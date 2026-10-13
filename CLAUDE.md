@@ -78,6 +78,19 @@ treat these as labels that tie related code together, not as links to follow.
 - Forward-only: no downgrades, no reading arbitrarily old shapes, and no `LEGACY_*` keys or
   `Legacy*` back-compat fields beside the upcasters.
 
+## The audio engine (engine/)
+
+- The engine (INST-36) is Faust blocks (`engine/blocks/*.dsp`) compiled to Rust, plus a Rust router
+  (`engine/src/`), built into **`engine/engine.wasm`, which is committed**. Running, testing and
+  building the app use that file as is: no Rust, Faust or Docker needed.
+- **Changing anything under `engine/` means `yarn engine:build`** (needs Docker; the pinned toolchain
+  image builds itself on first use, about 10 minutes) **and committing the new `engine.wasm`** with
+  the change. CI rebuilds it and fails if the hash differs.
+- The toolchain's versions are pinned in `engine/toolchain/Dockerfile`. Bumping one changes the
+  engine's output, so it is its own change, with the rebuilt `engine.wasm`.
+- Rust in the engine is written to be read by people new to Rust: a short note on any Rust concept
+  the first time a file uses it.
+
 ## Running locally
 
 - **`yarn dev`** runs the app on **:5155**. With no `.env`, it runs on its own and keeps
@@ -94,5 +107,5 @@ treat these as labels that tie related code together, not as links to follow.
 ## CI
 
 - `lint`, `format:check`, `build` (with `tsc`), `check:server` (the local MCP's types), `test`,
-  `check:pwa` and `test:e2e` run in GitHub Actions on every push and pull request. Keep them
-  green; a red gate blocks the merge.
+  `check:pwa` and `test:e2e` run in GitHub Actions on every push and pull request, and
+  `engine:check` when `engine/` changed. Keep them green; a red gate blocks the merge.

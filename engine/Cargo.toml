@@ -1,0 +1,22 @@
+[package]
+name = "corrente-engine"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[lib]
+# A cdylib is a library other languages load: here, a WebAssembly module the browser runs.
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+# No dependencies yet. The types Faust's generated Rust expects are declared in src/faust.rs.
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = false
+strip = true

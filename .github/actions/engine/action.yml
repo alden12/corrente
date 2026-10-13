@@ -1,0 +1,46 @@
+name: Engine matches its sources
+description: >-
+  Rebuild engine.wasm in its pinned toolchain and fail if it differs from the committed file
+  (INST-36.1). Only when the engine's sources changed; otherwise every step is skipped. Works in the
+  public repo (engine/) and the private monorepo (packages/app/engine/).
+runs:
+  using: composite
+  steps:
+    - name: Did the engine change?
+      id: changes
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          engine:
+            - 'engine/**'
+            - 'packages/app/engine/**'
+
+    - name: Find the engine
+      if: steps.changes.outputs.engine == 'true'
+      id: dir
+      shell: bash
+      run: |
+        if [ -d packages/app/engine ]; then echo "path=packages/app/engine" >> "$GITHUB_OUTPUT"
+        else echo "path=engine" >> "$GITHUB_OUTPUT"; fi
+
+    - if: steps.changes.outputs.engine == 'true'
+      uses: docker/setup-buildx-action@v3
+
+    # The toolchain compiles Faust from source, about 10 minutes, so its layers are cached between
+    # runs. They only change when engine/toolchain does.
+    - name: Toolchain image (cached)
+      if: steps.changes.outputs.engine == 'true'
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ steps.dir.outputs.path }}/toolchain
+        load: true
+        tags: corrente-engine-toolchain:ci
+        cache-from: type=gha,scope=engine-toolchain
+        cache-to: type=gha,mode=max,scope=engine-toolchain
+
+    - name: engine.wasm matches its sources
+      if: steps.changes.outputs.engine == 'true'
+      shell: bash
+      env:
+        ENGINE_TOOLCHAIN_IMAGE: corrente-engine-toolchain:ci
+      run: sh ${{ steps.dir.outputs.path }}/compile.sh --check
