@@ -17,7 +17,11 @@ export interface EngineExports {
   eng_init_param(track: number, source: number, value: number): void;
   eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number): void;
   eng_note_off(track: number, slot: number, offset: number): void;
+  /** Fades a slot's voice out over a block from `offset`, then frees it. */
+  eng_note_cut(track: number, slot: number, offset: number): void;
   eng_voice_active(track: number, slot: number): number;
+  /** The track's voice slots: its plan's voices and a few spares. */
+  eng_voice_slots(track: number): number;
   eng_input(track: number, channel: number): number;
   eng_output(track: number, channel: number): number;
   eng_process(): void;

@@ -67,32 +67,52 @@ describe("EventQueue", () => {
 });
 
 describe("VoiceAllocator", () => {
-  const silent = () => false;
+  /** An allocator and a stand-in engine: a slot sounds from its note on until `finish`es it. */
+  const allocator = (slots: number, voices: number) => {
+    const allocated = new VoiceAllocator(slots, voices);
+    const busy = new Set<number>();
+    const sounding = (slot: number) => busy.has(slot);
+    const play = (note: number, time: number) => {
+      const slot = allocated.noteOn(note, 1, time, sounding);
+      busy.add(slot);
+      return { slot, cut: allocated.cut };
+    };
+    return { allocated, play, finish: (slot: number) => busy.delete(slot) };
+  };
 
-  it("takes free slots, and restrikes a note's own slot", () => {
-    const voices = new VoiceAllocator(3);
-    expect(voices.noteOn(60, 0, silent)).toBe(0);
-    expect(voices.noteOn(64, 1, silent)).toBe(1);
-    expect(voices.noteOn(60, 2, silent)).toBe(0);
+  it("takes free slots, and cuts a sounding note's copy to start it again", () => {
+    const { play } = allocator(4, 2);
+    expect(play(60, 0)).toEqual({ slot: 0, cut: -1 });
+    expect(play(64, 1)).toEqual({ slot: 1, cut: -1 });
+    // Slot 0 fades out while the note starts again in a spare.
+    expect(play(60, 2)).toEqual({ slot: 2, cut: 0 });
   });
 
-  it("steals the slot released longest ago, then the oldest held", () => {
-    const voices = new VoiceAllocator(3);
-    const sounding = () => true;
-    [60, 62, 64].forEach((note, time) => voices.noteOn(note, time, sounding));
-    voices.noteOff(64, 3);
-    voices.noteOff(62, 4);
-    expect(voices.noteOn(65, 5, sounding)).toBe(2);
-    expect(voices.noteOn(67, 6, sounding)).toBe(1);
-    expect(voices.noteOn(69, 7, sounding)).toBe(0);
+  it("past its voices, cuts the one released longest ago, then the oldest held", () => {
+    const { allocated, play } = allocator(5, 3);
+    [60, 62, 64].forEach((note, time) => play(note, time));
+    allocated.noteOff(64, 3);
+    allocated.noteOff(62, 4);
+    expect(play(65, 5)).toEqual({ slot: 3, cut: 2 });
+    expect(play(67, 6)).toEqual({ slot: 4, cut: 1 });
+    // Every slot is busy or fading: the one cut longest ago is taken over.
+    expect(play(69, 7)).toEqual({ slot: 1, cut: 0 });
   });
 
-  it("ignores the note off of a stolen note", () => {
-    const voices = new VoiceAllocator(1);
-    voices.noteOn(60, 0, () => true);
-    voices.noteOn(62, 1, () => true);
-    expect(voices.noteOff(60, 2)).toBe(-1);
-    expect(voices.noteOff(62, 2)).toBe(0);
+  it("uses a slot again once its cut has finished", () => {
+    const { play, finish } = allocator(3, 1);
+    play(60, 0);
+    expect(play(62, 1)).toEqual({ slot: 1, cut: 0 });
+    finish(0);
+    expect(play(64, 2)).toEqual({ slot: 0, cut: 1 });
+  });
+
+  it("ignores the note off of a cut note", () => {
+    const { allocated, play } = allocator(2, 1);
+    play(60, 0);
+    play(62, 1);
+    expect(allocated.noteOff(60, 2)).toBe(-1);
+    expect(allocated.noteOff(62, 2)).toBe(1);
   });
 });
 
@@ -147,18 +167,32 @@ describe("EngineBank", () => {
     expect(render(late, 1, 0, BLOCK)[0]).toBeCloseTo(1, 6);
   });
 
-  it("steals a voice past the plan's count, and a stolen note's off leaves the new note playing", () => {
+  it("fades a stolen voice out while the new note starts on time", () => {
     const bank = bankOf();
     bank.noteOn(0, 60, 0.25, 0);
     bank.noteOn(0, 62, 0.25, 0);
     bank.noteOn(0, 64, 0.5, 10 * SAMPLE);
     bank.noteOff(0, 60, 20 * SAMPLE);
-    const sound = render(bank, 1);
-    // Two voices of a quarter, then the oldest (60) is taken for 64: a quarter plus a half.
+    const sound = render(bank, 2);
+    // Two voices of a quarter; at 10, 64 starts at a half and 60 (the oldest) fades over a block.
     expect(sound[5]).toBeCloseTo(0.5, 6);
-    expect(sound[15]).toBeCloseTo(0.75, 6);
-    expect(sound[30]).toBeCloseTo(0.75, 6);
+    expect(sound[10]).toBeCloseTo(0.25 + 0.5 + 0.25 * (1 - 1 / BLOCK), 5);
+    expect(sound[10 + BLOCK / 2]).toBeCloseTo(0.25 + 0.5 + 0.25 * (1 - (BLOCK / 2 + 1) / BLOCK), 5);
+    // Faded out a block on; 60's note off finds nothing to release.
+    expect(sound[10 + BLOCK + 5]).toBeCloseTo(0.75, 6);
     expect(bank.activeVoices(0)).toBe(2);
+  });
+
+  it("carries held notes into a new plan, crossfading over a block", () => {
+    const bank = bankOf();
+    bank.noteOn(0, 60, 1, 0);
+    render(bank, 1);
+    bank.load(0, plan, { level: 0.25 });
+    const sound = render(bank, 2, 0, BLOCK);
+    // From the old plan's level (1) to the new one's (0.5), the note held throughout.
+    expect(sound[0]).toBeCloseTo(1 - 0.5 / BLOCK, 5);
+    expect(sound[BLOCK / 2 - 1]).toBeCloseTo(0.75, 5);
+    expect(sound.slice(BLOCK).every((sample) => Math.abs(sample - 0.5) < 1e-6)).toBe(true);
   });
 
   it("moves a param over the block it lands in", () => {
@@ -220,7 +254,8 @@ describe("EngineBank", () => {
     bank.setParam(0, "level", 0.1, 0);
     bank.load(0, plan);
     bank.noteOn(0, 60, 1, 0);
-    expect(render(bank, 1)[0]).toBeCloseTo(0.2, 6);
+    // After the block it crossfades in over.
+    expect(render(bank, 2)[BLOCK]).toBeCloseTo(0.2, 6);
   });
 });
 

@@ -1,7 +1,7 @@
 //! The router's behaviour, checked against answers worked out by hand: sample-accurate note starts,
 //! one-sample feedback, a delay loop run in chunks, voices freeing after their release, the shared
 //! section, stereo and multi-output blocks, effects after the voices, audio inputs, independent
-//! tracks, and plans the engine must refuse. `yarn engine:test` runs them.
+//! tracks, plans the engine must refuse, and edits that crossfade. `yarn engine:test` runs them.
 //!
 //! This file holds `PlanBuilder` and the helpers; the tests are in the files beside it, by topic.
 //!
@@ -13,6 +13,7 @@
 //!   go through the real parser too.
 
 
+mod edits;
 mod loops;
 mod playing;
 mod refusals;

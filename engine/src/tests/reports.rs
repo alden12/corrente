@@ -75,10 +75,18 @@ fn rendering_allocates_nothing() {
     engine.init_param(0, 0, 2000.0);
     engine.note_on(0, 0, 0, 220.0, 1.0);
     render(&mut engine, 4);
-    // Everything that happens while playing: blocks, param moves, notes on and off, reading reports.
+    // Loaded again, so the first block measured crossfades from the graph this replaces.
+    assert!(engine.load(0, plan.plan()));
+    engine.init_param(0, 0, 2000.0);
+    engine.note_on(0, 0, 0, 220.0, 1.0);
+    // Everything that happens while playing: blocks, a crossfade, param moves, notes on, off and
+    // cut, reading reports.
     let count = allocations_during(|| {
         (0..16).for_each(|block| {
             engine.set_param(0, 0, 1000.0 + block as f32 * 100.0);
+            if block % 4 == 0 {
+                engine.cut(0, 1, 10);
+            }
             engine.note_on(0, 1, 5, 330.0, 0.8);
             engine.note_off(0, 0, 3);
             engine.process();

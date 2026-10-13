@@ -71,6 +71,20 @@ impl Engine {
         }
     }
 
+    /// Fade a voice out and free it: see `Track::cut`.
+    // TS: this.tracks[track]?.cut(slot, offset)
+    pub fn cut(&mut self, track: usize, slot: usize, offset: i32) {
+        if let Some(track) = self.tracks.get_mut(track) {
+            track.cut(slot, offset);
+        }
+    }
+
+    /// How many voice slots a track's plan has, spares included.
+    // TS: return this.tracks[track]?.voiceSlots()
+    pub fn voice_slots(&self, track: usize) -> Option<usize> {
+        self.tracks.get(track).map(|track| track.voice_slots())
+    }
+
     // TS: return this.tracks[track]?.voiceActive(slot) ?? false
     // `.is_some_and(f)` is `x !== undefined && f(x)`.
     pub fn voice_active(&self, track: usize, slot: usize) -> bool {

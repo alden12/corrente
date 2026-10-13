@@ -174,6 +174,25 @@ pub extern "C" fn eng_note_off(track: i32, slot: i32, offset: i32) {
     }
 }
 
+/// Fade the voice in a track's slot out over a block from `offset`, then free the slot: how JS steals
+/// a voice without a click.
+// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.cut(track, slot, offset));
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_note_cut(track: i32, slot: i32, offset: i32) {
+    if let (Some(track), Some(slot)) = (index(track), index(slot)) {
+        with_engine(|engine| engine.cut(track, slot, offset));
+    }
+}
+
+/// How many voice slots a track has: its plan's voices and a few spares, which JS allocates from.
+/// -1 if there is no such track.
+// TS: return withEngine((engine) => engine.voiceSlots(track)) ?? -1
+// `.and_then(f)` chains a lookup that may come up empty; `.map_or(-1, f)` gives -1 for None.
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_voice_slots(track: i32) -> i32 {
+    index(track).and_then(|track| with_engine(|engine| engine.voice_slots(track))).map_or(-1, |slots| slots as i32)
+}
+
 /// 1 if the track's voice slot is sounding (including its release), 0 if it is free.
 // TS: return Number(track >= 0 && slot >= 0 && withEngine((engine) => engine.voiceActive(track, slot)))
 // `.is_some_and(f)`: false if missing, else f(value). `as i32` turns a bool into 0 or 1.

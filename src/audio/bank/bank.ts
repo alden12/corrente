@@ -9,6 +9,8 @@
  * - **Params are set by name**, with the raw value the param store holds: each binding's table,
  *   scale and offset turn it into what its engine source gets, here as the event is added rather
  *   than while rendering.
+ * - **Edits don't click.** A new plan crossfades in over a block in the engine, and the notes held
+ *   start again in it; a voice stolen for a new note fades out while the note starts in a spare slot.
  * - **`process` creates nothing**: events, voices and the views of the engine's memory are all made
  *   ahead (decision 4 of INST-36). The memory only grows on init and load, so views are re-made
  *   then (the addresses the engine gave stay put).
@@ -60,7 +62,7 @@ export class EngineBank {
     this.engine.eng_init(sampleRate, trackCount);
     this.tracks = Array.from({ length: trackCount }, (_, index) => ({
       plan: null,
-      voices: new VoiceAllocator(0),
+      voices: new VoiceAllocator(0, 0),
       sounding: (slot: number) => this.engine.eng_voice_active(index, slot) === 1,
       values: {},
     }));
@@ -74,7 +76,8 @@ export class EngineBank {
 
   /**
    * Play a compiled plan on a track, its params starting at `values` (by name; any left out keep
-   * the value they had, or 0). Sounding notes are cut, and the track's queued events dropped.
+   * the value they had, or 0). The old plan fades out over a block with the notes it was releasing;
+   * the notes held start again in the new one. Queued events still play, in the new plan.
    */
   load(track: number, plan: CompiledPlan, values: Record<string, number> = {}): void {
     const state = this.trackAt(track);
@@ -84,13 +87,17 @@ export class EngineBank {
     this.engine.eng_free(pointer);
     this.view();
     if (code !== 0) throw new PlanRejected(track, code);
+    const held = state.voices.heldNotes();
     state.plan = plan;
-    state.voices = new VoiceAllocator(plan.voices);
+    state.voices = new VoiceAllocator(this.engine.eng_voice_slots(track), plan.voices);
     state.values = { ...state.values, ...values };
     plan.params.forEach((source, index) =>
       this.engine.eng_init_param(track, index, resolveNumber(state.values[source.param] ?? 0, source)),
     );
-    this.queue.clear(track);
+    held.forEach(({ note, velocity }) => {
+      const slot = state.voices.noteOn(note, velocity, 0, state.sounding);
+      this.engine.eng_note_on(track, slot, 0, frequencyOf(note), velocity);
+    });
   }
 
   /** Empty a track (its device went): it plays nothing, its queued events and knob values are dropped. */
@@ -102,7 +109,7 @@ export class EngineBank {
     this.engine.eng_free(pointer);
     this.view();
     state.plan = null;
-    state.voices = new VoiceAllocator(0);
+    state.voices = new VoiceAllocator(0, 0);
     state.values = {};
     this.queue.clear(track);
   }
@@ -158,15 +165,17 @@ export class EngineBank {
   activeVoices(track: number): number {
     const state = this.trackAt(track);
     let active = 0;
-    for (let slot = 0; slot < state.voices.count; slot++) if (state.sounding(slot)) active++;
+    for (let slot = 0; slot < state.voices.slots; slot++) if (state.sounding(slot)) active++;
     return active;
   }
 
   private playNoteOn(event: TimedEvent, offset: number): void {
     const state = this.tracks[event.track];
     if (!state) return;
-    const slot = state.voices.noteOn(event.target, event.time, state.sounding);
-    if (slot >= 0) this.engine.eng_note_on(event.track, slot, offset, frequencyOf(event.target), event.value);
+    if (state.voices.slots === 0) return;
+    const slot = state.voices.noteOn(event.target, event.value, event.time, state.sounding);
+    if (state.voices.cut >= 0) this.engine.eng_note_cut(event.track, state.voices.cut, offset);
+    this.engine.eng_note_on(event.track, slot, offset, frequencyOf(event.target), event.value);
   }
 
   private playNoteOff(event: TimedEvent, offset: number): void {
@@ -180,7 +189,7 @@ export class EngineBank {
     const { track } = event;
     const state = this.tracks[track];
     if (!state) return;
-    for (let slot = 0; slot < state.voices.count; slot++) {
+    for (let slot = 0; slot < state.voices.slots; slot++) {
       if (!state.voices.isHeld(slot)) continue;
       state.voices.releaseSlot(slot, event.time);
       this.engine.eng_note_off(track, slot, offset);
