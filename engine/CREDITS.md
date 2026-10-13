@@ -43,6 +43,10 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 - `oscillators.lib/lf_sawpos`, by Bart Brouns, revised by Stéphane Letz, under LicenseRef-STK-4.3
 
+### loopgain
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
 ### lowpass
 
 - `filters.lib/svf`, by Oleg Nesterov, Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>, under LicenseRef-STK-4.3

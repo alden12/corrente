@@ -18,7 +18,13 @@ interface TestInstrument {
   definition: DeviceDefinition;
 }
 
-/** A plucked string (Karplus-Strong): a burst of noise round a delay one period long. */
+/**
+ * A plucked string (Karplus-Strong): a burst of noise round a delay one period long. Two things keep
+ * high notes from going dull and dying at once, since they go round the loop many more times a
+ * second: the damping filter's cutoff rises with the note, and the loop's gain is set per note
+ * (`loopgain`) so every note rings for about `decay`. The burst lasts two periods, so a high note
+ * isn't driven many times round and made loud.
+ */
 const pluck: TestInstrument = {
   type: "engine-pluck",
   label: "Pluck (new engine)",
@@ -33,22 +39,31 @@ const pluck: TestInstrument = {
       unit: "Hz",
       taper: "exponential",
     },
-    { id: "sustain", label: "Sustain", kind: "number", min: 0.9, max: 0.999, default: 0.996, taper: "linear" },
+    { id: "decay", label: "Decay", kind: "number", min: 0.2, max: 10, default: 3, unit: "s", taper: "exponential" },
   ],
   definition: {
     format: 1,
     nodes: {
       exciter: { block: "noise", voice: true },
+      // Two periods, in seconds (near enough at 44.1 kHz too).
+      burstTime: { block: "mul", voice: true, inputs: { a: "period", b: 2 / 48000 } },
       burst: {
         block: "adsr",
         voice: true,
-        inputs: { gate: "voice.gate", attack: 0.001, decay: 0.012, sustain: 0, release: 0.001 },
+        inputs: { gate: "voice.gate", attack: 0.001, decay: "burstTime", sustain: 0, release: 0.001 },
       },
       excite: { block: "mul", voice: true, inputs: { a: "exciter", b: "burst" } },
       period: { block: "period", voice: true, inputs: { frequency: "voice.frequency", offset: 0.5 } },
       string: { block: "delay", voice: true, inputs: { signal: ["excite", "feedback"], length: "period" } },
-      damping: { block: "onepole", voice: true, inputs: { signal: "string", cutoff: { param: "brightness" } } },
-      feedback: { block: "mul", voice: true, inputs: { a: "damping", b: { param: "sustain" } } },
+      // Brightness, plus six times the note: high notes stay bright.
+      keyed: { block: "mul", voice: true, inputs: { a: "voice.frequency", b: 6 } },
+      damping: {
+        block: "onepole",
+        voice: true,
+        inputs: { signal: "string", cutoff: [{ param: "brightness" }, "keyed"] },
+      },
+      ring: { block: "loopgain", voice: true, inputs: { period: "period", time: { param: "decay" } } },
+      feedback: { block: "mul", voice: true, inputs: { a: "damping", b: "ring" } },
     },
     voice: "string",
   },

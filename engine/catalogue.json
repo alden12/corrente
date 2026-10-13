@@ -414,8 +414,47 @@
       ]
     },
     {
-      "name": "lowpass",
+      "name": "loopgain",
       "kind": 7,
+      "description": "The gain for a feedback loop: what a signal going round a loop of `period` samples is multiplied by each time round, so that it dies away by 60 dB in `time` seconds whatever the period. Keeps a plucked string's decay even from low notes to high ones.",
+      "inputs": [
+        {
+          "name": "period",
+          "min": 0,
+          "max": 96000,
+          "unit": "samples"
+        },
+        {
+          "name": "time",
+          "min": 0.01,
+          "max": 60,
+          "unit": "s"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "gain",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "lowpass",
+      "kind": 8,
       "description": "A resonant two-pole low-pass, the counterpart of Web Audio's biquad, whose peak at the cutoff rises with q. A state-variable filter, so it stays stable however fast the cutoff moves.",
       "inputs": [
         {
@@ -468,7 +507,7 @@
     },
     {
       "name": "meter",
-      "kind": 8,
+      "kind": 9,
       "description": "Passes its signal through unchanged and shows its level on a meter, as a channel meter does: it rises at once and falls back over about 300 ms.",
       "inputs": [
         {
@@ -506,7 +545,7 @@
     },
     {
       "name": "mul",
-      "kind": 9,
+      "kind": 10,
       "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
       "inputs": [
         {
@@ -534,7 +573,7 @@
     },
     {
       "name": "noise",
-      "kind": 10,
+      "kind": 11,
       "description": "White noise.",
       "inputs": [],
       "outputs": [
@@ -551,7 +590,7 @@
     },
     {
       "name": "onepole",
-      "kind": 11,
+      "kind": 12,
       "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
       "inputs": [
         {
@@ -616,7 +655,7 @@
     },
     {
       "name": "pan",
-      "kind": 12,
+      "kind": 13,
       "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
       "inputs": [
         {
@@ -660,7 +699,7 @@
     },
     {
       "name": "period",
-      "kind": 13,
+      "kind": 14,
       "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
       "inputs": [
         {
@@ -700,7 +739,7 @@
     },
     {
       "name": "pitch",
-      "kind": 14,
+      "kind": 15,
       "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
       "inputs": [
         {
@@ -732,7 +771,7 @@
     },
     {
       "name": "pulse",
-      "kind": 15,
+      "kind": 16,
       "description": "A band-limited pulse wave whose width can move every sample (pulse-width modulation): width 0.5 is a square from -1 to 1. It has no DC offset, as an analog synth's output has none, so a narrow pulse reaches towards 2 on its short side. An octave down, it is a sub-oscillator.",
       "inputs": [
         {
@@ -781,7 +820,7 @@
     },
     {
       "name": "reverb",
-      "kind": 16,
+      "kind": 17,
       "description": "A stereo algorithmic reverb (Zita-Rev1): a short pre-delay, then a dense tail that decays over the time set, faster in the highs above the damping frequency.",
       "inputs": [
         {
@@ -886,7 +925,7 @@
     },
     {
       "name": "saw",
-      "kind": 17,
+      "kind": 18,
       "description": "A band-limited sawtooth.",
       "inputs": [
         {
@@ -925,7 +964,7 @@
     },
     {
       "name": "shaper",
-      "kind": 18,
+      "kind": 19,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -964,7 +1003,7 @@
     },
     {
       "name": "sine",
-      "kind": 19,
+      "kind": 20,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -997,7 +1036,7 @@
     },
     {
       "name": "svf",
-      "kind": 20,
+      "kind": 21,
       "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
       "inputs": [
         {
