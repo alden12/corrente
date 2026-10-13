@@ -3,34 +3,19 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DefinitionError, compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
 import type { DeviceDefinition } from "../src/audio/definitions/format";
+import { startEngine } from "../src/audio/bank/exports";
 
 /**
  * The plan compiler (INST-36.4): definitions compiled and played in the committed engine.wasm, so a
  * plan the compiler writes is one the engine accepts and sounds as it should; and definitions it
  * must refuse, with problems that say what to fix.
  */
-interface EngineExports {
-  memory: WebAssembly.Memory;
-  _initialize(): void;
-  eng_malloc(bytes: number): number;
-  eng_free(pointer: number): void;
-  eng_init(sampleRate: number, tracks: number): number;
-  eng_load(track: number, plan: number, length: number): number;
-  eng_init_param(track: number, source: number, value: number): void;
-  eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number): void;
-  eng_note_off(track: number, slot: number, offset: number): void;
-  eng_input(track: number, channel: number): number;
-  eng_output(track: number, channel: number): number;
-  eng_process(): void;
-}
-
 const RATE = 48000;
 const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.meta.url)));
 
 /** An engine of one track playing a compiled plan, its params set from `values` (by param name). */
 const playing = (compiled: CompiledPlan, values: Record<string, number> = {}) => {
-  const engine = new WebAssembly.Instance(new WebAssembly.Module(wasm), {}).exports as unknown as EngineExports;
-  engine._initialize();
+  const engine = startEngine(wasm);
   engine.eng_init(RATE, 1);
   const pointer = engine.eng_malloc(compiled.words.length * 4);
   new Int32Array(engine.memory.buffer, pointer, compiled.words.length).set(compiled.words);

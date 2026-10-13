@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { startEngine, type EngineExports } from "../src/audio/bank/exports";
 
 /**
  * The committed engine.wasm (INST-36) loads, knows the blocks in engine/blocks, and plays a plan
@@ -8,37 +9,9 @@ import { fileURLToPath } from "node:url";
  * router's behaviour has Rust tests (`yarn engine:test`); this checks the file everyone else runs,
  * from JavaScript, the way the app will call it.
  */
-interface EngineExports {
-  memory: WebAssembly.Memory;
-  _initialize(): void;
-  eng_malloc(bytes: number): number;
-  eng_free(pointer: number): void;
-  eng_init(sampleRate: number, tracks: number): number;
-  eng_load(track: number, plan: number, length: number): number;
-  eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number): void;
-  eng_note_off(track: number, slot: number, offset: number): void;
-  eng_voice_active(track: number, slot: number): number;
-  eng_input(track: number, channel: number): number;
-  eng_output(track: number, channel: number): number;
-  eng_process(): void;
-  eng_track_peak(track: number, channel: number): number;
-  eng_track_silent(track: number): number;
-  eng_track_latency(track: number): number;
-  eng_meter(track: number, section: number, node: number, meter: number): number;
-  eng_block_count(): number;
-  eng_block_inputs(kind: number): number;
-  eng_block_outputs(kind: number): number;
-  eng_block_controls(kind: number): number;
-  eng_block_meters(kind: number): number;
-}
-
 const engineDir = fileURLToPath(new URL("../engine/", import.meta.url));
 const bytes = readFileSync(`${engineDir}engine.wasm`);
-const instantiate = () => {
-  const exports = new WebAssembly.Instance(new WebAssembly.Module(bytes), {}).exports as unknown as EngineExports;
-  exports._initialize();
-  return exports;
-};
+const instantiate = () => startEngine(bytes);
 const engine = instantiate();
 
 /** Kinds are numbered by sorted file name, as compile.ts registers them. */

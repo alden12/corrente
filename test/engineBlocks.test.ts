@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BlockSpec, Catalogue, Port } from "../engine/catalogue.ts";
+import { startEngine, type EngineExports } from "../src/audio/bank/exports";
 
 /**
  * Every block in the catalogue (INST-36.2), run in the committed engine.wasm: its ports agree with
@@ -9,32 +10,9 @@ import type { BlockSpec, Catalogue, Port } from "../engine/catalogue.ts";
  * within the ranges it declares for them. That catches a block whose internals Faust sized for
  * inputs within -1..1 (the prototype's 3-sample delay), and a range declared wrong.
  */
-interface EngineExports {
-  memory: WebAssembly.Memory;
-  _initialize(): void;
-  eng_malloc(bytes: number): number;
-  eng_free(pointer: number): void;
-  eng_init(sampleRate: number, tracks: number): number;
-  eng_load(track: number, plan: number, length: number): number;
-  eng_init_param(track: number, source: number, value: number): void;
-  eng_set_param(track: number, source: number, value: number): void;
-  eng_output(track: number, channel: number): number;
-  eng_process(): void;
-  eng_block_count(): number;
-  eng_block_inputs(kind: number): number;
-  eng_block_outputs(kind: number): number;
-  eng_block_controls(kind: number): number;
-  eng_block_meters(kind: number): number;
-}
-
 const engineDir = fileURLToPath(new URL("../engine/", import.meta.url));
 const catalogue = JSON.parse(readFileSync(`${engineDir}catalogue.json`, "utf8")) as Catalogue;
-const instantiate = () => {
-  const module = new WebAssembly.Module(readFileSync(`${engineDir}engine.wasm`));
-  const exports = new WebAssembly.Instance(module, {}).exports as unknown as EngineExports;
-  exports._initialize();
-  return exports;
-};
+const instantiate = () => startEngine(readFileSync(`${engineDir}engine.wasm`));
 
 /** One value per input then per control: what the block is driven with at one moment. */
 type Setting = number[];
