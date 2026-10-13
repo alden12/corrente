@@ -5,21 +5,38 @@
  * each runs. The engine only checks the plan and follows it.
  *
  * A definition that can't compile is refused with every problem found, each naming the node and
- * input it's about, so whoever wrote it (often an agent) can fix them all at once.
+ * input it's about, so whoever wrote it (often an agent) can fix them all at once. Most are found by
+ * its schema (schema.ts); the compiler adds what each section may read.
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
-import {
-  DEFAULT_VOICES,
-  RESERVED_NAMES,
-  TRACK_INPUTS,
-  VOICE_SIGNALS,
-  VOICE_SUM,
-  definitionSchema,
-  type DeviceDefinition,
-  type InputValue,
-  type ParamBinding,
-} from "./format";
+import { DEFAULT_VOICES, type DeviceDefinition, type ParamBinding } from "./format";
 import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
+import { channelsOf, referenceTo, sourcesOf, type Source } from "./references";
+import { definitionSchemaFor, problemsIn } from "./schema";
+
+/**
+ * How the plan words name what an input reads, and how a step runs: engine/src/plan/mod.rs reads
+ * these numbers, so they change together.
+ */
+const INPUT_TYPE = {
+  /** A node in the same section, this block: (node, port). */
+  buffer: 0,
+  /** A node in the same section, the sample before (a feedback edge): (node, port). */
+  previous: 1,
+  /** A param source: (index). */
+  param: 2,
+  /** A fixed number: (0, its f32 bits). */
+  constant: 3,
+  /** A voice signal: (signal). */
+  voice: 4,
+  /** A node in the pre section, read from a later one: (node, port). */
+  shared: 5,
+  /** The voices summed: (channel). */
+  voiceSum: 6,
+  /** The track's audio input: (channel). */
+  input: 7,
+} as const;
+const STEP_MODE: Record<StepMode, number> = { node: 0, "sample-loop": 1, "chunk-loop": 2 };
 
 /** The sections a plan runs in a block: once before the voices, once per voice, once after. */
 export type Section = "pre" | "voice" | "post";
@@ -53,15 +70,6 @@ export class DefinitionError extends Error {
   }
 }
 
-/** What an input reads, once its reference is understood. */
-type Source =
-  | { type: "node"; name: string; port: number }
-  | { type: "param"; binding: ParamBinding }
-  | { type: "const"; value: number }
-  | { type: "voice"; signal: number }
-  | { type: "voiceSum"; channel: number }
-  | { type: "input"; channel: number };
-
 /** A node of the plan: the definition's, or an `add` the compiler put in to sum an input. */
 interface Planned {
   name: string;
@@ -70,42 +78,6 @@ interface Planned {
   /** One list per input, audio inputs then controls; several sources are summed. */
   inputs: Source[][];
 }
-
-const signalSources: Record<string, Source> = {
-  ...Object.fromEntries(Object.entries(VOICE_SIGNALS).map(([name, signal]) => [name, { type: "voice", signal }])),
-  ...Object.fromEntries(Object.entries(VOICE_SUM).map(([name, channel]) => [name, { type: "voiceSum", channel }])),
-  ...Object.fromEntries(Object.entries(TRACK_INPUTS).map(([name, channel]) => [name, { type: "input", channel }])),
-};
-
-const listOf = (value: InputValue) => (Array.isArray(value) ? value : [value]);
-
-/** A reference (`osc`, `svf.highpass`, `voice.gate`) as a source, or the problem with it. */
-const referenceTo = (reference: string, nodes: DeviceDefinition["nodes"]): Source | string => {
-  const signal = signalSources[reference];
-  if (signal) return signal;
-  const [name, port, ...rest] = reference.split(".");
-  const node = nodes[name];
-  const block = node && blockNamed(node.block);
-  if (!node || rest.length > 0) return `"${reference}" is not a node or a signal`;
-  if (!block) return `"${reference}" is a ${node.block}, which isn't a block`;
-  const index = port === undefined ? 0 : block.outputs.findIndex((output) => output.name === port);
-  if (index < 0 || block.outputs.length === 0) {
-    return `${name} (a ${node.block}) has no output "${port}" (it has ${block.outputs.map((output) => output.name).join(", ") || "none"})`;
-  }
-  return { type: "node", name, port: index };
-};
-
-/** One input's sources, or problems. A number into a port is checked against the port's range. */
-const sourcesOf = (value: InputValue, nodes: DeviceDefinition["nodes"], range: { min: number; max: number }) =>
-  listOf(value).map((item): Source | string => {
-    if (typeof item === "number") {
-      return item < range.min || item > range.max
-        ? `${item} is outside ${range.min}..${range.max}`
-        : { type: "const", value: item };
-    }
-    if (typeof item === "string") return referenceTo(item, nodes);
-    return { type: "param", binding: item };
-  });
 
 /**
  * Which section each node runs in. Voice nodes are marked; a shared node runs after the voices if it
@@ -150,106 +122,41 @@ export interface CompileOptions {
 }
 
 export const compileDefinition = (input: unknown, options: CompileOptions = {}): CompiledPlan => {
-  const parsed = definitionSchema.safeParse(input);
+  const parsed = definitionSchemaFor(options.params).safeParse(input);
   if (!parsed.success) {
-    throw new DefinitionError(
-      parsed.error.issues.map((issue) => `${issue.path.join(".") || "the definition"}: ${issue.message}`),
-    );
+    throw new DefinitionError(problemsIn(parsed.error));
   }
-  const definition = parsed.data;
+  const definition = parsed.data as DeviceDefinition;
   const nodes = definition.nodes;
-  const problems: string[] = [];
+  const named = Object.keys(nodes);
 
-  // Each node's block and inputs: audio inputs must be wired, controls default to their start.
-  const blocks: Record<string, BlockSpec> = {};
-  const inputs: Record<string, Source[][]> = {};
-  Object.entries(nodes).forEach(([name, node]) => {
-    if (RESERVED_NAMES.includes(name))
-      return problems.push(`${name}: the name is kept for signals (${RESERVED_NAMES.join(", ")})`);
-    const block = blockNamed(node.block);
-    if (!block) return problems.push(`${name}: there is no block "${node.block}"`);
-    blocks[name] = block;
-    const ports = [...block.inputs, ...block.controls];
-    const given = node.inputs ?? {};
-    Object.keys(given)
-      .filter((port) => !ports.some((candidate) => candidate.name === port))
-      .forEach((port) =>
-        problems.push(
-          `${name}: a ${node.block} has no input "${port}" (it has ${ports.map((candidate) => candidate.name).join(", ") || "none"})`,
-        ),
-      );
-    block.inputs
-      .filter((port) => given[port.name] === undefined)
-      .forEach((port) =>
-        problems.push(`${name}.${port.name}: not wired (every audio input needs a value, a param or a connection)`),
-      );
-    inputs[name] = ports.map((port) => {
-      const value = given[port.name] ?? ("init" in port ? port.init : 0);
-      const resolved = sourcesOf(value, nodes, port);
-      resolved
-        .filter((source) => typeof source === "string")
-        .forEach((problem) => problems.push(`${name}.${port.name}: ${problem}`));
-      return resolved.filter((source): source is Source => typeof source !== "string");
-    });
-  });
-  const allParams = Object.values(inputs)
-    .flat(2)
-    .filter((source) => source.type === "param");
-  if (options.params) {
-    allParams
-      .filter((source) => !options.params!.includes(source.binding.param))
-      .forEach((source) =>
-        problems.push(
-          `there is no param "${source.binding.param}" (the device has ${options.params!.join(", ") || "none"})`,
-        ),
-      );
-  }
-
-  const named = Object.keys(blocks);
-  const flatSources = Object.fromEntries(named.map((name) => [name, inputs[name].flat()]));
-  const sectionOf = sectionsOf(Object.fromEntries(named.map((name) => [name, nodes[name]])), flatSources);
-  named.forEach((name) => problems.push(...sectionProblems(name, sectionOf[name], flatSources[name], sectionOf)));
-
-  // The outputs: what each voice plays, and what the track plays.
-  const voiceNodes = named.filter((name) => sectionOf[name] === "voice");
-  const voices = definition.voices ?? (voiceNodes.length > 0 ? DEFAULT_VOICES : 0);
-  const channels = (value: string | [string, string] | undefined) =>
-    value === undefined ? [] : Array.isArray(value) ? value : [value];
-  const voiceOut = channels(definition.voice).map((reference) => referenceTo(reference, nodes));
-  const trackOut = channels(definition.output ?? (voices > 0 ? ["voices.left", "voices.right"] : undefined)).map(
-    (reference) => referenceTo(reference, nodes),
+  // Each node's sources, an input at a time: audio inputs, then controls (left out: their start).
+  const blocks = Object.fromEntries(named.map((name) => [name, blockNamed(nodes[name].block)!]));
+  const inputs = Object.fromEntries(
+    named.map((name) => {
+      const given = nodes[name].inputs ?? {};
+      const ports = [...blocks[name].inputs, ...blocks[name].controls];
+      return [name, ports.map((port) => sourcesOf(given[port.name] ?? ("init" in port ? port.init : 0), nodes))];
+    }),
   );
-  [...voiceOut, ...trackOut]
-    .filter((source) => typeof source === "string")
-    .forEach((problem) => problems.push(`output: ${problem}`));
-  if (voiceNodes.length > 0 && voiceOut.length === 0)
-    problems.push("voice: the voices play nothing (name what each voice plays)");
-  if (voiceNodes.length > 0 && voices === 0) problems.push("voices: there are voice nodes but no voices");
-  if (voiceNodes.length === 0 && definition.voice !== undefined)
-    problems.push("voice: there are no voice nodes to play");
-  if (trackOut.length === 0) problems.push("output: the track plays nothing (name its output)");
-  voiceOut.forEach((source) => {
-    if (typeof source !== "string" && (source.type !== "node" || sectionOf[source.name] !== "voice"))
-      problems.push("voice: each voice plays a voice node's output");
-  });
-  trackOut.forEach((source) => {
-    if (typeof source !== "string")
-      problems.push(
-        ...sectionProblems("output", "post", [source], sectionOf).map((problem) =>
-          problem.replace(/^output isn't a voice node, so it/, "the output"),
-        ),
-      );
-  });
+
+  // Sections, and what each may read: the one check that needs the graph worked out.
+  const flatSources = Object.fromEntries(named.map((name) => [name, inputs[name].flat()]));
+  const sectionOf = sectionsOf(nodes, flatSources);
+  const voices = definition.voices ?? (named.some((name) => sectionOf[name] === "voice") ? DEFAULT_VOICES : 0);
+  const voiceOut = channelsOf(definition.voice).map((reference) => referenceTo(reference, nodes) as Source);
+  const trackOut = channelsOf(definition.output ?? (voices > 0 ? ["voices.left", "voices.right"] : undefined)).map(
+    (reference) => referenceTo(reference, nodes) as Source,
+  );
+  const problems = [
+    ...named.flatMap((name) => sectionProblems(name, sectionOf[name], flatSources[name], sectionOf)),
+    ...sectionProblems("output", "post", trackOut, sectionOf).map((problem) =>
+      problem.replace(/^output isn't a voice node, so it/, "output: the output"),
+    ),
+  ];
   if (problems.length > 0) throw new DefinitionError(problems);
 
-  return plan(definition, {
-    blocks,
-    inputs,
-    sectionOf,
-    voices,
-    voiceOut: voiceOut as Source[],
-    trackOut: trackOut as Source[],
-  });
+  return plan(definition, { blocks, inputs, sectionOf, voices, voiceOut, trackOut });
 };
 
 interface Resolved {
@@ -342,15 +249,15 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     node: (source, section, reader) => {
       const from = resolved.sectionOf[source.name] ?? section;
       const index = indices[from].get(source.name)!;
-      if (from !== section) return [5, index, source.port];
+      if (from !== section) return [INPUT_TYPE.shared, index, source.port];
       const feedback = reader >= 0 && isFeedback(stepOf(section, reader), reader, index);
-      return [feedback ? 1 : 0, index, source.port];
+      return [feedback ? INPUT_TYPE.previous : INPUT_TYPE.buffer, index, source.port];
     },
-    param: (source) => [2, paramIndex(source.binding), 0],
-    const: (source) => [3, 0, floatBits(source.value)],
-    voice: (source) => [4, source.signal, 0],
-    voiceSum: (source) => [6, source.channel, 0],
-    input: (source) => [7, source.channel, 0],
+    param: (source) => [INPUT_TYPE.param, paramIndex(source.binding), 0],
+    const: (source) => [INPUT_TYPE.constant, 0, floatBits(source.value)],
+    voice: (source) => [INPUT_TYPE.voice, source.signal, 0],
+    voiceSum: (source) => [INPUT_TYPE.voiceSum, source.channel, 0],
+    input: (source) => [INPUT_TYPE.input, source.channel, 0],
   };
   const encode = (source: Source, section: Section, reader: number) =>
     (encoders[source.type] as (source: Source, section: Section, reader: number) => number[])(source, section, reader);
@@ -363,11 +270,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       node.block.controls.length,
       ...node.inputs.flatMap((sources) => encode(sources[0], section, index)),
     ]),
-    ...steps[section].flatMap((step) => [
-      { node: 0, "sample-loop": 1, "chunk-loop": 2 }[step.mode],
-      step.nodes.length,
-      ...step.nodes,
-    ]),
+    ...steps[section].flatMap((step) => [STEP_MODE[step.mode], step.nodes.length, ...step.nodes]),
   ];
   const body = [
     ...SECTIONS.flatMap(sectionWords),

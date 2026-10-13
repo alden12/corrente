@@ -67,12 +67,12 @@ export const paramBindingSchema = z
   })
   .strict();
 
-const singleInputSchema = z.union([z.number().finite(), z.string().min(1), paramBindingSchema]);
+export const singleInputSchema = z.union([z.number().finite(), z.string().min(1), paramBindingSchema]);
 /** One input: a number, a param binding, a reference, or several of those summed. */
 export const inputSchema = z.union([singleInputSchema, z.array(singleInputSchema).min(1)]);
 
 /** Node names are plain words: they're written into references (`node.port`), so no dots. */
-const NODE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+export const NODE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 /** Words a node can't be named, since references starting with them are signals. */
 export const RESERVED_NAMES = ["voice", "voices", "input"];
 
@@ -85,8 +85,12 @@ export const nodeSchema = z
   .strict();
 
 /** One reference (mono, or in both channels), or a left and a right. */
-const channelsSchema = z.union([z.string().min(1), z.tuple([z.string().min(1), z.string().min(1)])]);
+export const channelsSchema = z.union([z.string().min(1), z.tuple([z.string().min(1), z.string().min(1)])]);
 
+/**
+ * The format's shape, with any block name and any inputs: what a definition's type comes from, and
+ * the outline a tool's input can show. `definitionSchemaFor` (schema.ts) is the full check.
+ */
 export const definitionSchema = z
   .object({
     format: z.literal(DEFINITION_FORMAT),

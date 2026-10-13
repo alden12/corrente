@@ -232,28 +232,40 @@ describe("definitions the compiler refuses", () => {
   it("says what's wrong with the shape", () => {
     expect(problemsOf({ format: 2, nodes: {} })).toEqual([expect.stringMatching(/^format: /)]);
     expect(problemsOf({ format: 1, nodes: { "bad.name": { block: "saw" } } })).toEqual([
-      expect.stringMatching(/^nodes.bad.name: /),
+      "bad.name: node names are a letter then letters, digits and _",
     ]);
     expect(problemsOf({ format: 1, nodes: { x: { block: "saw", extra: 1 } } })).toEqual([
-      expect.stringMatching(/^nodes.x: /),
+      "x.frequency: not wired (every audio input needs a value, a param or a connection)",
+      'x: a node has no "extra" (it has block, voice and inputs)',
     ]);
   });
 
-  it("names unknown blocks, inputs and outputs, and what there is instead", () => {
+  it("names unknown blocks and inputs, and what there is instead", () => {
     expect(
       problemsOf(
         voiceWith({
           x: { block: "sawtooth", voice: true },
           y: { block: "saw", voice: true, inputs: { freq: 440, frequency: "voice.frequency" } },
-          z: { block: "mul", voice: true, inputs: { a: "y.left", b: "nowhere" } },
         }),
       ),
+    ).toEqual(['x: there is no block "sawtooth"', 'y: a saw has no input "freq" (it has frequency)']);
+  });
+
+  it("names references to nothing, against the input they're in", () => {
+    expect(
+      problemsOf({
+        format: 1,
+        nodes: {
+          y: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+          z: { block: "mul", voice: true, inputs: { a: "y.left", b: [1, "nowhere"] } },
+        },
+        voice: "z",
+        output: "verb",
+      }),
     ).toEqual([
-      'x: there is no block "sawtooth"',
-      'y: a saw has no input "freq" (it has frequency)',
       'z.a: y (a saw) has no output "left" (it has signal)',
       'z.b: "nowhere" is not a node or a signal',
-      'output: "x" is a sawtooth, which isn\'t a block',
+      'output: "verb" is not a node or a signal',
     ]);
   });
 
@@ -299,7 +311,7 @@ describe("definitions the compiler refuses", () => {
   it("checks params against the device's, and keeps signal names for signals", () => {
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "volume" }, b: 1 } } }), ["level"]),
-    ).toEqual(['there is no param "volume" (the device has level)']);
+    ).toEqual(['x.a: there is no param "volume" (the device has level)']);
     expect(problemsOf(voiceWith({ voice: { block: "noise", voice: true } }, "voice"))).toContain(
       "voice: the name is kept for signals (voice, voices, input)",
     );
