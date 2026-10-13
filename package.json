@@ -22,6 +22,7 @@
     "check:pwa": "tsx scripts/checkPwaOffline.ts",
     "engine:build": "node engine/compile.ts",
     "engine:check": "node engine/compile.ts --check",
+    "engine:test": "node engine/compile.ts --test",
     "portraits": "tsx scripts/generatePortraits.ts",
     "preview": "vite preview"
   },

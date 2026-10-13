@@ -51,3 +51,10 @@ runs:
       env:
         ENGINE_TOOLCHAIN_IMAGE: corrente-engine-toolchain:ci
       run: node ${{ steps.dir.outputs.path }}/compile.ts --check
+
+    - name: The router's Rust tests
+      if: steps.changes.outputs.engine == 'true'
+      shell: bash
+      env:
+        ENGINE_TOOLCHAIN_IMAGE: corrente-engine-toolchain:ci
+      run: node ${{ steps.dir.outputs.path }}/compile.ts --test

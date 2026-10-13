@@ -110,7 +110,7 @@ pub mod libm {
 // in Rust you say so with `dyn`.
 pub type Block = dyn FaustDsp<T = FaustFloat>;
 
-// The generated blocks, one module each, then FACTORIES, INPUTS and COUNT.
+// The generated blocks, one module each, then FACTORIES, INPUTS, OUTPUTS, COUNT and NAMES.
 // No TS equivalent: `include!` pastes another file's text in here at compile time, like a C
 // #include, with the path relative to this file. Anything ending in `!` is a macro: code that
 // writes code.
