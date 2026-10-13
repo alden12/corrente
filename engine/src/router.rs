@@ -370,6 +370,9 @@ impl Render<'_> {
     /// A delay outside any loop: write each sample then read, so a delay of 0 passes straight through.
     fn run_delay(&mut self, index: usize) {
         self.with_node(index, 0, |node, unit, outputs, sources| {
+            // TS: if (unit.type !== "delay") return; const line = unit.line;
+            // The pattern `Unit::Delay(line)` both checks the variant and names the DelayLine it
+            // carries: `line` is a new variable, made here.
             let Unit::Delay(line) = unit else { return };
             let input = sources.samples(node.audio[0], 0, BLOCK);
             let lengths = sources.samples(node.audio[1], 0, BLOCK);
@@ -386,6 +389,7 @@ impl Render<'_> {
     /// A delay's output over [start, start + length), from what it has already been given.
     fn delay_read(&mut self, index: usize, start: usize, length: usize) {
         self.with_node(index, start, |node, unit, outputs, sources| {
+            // TS: if (unit.type !== "delay") return; const line = unit.line;
             let Unit::Delay(line) = unit else { return };
             let lengths = sources.samples(node.audio[1], start, length);
             let output = &mut outputs[0][start + 1..start + 1 + length];
@@ -401,6 +405,7 @@ impl Render<'_> {
     fn delay_write(&mut self, index: usize, start: usize, length: usize) {
         // `_outputs`: given but unused, hence the underscore.
         self.with_node(index, start, |node, unit, _outputs, sources| {
+            // TS: if (unit.type !== "delay") return; const line = unit.line;
             let Unit::Delay(line) = unit else { return };
             // In a one-sample loop the input can be a feedback edge, read as the sample before.
             sources.samples(node.audio[0], start, length).iter().for_each(|&sample| {
