@@ -8,7 +8,6 @@ use crate::plan::Plan;
 /// The most tracks one engine runs (a bank; a phone wants about 16).
 pub const MAX_TRACKS: usize = 64;
 
-// TS: export class Engine { private sampleRate: number; private tracks: Track[] }
 // Fields are private unless marked `pub`; only `Engine` itself is public.
 pub struct Engine {
     sample_rate: i32,
@@ -16,7 +15,7 @@ pub struct Engine {
 }
 
 impl Engine {
-    // TS: constructor(). `const fn` can also run at compile time, which lib.rs needs to set up the
+    // `const fn` can also run at compile time, which lib.rs needs to set up the
     // one engine before anything calls it.
     pub const fn new() -> Self {
         Engine { sample_rate: 48000, tracks: Vec::new() }
@@ -96,5 +95,26 @@ impl Engine {
     // TS: return this.tracks[track]?.inputMut(channel)
     pub fn input_mut(&mut self, track: usize, channel: usize) -> Option<&mut [f32]> {
         self.tracks.get_mut(track).and_then(|track| track.input_mut(channel))
+    }
+
+    /// The loudest sample in a track's output channel last block.
+    // TS: return this.tracks[track]?.peak(channel)
+    pub fn peak(&self, track: usize, channel: usize) -> Option<f32> {
+        self.tracks.get(track).and_then(|track| track.peak(channel))
+    }
+
+    /// Whether a track was silent last block (no voice sounding, nothing out).
+    pub fn silent(&self, track: usize) -> Option<bool> {
+        self.tracks.get(track).map(|track| track.silent())
+    }
+
+    /// How many samples late a track's output is, from its plan.
+    pub fn latency(&self, track: usize) -> Option<usize> {
+        self.tracks.get(track).map(|track| track.latency())
+    }
+
+    /// What a node's meter shows: see `Track::meter`.
+    pub fn meter(&self, track: usize, section: usize, node: usize, index: usize) -> Option<f32> {
+        self.tracks.get(track).and_then(|track| track.meter(section, node, index))
     }
 }

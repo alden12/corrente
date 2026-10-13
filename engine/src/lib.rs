@@ -53,25 +53,12 @@ fn with_engine<R>(run: impl FnOnce(&mut Engine) -> R) -> R {
     ENGINE.with_borrow_mut(run)
 }
 
-/// Grow the heap once, up front, and hand it back to the allocator. Later allocations (loading a
-/// plan) then reuse it rather than growing memory, which would detach JS's view of the mix. Chunks
-/// stay small so the allocator keeps them rather than treating each as its own mapping.
-// TS: const RESERVED_HEAP = 32 * 2 ** 20; const RESERVE_CHUNK = 64 * 2 ** 10;  (32MB, 64KB)
-// `const` needs its type written out; `<<` is a bit shift, as in TS.
-const RESERVED_HEAP: usize = 32 << 20;
-const RESERVE_CHUNK: usize = 64 << 10;
-
-/// Called once when the module starts.
-// TS: const chunks = Array.from({ length: RESERVED_HEAP / RESERVE_CHUNK }, () => new Uint8Array(RESERVE_CHUNK));
-// `(0..n)` is a range, 0 to n - 1; `.map(|_| ...)` ignores the number. `Vec::with_capacity`
-// reserves room without filling it. `drop(...)` frees them now rather than at the end of the
-// function: the memory goes back to the allocator, which keeps it for later.
+/// Called once when the module starts. Nothing to do: memory starts small and grows only while a
+/// plan loads (eng_init and eng_load), never while rendering (a test checks rendering allocates
+/// nothing). Growing replaces JS's ArrayBuffer of the memory, so JS makes its views again after
+/// those two calls; the addresses eng_input and eng_output give stay the same.
 #[unsafe(no_mangle)]
-pub extern "C" fn _initialize() {
-    let chunks: Vec<Vec<u8>> = (0..RESERVED_HEAP / RESERVE_CHUNK).map(|_| Vec::with_capacity(RESERVE_CHUNK)).collect();
-    // black_box, or the optimizer sees allocations nobody uses and removes them.
-    drop(std::hint::black_box(chunks));
-}
+pub extern "C" fn _initialize() {}
 
 /// Memory for JS to write a plan into. Freed by eng_free.
 // TS:
@@ -247,21 +234,66 @@ pub extern "C" fn eng_block_outputs(kind: i32) -> i32 {
     faust::outputs(kind).map_or(-1, |count| count as i32)
 }
 
-/// How many control inputs (Faust sliders) a kind has, or -1 if there is no such kind. Making a
-/// block to ask is the only way to know, so this also proves every block can be built.
-// TS:
-//   if (kind >= 0 && kind < faust.COUNT) return faust.controls(faust.create(kind)).length;
-//   return -1;
-// `match` is a switch that must cover every case. `Ok(kind) if ...` matches a successful conversion
-// and pulls the value out as `kind`, with an extra condition; `_` is `default:`.
-// `&*faust::create(kind)`: create returns a Box (an owned block); `*` reaches the block inside and
-// `&` lends it to `controls`. The box is dropped, freeing the block, at the end of the statement.
+/// A kind's controls and meters, by building one to ask (the only way to know, so this also proves
+/// every block can be built). None if there is no such kind.
+// TS: return kind >= 0 && kind < faust.COUNT ? faust.ports(faust.create(kind)) : undefined
+// `.filter(f)` on an Option keeps the value only if f says so. `&*faust::create(kind)`: create
+// returns a Box (an owned block); `*` reaches the block inside and `&` lends it to `ports`. The box
+// is dropped, freeing the block, at the end of the expression.
+fn block_ports(kind: i32) -> Option<faust::Ports> {
+    index(kind).filter(|&kind| kind < faust::COUNT).map(|kind| faust::ports(&*faust::create(kind)))
+}
+
+/// How many control inputs (Faust sliders) a kind has, or -1 if there is no such kind.
+// TS: return blockPorts(kind)?.controls.length ?? -1
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_block_controls(kind: i32) -> i32 {
-    match usize::try_from(kind) {
-        Ok(kind) if kind < faust::COUNT => faust::controls(&*faust::create(kind)).len() as i32,
-        _ => -1,
-    }
+    block_ports(kind).map_or(-1, |ports| ports.controls.len() as i32)
+}
+
+/// How many meters (Faust bargraphs) a kind has, or -1 if there is no such kind.
+// TS: return blockPorts(kind)?.meters.length ?? -1
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_block_meters(kind: i32) -> i32 {
+    block_ports(kind).map_or(-1, |ports| ports.meters.len() as i32)
+}
+
+/// The loudest sample in a track's output channel last block, or -1 if there is no such track or
+/// channel. For level meters.
+// TS: return withEngine((engine) => engine.peak(track, channel)) ?? -1
+// `.zip(other)` on two Options: Some((a, b)) if both are there. `.and_then(f)` chains a lookup that
+// may come up empty.
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_track_peak(track: i32, channel: i32) -> f32 {
+    let found = index(track).zip(index(channel)).and_then(|(track, channel)| with_engine(|engine| engine.peak(track, channel)));
+    found.unwrap_or(-1.0)
+}
+
+/// 1 if a track was silent last block (no voice sounding, nothing out), 0 if not, -1 if there is no
+/// such track.
+// TS: const silent = withEngine((engine) => engine.silent(track)); return silent === undefined ? -1 : Number(silent)
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_track_silent(track: i32) -> i32 {
+    index(track).and_then(|track| with_engine(|engine| engine.silent(track))).map_or(-1, |silent| silent as i32)
+}
+
+/// How many samples late a track's output is, from its plan, or -1 if there is no such track.
+// TS: return withEngine((engine) => engine.latency(track)) ?? -1
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_track_latency(track: i32) -> i32 {
+    index(track).and_then(|track| with_engine(|engine| engine.latency(track))).map_or(-1, |latency| latency as i32)
+}
+
+/// What a node's meter `meter` shows, in section 0 (pre), 1 (voice: the highest of the sounding
+/// voices) or 2 (post). NaN (not a number) if there is no such track, section, node or meter.
+// TS: return withEngine((engine) => engine.meter(track, section, node, meter)) ?? NaN
+// `f32::NAN` is the float "not a number", which JS sees as NaN.
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_meter(track: i32, section: i32, node: i32, meter: i32) -> f32 {
+    let (Some(track), Some(section), Some(node), Some(meter)) = (index(track), index(section), index(node), index(meter)) else {
+        return f32::NAN;
+    };
+    with_engine(|engine| engine.meter(track, section, node, meter)).unwrap_or(f32::NAN)
 }
 
 // TS: no equivalent. `#[cfg(test)]` includes the module only when building the tests, so tests/

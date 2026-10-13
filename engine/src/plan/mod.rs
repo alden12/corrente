@@ -12,7 +12,8 @@
 //! and the voice sum; nothing reads backwards.
 //!
 //! Layout (a float is its bit pattern):
-//!   header: paramCount, voiceCount
+//!   header: paramCount, voiceCount, latency (samples the track's output runs late, for the mixer
+//!     to make up: a look-ahead limiter's look-ahead, say)
 //!   each section, pre then voice then post: nodeCount, stepCount, then the nodes, then the steps
 //!     each node: kind, audioCount, controlCount, then each input as (type, index, extra)
 //!     each step: mode, memberCount, node ids
@@ -119,7 +120,6 @@ pub enum NodeKind {
     Delay,
 }
 
-// TS: interface Node { kind: NodeKind; audio: Source[]; control: Source[]; outputs: number; readsItself: boolean }
 // A `struct` is a plain object type with named fields; `pub` makes a field readable outside this file.
 pub struct Node {
     pub kind: NodeKind,
@@ -158,7 +158,6 @@ pub enum StepMode {
     ChunkLoop,
 }
 
-// TS: interface Step { mode: StepMode; nodes: number[] }
 pub struct Step {
     pub mode: StepMode,
     pub nodes: Vec<usize>,
@@ -173,7 +172,6 @@ enum Place {
     Post,
 }
 
-// TS: interface Section { nodes: Node[]; steps: Step[]; base: number[]; bufferCount: number }
 pub struct Section {
     pub nodes: Vec<Node>,
     pub steps: Vec<Step>,
@@ -183,10 +181,11 @@ pub struct Section {
     pub buffer_count: usize,
 }
 
-// TS: interface Plan { paramCount: number; voiceCount: number; constants: number[]; pre: Section; voice: Section; post: Section; voiceOut: Source[]; trackOut: Source[] }
 pub struct Plan {
     pub param_count: usize,
     pub voice_count: usize,
+    /// How many samples late the track's output is, for the mixer to compensate.
+    pub latency: usize,
     /// The literal each `Source::Const` points at.
     pub constants: Vec<f32>,
     pub pre: Section,
@@ -207,6 +206,7 @@ pub fn parse(words: &[i32]) -> Result<Plan, i32> {
     let mut reader = Reader { words, at: 0, constants: Vec::new() };
     let param_count = reader.count()?;
     let voice_count = reader.count()?;
+    let latency = reader.count()?;
     if voice_count > MAX_VOICES {
         return Err(REJECTED);
     }
@@ -220,5 +220,5 @@ pub fn parse(words: &[i32]) -> Result<Plan, i32> {
         return Err(WRONG_LENGTH);
     }
     let constants = reader.constants;
-    Ok(Plan { param_count, voice_count, constants, pre, voice, post, voice_out, track_out })
+    Ok(Plan { param_count, voice_count, latency, constants, pre, voice, post, voice_out, track_out })
 }

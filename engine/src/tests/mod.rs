@@ -16,6 +16,7 @@
 mod loops;
 mod playing;
 mod refusals;
+mod reports;
 mod sections;
 
 use crate::faust;
@@ -41,6 +42,9 @@ fn previous(node: i32) -> Input {
     (1, node, 0)
 }
 // `.to_bits()` is the float's bit pattern, as the plan carries it.
+fn param(param: i32) -> Input {
+    (2, param, 0)
+}
 fn constant(value: f32) -> Input {
     (3, 0, value.to_bits() as i32)
 }
@@ -75,7 +79,6 @@ const PRE: usize = 0;
 const VOICE: usize = 1;
 const POST: usize = 2;
 
-// TS: interface SectionWords { nodes: [kind: number, audio: Input[], control: Input[]][]; steps: [mode: number, members: number[]][] }
 // `#[derive(Default)]` writes `SectionWords::default()` for us: both lists empty.
 #[derive(Default)]
 struct SectionWords {
@@ -83,9 +86,11 @@ struct SectionWords {
     steps: Vec<(i32, Vec<i32>)>,
 }
 
-// TS: class PlanBuilder { voices = 4; sections = [new SectionWords(), ...]; voiceOut: Input[] = []; trackOut = [voiceSum(0), voiceSum(1)] }
+// TS: class PlanBuilder { params = 0; voices = 4; latency = 0; sections = [new SectionWords(), ...]; voiceOut: Input[] = []; trackOut = [voiceSum(0), voiceSum(1)] }
 struct PlanBuilder {
+    params: i32,
     voices: i32,
+    latency: i32,
     sections: [SectionWords; 3],
     voice_out: Vec<Input>,
     track_out: Vec<Input>,
@@ -94,7 +99,7 @@ struct PlanBuilder {
 impl PlanBuilder {
     /// A plan with 4 voices, whose track plays the voices' sum.
     fn new() -> Self {
-        PlanBuilder { voices: 4, sections: Default::default(), voice_out: vec![], track_out: vec![voice_sum(0), voice_sum(1)] }
+        PlanBuilder { params: 0, voices: 4, latency: 0, sections: Default::default(), voice_out: vec![], track_out: vec![voice_sum(0), voice_sum(1)] }
     }
 
     // TS: voices(count) { this.voices = count; return this }
@@ -102,6 +107,16 @@ impl PlanBuilder {
     // `PlanBuilder::new().node(...).step(...)`.
     fn voices(mut self, count: i32) -> Self {
         self.voices = count;
+        self
+    }
+
+    fn params(mut self, count: i32) -> Self {
+        self.params = count;
+        self
+    }
+
+    fn latency(mut self, samples: i32) -> Self {
+        self.latency = samples;
         self
     }
 
@@ -146,7 +161,7 @@ impl PlanBuilder {
     //   words(): number[] {
     //     const inputWords = (inputs: Input[]) => inputs.flat();
     //     const sections = this.sections.flatMap((section) => [section.nodes.length, section.steps.length, ...nodes, ...steps]);
-    //     return [0, this.voices, ...sections, this.voiceOut.length, ...inputWords(this.voiceOut), this.trackOut.length, ...inputWords(this.trackOut)];
+    //     return [this.params, this.voices, this.latency, ...sections, this.voiceOut.length, ...inputWords(this.voiceOut), this.trackOut.length, ...inputWords(this.trackOut)];
     //   }
     // `flat_map` is flatMap; `[a, b].concat()` joins lists. `|&(kind, index, extra)|` destructures a
     // tuple, copying it out of its reference.
@@ -160,7 +175,7 @@ impl PlanBuilder {
             let steps = section.steps.iter().flat_map(|(mode, members)| [vec![*mode, members.len() as i32], members.clone()].concat());
             [section.nodes.len() as i32, section.steps.len() as i32].into_iter().chain(nodes).chain(steps).collect::<Vec<i32>>()
         });
-        [0, self.voices].into_iter().chain(sections).chain(outputs(&self.voice_out)).chain(outputs(&self.track_out)).collect()
+        [self.params, self.voices, self.latency].into_iter().chain(sections).chain(outputs(&self.voice_out)).chain(outputs(&self.track_out)).collect()
     }
 
     /// The plan, parsed: the test fails here if the engine would refuse it.

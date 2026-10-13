@@ -9,8 +9,8 @@
 //!   writes and the reads never overlap.
 //! - `|args| body` is a closure, like an arrow function. `impl FnOnce(...)` accepts any closure that
 //!   is called once.
-//! - `let Unit::Faust { block, controls } = unit else { return };` takes `unit` apart if it is a
-//!   Faust unit, and returns otherwise.
+//! - `let Unit::Faust { block, controls, .. } = unit else { return };` takes `unit` apart if it is a
+//!   Faust unit, and returns otherwise; `..` skips the fields it doesn't name.
 
 use super::delay::DelayLine;
 use super::sources::{Context, Sources};
@@ -19,23 +19,23 @@ use crate::faust::{self, Block, ParamIndex};
 use crate::plan::{MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Section, StepMode};
 
 /// What a node is when it runs: a Faust block with its sliders, or a delay line.
-// TS: type Unit = { type: "faust"; block: Block; controls: ParamIndex[] } | { type: "delay"; line: DelayLine }
+// TS: type Unit = { type: "faust"; block: Block; controls: ParamIndex[]; meters: ParamIndex[] } | { type: "delay"; line: DelayLine }
 // A variant can have named fields (`Faust { ... }`) or unnamed ones (`Delay(...)`).
 pub(super) enum Unit {
-    Faust { block: Box<Block>, controls: Vec<ParamIndex> },
+    Faust { block: Box<Block>, controls: Vec<ParamIndex>, meters: Vec<ParamIndex> },
     Delay(DelayLine),
 }
 
 impl Unit {
-    // TS: static create(node: Node, sampleRate: number): Unit
     pub(super) fn new(node: &Node, sample_rate: i32) -> Self {
         match node.kind {
             NodeKind::Delay => Unit::Delay(DelayLine::new()),
             NodeKind::Faust(kind) => {
                 let mut block = faust::create(kind);
                 block.init(sample_rate);
-                let controls = faust::controls(&*block);
-                Unit::Faust { block, controls }
+                // TS: const { controls, meters } = faust.ports(block)
+                let faust::Ports { controls, meters } = faust::ports(&*block);
+                Unit::Faust { block, controls, meters }
             }
         }
     }
@@ -48,10 +48,17 @@ impl Unit {
             Unit::Delay(line) => line.clear(),
         }
     }
+
+    /// The value a block's meter `index` shows, or None if it has no such meter.
+    // TS: return this.type === "faust" ? (this.meters[index] !== undefined ? this.block.getParam(this.meters[index]) : undefined) : undefined
+    // `let ... else` again; then `?` on Options, returning None as soon as a lookup comes up empty.
+    pub(super) fn meter(&self, index: usize) -> Option<f32> {
+        let Unit::Faust { block, meters, .. } = self else { return None };
+        block.get_param(*meters.get(index)?)
+    }
 }
 
 /// One section while it renders: its units and buffers, and what it reads.
-// TS: interface Render { section: Section; units: Unit[]; buffers: Slot[]; context: Context }
 // `&'a mut` fields are writable loans: while a Render exists, nothing else can touch those units or
 // buffers.
 pub(super) struct Render<'a> {
@@ -103,7 +110,7 @@ impl Render<'_> {
     fn run_faust(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
         self.with_node(index, start, |node, unit, outputs, sources| {
             // TS: if (unit.type !== "faust") return; const { block, controls } = unit;
-            let Unit::Faust { block, controls } = unit else { return };
+            let Unit::Faust { block, controls, .. } = unit else { return };
             if set_controls {
                 // TS: controls.forEach((param, i) => block.setParam(param, sources.samples(node.control[i], start, 1)[0]))
                 // `.zip(other)` walks two lists in step, giving pairs. `|(&param, &source)|`

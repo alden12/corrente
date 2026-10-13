@@ -7,13 +7,11 @@ use super::{BLOCK, NO_SIGNALS, NO_VOICE_SUM, SILENCE, SILENT_SLOT, SLOT, Slot};
 use crate::plan::{CHANNELS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
 
 /// One section's state, in a track or in one voice: a unit per node and a buffer per node output.
-// TS: interface SectionState { units: Unit[]; buffers: Slot[] }
 struct SectionState {
     units: Vec<Unit>,
     buffers: Vec<Slot>,
 }
 
-// TS: interface Voice { state: SectionState; signals: [Slot, Slot, Slot]; current: [number, number, number]; active: boolean; released: boolean }
 struct Voice {
     state: SectionState,
     signals: [Slot; VOICE_SIGNALS],
@@ -32,7 +30,6 @@ pub(super) struct ParamSource {
     pub(super) buffer: Slot,
 }
 
-// TS: static default(): ParamSource { return { current: 0, target: 0, buffer: new Float32Array(SLOT) } }
 // `Default` is a standard trait for "a sensible starting value". `Self` is the type being implemented.
 impl Default for ParamSource {
     fn default() -> Self {
@@ -41,7 +38,6 @@ impl Default for ParamSource {
 }
 
 /// One track of the bank: its plan, and everything that plan runs on.
-// TS: interface Track { plan?: Plan; params: ParamSource[]; ...; inputs: Slot[]; output: [Float32Array, Float32Array] }
 // `inputs` and `output` sit inside the track, so they stay at one address while the bank exists:
 // JS is handed pointers to them once.
 pub(super) struct Track {
@@ -54,10 +50,14 @@ pub(super) struct Track {
     voice_sum: [Slot; CHANNELS],
     inputs: [Slot; MAX_INPUTS],
     output: [[f32; BLOCK]; CHANNELS],
+    /// The loudest sample in each output channel last block, for level meters.
+    peaks: [f32; CHANNELS],
+    /// Whether last block was silent: no voice sounding and nothing above SILENCE out. A silent
+    /// track can be skipped (DAW-57) until something changes.
+    silent: bool,
 }
 
 impl SectionState {
-    // TS: static create(section: Section, sampleRate: number): SectionState
     fn new(section: &Section, sample_rate: i32) -> Self {
         SectionState {
             units: section.nodes.iter().map(|node| Unit::new(node, sample_rate)).collect(),
@@ -66,7 +66,6 @@ impl SectionState {
         }
     }
 
-    // TS: static empty(): SectionState { return { units: [], buffers: [] } }
     fn empty() -> Self {
         SectionState { units: Vec::new(), buffers: Vec::new() }
     }
@@ -86,7 +85,6 @@ impl SectionState {
 }
 
 impl Voice {
-    // TS: static create(section: Section, sampleRate: number): Voice
     fn new(section: &Section, sample_rate: i32) -> Self {
         Voice {
             state: SectionState::new(section, sample_rate),
@@ -109,7 +107,7 @@ impl Voice {
 }
 
 impl Track {
-    // TS: static create(): Track, with no plan: silent until one loads.
+    // With no plan: silent until one loads.
     pub(super) fn new() -> Self {
         Track {
             plan: None,
@@ -121,6 +119,8 @@ impl Track {
             voice_sum: [SILENT_SLOT; CHANNELS],
             inputs: [SILENT_SLOT; MAX_INPUTS],
             output: [[0.0; BLOCK]; CHANNELS],
+            peaks: [0.0; CHANNELS],
+            silent: true,
         }
     }
 
@@ -155,7 +155,12 @@ impl Track {
         self.output.iter_mut().for_each(|channel| channel.fill(0.0));
         self.voice_sum.iter_mut().for_each(|channel| channel.fill(0.0));
         // TS: const plan = this.plan; if (!plan) return;
-        let Some(plan) = &self.plan else { return };
+        // TS: if (!this.plan) { this.measure(); return } const plan = this.plan;
+        // The `else` block runs when there is no plan; it must leave the function (`return`).
+        let Some(plan) = &self.plan else {
+            self.measure();
+            return;
+        };
 
         // Rust lets one function hold loans of different fields of `self` at once (`self.inputs` read,
         // `self.pre` written), since they can't overlap. These loans all end with the function.
@@ -211,6 +216,18 @@ impl Track {
         });
         self.pre.carry();
         self.post.carry();
+        self.measure();
+    }
+
+    /// Note the block's peaks, and whether it was silent.
+    // TS:
+    //   this.peaks = this.output.map((channel) => Math.max(...channel.map(Math.abs)));
+    //   this.silent = !this.voices.some((voice) => voice.active) && this.peaks.every((peak) => peak < SILENCE);
+    // `fold(0.0, f)` is `reduce(f, 0)`; `f32::max` names the method as a two-argument function.
+    // `std::array::from_fn` builds the fixed-size array from each channel's index.
+    fn measure(&mut self) {
+        self.peaks = std::array::from_fn(|channel| self.output[channel].iter().map(|sample| sample.abs()).fold(0.0, f32::max));
+        self.silent = !self.voices.iter().any(|voice| voice.active) && self.peaks.iter().all(|&peak| peak < SILENCE);
     }
 
     /// Start a note in a voice slot, `offset` samples into the coming block. A busy slot is reset
@@ -269,5 +286,46 @@ impl Track {
     // `.map(f)` on an Option: f(value) if there is one. Slot 0 is the engine's, so JS gets 1..=128.
     pub(super) fn input_mut(&mut self, channel: usize) -> Option<&mut [f32]> {
         self.inputs.get_mut(channel).map(|slot| &mut slot[1..])
+    }
+
+    // TS: return this.peaks[channel]
+    pub(super) fn peak(&self, channel: usize) -> Option<f32> {
+        self.peaks.get(channel).copied()
+    }
+
+    pub(super) fn silent(&self) -> bool {
+        self.silent
+    }
+
+    // TS: return this.plan?.latency ?? 0
+    // `.as_ref()` lends the plan out of the Option rather than moving it; `.map_or(default, f)`.
+    pub(super) fn latency(&self) -> usize {
+        self.plan.as_ref().map_or(0, |plan| plan.latency)
+    }
+
+    /// What a node's meter `index` shows: in the pre (0) or post (2) section, that node's; in the voice
+    /// section (1), the highest across the sounding voices, or 0 with none sounding. None if there is
+    /// no such section, node or meter.
+    // TS:
+    //   switch (section) {
+    //     case 0: return this.pre.units[node]?.meter(index);
+    //     case 1: { if (this.voices[0]?.state.units[node]?.meter(index) === undefined) return undefined;
+    //               return Math.max(0, ...activeVoices.map((voice) => voice.state.units[node].meter(index))) }
+    //     case 2: return this.post.units[node]?.meter(index);
+    //   }
+    // `.first()?` returns None from the function if there are no voices. `filter_map(f)` keeps each
+    // f(voice) that is Some.
+    pub(super) fn meter(&self, section: usize, node: usize, index: usize) -> Option<f32> {
+        let in_section = |state: &SectionState| -> Option<f32> { state.units.get(node)?.meter(index) };
+        match section {
+            0 => in_section(&self.pre),
+            1 => {
+                in_section(&self.voices.first()?.state)?;
+                let sounding = self.voices.iter().filter(|voice| voice.active).filter_map(|voice| in_section(&voice.state));
+                Some(sounding.fold(0.0, f32::max))
+            }
+            2 => in_section(&self.post),
+            _ => None,
+        }
     }
 }

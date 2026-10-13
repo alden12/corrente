@@ -11,7 +11,6 @@ use crate::plan::{CHANNELS, MAX_INPUTS, MAX_OUTPUTS, Source, VOICE_SIGNALS};
 
 /// What a section reads besides its own buffers. The same for every node in it, so it is built once
 /// per section and copied (it is only loans, so copying is cheap).
-// TS: interface Context { shared: Slot[]; sharedBase: number[]; signals: Slot[]; voiceSum: Slot[]; inputs: Slot[]; params: ParamSource[]; constants: Slot[] }
 // `#[derive(Clone, Copy)]` on a struct of loans: copying it copies the loans, not what they point at.
 #[derive(Clone, Copy)]
 pub(super) struct Context<'a> {
@@ -27,7 +26,6 @@ pub(super) struct Context<'a> {
 
 /// Everything a node reads, with its own buffers split off to be written. A node only reads its own
 /// output as a one-sample feedback edge, and then it reads `own`, a copy taken before the split.
-// TS: interface Sources { base: number[]; first: number; count: number; before: Slot[]; after: Slot[]; own?: number[]; context: Context }
 // Every loan field is read-only (`&'a`), all valid for the same lifetime 'a.
 pub(super) struct Sources<'a> {
     pub(super) base: &'a [usize],

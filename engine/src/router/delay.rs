@@ -12,7 +12,6 @@ const DELAY_MASK: usize = DELAY_SIZE - 1;
 const LONGEST_DELAY: f32 = (DELAY_SIZE - 2) as f32;
 
 /// A delay line's state: a ring of past inputs. out[t] = in[t - samples].
-// TS: interface DelayLine { ring: Float32Array; write: number }
 // `Box<[f32; 4096]>` puts the 16KB ring on the heap rather than inline in the struct.
 pub(super) struct DelayLine {
     ring: Box<[f32; DELAY_SIZE]>,
@@ -20,7 +19,6 @@ pub(super) struct DelayLine {
 }
 
 impl DelayLine {
-    // TS: static create(): DelayLine { return { ring: new Float32Array(DELAY_SIZE), write: 0 } }
     pub(super) fn new() -> Self {
         DelayLine { ring: Box::new([0.0; DELAY_SIZE]), write: 0 }
     }

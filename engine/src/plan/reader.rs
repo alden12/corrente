@@ -7,7 +7,6 @@ use crate::faust;
 /// Reads words in order, collecting the plan's constants as it goes. Past the end it reads 0 and
 /// counts the overrun, so the length check catches a plan cut short as well as one with words left
 /// over.
-// TS: class Reader { constructor(public words: Int32Array, public at = 0, public constants: number[] = []) {} }
 // No TS equivalent for `<'a>`: a "lifetime", a name for how long the borrowed `words` lives. The
 // struct holds a loan of the caller's array rather than a copy, and this tells the compiler a
 // `Reader` can't outlive that array.

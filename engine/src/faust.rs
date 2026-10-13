@@ -27,7 +27,6 @@ pub type FaustFloat = F32;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParamIndex(pub i32);
 
-// TS: interface Meta { declare(key: string, value: string): void }
 // `&mut self` means the method may change the object it's called on; `&str` is a borrowed string
 // (read-only, owned by the caller).
 pub trait Meta {
@@ -55,7 +54,7 @@ pub trait UI<T> {
 }
 
 /// The interface every generated block implements.
-// TS: interface FaustDsp<T> { ... }, but with two things TS doesn't have:
+// Two things here that TS interfaces don't have:
 // - `type T;` is an "associated type": each implementation picks what T is (here always f32),
 //   rather than the caller passing it in as a generic.
 // - Methods without `self` (`new`, `class_init`, `build_user_interface_static`) are static methods,
@@ -143,39 +142,52 @@ pub fn outputs(kind: i32) -> Option<usize> {
     usize::try_from(kind).ok().and_then(|kind| OUTPUTS.get(kind).copied())
 }
 
-/// A block's controls in declared ([n]) order, which is the order it describes them in.
+/// A block's controls (its sliders) and its meters (its bargraphs), each in the order it declares
+/// them ([n] in a label sets that order).
+pub struct Ports {
+    pub controls: Vec<ParamIndex>,
+    pub meters: Vec<ParamIndex>,
+}
+
+/// Ask a block for its controls and meters: it describes them to a UI, and this one just collects.
 // TS:
-//   function controls(block: Block): ParamIndex[] {
-//     class Collector extends UI { params: ParamIndex[] = []; addButton(_, param) { this.params.push(param) } ... }
+//   function ports(block: Block): Ports {
+//     class Collector extends UI { ports = { controls: [], meters: [] }; addHorizontalSlider(_, param) { this.ports.controls.push(param) } ... }
 //     const collector = new Collector();
 //     block.buildUserInterface(collector);
-//     return collector.params;
+//     return collector.ports;
 //   }
-pub fn controls(block: &Block) -> Vec<ParamIndex> {
-    // TS: class Collector { 0: ParamIndex[] }. A tuple struct again: its one field is `.0`.
-    // `Vec<T>` is a growable array, TS `T[]`.
-    struct Collector(Vec<ParamIndex>);
+pub fn ports(block: &Block) -> Ports {
+    // A tuple struct: its one field is `.0`.
+    struct Collector(Ports);
     // TS: Collector implements UI<number>, overriding only these methods. `impl Trait for Type`
     // attaches an interface to a type after the fact, separately from declaring the type.
     impl UI<FaustFloat> for Collector {
         fn add_button(&mut self, _: &str, param: ParamIndex) {
-            self.0.push(param);
+            self.0.controls.push(param);
         }
         fn add_check_button(&mut self, _: &str, param: ParamIndex) {
-            self.0.push(param);
+            self.0.controls.push(param);
         }
         fn add_vertical_slider(&mut self, _: &str, param: ParamIndex, _: F32, _: F32, _: F32, _: F32) {
-            self.0.push(param);
+            self.0.controls.push(param);
         }
         fn add_horizontal_slider(&mut self, _: &str, param: ParamIndex, _: F32, _: F32, _: F32, _: F32) {
-            self.0.push(param);
+            self.0.controls.push(param);
         }
         fn add_num_entry(&mut self, _: &str, param: ParamIndex, _: F32, _: F32, _: F32, _: F32) {
-            self.0.push(param);
+            self.0.controls.push(param);
+        }
+        fn add_horizontal_bargraph(&mut self, _: &str, param: ParamIndex, _: F32, _: F32) {
+            self.0.meters.push(param);
+        }
+        fn add_vertical_bargraph(&mut self, _: &str, param: ParamIndex, _: F32, _: F32) {
+            self.0.meters.push(param);
         }
     }
-    // TS: let collector = new Collector([]). `let mut`: Rust variables are const unless marked mut.
-    let mut collector = Collector(Vec::new());
+    // TS: const collector = new Collector({ controls: [], meters: [] }). `let mut`: Rust variables
+    // are const unless marked mut.
+    let mut collector = Collector(Ports { controls: Vec::new(), meters: Vec::new() });
     // TS: block.buildUserInterface(collector). `&mut collector` lends it out for writing, for the
     // length of the call; we still own it afterwards.
     block.build_user_interface(&mut collector);
