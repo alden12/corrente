@@ -11,41 +11,56 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
+  # In parallel: the static checks and build, the unit tests, and the end-to-end suite split four
+  # ways. The steps are composite actions in .github/actions.
+  static:
+    name: Static checks + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: yarn
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Lint
-        run: yarn lint
-
-      - name: Format check (Prettier)
-        run: yarn format:check
-
-      - name: Typecheck + build (tsc -b + vite)
-        run: yarn build
-
-      - name: Typecheck the local MCP server (DOM-free)
-        run: yarn check:server
-
-      - name: Unit tests
-        run: yarn test
-
-      - name: Install Playwright browser
-        run: yarn playwright install --with-deps chromium
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/static
+      - uses: ./.github/actions/playwright
 
       # Against dist/ from the build step above, because the service worker only exists in a
       # real build - the e2e suite runs on the dev server, where it is deliberately off.
       - name: PWA installs and starts offline
         run: yarn check:pwa
 
+  # The committed engine.wasm still builds from its sources, byte for byte (INST-36.1). Skips itself
+  # unless the engine changed.
+  engine:
+    name: Engine matches its sources
+    runs-on: ubuntu-latest
+    # The path filter asks the pull request API which files changed; the default token can't read it.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/engine
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Unit tests
+        run: yarn test
+
+  e2e:
+    name: End-to-end (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/playwright
+
       - name: End-to-end tests
-        run: yarn test:e2e
+        run: yarn test:e2e --shard=${{ matrix.shard }}/4
