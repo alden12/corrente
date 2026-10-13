@@ -18,7 +18,7 @@ const engineDir = fileURLToPath(new URL("../engine/", import.meta.url));
 const engine = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(`${engineDir}engine.wasm`)), {})
   .exports as unknown as EngineExports;
 
-/** Kinds are numbered by sorted file name, as build.rs registers them. */
+/** Kinds are numbered by sorted file name, as compile.ts registers them. */
 const kinds = readdirSync(`${engineDir}blocks`)
   .filter((file) => file.endsWith(".dsp"))
   .map((file) => file.replace(/\.dsp$/, ""))

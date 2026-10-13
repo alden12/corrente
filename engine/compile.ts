@@ -16,7 +16,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const engineDir = fileURLToPath(new URL(".", import.meta.url));
 const PLATFORM = "linux/amd64";
 /** What the build reads; the rest of engine/ stays out of the container. */
-const SOURCES = ["Cargo.toml", "Cargo.lock", "build.rs", "src", "blocks"];
+const SOURCES = ["Cargo.toml", "Cargo.lock", "src", "blocks"];
 const CARGO_FLAGS = ["--release", "--locked", "--offline"];
 const BUILT_WASM = "/src/target/wasm32-unknown-unknown/release/corrente_engine.wasm";
 
@@ -66,19 +66,62 @@ const toolchainImage = () => {
   return image;
 };
 
-/** Run cargo on the sources in a fresh container, then copy `collect` out of it before it goes. */
+/**
+ * The block kinds, by file name in blocks/. A block's kind is its index in this order, so the app's
+ * tests sort the same way. Names become Rust module names and shell words, so they stay plain.
+ */
+const blockKinds = () => {
+  const kinds = readdirSync(join(engineDir, "blocks"))
+    .filter((file) => file.endsWith(".dsp"))
+    .map((file) => file.replace(/\.dsp$/, ""))
+    .sort();
+  const badName = kinds.find((kind) => !/^[a-z][a-z0-9_]*$/.test(kind));
+  if (badName) throw new EngineError(`blocks/${badName}.dsp: block names are lower case letters, digits and _.`);
+  return kinds;
+};
+
+/**
+ * Faust turns one block into its own Rust struct, `Block_<kind>`, in gen/. -ftz 1 flushes values too
+ * small to hear to zero, so decaying filters don't slow to a crawl on chips that compute them slowly
+ * (INST-33 roadblock 5).
+ */
+const faustCommand = (kind: string) => `faust -lang rust -cn Block_${kind} -ftz 1 -o gen/${kind}.rs blocks/${kind}.dsp`;
+
+/** The registry src/faust.rs includes: one module per block, then what the engine needs per kind. */
+const registry = (kinds: string[]) => {
+  const each = (line: (kind: string) => string) => kinds.map(line).join("");
+  return [
+    each((kind) => `pub mod ${kind} { use super::*; include!("${kind}.rs"); }\n`),
+    `pub const FACTORIES: &[fn() -> Box<Block>] = &[\n${each((kind) => `  || -> Box<Block> { Box::new(${kind}::Block_${kind}::new()) },\n`)}];\n`,
+    `pub const INPUTS: &[usize] = &[\n${each((kind) => `  ${kind}::FAUST_INPUTS,\n`)}];\n`,
+    `pub const OUTPUTS: &[usize] = &[\n${each((kind) => `  ${kind}::FAUST_OUTPUTS,\n`)}];\n`,
+    "pub const COUNT: usize = INPUTS.len();\n",
+    `pub const NAMES: &[&str] = &[\n${each((kind) => `  "${kind}",\n`)}];\n`,
+  ].join("");
+};
+
+/**
+ * In a fresh container: copy the sources and the registry in, run Faust over the blocks, then cargo,
+ * then copy `collect` out before the container goes.
+ */
 const cargoInToolchain = (image: string, cargoArgs: string[], collect?: { from: string; to: string }) => {
-  const container = docker(["create", "--platform", PLATFORM, image, "cargo", ...cargoArgs], { quiet: true }).trim();
+  const kinds = blockKinds();
+  const command = [...kinds.map(faustCommand), ["cargo", ...cargoArgs].join(" ")].join(" && ");
+  const genDir = mkdtempSync(join(tmpdir(), "corrente-engine-gen-"));
+  const container = docker(["create", "--platform", PLATFORM, image, "sh", "-c", command], { quiet: true }).trim();
   try {
+    writeFileSync(join(genDir, "registry.rs"), registry(kinds));
     SOURCES.forEach((source) => docker(["cp", source, `${container}:/src/${source}`], { quiet: true }));
+    docker(["cp", genDir, `${container}:/src/gen`], { quiet: true });
     try {
       docker(["start", "--attach", container]);
     } catch {
-      throw new EngineError("The engine did not build: cargo's errors are above.");
+      throw new EngineError("The engine did not build: Faust's or cargo's errors are above.");
     }
     if (collect) docker(["cp", `${container}:${collect.from}`, collect.to], { quiet: true });
   } finally {
     spawnSync("docker", ["rm", "--force", container], { stdio: "ignore" });
+    rmSync(genDir, { recursive: true, force: true });
   }
 };
 

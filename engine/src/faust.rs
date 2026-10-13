@@ -1,5 +1,5 @@
-//! The Faust blocks: the types their generated code expects to find, and the registry build.rs
-//! writes, which numbers the kinds by sorted name.
+//! The Faust blocks: the types their generated code expects to find, and the registry compile.ts
+//! writes (gen/registry.rs), which numbers the kinds by sorted name.
 //!
 //! Faust's Rust output names a handful of types it doesn't define (normally from the `faust-types`
 //! crate). They are small, so they are declared here instead and the engine has no dependencies.
@@ -112,9 +112,9 @@ pub type Block = dyn FaustDsp<T = FaustFloat>;
 
 // The generated blocks, one module each, then FACTORIES, INPUTS and COUNT.
 // No TS equivalent: `include!` pastes another file's text in here at compile time, like a C
-// #include. `concat!` and `env!` are also compile-time: they build the path to the folder Cargo
-// gave build.rs (OUT_DIR). Anything ending in `!` is a macro: code that writes code.
-include!(concat!(env!("OUT_DIR"), "/registry.rs"));
+// #include, with the path relative to this file. Anything ending in `!` is a macro: code that
+// writes code.
+include!("../gen/registry.rs");
 
 // TS: export function create(kind: number): Block { return FACTORIES[kind]() }
 // `Box<Block>` is a block on the heap, owned by whoever holds the box: when it goes away, so does the
