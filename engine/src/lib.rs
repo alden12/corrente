@@ -3,8 +3,9 @@
 //! browser calls, all named `eng_*`.
 //!
 //! - faust.rs is what the Faust blocks have in common; compile.ts generates the blocks themselves into gen/.
-//! - plan.rs reads and checks a plan.
-//! - router.rs runs a bank of tracks, each following its own plan.
+//! - plan/ reads and checks a plan.
+//! - router/ runs a bank of tracks, each following its own plan.
+//! - tests/ are the Rust tests, by topic.
 //!
 //! The exports are thin: each borrows the one engine and calls a method on it. Calls name the track
 //! they mean; a track or voice slot that doesn't exist is ignored. WebAssembly here is
@@ -263,7 +264,7 @@ pub extern "C" fn eng_block_controls(kind: i32) -> i32 {
     }
 }
 
-// TS: no equivalent. `#[cfg(test)]` includes the module only when building the tests, so tests.rs
+// TS: no equivalent. `#[cfg(test)]` includes the module only when building the tests, so tests/
 // isn't part of engine.wasm at all.
 #[cfg(test)]
 mod tests;

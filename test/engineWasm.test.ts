@@ -81,7 +81,7 @@ describe("the engine module", () => {
 });
 
 describe("playing a plan", () => {
-  // The plan words the compiler writes (engine/src/plan.rs has the layout): four voices, each
+  // The plan words the compiler writes (engine/src/plan/mod.rs has the layout): four voices, each
   // multiplying its gate by 1, so a track plays 0 until the note starts and 1 after.
   const GATE = 1;
   const floatBits = (value: number) => new Int32Array(Float32Array.of(value).buffer)[0];
