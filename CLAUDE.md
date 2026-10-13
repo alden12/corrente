@@ -84,12 +84,15 @@ treat these as labels that tie related code together, not as links to follow.
   (`engine/src/`), built into **`engine/engine.wasm`, which is committed**. Running, testing and
   building the app use that file as is: no Rust, Faust or Docker needed.
 - **Changing anything under `engine/` means `yarn engine:build`** (needs Docker; the pinned toolchain
-  image builds itself on first use, about 10 minutes) **and committing the new `engine.wasm`** with
+  image builds itself on first use, about 10 minutes, or longer on an ARM Mac, which emulates the x86
+  CI builds on so both produce the same bytes) **and committing the new `engine.wasm`** with
   the change. CI rebuilds it and fails if the hash differs.
 - The toolchain's versions are pinned in `engine/toolchain/Dockerfile`. Bumping one changes the
   engine's output, so it is its own change, with the rebuilt `engine.wasm`.
 - Rust in the engine is written to be read by people new to Rust: a short note on any Rust concept
-  the first time a file uses it.
+  the first time a file uses it, and a `// TS:` comment above each block giving its TypeScript
+  equivalent (or what it means, where TypeScript has none). Those are a learning aid for the
+  maintainer, not documentation, and will be stripped together once they have done their job.
 
 ## Running locally
 

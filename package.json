@@ -20,8 +20,8 @@
     "mcp-server": "tsx server/index.ts",
     "check:server": "tsc -p tsconfig.server.json",
     "check:pwa": "tsx scripts/checkPwaOffline.ts",
-    "engine:build": "sh engine/compile.sh",
-    "engine:check": "sh engine/compile.sh --check",
+    "engine:build": "node engine/compile.ts",
+    "engine:check": "node engine/compile.ts --check",
     "portraits": "tsx scripts/generatePortraits.ts",
     "preview": "vite preview"
   },

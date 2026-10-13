@@ -34,13 +34,20 @@ runs:
       with:
         context: ${{ steps.dir.outputs.path }}/toolchain
         load: true
+        platforms: linux/amd64
         tags: corrente-engine-toolchain:ci
         cache-from: type=gha,scope=engine-toolchain
         cache-to: type=gha,mode=max,scope=engine-toolchain
+
+    # compile.ts is TypeScript, which Node 24 runs as is: no install needed.
+    - if: steps.changes.outputs.engine == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
 
     - name: engine.wasm matches its sources
       if: steps.changes.outputs.engine == 'true'
       shell: bash
       env:
         ENGINE_TOOLCHAIN_IMAGE: corrente-engine-toolchain:ci
-      run: sh ${{ steps.dir.outputs.path }}/compile.sh --check
+      run: node ${{ steps.dir.outputs.path }}/compile.ts --check
