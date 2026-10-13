@@ -4,9 +4,10 @@
 //!
 //! - faust.rs is what the Faust blocks have in common; compile.ts generates the blocks themselves into gen/.
 //! - plan.rs reads and checks a plan.
-//! - router.rs runs it, voice by voice.
+//! - router.rs runs a bank of tracks, each following its own plan.
 //!
-//! The exports are thin: each borrows the one engine and calls a method on it. WebAssembly here is
+//! The exports are thin: each borrows the one engine and calls a method on it. Calls name the track
+//! they mean; a track or voice slot that doesn't exist is ignored. WebAssembly here is
 //! single-threaded, so the engine lives in a thread-local cell rather than a global variable.
 //!
 //! Rust notes, for reading this file:
@@ -24,16 +25,13 @@
 //! - `RefCell` lets the engine be borrowed mutably from a function that doesn't own it, with the
 //!   one-writer rule checked when it runs rather than when it compiles.
 
-// TS: import * as faust from "./faust"; and the same for plan and router. Declaring a module is
-// what makes its file part of the build. These three are private: only this file sees them.
 mod faust;
 mod plan;
 mod router;
 
-// TS: import { RefCell } from "std/cell"; import { BLOCK, Engine } from "./router";
 use std::cell::RefCell;
 
-use router::{BLOCK, Engine};
+use router::Engine;
 
 // TS: let ENGINE = new Engine(); let ALLOCATIONS: Int32Array[] = [];  (module-level state)
 // Rust won't let plain globals be changed freely (two threads could race), so mutable state goes in
@@ -104,100 +102,125 @@ pub extern "C" fn eng_free(pointer: *mut i32) {
     });
 }
 
-/// Set the sample rate and how many voices there are. Returns the number of block kinds.
-// TS: return withEngine((engine) => engine.init(rate, Math.max(maxVoices, 0)))
-#[unsafe(no_mangle)]
-pub extern "C" fn eng_init(rate: i32, max_voices: i32) -> i32 {
-    with_engine(|engine| engine.init(rate, usize::try_from(max_voices).unwrap_or(0)))
+// TS: const index = (value: number) => (value >= 0 ? value : undefined)
+// Every export takes i32s from JS; this turns one into an index, or None if it is negative.
+fn index(value: i32) -> Option<usize> {
+    usize::try_from(value).ok()
 }
 
-/// Load a plan from memory eng_malloc handed out. Returns 0, or -1 for a bad plan and -2 for one
-/// of the wrong length (the engine is unchanged either way).
+/// Set the sample rate and how many tracks the bank has (each silent until a plan loads). Returns the
+/// number of block kinds.
+// TS: return withEngine((engine) => engine.init(rate, index(tracks) ?? 0))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_init(rate: i32, tracks: i32) -> i32 {
+    with_engine(|engine| engine.init(rate, index(tracks).unwrap_or(0)))
+}
+
+/// Load a plan into a track, from memory eng_malloc handed out. Returns 0, or -1 for a bad plan or
+/// track and -2 for a plan of the wrong length (the track is unchanged either way).
 // TS:
 //   const allocation = ALLOCATIONS.find((allocation) => addressOf(allocation) === pointer);
 //   const words = allocation && length >= 0 && length <= allocation.length ? allocation.subarray(0, length) : undefined;
 //   if (!words) return REJECTED;
 //   const parsed = parse(words);  // a plan, or an error code
 //   if (isErrorCode(parsed)) return parsed;
-//   withEngine((engine) => engine.load(parsed));
-//   return 0;
+//   return withEngine((engine) => engine.load(track, parsed)) ? 0 : REJECTED;
 // Inside the closure, `?` works on Options: a None returns None from the closure straight away.
 // `allocation.get(..n)` is the first n words, or None if there aren't that many.
-// The `match` then handles the three outcomes: `Some(Ok(plan))` pulls the plan out of both
-// wrappers, `Some(Err(code))` the error code, and `None` is "no such allocation".
+// The `match` on the pair then handles the outcomes: `(Some(Ok(new_plan)), Some(track))` pulls the
+// plan out of both wrappers when the track index is valid too, `(Some(Err(code)), _)` is the
+// parser's error code (`_` matches anything), and the last `_` is everything else.
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_load(pointer: *const i32, length: i32) -> i32 {
+pub extern "C" fn eng_load(track: i32, pointer: *const i32, length: i32) -> i32 {
     // Reading the plan through its allocation, not the raw pointer, keeps this safe: a pointer the
     // engine didn't hand out is rejected rather than read.
     let parsed = ALLOCATIONS.with_borrow(|allocations| {
         let allocation = allocations.iter().find(|allocation| allocation.as_ptr() == pointer)?;
-        let words = allocation.get(..usize::try_from(length).ok()?)?;
+        let words = allocation.get(..index(length)?)?;
         Some(plan::parse(words))
     });
-    match parsed {
-        Some(Ok(plan)) => {
-            with_engine(|engine| engine.load(plan));
-            0
+    match (parsed, index(track)) {
+        (Some(Ok(new_plan)), Some(track)) => {
+            if with_engine(|engine| engine.load(track, new_plan)) { 0 } else { plan::REJECTED }
         }
-        Some(Err(code)) => code,
-        None => plan::REJECTED,
+        (Some(Err(code)), _) => code,
+        _ => plan::REJECTED,
     }
 }
 
-/// Set a param source's value; it ramps there over the next block.
-// TS: if (source >= 0) withEngine((engine) => engine.setParam(source, value));
-// `if let Ok(source) = ...` runs the block only if the conversion succeeded, with the converted
-// value as `source`: a one-case `match`.
+/// Set a track param's value; it ramps there over the next block.
+// TS: if (track >= 0 && source >= 0) withEngine((engine) => engine.setParam(track, source, value));
+// `if let (Some(a), Some(b)) = (x, y)` runs the block only if both are present, naming them: a
+// one-case `match` on a pair.
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_set_param(source: i32, value: f32) {
-    if let Ok(source) = usize::try_from(source) {
-        with_engine(|engine| engine.set_param(source, value));
+pub extern "C" fn eng_set_param(track: i32, source: i32, value: f32) {
+    if let (Some(track), Some(source)) = (index(track), index(source)) {
+        with_engine(|engine| engine.set_param(track, source, value));
     }
 }
 
-/// Jump a param source to a value with no ramp (its starting value).
-// TS: if (source >= 0) withEngine((engine) => engine.initParam(source, value));
+/// Jump a track param to a value with no ramp (its starting value).
+// TS: if (track >= 0 && source >= 0) withEngine((engine) => engine.initParam(track, source, value));
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_init_param(source: i32, value: f32) {
-    if let Ok(source) = usize::try_from(source) {
-        with_engine(|engine| engine.init_param(source, value));
+pub extern "C" fn eng_init_param(track: i32, source: i32, value: f32) {
+    if let (Some(track), Some(source)) = (index(track), index(source)) {
+        with_engine(|engine| engine.init_param(track, source, value));
     }
 }
 
-/// Start a note in a voice slot, `offset` samples into the coming block.
-// TS: if (slot >= 0) withEngine((engine) => engine.noteOn(slot, offset, frequency, velocity));
+/// Start a note in a track's voice slot, `offset` samples into the coming block.
+// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOn(track, slot, offset, frequency, velocity));
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_note_on(slot: i32, offset: i32, frequency: f32, velocity: f32) {
-    if let Ok(slot) = usize::try_from(slot) {
-        with_engine(|engine| engine.note_on(slot, offset, frequency, velocity));
+pub extern "C" fn eng_note_on(track: i32, slot: i32, offset: i32, frequency: f32, velocity: f32) {
+    if let (Some(track), Some(slot)) = (index(track), index(slot)) {
+        with_engine(|engine| engine.note_on(track, slot, offset, frequency, velocity));
     }
 }
 
-/// Release the note in a voice slot, `offset` samples into the coming block.
-// TS: if (slot >= 0) withEngine((engine) => engine.noteOff(slot, offset));
+/// Release the note in a track's voice slot, `offset` samples into the coming block.
+// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOff(track, slot, offset));
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_note_off(slot: i32, offset: i32) {
-    if let Ok(slot) = usize::try_from(slot) {
-        with_engine(|engine| engine.note_off(slot, offset));
+pub extern "C" fn eng_note_off(track: i32, slot: i32, offset: i32) {
+    if let (Some(track), Some(slot)) = (index(track), index(slot)) {
+        with_engine(|engine| engine.note_off(track, slot, offset));
     }
 }
 
-/// 1 if the slot is sounding (including its release), 0 if it is free.
-// TS: return Number(slot >= 0 && withEngine((engine) => engine.voiceActive(slot)))
-// `.is_ok_and(f)`: false if the conversion failed, else f(value). `as i32` turns a bool into 0 or 1.
+/// 1 if the track's voice slot is sounding (including its release), 0 if it is free.
+// TS: return Number(track >= 0 && slot >= 0 && withEngine((engine) => engine.voiceActive(track, slot)))
+// `.is_some_and(f)`: false if missing, else f(value). `as i32` turns a bool into 0 or 1.
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_voice_active(slot: i32) -> i32 {
-    usize::try_from(slot).is_ok_and(|slot| with_engine(|engine| engine.voice_active(slot))) as i32
+pub extern "C" fn eng_voice_active(track: i32, slot: i32) -> i32 {
+    let active = index(track).zip(index(slot)).is_some_and(|(track, slot)| with_engine(|engine| engine.voice_active(track, slot)));
+    active as i32
 }
 
-/// Render one block. Returns where the 128-sample mono mix is; it stays put, so JS views it once.
-// TS: return addressOf(withEngine((engine) => engine.process()))
-// `[f32; BLOCK]` is a fixed-length array type, BLOCK floats. `process` returns a loan of the
-// engine's mix, which can't outlive the closure; `as *const _` turns it into a raw address, which
-// can (`_` lets the compiler fill in the type). JS reads the samples at that address.
+/// Where to write a track's audio input channel (128 samples) before the next eng_process, or 0 if
+/// there is no such track or channel. The address stays put, so JS views it once.
+// TS: return addressOf(withEngine((engine) => engine.inputMut(track, channel))) ?? 0
+// `*mut f32` is a raw pointer, a plain address with no ownership: what JS needs to find the memory.
+// `.map_or(default, f)`: f(value) if there is one, else the default; `std::ptr::null_mut()` is 0.
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_process() -> *const [f32; BLOCK] {
-    with_engine(|engine| engine.process() as *const _)
+pub extern "C" fn eng_input(track: i32, channel: i32) -> *mut f32 {
+    let (Some(track), Some(channel)) = (index(track), index(channel)) else { return std::ptr::null_mut() };
+    with_engine(|engine| engine.input_mut(track, channel).map_or(std::ptr::null_mut(), |input| input.as_mut_ptr()))
+}
+
+/// Where a track's output channel (128 samples) is after eng_process, or 0 if there is no such
+/// track or channel. The address stays put, so JS views it once.
+// TS: return addressOf(withEngine((engine) => engine.output(track, channel))) ?? 0
+// `std::ptr::null()` is the read-only null; `.as_ptr()` is the array's address.
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_output(track: i32, channel: i32) -> *const f32 {
+    let (Some(track), Some(channel)) = (index(track), index(channel)) else { return std::ptr::null() };
+    with_engine(|engine| engine.output(track, channel).map_or(std::ptr::null(), |output| output.as_ptr()))
+}
+
+/// Render one block of every track. Their outputs are then at the addresses eng_output gave.
+// TS: withEngine((engine) => engine.process())
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_process() {
+    with_engine(|engine| engine.process());
 }
 
 /// How many kinds of block the engine has. Kinds are numbered 0 to count - 1, by sorted name.

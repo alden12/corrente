@@ -13,12 +13,14 @@ interface EngineExports {
   _initialize(): void;
   eng_malloc(bytes: number): number;
   eng_free(pointer: number): void;
-  eng_init(sampleRate: number, maxVoices: number): number;
-  eng_load(plan: number, length: number): number;
-  eng_note_on(slot: number, offset: number, frequency: number, velocity: number): void;
-  eng_note_off(slot: number, offset: number): void;
-  eng_voice_active(slot: number): number;
-  eng_process(): number;
+  eng_init(sampleRate: number, tracks: number): number;
+  eng_load(track: number, plan: number, length: number): number;
+  eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number): void;
+  eng_note_off(track: number, slot: number, offset: number): void;
+  eng_voice_active(track: number, slot: number): number;
+  eng_input(track: number, channel: number): number;
+  eng_output(track: number, channel: number): number;
+  eng_process(): void;
   eng_block_count(): number;
   eng_block_inputs(kind: number): number;
   eng_block_outputs(kind: number): number;
@@ -64,6 +66,9 @@ describe("the engine module", () => {
     // A source: nothing in.
     expect(engine.eng_block_inputs(kindOf("noise"))).toBe(0);
     expect(engine.eng_block_controls(kindOf("noise"))).toBe(0);
+    // A panner: one signal in, left and right out.
+    expect(engine.eng_block_inputs(kindOf("pan"))).toBe(1);
+    expect(engine.eng_block_outputs(kindOf("pan"))).toBe(2);
   });
 
   it("answers -1 for a kind that does not exist", () => {
@@ -76,42 +81,83 @@ describe("the engine module", () => {
 });
 
 describe("playing a plan", () => {
-  // The plan words the compiler writes (engine/src/plan.rs has the layout): one node multiplying the
-  // voice's gate by 1, so the output is 0 until the note starts and 1 after.
+  // The plan words the compiler writes (engine/src/plan.rs has the layout): four voices, each
+  // multiplying its gate by 1, so a track plays 0 until the note starts and 1 after.
   const GATE = 1;
+  const floatBits = (value: number) => new Int32Array(Float32Array.of(value).buffer)[0];
   const mulOfGate = [
-    ...[1, 0, 1, 0], // one node, no params, one step, output from node 0
+    ...[0, 4], // no params, four voices
+    ...[0, 0], // the pre section: no nodes, no steps
+    ...[1, 1], // the voice section: one node, one step
     ...[kindOf("mul"), 2, 0], // a multiply with two audio inputs and no controls
     ...[4, GATE, 0], // input a: the voice's gate
-    ...[3, 0, new Int32Array(Float32Array.of(1).buffer)[0]], // input b: the constant 1
+    ...[3, 0, floatBits(1)], // input b: the constant 1
     ...[0, 1, 0], // the one step: run node 0 over the block
+    ...[0, 0], // the post section: none
+    ...[1, 0, 0, 0], // each voice plays node 0's first output, in both channels
+    ...[2, 6, 0, 0, 6, 1, 0], // the track plays the voices summed, left and right
   ];
 
-  const load = (exports: EngineExports, words: number[]) => {
+  const load = (exports: EngineExports, track: number, words: number[]) => {
     const pointer = exports.eng_malloc(words.length * 4);
     new Int32Array(exports.memory.buffer, pointer, words.length).set(words);
-    const result = exports.eng_load(pointer, words.length);
+    const result = exports.eng_load(track, pointer, words.length);
     exports.eng_free(pointer);
     return result;
   };
+  const output = (exports: EngineExports, track: number, channel: number) =>
+    Array.from(new Float32Array(exports.memory.buffer, exports.eng_output(track, channel), 128));
 
-  it("starts a note on the sample it was asked for", () => {
+  it("starts a note on the sample it was asked for, in both channels", () => {
     const exports = instantiate();
-    exports.eng_init(48000, 4);
-    expect(load(exports, mulOfGate)).toBe(0);
-    exports.eng_note_on(0, 37, 440, 1);
-    const block = Array.from(new Float32Array(exports.memory.buffer, exports.eng_process(), 128));
-    expect(block.slice(0, 37).every((sample) => sample === 0)).toBe(true);
-    expect(block.slice(37).every((sample) => sample === 1)).toBe(true);
-    expect(exports.eng_voice_active(0)).toBe(1);
+    exports.eng_init(48000, 1);
+    expect(load(exports, 0, mulOfGate)).toBe(0);
+    exports.eng_note_on(0, 0, 37, 440, 1);
+    exports.eng_process();
+    [0, 1].forEach((channel) => {
+      const block = output(exports, 0, channel);
+      expect(block.slice(0, 37).every((sample) => sample === 0)).toBe(true);
+      expect(block.slice(37).every((sample) => sample === 1)).toBe(true);
+    });
+    expect(exports.eng_voice_active(0, 0)).toBe(1);
   });
 
   it("refuses a plan cut short, and keeps the one it had", () => {
     const exports = instantiate();
-    exports.eng_init(48000, 4);
-    expect(load(exports, mulOfGate)).toBe(0);
-    expect(load(exports, mulOfGate.slice(0, -1))).toBe(-2);
-    exports.eng_note_on(0, 0, 440, 1);
-    expect(new Float32Array(exports.memory.buffer, exports.eng_process(), 128)[0]).toBe(1);
+    exports.eng_init(48000, 1);
+    expect(load(exports, 0, mulOfGate)).toBe(0);
+    expect(load(exports, 0, mulOfGate.slice(0, -1))).toBe(-2);
+    exports.eng_note_on(0, 0, 0, 440, 1);
+    exports.eng_process();
+    expect(output(exports, 0, 0)[0]).toBe(1);
+  });
+
+  it("runs a bank of tracks, each with its own plan and notes", () => {
+    const exports = instantiate();
+    exports.eng_init(48000, 2);
+    expect(load(exports, 0, mulOfGate)).toBe(0);
+    expect(load(exports, 1, mulOfGate)).toBe(0);
+    expect(load(exports, 2, mulOfGate)).toBe(-1);
+    exports.eng_note_on(1, 0, 0, 440, 1);
+    exports.eng_process();
+    expect(output(exports, 0, 0).every((sample) => sample === 0)).toBe(true);
+    expect(output(exports, 1, 0).every((sample) => sample === 1)).toBe(true);
+  });
+
+  it("takes audio in for a track with no voices", () => {
+    // A return track: its post section doubles the main input's left channel.
+    const doubler = [
+      ...[0, 0], // no params, no voices
+      ...[0, 0, 0, 0], // no pre or voice section
+      ...[1, 1, kindOf("mul"), 2, 0, ...[7, 0, 0], ...[3, 0, floatBits(2)], ...[0, 1, 0]],
+      ...[0], // no voice output
+      ...[1, 0, 0, 0], // the track plays the multiply
+    ];
+    const exports = instantiate();
+    exports.eng_init(48000, 1);
+    expect(load(exports, 0, doubler)).toBe(0);
+    new Float32Array(exports.memory.buffer, exports.eng_input(0, 0), 128).fill(0.25);
+    exports.eng_process();
+    expect(output(exports, 0, 0).every((sample) => sample === 0.5)).toBe(true);
   });
 });
