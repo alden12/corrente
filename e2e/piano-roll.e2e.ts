@@ -1,0 +1,201 @@
+import { test, expect, type Page } from "@playwright/test";
+import { dismissStart, openSettingsPage } from "./support/app";
+
+/**
+ * Piano-roll mouse editing: the default project seeds one instrument track
+ * (selected), so the roll is visible on load with an empty clip. Adds a note by
+ * clicking, moves it with a pointer drag, deletes the selection, and confirms a
+ * note survives a reload (it lives in the project snapshot). The two-voice feed
+ * records each gesture as a single entry.
+ *
+ * The grid is larger than the viewport and has sticky overlays (ruler on top,
+ * velocity lane on the bottom), so we click absolute viewport coordinates in the
+ * safe band near the grid's top rather than using element-relative positions.
+ */
+
+// A tall viewport so the piano-roll panel has room (otherwise the sticky velocity
+// lane covers most of the short grid and swallows clicks).
+test.use({ viewport: { width: 1280, height: 1100 } });
+
+/**
+ * A viewport point a little way into the grid, measured from the scroll
+ * container's top-left so it stays visible (the grid auto-scrolls to frame notes
+ * on load, so the grid's own box can sit above the viewport). dy clears the sticky
+ * ruler; the point still lands on the grid surface.
+ */
+/** Open the Activity rail view so the edit feed (Added note / Set clip length ...) is visible. */
+async function openActivity(page: Page) {
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+}
+
+async function gridPoint(page: Page, dx: number, dy: number) {
+  const box = (await page.getByTestId("roll-scroll").boundingBox())!;
+  return { x: box.x + dx, y: box.y + dy };
+}
+
+test("add, move and delete notes with the mouse; a note persists across reload", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+
+  await expect(page.getByTestId("piano-grid")).toBeVisible();
+  await expect(page.getByTestId("note")).toHaveCount(0);
+
+  // Click an empty cell -> add one note.
+  const p1 = await gridPoint(page, 120, 40);
+  await page.mouse.click(p1.x, p1.y);
+  await expect(page.getByTestId("note")).toHaveCount(1);
+  await expect(page.getByText("Added note")).toBeVisible();
+
+  // Drag the note body to move it (one "Edited" entry, not a duplicate note).
+  const box = (await page.getByTestId("note").first().boundingBox())!;
+  await page.mouse.move(box.x + 4, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 100, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText(/Edited 1 note/)).toBeVisible();
+  await expect(page.getByTestId("note")).toHaveCount(1);
+
+  // The note stays selected after the drag -> Delete removes it.
+  await page.keyboard.press("Delete");
+  await expect(page.getByTestId("note")).toHaveCount(0);
+  await expect(page.getByText(/Removed 1 note/)).toBeVisible();
+
+  // Add again and confirm it survives a reload (persisted in the snapshot).
+  const p2 = await gridPoint(page, 80, 60);
+  await page.mouse.click(p2.x, p2.y);
+  await expect(page.getByTestId("note")).toHaveCount(1);
+  await page.waitForTimeout(400); // let the debounced autosave flush
+  await page.reload();
+  await dismissStart(page);
+  await expect(page.getByTestId("note")).toHaveCount(1);
+});
+
+test("dragging the roll handle changes the active clip length", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+
+  // Zoom all the way out (time) so the whole clip + handle fit without scrolling.
+  const zoomOut = page.getByTitle("Zoom out (time)");
+  for (let i = 0; i < 8; i++) await zoomOut.click();
+
+  const end = page.getByTestId("roll-scroll").getByRole("slider", { name: "Loop length" });
+  const before = (await end.boundingBox())!;
+  await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(before.x - 80, before.y + before.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText(/Set clip length/)).toBeVisible();
+  expect((await end.boundingBox())!.x).toBeLessThan(before.x);
+});
+
+test("Escape and click-outside deselect (then Delete is a no-op)", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+
+  const p = await gridPoint(page, 120, 40);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.getByTestId("note")).toHaveCount(1);
+
+  // Escape clears the selection -> Delete removes nothing.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Delete");
+  await expect(page.getByTestId("note")).toHaveCount(1);
+
+  // Re-select, then click outside the roll (library) -> Delete still a no-op.
+  await page.getByTestId("note").first().click();
+  await page.getByText("Instruments").click();
+  await page.keyboard.press("Delete");
+  await expect(page.getByTestId("note")).toHaveCount(1);
+});
+
+test("clips sit in a rail to the left of the roll", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+
+  const addClip = page.getByRole("button", { name: "+ Clip" });
+  const tb = (await addClip.boundingBox())!;
+  const gb = (await page.getByTestId("piano-grid").boundingBox())!;
+  expect(tb.x).toBeLessThan(gb.x); // the clip rail is left of the grid
+});
+
+test("the roll toolbar fits when the panel is narrow, keeping zoom reachable", async ({ page }) => {
+  // Snap and quantize settings used to sit on the toolbar as controls. With the agent
+  // panel open the row overflowed below ~1150px and pushed the zoom cluster clean out of
+  // view - the controls you reach for most were the ones that got hidden. They live in
+  // the roll's settings menu now, so the row fits.
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: /expand agent panel/i }).click();
+  await expect.poll(() => page.getByTitle("Zoom out (time)").isVisible()).toBe(true);
+
+  const toolbar = page.getByText("Piano roll", { exact: true }).locator("..");
+  const size = await toolbar.evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
+  expect(size.scroll, "the toolbar row must not overflow").toBeLessThanOrEqual(size.client);
+
+  // Zoom sits inside the toolbar's own box rather than beyond its right edge.
+  const bar = (await toolbar.boundingBox())!;
+  const zoom = (await page.getByTitle("Zoom out (time)").boundingBox())!;
+  expect(zoom.x + zoom.width).toBeLessThanOrEqual(bar.x + size.client + 1);
+
+  // Snap and quantize are still reachable, in the roll's tools menu.
+  await page.getByRole("button", { name: "Notes tools" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /Snap to grid/i })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: /Quantize all notes|Quantize \d+ selected/ })).toBeVisible();
+});
+
+test("the velocity lane collapses from the roll's tools menu", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const lane = page.getByTitle("Velocity - drag a bar");
+  await expect(lane).toBeVisible();
+
+  await page.getByRole("button", { name: "Notes tools" }).click();
+  await page.getByRole("menuitemradio", { name: /Velocity lane/i }).click();
+  await expect(lane).toBeHidden();
+
+  // Persisted, so a short screen stays uncluttered across a reload.
+  await page.reload();
+  await dismissStart(page);
+  await expect(page.getByTitle("Velocity - drag a bar")).toBeHidden();
+});
+
+test("the Piano roll settings page sets the same lane as the toolbar menu (MOBILE-19.4)", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const lane = page.getByTitle("Velocity - drag a bar");
+  await expect(lane).toBeVisible();
+
+  // On desktop the settings are in both places, and it is one value: the page turns the lane
+  // off, and the toolbar menu's tick follows.
+  await openSettingsPage(page, "Piano roll");
+  await page.getByRole("radiogroup", { name: "Velocity lane" }).getByRole("radio", { name: "Off" }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(lane).toBeHidden();
+  await page.getByRole("button", { name: "Notes tools" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /Velocity lane/i })).toHaveAttribute("aria-checked", "false");
+});
+
+/**
+ * MOBILE-7's touch affordances stay off a mouse. The kebab and the move grip are answers to
+ * things a mouse already has - a keyboard for delete, a velocity lane, a drag-edge you can hit -
+ * so on a fine pointer they would be furniture floating over the neighbouring notes, paying for
+ * nothing. The end handles do carry over: a visible grab target is worth having either way.
+ */
+test("a selected note grows handles but no touch furniture on a mouse", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+
+  const point = await gridPoint(page, 120, 40);
+  await page.mouse.click(point.x, point.y);
+  await expect(page.getByTestId("note")).toHaveCount(1);
+
+  // Mounted either way, so `toBeHidden` is the honest check rather than a count of zero: the
+  // gate is CSS, and asserting on absence would pass just as well if the gate were deleted and
+  // the component simply failed to render.
+  await expect(page.getByTestId("note-handle-end")).toBeVisible();
+  await expect(page.getByTestId("note-actions"), "no kebab over the grid on a mouse").toBeHidden();
+  await expect(page.getByTestId("note-move"), "and no move grip either").toBeHidden();
+});

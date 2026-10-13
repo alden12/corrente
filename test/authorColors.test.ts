@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import { colorForAuthor } from "../src/ui/authorColors";
+import { DEFAULT_VOICE_COLORS } from "../src/ui/authorVoice";
+
+// Colouring is perspective-relative: the viewer's own id reads teal ("you"), the AI voices are absolute,
+// and every other id gets a stable hashed hue - so two collaborators never rely on a single privileged
+// "you" identity (the asymmetry the earlier model had).
+describe("colorForAuthor (perspective-relative)", () => {
+  it("paints the viewer's own edits with the you/teal hue, whoever they are", () => {
+    expect(colorForAuthor("you", {}, "you")).toBe(DEFAULT_VOICE_COLORS.you);
+    expect(colorForAuthor("bob", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.you);
+  });
+
+  it("reads the unattributed 'you' stamp as the viewer, whoever they are (DAW-8.10)", () => {
+    // "you" stamps defaults (a new track's clip, an untouched knob, the seeded project), not a person.
+    // Hashing it like a stranger's id painted all of those a random swatch once anyone signed in.
+    expect(colorForAuthor("you", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.you);
+  });
+
+  it("keeps the agent voice absolute (same colour for everyone)", () => {
+    expect(colorForAuthor("agent:alice", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.agent);
+    expect(colorForAuthor("agent", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.agent);
+  });
+
+  // Every agent is violet however many people are driving one, and MY agent is violet too rather
+  // than teal: the point of the two-voice colour is seeing what an AI did against what a person did.
+  it("gives every agent the one violet, whoever drove it", () => {
+    expect(colorForAuthor("agent:alice", {}, "alice")).toBe(DEFAULT_VOICE_COLORS.agent);
+    expect(colorForAuthor("agent:bob", {}, "alice")).toBe(colorForAuthor("agent:alice", {}, "alice"));
+  });
+
+  // The settings panel offers one agent row, so an override has to reach an agent whatever the
+  // driver - keyed on the voice, not on the full author id.
+  it("applies the agent override to an agent driven by anyone", () => {
+    expect(colorForAuthor("agent:carol", { agent: "#abcdef" }, "alice")).toBe("#abcdef");
+  });
+
+  it("lets a configured override win, even for self or a voice", () => {
+    expect(colorForAuthor("bob", { bob: "#123456" }, "alice")).toBe("#123456");
+    expect(colorForAuthor("bob", { bob: "#123456" }, "bob")).toBe("#123456"); // self override beats teal
+  });
+
+  it("gives distinct collaborators stable, different hues", () => {
+    const alice = colorForAuthor("alice", {}, "me");
+    const bob = colorForAuthor("bob", {}, "me");
+    expect(colorForAuthor("alice", {}, "me")).toBe(alice); // stable
+    expect(alice).not.toBe(bob);
+  });
+
+  it("defaults self to 'you' (solo/back-compat: the lone user is teal)", () => {
+    expect(colorForAuthor("you")).toBe(DEFAULT_VOICE_COLORS.you);
+  });
+});

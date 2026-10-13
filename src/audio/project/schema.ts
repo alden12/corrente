@@ -1,0 +1,358 @@
+/**
+ * The canonical project-document schema: one zod source of truth for the bundle
+ * documents. The client derives its TS types from these via `z.infer` (re-exported
+ * through project/types.ts, so the ~14 importers are unchanged), and the sync server
+ * validates writes against the SAME schemas (the sync server reads `validateBundleFile`
+ * from here) - so the persisted shape, the client types, and the server's zero-trust
+ * boundary cannot drift.
+ *
+ * Pure zod, DOM/Node-free (like graph/zod.ts and params/zod.ts), so the Node server
+ * imports it under a DOM-less tsconfig. Reuses graph/zod's instrument/effect def
+ * schemas for embedded custom devices rather than redefining them.
+ *
+ * Depth: project.json is deep-validated down the tree (tracks/groups/clips/placements/
+ * effects/params). Parameter *value* maps validate as `Record<string, ParamValue>` and
+ * the `EditCommand` union stays STRUCTURAL (`{type: string}`) - deep per-param and
+ * per-command validation are deferred (see apm: "Sync service - foundations and deferred notes"). Object schemas are non-strict
+ * (unknown keys are ignored, not rejected) and the server stores the original JSON, so
+ * validation is a gate, never a filter - evolving/extra fields never break a save.
+ */
+import { z } from "zod";
+import type { GraphInstrumentDef, GraphEffectDef } from "../graph/types";
+import { KEYFRAME_INDEX_PATH } from "../history/keyframes";
+
+/* -------------------------------------------------------------------------- */
+/* Leaves                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** Who authored a piece of durable state (mirrors commands `Author` + project `ClipAuthor`). A bounded
+ *  free string, not an enum: `"you"` is the default solo user, `agent:<userId>` is an AI agent's edit
+ *  made for that user (see commands/authors.ts), and any other value is a human user id (multi-user -
+ *  the id is a display handle until real auth supplies a stable one). The colour layer
+ *  (authorColors.ts) resolves any id to a stable hue.
+ *
+ *  The bound is 128 rather than 64 because an agent author is a prefix PLUS a user id, and a user id
+ *  may itself run to 64. */
+export const authorSchema = z.string().min(1).max(128);
+
+/** A single parameter value (the union a ParamStore holds). */
+export const paramValueSchema = z.union([z.number(), z.string(), z.boolean()]);
+
+/** A patch: parameter id -> value. */
+export const patchValuesSchema = z.record(z.string(), paramValueSchema);
+
+/** A MIDI note event (mirrors sequencer/types NoteEvent; pitch 0-127, velocity 0..1). */
+export const noteEventSchema = z.object({
+  id: z.string(),
+  pitch: z.number(),
+  start: z.number(),
+  length: z.number(),
+  velocity: z.number(),
+});
+
+/** A project-library sample asset (mirrors samples/catalog SampleAsset). */
+export const sampleAssetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  contentHash: z.string(),
+  source: z.string().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Chain + clips                                                              */
+/* -------------------------------------------------------------------------- */
+
+export const effectDataSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  bypassed: z.boolean(),
+  params: patchValuesSchema,
+});
+
+export const midiDeviceDataSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  bypassed: z.boolean(),
+  params: patchValuesSchema,
+});
+
+export const placementSchema = z.object({
+  id: z.string(),
+  clipId: z.string(),
+  startBeat: z.number(),
+  offset: z.number(),
+  length: z.number(),
+});
+
+export const noteClipDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  author: authorSchema,
+  notes: z.array(noteEventSchema),
+  lengthBeats: z.number(),
+});
+
+export const audioClipDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  author: authorSchema,
+  fileId: z.string(),
+  gain: z.number(),
+  durationSec: z.number(),
+  loopStartSec: z.number().optional(),
+  loopEndSec: z.number().optional(),
+  gridOffsetSec: z.number().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Tracks + groups                                                            */
+/* -------------------------------------------------------------------------- */
+
+const baseTrackFields = {
+  id: z.string(),
+  name: z.string(),
+  parentId: z.string(),
+  muted: z.boolean(),
+  solo: z.boolean(),
+  volume: z.number(),
+};
+
+// The chain/arrangement fields are optional on the persisted shape (defaulted on load),
+// even though `snapshotProject` always writes them - so older/partial snapshots still load.
+export const instrumentTrackDataSchema = z.object({
+  ...baseTrackFields,
+  kind: z.literal("instrument"),
+  instrumentType: z.string(),
+  params: patchValuesSchema.optional(),
+  effects: z.array(effectDataSchema).optional(),
+  midiDevices: z.array(midiDeviceDataSchema).optional(),
+  clips: z.array(noteClipDataSchema).optional(),
+  placements: z.array(placementSchema).optional(),
+  activeClipId: z.string().optional(),
+  launchedClipId: z.string().nullable().optional(),
+});
+
+export const audioTrackDataSchema = z.object({
+  ...baseTrackFields,
+  kind: z.literal("audio"),
+  effects: z.array(effectDataSchema).optional(),
+  clips: z.array(audioClipDataSchema).optional(),
+  placements: z.array(placementSchema).optional(),
+  activeClipId: z.string().optional(),
+  launchedClipId: z.string().nullable().optional(),
+});
+
+export const trackDataSchema = z.discriminatedUnion("kind", [instrumentTrackDataSchema, audioTrackDataSchema]);
+
+export const groupDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  parentId: z.string().nullable(),
+  collapsed: z.boolean(),
+  muted: z.boolean(),
+  solo: z.boolean(),
+  volume: z.number(),
+  effects: z.array(effectDataSchema),
+});
+
+// Embedded user-authored devices are NOT checked here: `parseCustomDevices` does that at load, one
+// def at a time, dropping any it cannot read. Checking them here instead made one def this build
+// cannot read - a block kind added by a newer build, say - fail the whole project as "not a
+// project" (the recovery dialog), rather than costing just that device. Typed as the def so the
+// rest of the code reads them as what they will be once parsed.
+const customInstrumentSchema = z.unknown() as unknown as z.ZodType<GraphInstrumentDef>;
+const customEffectSchema = z.unknown() as unknown as z.ZodType<GraphEffectDef>;
+
+/**
+ * A project's time signature: `numerator` beats to the bar, each a `1/denominator` note. A "beat"
+ * in the app is a fixed quarter-note, so bar length in beats is `numerator * 4 / denominator`
+ * (integer for x/4, fractional for x/8). Denominator is a power of two per convention. Default 4/4.
+ * v1 wires the numerator (x/4) in the UI; the denominator rides here already so x/8 needs no schema
+ * change - see DAW-10.
+ */
+/** Time-signature bounds, shared by the schema (which validates/rejects at boundaries) and the
+ *  ProjectStore (which coerces/clamps trusted values) so the limits live in exactly one place. */
+export const TIME_SIGNATURE_NUMERATOR_RANGE = { min: 1, max: 32 } as const;
+/** Tempo bounds, in the same one place and for the same reason: the ProjectStore clamps to them and
+ *  the UI's number fields advertise them. Deliberately *not* on the document schema's `tempoBpm` -
+ *  a stored value outside the range is healed on load (`ProjectStore.load` clamps), and turning that
+ *  into a validation failure would lose the project rather than fix the number. */
+export const TEMPO_BPM_RANGE = { min: 20, max: 300 } as const;
+export const TIME_SIGNATURE_DENOMINATORS = [1, 2, 4, 8, 16, 32] as const;
+
+export const timeSignatureSchema = z.object({
+  numerator: z.number().int().min(TIME_SIGNATURE_NUMERATOR_RANGE.min).max(TIME_SIGNATURE_NUMERATOR_RANGE.max),
+  denominator: z.literal(TIME_SIGNATURE_DENOMINATORS),
+});
+
+/** The default time signature (common time). Used to heal older docs on load and seed new projects. */
+export const DEFAULT_TIME_SIGNATURE = { numerator: 4, denominator: 4 } as const;
+
+/** Bar length in beats (a beat = a quarter-note): `numerator * 4 / denominator`. Integer for x/4,
+ *  fractional for x/8. The scheduler, rulers, and grid all project the meter through this one formula. */
+export const beatsPerBar = (timeSignature: z.infer<typeof timeSignatureSchema>): number =>
+  (timeSignature.numerator * 4) / timeSignature.denominator;
+
+/** The length in beats (quarter-notes) of the note the denominator counts - the meter's "shown beat":
+ *  `4 / denominator` (1 for x/4, 0.5 for x/8). A bar is `numerator` of these. The ruler ticks and the
+ *  metronome step by this, so x/8 shows/clicks eighth-notes with the bar line landing on a tick. */
+export const beatUnitBeats = (timeSignature: z.infer<typeof timeSignatureSchema>): number =>
+  4 / timeSignature.denominator;
+
+/* -------------------------------------------------------------------------- */
+/* Project root (project.json)                                                */
+/* -------------------------------------------------------------------------- */
+
+export const projectDataSchema = z.object({
+  /** The project's display name. Optional for back-compat (older docs kept it only in meta.json, the
+   *  list index); now it rides the project state so a rename syncs as an edit. Healed from meta on load
+   *  when absent. */
+  name: z.string().optional(),
+  groups: z.array(groupDataSchema),
+  tracks: z.array(trackDataSchema),
+  tempoBpm: z.number(),
+  lengthBeats: z.number(),
+  loopStart: z.number().optional(),
+  grooveId: z.string().optional(),
+  grooveAmount: z.number().optional(),
+  // Optional + healed to 4/4 on load (like loopStart/grooveId), so older docs need no schema bump.
+  timeSignature: timeSignatureSchema.optional(),
+  samples: z.array(sampleAssetSchema).optional(),
+  customInstruments: z.array(customInstrumentSchema).optional(),
+  customEffects: z.array(customEffectSchema).optional(),
+  deviceFormatVersion: z.number().optional(),
+  authorship: z.record(z.string(), authorSchema).optional(),
+  selectedTrackId: z.string().nullable(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Other bundle documents                                                     */
+/* -------------------------------------------------------------------------- */
+
+export const manifestSchema = z.object({
+  formatVersion: z.number(),
+  projectId: z.string(),
+  projectSchema: z.number(),
+});
+
+export const metaSchema = z.object({
+  name: z.string(),
+  modifiedAt: z.string(),
+});
+
+export const refsSchema = z.object({
+  head: z.string(),
+  branches: z.record(z.string(), z.string().nullable()),
+});
+
+/** Edit commands stay STRUCTURAL: a ~50-variant wire-coupled union, only asserted to be an object
+ *  with a string `type`. `catchall(unknown)` PRESERVES the rest of the payload (note data, patch
+ *  values, ...) - unlike a plain object, which strips unknown keys, so a validated command kept only
+ *  its `type`. The edit-log append relies on the parsed output, so preserving the payload is required
+ *  for replay to reconstruct HEAD. */
+export const editCommandSchema = z.object({ type: z.string() }).catchall(z.unknown());
+
+export const editEntrySchema = z.object({
+  seq: z.number(),
+  /** Stable identity of the edit, minted by whoever made it - what an undo step names, since `seq`
+   *  is an order the authority reassigns (DAW-34 stage E). Optional: older logs have none. */
+  id: z.string().optional(),
+  command: editCommandSchema,
+  author: authorSchema,
+  time: z.number(),
+  // "note" is a feed-only annotation folded into the one authored stream (its text rides `command`
+  // as {type:"note", text}); it is skipped by forward replay. undo/redo are the reflog markers.
+  kind: z.enum(["edit", "undo", "redo", "note"]).optional(),
+  label: z.string().optional(),
+  /** On an undo/redo entry: the id of the edit it takes back or puts back - the tombstone that makes
+   *  the log alone say what the project is (DAW-34 stage E). */
+  undoes: z.string().optional(),
+});
+
+export const feedNoteSchema = z.object({
+  seq: z.number(),
+  text: z.string(),
+  author: authorSchema,
+  time: z.number(),
+});
+
+export const logSchema = z.array(editEntrySchema);
+export const notesSchema = z.array(feedNoteSchema);
+
+export const commitSchema = z.object({
+  id: z.string(),
+  parent: z.string().nullable(),
+  author: authorSchema,
+  message: z.string(),
+  time: z.number(),
+  auto: z.boolean(),
+  entryCount: z.number(),
+  snapshot: projectDataSchema.optional(),
+  entries: z.array(editEntrySchema),
+  notes: z.array(feedNoteSchema).optional(),
+  lastSeq: z.number(),
+});
+
+/* -------------------------------------------------------------------------- */
+/* Inferred document types (re-exported through project/types.ts)             */
+/* -------------------------------------------------------------------------- */
+
+export type ClipAuthor = z.infer<typeof authorSchema>;
+export type EffectData = z.infer<typeof effectDataSchema>;
+export type MidiDeviceData = z.infer<typeof midiDeviceDataSchema>;
+export type Placement = z.infer<typeof placementSchema>;
+export type NoteClipData = z.infer<typeof noteClipDataSchema>;
+export type AudioClipData = z.infer<typeof audioClipDataSchema>;
+export type InstrumentTrackData = z.infer<typeof instrumentTrackDataSchema>;
+export type AudioTrackData = z.infer<typeof audioTrackDataSchema>;
+export type TrackData = z.infer<typeof trackDataSchema>;
+export type GroupData = z.infer<typeof groupDataSchema>;
+export type TimeSignature = z.infer<typeof timeSignatureSchema>;
+export type ProjectData = z.infer<typeof projectDataSchema>;
+
+/* -------------------------------------------------------------------------- */
+/* Path -> schema dispatch (the shared "what a valid bundle file is")         */
+/* -------------------------------------------------------------------------- */
+
+/** The retained keyframe ring's slot -> seq map: one entry per slot, null where never written. */
+const keyframeIndexSchema = z.array(z.number().nullable());
+
+/** Exact-path schemas; commits are matched by prefix in `bundleSchemaForPath`. */
+const byPath: Record<string, z.ZodType> = {
+  "manifest.json": manifestSchema,
+  "meta.json": metaSchema,
+  "project.json": projectDataSchema,
+  "log.json": logSchema,
+  "notes.json": notesSchema,
+  "history/refs.json": refsSchema,
+  [KEYFRAME_INDEX_PATH]: keyframeIndexSchema,
+};
+
+/** The schema for a bundle path, or null for JSON paths we don't model (accepted as-is). */
+export function bundleSchemaForPath(path: string): z.ZodType | null {
+  if (byPath[path]) return byPath[path];
+  if (path.startsWith("history/commits/") && path.endsWith(".json")) return commitSchema;
+  // Server-authoritative commit-pinned keyframes (Phase B2): a ProjectData snapshot + a headSeq marker
+  // (projectDataSchema is non-strict, so it tolerates the extra key), NOT a Commit DAG node.
+  if (path.startsWith("history/keyframes/") && path.endsWith(".json")) return projectDataSchema;
+  // The retained keyframe ring (DAW-34 stage B): same snapshot shape, addressed by ring slot. The
+  // index beside them is matched exactly, above.
+  if (path.startsWith("keyframes/") && path.endsWith(".json")) return projectDataSchema;
+  return null;
+}
+
+export type ValidationResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Validate a parsed JSON bundle file against its path's schema. Known paths are
+ * shape-checked; unmodeled JSON paths pass (still valid JSON, never read by the app).
+ * Returns a compact error string on failure.
+ */
+export function validateBundleFile(path: string, json: unknown): ValidationResult {
+  const schema = bundleSchemaForPath(path);
+  if (!schema) return { ok: true };
+  const result = schema.safeParse(json);
+  if (result.success) return { ok: true };
+  const error = result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ");
+  return { ok: false, error };
+}

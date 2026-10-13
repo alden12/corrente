@@ -1,0 +1,109 @@
+/**
+ * Per-author inline styles: the colour half of author presence for surfaces that tint by *who* last
+ * edited (faders, knob pointers, piano-roll notes, arrangement blocks). The class-based `authorVoice.ts`
+ * collapses every author to one of three fixed voices (its Tailwind classes are static); these helpers
+ * resolve ANY author id via `colorForAuthor` and emit inline styles, so a collaborator's edits show in
+ * their own colour. Colouring is perspective-relative, so each takes the viewer's `AuthorPresence`
+ * ({ config, self }): the viewer's own edits read teal, everyone else in their hue.
+ *
+ * Reactivity: get presence from `useAuthorPresence()` (a context fed by the author-colour store + the
+ * current user) so a surface recolours live when a swatch or identity changes.
+ */
+import type { CSSProperties } from "react";
+import { colorForAuthor, isViewer } from "./authorColors";
+import { agentDriver, isAgentAuthor } from "../audio/commands/authors";
+import { withLightness } from "./oklch";
+import type { AuthorPresence } from "./authorColorsContext";
+import { DEFAULT_USER } from "./currentUser";
+
+/** #rrggbb -> rgba() at `alpha`, so an accent can tint fills/borders at any opacity (Tailwind's `/NN`). */
+function withAlpha(hex: string, alpha: number): string {
+  const value = hex.replace("#", "");
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * OKLab lightness the palette is re-lit to on a white ground. Solved rather than picked, and
+ * the binding case is not plain text on white: it is an accent label on a 15% tint of *itself*
+ * (`text-you bg-you/15`, the Play / + Clip / Rec buttons), where the tint darkens the ground
+ * barely at all. 0.55 left that at 3.77:1; 0.50 puts it at 4.65:1 and plain text on white at
+ * 5.8:1, so every author clears 4.5:1 in both places. Dark is left exactly as authored, since
+ * the palette was drawn for it and already runs 6.3-10.4:1.
+ */
+const LIGHT_GROUND_LIGHTNESS = 0.5;
+
+/**
+ * The author's accent from the viewer's perspective (own = teal, others by id), at the
+ * lightness the current ground needs.
+ *
+ * `colorForAuthor` stays the identity: it is what the Authors picker shows and what gets
+ * stored, so a chosen colour is never quietly rewritten. Only the *rendered* value moves,
+ * and only downwards, and only on white. Hue and chroma are untouched, so teal is still
+ * recognisably teal; it just stops being invisible.
+ */
+export const authorHex = (author: string, presence: AuthorPresence): string => {
+  const identity = colorForAuthor(author, presence.config, presence.self);
+  return presence.theme === "light" ? withLightness(identity, LIGHT_GROUND_LIGHTNESS) : identity;
+};
+
+/** A small coloured dot / solid pointer in the author's colour. */
+export const authorDotStyle = (author: string, presence: AuthorPresence): CSSProperties => ({
+  background: authorHex(author, presence),
+});
+
+/** A translucent fader fill (was `bg-<voice>/70`). */
+export const authorFillStyle = (author: string, presence: AuthorPresence, alpha = 0.7): CSSProperties => ({
+  background: withAlpha(authorHex(author, presence), alpha),
+});
+
+/** A left-accent border (was `border-<voice>`), for feed rows / version markers. */
+export const authorBorderStyle = (author: string, presence: AuthorPresence): CSSProperties => ({
+  borderLeftColor: authorHex(author, presence),
+});
+
+/** A piano-roll note rectangle, tinted by its last editor. Selected reads as bright + ringed. */
+export const authorNoteStyle = (author: string, selected: boolean, presence: AuthorPresence): CSSProperties => {
+  const hex = authorHex(author, presence);
+  return selected
+    ? { borderColor: hex, boxShadow: `0 0 0 1px ${hex}` } // ring-1; bg-strong stays a class
+    : { background: hex, borderColor: withAlpha(hex, 0.4) };
+};
+
+/** An arrangement placement block, tinted by its clip's last editor (top-accent when unselected). */
+export const authorBlockStyle = (author: string, selected: boolean, presence: AuthorPresence): CSSProperties => {
+  const hex = authorHex(author, presence);
+  return selected
+    ? { borderColor: hex, background: withAlpha(hex, 0.25), boxShadow: `0 0 0 1px ${hex}` }
+    : { borderTopColor: hex };
+};
+
+/** The faint inner-fill tint of a placement block (was `bg-<voice>/10`). */
+export const authorBlockTintStyle = (author: string, presence: AuthorPresence): CSSProperties => ({
+  background: withAlpha(authorHex(author, presence), 0.1),
+});
+
+/** A note-summary bar inside a placement block (was `bg-<voice>/85`). */
+export const authorMiniStyle = (author: string, presence: AuthorPresence): CSSProperties => ({
+  background: withAlpha(authorHex(author, presence), 0.85),
+});
+
+/**
+ * Display label for an author: the reserved voices get a friendly name; a user id shows as-is.
+ *
+ * An agent edit names the user who drove it, so the label says whose agent it was - except when it
+ * was the viewer's own, where "Agent" is what they mean by it. That is the one place the driver is
+ * visible: every agent shares the one violet, so the label is what tells two of them apart.
+ *
+ * "You" is whoever `self` says it is, plus the unattributed `"you"` stamp, which reads as the viewer
+ * for the same reason it takes their colour (see `isViewer` in authorColors).
+ */
+export const authorLabel = (author: string, self = DEFAULT_USER): string => {
+  if (isViewer(author, self)) return "You";
+  const driver = agentDriver(author);
+  if (driver !== null) return driver === self ? "Agent" : `Agent (${driver})`;
+  if (isAgentAuthor(author)) return "Agent";
+  return author;
+};

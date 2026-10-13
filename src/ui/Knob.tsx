@@ -1,0 +1,327 @@
+/**
+ * A generic, schema-driven control. Given a ParamSpec it renders the right
+ * control for the param's kind and reads/writes through the store. There is no
+ * per-parameter UI code anywhere - panels are just this mapped over a schema.
+ */
+import { useRef } from "react";
+import type { ReactElement } from "react";
+import type { EnumSpec, NumberSpec, ParamSpec, ParamValue } from "../audio/params/types";
+import type { ParamStore } from "../audio/params/store";
+import { useParam } from "../audio/params/useParam";
+import { fromNormalized, toNormalized } from "../audio/params/taper";
+import type { SampleAsset } from "../audio/samples/catalog";
+import { SamplePicker } from "./SamplePicker";
+import { capturePointerDrag, releasePointerDrag } from "./dragGesture";
+import { pitchName } from "./noteNames";
+import { Select } from "./controls/Select";
+import { Fader } from "./controls/Fader";
+import { authorFillStyle, authorDotStyle, authorHex } from "./authorStyle";
+import { useAuthorPresence } from "./authorColorsContext";
+
+/** Extra context the `sample` control needs (the project library + import action);
+ *  optional, since only instrument panels with a sample param supply it. */
+export interface SampleContext {
+  assets: SampleAsset[];
+  onImportFile?: (file: File) => Promise<string | null>;
+  /** Reveal the Samples library view (fired when an empty picker is clicked). */
+  onReveal?: () => void;
+}
+
+const DRAG_SENSITIVITY = 1 / 200; // normalized units per pixel dragged
+
+/** Writes go through an injected callback so every edit becomes a logged command;
+ *  reads stay live via useParam (the value updates after the command applies). */
+type OnChange = (id: string, value: ParamValue) => void;
+
+function formatValue(spec: NumberSpec, value: number): string {
+  if (spec.format === "note") return pitchName(value);
+  const decimals = Math.abs(value) < 10 && !Number.isInteger(value) ? 2 : 0;
+  const text = value.toFixed(decimals);
+  return spec.unit ? `${text} ${spec.unit}` : text;
+}
+
+/** A note-name dropdown for a `format: "note"` number param - the value stays a MIDI
+ *  note number, but it reads as C2/C#2/... to match the piano roll. */
+function NoteSelect({
+  spec,
+  store,
+  onChange,
+  hideLabel,
+}: {
+  spec: NumberSpec;
+  store: ParamStore;
+  onChange: OnChange;
+  hideLabel?: boolean;
+}) {
+  const [value] = useParam(store, spec.id);
+  const notes = Array.from({ length: spec.max - spec.min + 1 }, (_unused, index) => spec.min + index);
+  return (
+    <label className={hideLabel ? "flex items-center" : "flex flex-col items-center gap-1.5"}>
+      {!hideLabel && <span className="text-[9px] uppercase tracking-wide text-muted">{spec.label}</span>}
+      <Select
+        value={String(value)}
+        aria-label={spec.label}
+        onChange={(e) => onChange(spec.id, Number(e.target.value))}
+        className="font-mono"
+      >
+        {notes.map((note) => (
+          <option key={note} value={note}>
+            {pitchName(note)}
+          </option>
+        ))}
+      </Select>
+    </label>
+  );
+}
+
+/** A horizontal fader for a number param - label on the left, value on the right, track
+ *  stretching between. Used in the compact drum-pad layout. The taper is applied here and the
+ *  track itself is a plain 0..1 `Fader`; `spec.step` is snapped by the store's coercion. */
+function NumberHSlider({
+  spec,
+  store,
+  onChange,
+  author,
+}: {
+  spec: NumberSpec;
+  store: ParamStore;
+  onChange: OnChange;
+  author?: string;
+}) {
+  const [value] = useParam(store, spec.id);
+  const presence = useAuthorPresence();
+
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <span className="w-10 shrink-0 text-[9px] uppercase tracking-wide text-muted">{spec.label}</span>
+      <Fader
+        label={spec.label}
+        position={toNormalized(spec, value as number)}
+        onPosition={(position) => onChange(spec.id, fromNormalized(spec, position))}
+        display={formatValue(spec, value as number)}
+        aria={{ now: value as number, min: spec.min, max: spec.max }}
+        fillStyle={authorFillStyle(author ?? "you", presence)}
+      />
+    </div>
+  );
+}
+
+function NumberKnob({
+  spec,
+  store,
+  onChange,
+  author,
+}: {
+  spec: NumberSpec;
+  store: ParamStore;
+  onChange: OnChange;
+  author?: string;
+}) {
+  const [value] = useParam(store, spec.id);
+  const presence = useAuthorPresence();
+  const drag = useRef<{ startY: number; startNorm: number } | null>(null);
+  const norm = toNormalized(spec, value as number);
+  const angle = -135 + norm * 270;
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    capturePointerDrag(e);
+    drag.current = { startY: e.clientY, startNorm: norm };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const dy = e.clientY - drag.current.startY;
+    const nextNorm = Math.min(1, Math.max(0, drag.current.startNorm - dy * DRAG_SENSITIVITY));
+    onChange(spec.id, fromNormalized(spec, nextNorm));
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    releasePointerDrag(e);
+    drag.current = null;
+  };
+
+  // The value is the LENGTH of the arc, not just where a tick points: a filled sweep is
+  // readable at 40px in a way a bare pointer is not. The travel is the same 270 degrees the
+  // pointer used, starting at -135 (conic 225deg, since conic 0 is twelve o'clock).
+  const hex = authorHex(author ?? "you", presence);
+  const sweep = norm * 270;
+
+  return (
+    <div className="flex flex-col items-center gap-1.5 w-14">
+      <div
+        className="relative w-10 h-10 rounded-full cursor-ns-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
+        style={{
+          background: `conic-gradient(from 225deg, ${hex} 0deg ${sweep}deg, var(--color-line) ${sweep}deg 270deg, transparent 270deg 360deg)`,
+        }}
+        role="slider"
+        aria-label={spec.label}
+        aria-valuemin={spec.min}
+        aria-valuemax={spec.max}
+        aria-valuenow={value as number}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {/* Punches the ring out of the sweep, so the arc reads as a track rather than a pie. */}
+        <span className="absolute inset-1.25 rounded-full bg-ground" />
+        {/* A short tick still marks the exact position; the arc alone is coarse to read precisely. */}
+        <span
+          className="absolute left-1/2 top-1.25 w-0.5 h-2 rounded-full origin-[50%_15px]"
+          style={{ ...authorDotStyle(author ?? "you", presence), transform: `translateX(-50%) rotate(${angle}deg)` }}
+        />
+      </div>
+      <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>
+      <span className="font-mono text-[10px] text-ink">{formatValue(spec, value as number)}</span>
+    </div>
+  );
+}
+
+/** A vertical fader for a number param - the same drag logic as the knob, drawn as a
+ *  slider so sectioned instrument panels read like a hardware synth. */
+function NumberSlider({
+  spec,
+  store,
+  onChange,
+  author,
+}: {
+  spec: NumberSpec;
+  store: ParamStore;
+  onChange: OnChange;
+  author?: string;
+}) {
+  const [value] = useParam(store, spec.id);
+  const presence = useAuthorPresence();
+  const drag = useRef<{ startY: number; startNorm: number } | null>(null);
+  const norm = toNormalized(spec, value as number);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    capturePointerDrag(e);
+    drag.current = { startY: e.clientY, startNorm: norm };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const dy = e.clientY - drag.current.startY;
+    const nextNorm = Math.min(1, Math.max(0, drag.current.startNorm - dy * DRAG_SENSITIVITY));
+    onChange(spec.id, fromNormalized(spec, nextNorm));
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    releasePointerDrag(e);
+    drag.current = null;
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-1.5 w-12">
+      {/* The hit area is the full 24px box; the visible track is a 2px line down the middle.
+          Drawing the track *as* the target would leave an 8px-wide thing to hit on touch. */}
+      <div
+        className="relative w-6 h-16 cursor-ns-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
+        role="slider"
+        aria-label={spec.label}
+        aria-valuemin={spec.min}
+        aria-valuemax={spec.max}
+        aria-valuenow={value as number}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <span className="absolute left-1/2 top-0 bottom-0 w-0.5 -translate-x-1/2 rounded-full bg-line" />
+        <span
+          className="absolute left-1/2 bottom-0 w-0.5 -translate-x-1/2 rounded-full"
+          style={{ ...authorFillStyle(author ?? "you", presence, 1), height: `${norm * 100}%` }}
+        />
+        {/* A fader cap, not a ring: wider than it is tall, so it reads as a thing that slides
+            up and down. `translate-y-1/2` centres it on the value (bottom puts its edge there). */}
+        <span
+          className="absolute left-1/2 h-2 w-4 -translate-x-1/2 translate-y-1/2 rounded-[3px] border-2 bg-ground"
+          style={{ bottom: `${norm * 100}%`, borderColor: authorHex(author ?? "you", presence) }}
+        />
+      </div>
+      <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>
+      <span className="font-mono text-[10px] text-ink">{formatValue(spec, value as number)}</span>
+    </div>
+  );
+}
+
+export function Knob({
+  spec,
+  store,
+  onChange,
+  sampleContext,
+  variant = "knob",
+  hideLabel,
+  author,
+}: {
+  spec: ParamSpec;
+  store: ParamStore;
+  onChange: OnChange;
+  /** Supplied by instrument panels so a `sample` param can browse/import; omitted elsewhere. */
+  sampleContext?: SampleContext;
+  /** How a number param is drawn: a rotary knob (default), a vertical fader, or a
+   *  horizontal fader row (label left, value right). */
+  variant?: "knob" | "slider" | "row";
+  /** Drop the control's own label (the surrounding layout supplies it). */
+  hideLabel?: boolean;
+  /** Last editor of this param; tints the fill/pointer. Omit to leave it the default voice. */
+  author?: string;
+}) {
+  const [value] = useParam(store, spec.id);
+
+  // One renderer per kind (map dispatch). useParam runs above unconditionally, so
+  // hook order is stable regardless of which renderer is picked.
+  const renderers: Record<ParamSpec["kind"], () => ReactElement> = {
+    number: () =>
+      (spec as NumberSpec).format === "note" ? (
+        <NoteSelect spec={spec as NumberSpec} store={store} onChange={onChange} hideLabel={hideLabel} />
+      ) : variant === "row" ? (
+        <NumberHSlider spec={spec as NumberSpec} store={store} onChange={onChange} author={author} />
+      ) : variant === "slider" ? (
+        <NumberSlider spec={spec as NumberSpec} store={store} onChange={onChange} author={author} />
+      ) : (
+        <NumberKnob spec={spec as NumberSpec} store={store} onChange={onChange} author={author} />
+      ),
+    enum: () => (
+      <label className="flex flex-col items-center gap-1.5 min-w-14">
+        <span className="text-[9px] uppercase tracking-wide text-muted">{spec.label}</span>
+        <Select
+          value={value as string}
+          // Blur after choosing so the select doesn't keep keyboard focus and swallow the
+          // note-play keys (a focused select does letter typeahead; releasing focus avoids it).
+          onChange={(e) => {
+            onChange(spec.id, e.target.value);
+            e.target.blur();
+          }}
+          aria-label={spec.label}
+          className="font-mono"
+        >
+          {(spec as EnumSpec).options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </Select>
+      </label>
+    ),
+    boolean: () => (
+      <label className="flex flex-col items-center gap-1.5 w-14">
+        <span className="text-[9px] uppercase tracking-wide text-muted">{spec.label}</span>
+        <input type="checkbox" checked={value as boolean} onChange={(e) => onChange(spec.id, e.target.checked)} />
+      </label>
+    ),
+    // The sample picker lists built-ins + the project library, and can import a
+    // file. It needs project context, so the panel threads it via sampleContext.
+    sample: () => (
+      <SamplePicker
+        spec={spec}
+        value={value as string}
+        onChange={onChange}
+        assets={sampleContext?.assets ?? []}
+        onImportFile={sampleContext?.onImportFile}
+        onReveal={sampleContext?.onReveal}
+      />
+    ),
+  };
+
+  return renderers[spec.kind]();
+}

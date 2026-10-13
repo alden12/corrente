@@ -1,0 +1,95 @@
+import { test, expect, type Page } from "@playwright/test";
+import { dismissStart, openExploreCategory } from "./support/app";
+
+/**
+ * Importing a sample into the project library (Explore's Samples
+ * page): the file is stored content-addressed, added as an asset record, and
+ * survives a reload. Fixture-driven with a tiny generated WAV - no mic, no real
+ * audio file on disk.
+ */
+
+test.use({ viewport: { width: 1320, height: 900 } });
+
+/** A minimal valid 16-bit PCM mono WAV (a few silent frames) as a Buffer. */
+function tinyWav(): Buffer {
+  const frames = 64;
+  const buffer = Buffer.alloc(44 + frames * 2);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + frames * 2, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(44100, 24);
+  buffer.writeUInt32LE(44100 * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(frames * 2, 40);
+  return buffer;
+}
+
+const sampleRow = (page: Page) => page.getByTitle('Show "blip", to hear it or put it on an audio track');
+
+test("import a sample, it lists, and persists across reload", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Samples");
+
+  await expect(sampleRow(page)).toHaveCount(0);
+
+  await page
+    .getByTestId("sample-import-input")
+    .setInputFiles({ name: "blip.wav", mimeType: "audio/wav", buffer: tinyWav() });
+
+  await expect(sampleRow(page)).toBeVisible();
+
+  // The library is part of the persisted project: it survives a reload.
+  await page.waitForTimeout(400); // let the debounced autosave flush
+  await page.reload();
+  await dismissStart(page);
+  await expect(sampleRow(page)).toBeVisible();
+});
+
+test("an audio clip becomes a sample: a library entry for the same audio, and a Sampler playing it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Samples");
+  await page
+    .getByTestId("audio-import-input")
+    .setInputFiles({ name: "take.wav", mimeType: "audio/wav", buffer: tinyWav() });
+  await page.getByRole("button", { name: "Use as sample" }).click();
+
+  // A Sampler track, set to the new library entry.
+  await expect(page.getByText("sampler", { exact: true }).first()).toBeVisible();
+  await expect(page.getByTitle('Show "take", to hear it or put it on an audio track')).toBeVisible();
+
+  // The same audio again is the same library entry, not a second copy.
+  await page.getByTitle("take (double-click to rename)").click();
+  await page.getByRole("button", { name: "Use as sample" }).click();
+  await expect(page.getByTitle('Show "take", to hear it or put it on an audio track')).toHaveCount(1);
+});
+
+test("a sample's panel plays it, and Add puts it on a new audio track", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Samples");
+  await page
+    .getByTestId("sample-import-input")
+    .setInputFiles({ name: "blip.wav", mimeType: "audio/wav", buffer: tinyWav() });
+  const trackHeaders = page.getByTitle("Double-click to rename");
+  const before = await trackHeaders.count();
+
+  await sampleRow(page).click();
+  const panel = page.getByRole("region", { name: "blip" });
+  await expect(panel).toBeVisible();
+  await panel.getByRole("button", { name: "Play blip" }).click(); // hears it; nothing is added
+  await expect(trackHeaders).toHaveCount(before);
+
+  await panel.getByRole("button", { name: "Add as a new audio track" }).click();
+  await expect(trackHeaders).toHaveCount(before + 1);
+  await expect(panel).toHaveCount(0);
+});

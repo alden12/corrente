@@ -1,0 +1,134 @@
+/**
+ * Author colours: the accent hue for each author (voice), chosen by the user from a fixed
+ * swatch palette and held in this browser's localStorage. Pure data + a subscribe seam (no
+ * DOM, no React), mirroring the agent config store; a cached snapshot keeps `readAuthorColors`
+ * referentially stable so it is safe as a `useSyncExternalStore` getSnapshot.
+ *
+ * The config is a generic `author -> hex` map, not three fixed fields, and `colorForAuthor`
+ * hashes any unknown author id into the palette, so an arbitrary number of collaborators each
+ * resolve to a stable, distinct hue. Colour is derived here; the *authorship* (who last edited a
+ * thing) is stored on the project data.
+ *
+ * Colouring is PERSPECTIVE-RELATIVE: `colorForAuthor` takes the viewer's own id (`self`) and paints
+ * the viewer's own edits with the "you" hue (teal), so on every screen "my edits" read teal and
+ * everyone else reads in their own colour - symmetric, with no single privileged identity. An agent
+ * is an absolute voice (violet for everyone, whoever drove it - the driver shows in the label, not
+ * the hue); every other id (including a peer who happens to be the default `you`) gets its
+ * configured or hashed hue.
+ */
+import { DEFAULT_VOICE_COLORS } from "./authorVoice";
+import { isAgentAuthor } from "../audio/commands/authors";
+import { DEFAULT_USER } from "./currentUser";
+
+/** A pickable colour. `hex` is what lands in the CSS var / inline style. */
+export interface Swatch {
+  id: string;
+  hex: string;
+  name: string;
+}
+
+/**
+ * The palette a user picks from: a curated set that stays legible on the dark theme and
+ * mutually distinguishable (so two authors rarely read as the same). The voice defaults lead so
+ * they are always present as swatches.
+ */
+export const SWATCHES: Swatch[] = [
+  { id: "teal", hex: DEFAULT_VOICE_COLORS.you, name: "Teal" },
+  { id: "violet", hex: DEFAULT_VOICE_COLORS.agent, name: "Violet" },
+  { id: "coral", hex: "#d9775a", name: "Coral" },
+  { id: "sky", hex: "#5aa9e6", name: "Sky" },
+  { id: "mint", hex: "#5fd0a0", name: "Mint" },
+  { id: "lime", hex: "#9ecb64", name: "Lime" },
+  { id: "amber", hex: "#e0a458", name: "Amber" },
+  { id: "rose", hex: "#e26d8f", name: "Rose" },
+  { id: "orchid", hex: "#d98cd0", name: "Orchid" },
+  { id: "cornflower", hex: "#7f8ce6", name: "Cornflower" },
+];
+
+/** author id -> chosen hex. Only overrides are stored; unset authors fall back. */
+export type AuthorColorConfig = Record<string, string>;
+
+const STORAGE_KEY = "corrente:author-colors:v1";
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const listeners = new Set<() => void>();
+
+function store(): Storage | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage : null;
+  } catch {
+    return null; // localStorage can throw (privacy mode); degrade to defaults
+  }
+}
+
+/** Keep only entries whose value is a valid #rrggbb hex. */
+function cleanConfig(value: unknown): AuthorColorConfig {
+  if (typeof value !== "object" || value === null) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([, hex]) => typeof hex === "string" && HEX.test(hex)),
+  ) as AuthorColorConfig;
+}
+
+function readFromStorage(): AuthorColorConfig {
+  const raw = store()?.getItem(STORAGE_KEY);
+  if (!raw) return {};
+  try {
+    return cleanConfig(JSON.parse(raw));
+  } catch {
+    return {};
+  }
+}
+
+let cached: AuthorColorConfig = readFromStorage();
+
+/** The current author-colour overrides (a stable reference until the next write). */
+export function readAuthorColors(): AuthorColorConfig {
+  return cached;
+}
+
+/** Replace the overrides and notify subscribers. */
+export function writeAuthorColors(config: AuthorColorConfig): void {
+  cached = cleanConfig(config);
+  store()?.setItem(STORAGE_KEY, JSON.stringify(cached));
+  for (const listener of listeners) listener();
+}
+
+/** Subscribe to author-colour changes. Returns an unsubscribe fn. */
+export function subscribeAuthorColors(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Stable non-negative hash of a string, for hashing unknown author ids into the palette. */
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index++) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * The colour (hex) for an author, from the viewer's perspective. A configured override wins; then the
+ * viewer's own id (`self`) takes the "you" hue (teal), so my edits always read teal on my screen; then
+ * the agent voice, whoever drove it; otherwise the id is hashed deterministically into the palette,
+ * so every collaborator gets a stable, distinct hue. `self` defaults to "you" (solo: the lone user's
+ * edits are teal).
+ *
+ * **The literal `"you"` also reads as the viewer (DAW-8.10).** It is the stamp for "nobody in
+ * particular": a new track's default clip, a control nobody has touched, the project a first visit
+ * seeds, edits made before there were accounts. Hashing it like a stranger's id painted all of those
+ * in a random swatch the moment anyone signed in, which read as the agent's violet. Real people have
+ * real ids under auth, so nobody else is literally "you".
+ */
+/** Whether an author reads as the viewer: their own id, or the unattributed `"you"` stamp. */
+export const isViewer = (author: string, self: string): boolean => author === self || author === DEFAULT_USER;
+
+export function colorForAuthor(author: string, config: AuthorColorConfig = cached, self = "you"): string {
+  // An override is configured per VOICE, so every agent reads the one agent colour however many
+  // people are driving one - the settings panel offers one agent row, not one per collaborator.
+  const override = config[isAgentAuthor(author) ? "agent" : author];
+  if (override) return override;
+  if (isViewer(author, self)) return DEFAULT_VOICE_COLORS.you; // my own edits: the "you" hue, whoever I am
+  if (isAgentAuthor(author)) return DEFAULT_VOICE_COLORS.agent;
+  return SWATCHES[hashString(author) % SWATCHES.length].hex;
+}

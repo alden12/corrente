@@ -1,0 +1,15 @@
+name: Set up
+description: >-
+  Node with the yarn cache, and dependencies installed. Run after actions/checkout. Shared by the
+  public repo's CI and the private monorepo's (which runs it from packages/app/.github/actions).
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: yarn
+
+    - name: Install dependencies
+      shell: bash
+      run: yarn install --frozen-lockfile

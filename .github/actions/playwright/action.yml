@@ -1,0 +1,27 @@
+name: Playwright browser
+description: >-
+  Chromium for Playwright, cached by Playwright's version, so a cache hit installs only the system
+  packages it needs.
+runs:
+  using: composite
+  steps:
+    - name: Playwright version
+      id: version
+      shell: bash
+      run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.version.outputs.version }}
+
+    - name: Install Chromium
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: yarn e2e:browser
+
+    - name: Install Chromium's system dependencies
+      if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: yarn e2e:browser-deps

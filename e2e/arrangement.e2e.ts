@@ -1,0 +1,333 @@
+import { test, expect, type Page } from "@playwright/test";
+import { dismissStart } from "./support/app";
+
+/**
+ * Editable arrangement timeline: the default project seeds one instrument track
+ * with a single placement of its clip at the start, so one block is visible on
+ * load. Exercises the mouse gestures - create (drag empty lane), move (drag body),
+ * split (double-click), delete (select + Delete), mark (click empty lane) - and the
+ * arrangement ruler's loop-region handle, then confirms a placed clip survives a
+ * reload (it lives in the project snapshot). Each gesture records a single
+ * two-voice feed entry.
+ */
+
+// A wide, tall viewport so the lanes have room to the right of the seed block and
+// the timeline panel is not cramped.
+test.use({ viewport: { width: 1320, height: 900 } });
+
+const placements = (page: Page) => page.getByTestId("placement");
+
+/** Open the Activity rail view so the edit feed (Placed/Moved/... entries) is visible. */
+async function openActivity(page: Page) {
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+}
+
+/** Zoom the arrangement out a few notches so blocks are compact and empty lane shows. */
+async function zoomOut(page: Page) {
+  const btn = page.getByTitle("Zoom out", { exact: true });
+  for (let i = 0; i < 3; i++) await btn.click();
+}
+
+test("place, move, split and delete clips in the arrangement", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+  await zoomOut(page);
+
+  // The seed track shows exactly one placement on load.
+  await expect(placements(page)).toHaveCount(1);
+
+  // Drag across the empty lane to the right of the seed -> create + place a clip.
+  const seed = (await placements(page).first().boundingBox())!;
+  const y = seed.y + seed.height / 2;
+  await page.mouse.move(seed.x + seed.width + 40, y);
+  await page.mouse.down();
+  await page.mouse.move(seed.x + seed.width + 160, y, { steps: 8 });
+  await page.mouse.up();
+  await expect(placements(page)).toHaveCount(2);
+  await expect(page.getByText("Placed clip")).toBeVisible();
+
+  // Drag the seed block's body to the right -> move (one "Moved clip" entry).
+  const before = (await placements(page).first().boundingBox())!;
+  await page.mouse.move(before.x + 6, before.y + before.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(before.x + 90, before.y + before.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText("Moved clip")).toBeVisible();
+  await expect(placements(page)).toHaveCount(2);
+  expect((await placements(page).first().boundingBox())!.x).toBeGreaterThan(before.x);
+
+  // Double-click a block at its middle -> split into two windows over the clip.
+  const toSplit = (await placements(page).first().boundingBox())!;
+  await page.mouse.dblclick(toSplit.x + toSplit.width / 2, toSplit.y + toSplit.height / 2);
+  await expect(page.getByText("Split clip")).toBeVisible();
+  await expect(placements(page)).toHaveCount(3);
+
+  // Select a block and press Delete -> remove it from the arrangement.
+  await placements(page).first().click();
+  await page.keyboard.press("Delete");
+  await expect(page.getByText("Removed clip from arrangement")).toBeVisible();
+  await expect(placements(page)).toHaveCount(2);
+});
+
+test("copy and paste a placement", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await zoomOut(page);
+
+  await expect(placements(page)).toHaveCount(1);
+  await placements(page).first().click(); // select the seed placement
+  await page.keyboard.press("ControlOrMeta+c");
+  await page.keyboard.press("ControlOrMeta+v");
+  await expect(placements(page)).toHaveCount(2);
+});
+
+test("drag on an empty lane creates a new empty clip sized to the drag", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+  await zoomOut(page);
+
+  // Drag across empty lane to the right of the seed block.
+  const seed = (await placements(page).first().boundingBox())!;
+  const y = seed.y + seed.height / 2;
+  await page.mouse.move(seed.x + seed.width + 40, y);
+  await page.mouse.down();
+  await page.mouse.move(seed.x + seed.width + 200, y, { steps: 10 });
+  await page.mouse.up();
+
+  await expect(page.getByText("New clip")).toBeVisible(); // a fresh clip was created
+  await expect(placements(page)).toHaveCount(2); // and placed
+});
+
+test("a track can be renamed inline", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+
+  const name = page.getByTestId("arr-scroll").getByText("Subtractive 1", { exact: true });
+  await name.dblclick();
+  const input = page.getByTestId("arr-scroll").getByRole("textbox");
+  await input.fill("My Bass");
+  await input.press("Enter");
+  await expect(page.getByTestId("arr-scroll").getByText("My Bass")).toBeVisible();
+});
+
+test("drag a clip from the rail onto its lane places it", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+
+  await expect(placements(page)).toHaveCount(1); // the seed placement of clip A
+
+  // HTML5 drag-and-drop: dispatch dragstart on the chip, then dragover + drop on
+  // the lane sharing one DataTransfer (Playwright's mouse drag does not drive
+  // native DnD reliably). The drop x sets the beat.
+  const chip = page.getByTitle(/drag onto the lane/).first();
+  const lane = page.getByTestId("lane").first();
+  const box = (await lane.boundingBox())!;
+  const x = box.x + 420;
+  const y = box.y + box.height / 2;
+  await page.evaluate(
+    ([src, tgt, px, py]) => {
+      const dt = new DataTransfer();
+      const opts = (cx: number, cy: number) => ({
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dt,
+        clientX: cx,
+        clientY: cy,
+      });
+      (src as Element).dispatchEvent(new DragEvent("dragstart", opts(0, 0)));
+      (tgt as Element).dispatchEvent(new DragEvent("dragover", opts(px as number, py as number)));
+      (tgt as Element).dispatchEvent(new DragEvent("drop", opts(px as number, py as number)));
+      (src as Element).dispatchEvent(new DragEvent("dragend", opts(0, 0)));
+    },
+    [await chip.elementHandle(), await lane.elementHandle(), x, y] as const,
+  );
+
+  await expect(placements(page)).toHaveCount(2);
+  await expect(page.getByText("Placed clip")).toBeVisible();
+});
+
+test("a group can be renamed inline", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+
+  // New tracks are filed into the single default "main" group.
+  const group = page.getByTestId("arr-scroll").getByText("main", { exact: true });
+  await group.dblclick();
+  const input = page.getByTestId("arr-scroll").getByRole("textbox");
+  await input.fill("Leads");
+  await input.press("Enter");
+  await expect(page.getByTestId("arr-scroll").getByText("Leads", { exact: true })).toBeVisible();
+});
+
+test("the arrangement ruler sets the loop region", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+  await zoomOut(page);
+
+  // Scope to the arrangement scroller (the piano roll also renders a ruler).
+  const end = page.getByTestId("arr-scroll").getByRole("slider", { name: "Loop length" });
+  const box = (await end.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 60, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText(/Set loop length/)).toBeVisible();
+});
+
+test("clicking sets a paste marker and paste lands there", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await zoomOut(page);
+
+  await expect(placements(page)).toHaveCount(1);
+  const seed = (await placements(page).first().boundingBox())!;
+  const y = seed.y + seed.height / 2;
+
+  // Copy the seed placement, drop a marker far to the right, paste -> lands there.
+  await placements(page).first().click();
+  await page.keyboard.press("ControlOrMeta+c");
+  await page.mouse.click(seed.x + seed.width + 160, y);
+  await page.keyboard.press("ControlOrMeta+v");
+
+  await expect(placements(page)).toHaveCount(2);
+  const lefts = await placements(page).evaluateAll((els) =>
+    els.map((e) => (e as HTMLElement).getBoundingClientRect().left),
+  );
+  expect(Math.max(...lefts)).toBeGreaterThan(seed.x + seed.width); // pasted at the marker, right of the seed
+});
+
+test("a placed clip persists across reload", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await zoomOut(page);
+
+  // Drag to create a clip, then confirm it survives a reload.
+  const seed = (await placements(page).first().boundingBox())!;
+  const y = seed.y + seed.height / 2;
+  await page.mouse.move(seed.x + seed.width + 40, y);
+  await page.mouse.down();
+  await page.mouse.move(seed.x + seed.width + 160, y, { steps: 8 });
+  await page.mouse.up();
+  await expect(placements(page)).toHaveCount(2);
+
+  await page.waitForTimeout(400); // let the debounced autosave flush
+  await page.reload();
+  await dismissStart(page);
+  await expect(placements(page)).toHaveCount(2);
+});
+
+test("pressing outside the lanes deselects the clip", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await zoomOut(page);
+
+  // A selected clip grows handles, which is the visible proof of selection on either pointer.
+  await placements(page).first().click();
+  await expect(page.getByTestId("clip-handle-end")).toBeVisible();
+
+  // The room below the last track: inside the scroller, outside every lane. Before this, a
+  // selection could only be swapped for another or dismissed with Escape.
+  const scroller = (await page.getByTestId("arr-scroll").boundingBox())!;
+  await page.mouse.click(scroller.x + scroller.width / 2, scroller.y + scroller.height - 12);
+
+  await expect(page.getByTestId("clip-handle-end"), "the selection cleared").toHaveCount(0);
+});
+
+test("a selected clip grows handles but no touch furniture on a mouse", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await zoomOut(page);
+
+  await placements(page).first().click();
+  // Handles serve both pointers; the kebab is touch's answer to actions a mouse reaches by
+  // keyboard, so it is present in the tree and hidden by the pointer media query.
+  await expect(page.getByTestId("clip-handle-start")).toBeVisible();
+  await expect(page.getByTestId("clip-handle-end")).toBeVisible();
+  await expect(page.getByTestId("clip-actions")).toBeHidden();
+  // No move grip at all for a clip: it is 34px tall and only moves horizontally, so a fingertip
+  // never hides the edge being aimed. That is a prop, not a media query, hence absent not hidden.
+  await expect(page.getByTestId("clip-move")).toHaveCount(0);
+});
+
+test("dragging the start handle trims the clip instead of moving it", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await zoomOut(page);
+
+  // Drag out a clip well clear of the seed. Not the seed itself: it starts at beat 0, where the
+  // start handle straddles the boundary with the pinned header column and the column (z-10) wins
+  // the top half of it. Nothing is to the left of beat 0 to trim into anyway.
+  const seed = (await placements(page).first().boundingBox())!;
+  const y = seed.y + seed.height / 2;
+  await page.mouse.move(seed.x + seed.width + 60, y);
+  await page.mouse.down();
+  await page.mouse.move(seed.x + seed.width + 220, y, { steps: 10 });
+  await page.mouse.up();
+  await expect(placements(page)).toHaveCount(2);
+
+  // Creating selects it, so the handles are already up.
+  const target = placements(page).nth(1);
+  const before = (await target.boundingBox())!;
+  const handle = (await page.getByTestId("clip-handle-start").boundingBox())!;
+
+  // Drag the start to the right: the left edge follows and the right edge stays put. A move
+  // would carry both, which is the mistake this handle exists to make impossible.
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 40, handle.y + handle.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  await expect
+    .poll(
+      async () => {
+        const after = (await target.boundingBox())!;
+        return { trimmed: Math.round(after.x) > Math.round(before.x), right: Math.round(after.x + after.width) };
+      },
+      { message: "the start moved in and the end stayed" },
+    )
+    .toEqual({ trimmed: true, right: Math.round(before.x + before.width) });
+});
+
+/**
+ * DAW-8.13: a drag is one entry even when it pauses.
+ *
+ * Coalescing used to be a 400ms window and nothing else, so a finger resting mid-drag - which is
+ * what dragging a handle on a phone looks like - crossed it and started a fresh entry. A slow trim
+ * left a row per pause in the feed and a step per pause in undo. The drag now says where it begins
+ * and ends, so the pauses cost nothing.
+ */
+test("a slow drag is one feed entry and one undo step, not one per pause", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openActivity(page);
+  await zoomOut(page);
+
+  const seed = (await placements(page).first().boundingBox())!;
+  const y = seed.y + seed.height / 2;
+  const resized = page.getByText("Resized clip", { exact: true });
+
+  // Drag the seed block's right edge out in three hops, pausing well past the coalesce window
+  // between them. Grab it 3px inside the edge, which is the mouse-only grab zone.
+  await page.mouse.move(seed.x + seed.width - 3, y);
+  await page.mouse.down();
+  for (const dx of [40, 80, 120]) {
+    await page.mouse.move(seed.x + seed.width - 3 + dx, y, { steps: 4 });
+    await page.waitForTimeout(600);
+  }
+  await page.mouse.up();
+
+  await expect(resized).toHaveCount(1);
+
+  // And one step to take it back: a single undo returns the block to the width it started at.
+  const widened = (await placements(page).first().boundingBox())!;
+  expect(Math.round(widened.width)).toBeGreaterThan(Math.round(seed.width));
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect
+    .poll(async () => Math.round((await placements(page).first().boundingBox())!.width))
+    .toBe(Math.round(seed.width));
+});

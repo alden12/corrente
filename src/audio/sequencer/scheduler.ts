@@ -1,0 +1,409 @@
+/**
+ * The playback scheduler: the brief's "Tale of Two Clocks". A coarse setInterval
+ * wakes every LOOKAHEAD_MS and schedules note onsets within the next
+ * SCHEDULE_AHEAD_SEC for EVERY (non-muted) track, using the precise AudioContext
+ * clock via each track's instrument.playNote. Playback loops at the project's
+ * lengthBeats; tempo comes from the project.
+ *
+ * Beat bookkeeping is anchored as (anchorBeat at anchorTime), so a tempo change
+ * mid-playback re-anchors and stays continuous.
+ */
+import type { AudioEngine } from "../engine/AudioEngine";
+import type { ProjectStore } from "../project/projectStore";
+import type { Placement } from "../project/types";
+import type { TransportClock } from "../midi/device/clock";
+import { GRID, type NoteEvent } from "./types";
+import { grooveById } from "../grooves/catalog";
+import { grooveAt } from "./groove";
+import { clamp } from "../../util";
+
+const LOOKAHEAD_MS = 25;
+
+/**
+ * How far ahead each tick schedules (DAW-32).
+ *
+ * 25ms / 100ms is the pairing "A Tale of Two Clocks" recommends, and it held for the whole life
+ * of this project on a desktop. A phone broke it: a tick that arrives more than this late has
+ * let notes come due unscheduled, and there is nothing that can be done about them afterwards
+ * except drop them. Mobile browsers throttle timers hard, an installed PWA backgrounds when you
+ * switch apps, and a phone stalls the main thread over things a laptop shrugs off.
+ *
+ * So the window is wider than the classic advice. What it costs is the horizon at which an edit
+ * takes effect: notes already scheduled are already committed, so muting a track or moving a
+ * note lands up to this far in the future rather than half as far. At 200ms that is still under
+ * a 16th note at any tempo anyone works at.
+ *
+ * It reduces how often a stall loses anything at all. The floor in `tick` is what makes the
+ * stalls it cannot cover *harmless*, which is the other half and the more important one.
+ */
+const SCHEDULE_AHEAD_SEC = 0.2;
+
+/**
+ * How late a note may be and still play, rather than being skipped as part of a missed window.
+ *
+ * Without it, a stall a millisecond longer than the lookahead drops notes outright - and a
+ * marginal overrun is by far the most likely kind, so the common case would be the one that
+ * loses a note. 20ms is inaudible as lateness (a 16th note at 120bpm is 125ms) and much more
+ * forgiving than silence where a note should be.
+ */
+const CATCH_UP_GRACE_SEC = 0.02;
+
+/** Pure: seconds for a number of beats at a tempo. */
+export function beatsToSeconds(beats: number, bpm: number): number {
+  return (beats * 60) / bpm;
+}
+
+/**
+ * Pure: note occurrences whose onset lands in [fromBeat, toBeat), accounting for
+ * the clip looping the region [loopStart, loopStart+loopLen) every loopLen beats.
+ * Continuous playback beat 0 maps to loopStart, so a note at absolute beat S fires
+ * at iter*loopLen + (S - loopStart). Notes outside the loop region don't play.
+ * `loopStart` defaults to 0 (loop the whole clip from the top).
+ */
+export function notesStartingInBeatRange(
+  notes: NoteEvent[],
+  fromBeat: number,
+  toBeat: number,
+  loopLen: number,
+  loopStart = 0,
+): { note: NoteEvent; atBeat: number }[] {
+  const result: { note: NoteEvent; atBeat: number }[] = [];
+  if (loopLen <= 0 || toBeat <= fromBeat) return result;
+  const startIter = Math.floor(fromBeat / loopLen);
+  const endIter = Math.ceil(toBeat / loopLen);
+  for (let iter = startIter; iter <= endIter; iter++) {
+    const base = iter * loopLen;
+    for (const note of notes) {
+      if (note.start < loopStart || note.start >= loopStart + loopLen) continue;
+      const at = base + (note.start - loopStart);
+      if (at >= fromBeat && at < toBeat) result.push({ note, atBeat: at });
+    }
+  }
+  return result;
+}
+
+/**
+ * Pure: continuous beats at which a single onset (e.g. an audio clip's start)
+ * lands in [fromBeat, toBeat), accounting for the loop region [loopStart,
+ * loopStart+loopLen). Onsets outside the region don't play. `loopStart` defaults
+ * to 0.
+ */
+export function onsetsInBeatRange(
+  startBeat: number,
+  fromBeat: number,
+  toBeat: number,
+  loopLen: number,
+  loopStart = 0,
+): number[] {
+  const result: number[] = [];
+  if (loopLen <= 0 || toBeat <= fromBeat) return result;
+  if (startBeat < loopStart || startBeat >= loopStart + loopLen) return result;
+  const startIter = Math.floor(fromBeat / loopLen);
+  const endIter = Math.ceil(toBeat / loopLen);
+  for (let iter = startIter; iter <= endIter; iter++) {
+    const at = iter * loopLen + (startBeat - loopStart);
+    if (at >= fromBeat && at < toBeat) result.push(at);
+  }
+  return result;
+}
+
+/**
+ * Pure: a placement's clip notes tiled across its window, in arrangement-relative
+ * beats (0 = the placement start). A clip of `clipLen` beats loops to fill the
+ * window: a window that fits within the clip plays once (a trim), a longer window
+ * repeats the pattern. `offset` is the phase into the loop the window begins at.
+ */
+export function tileClipNotes(notes: NoteEvent[], clipLen: number, offset: number, length: number): NoteEvent[] {
+  const out: NoteEvent[] = [];
+  if (clipLen <= 0) return out;
+  for (const note of notes) {
+    if (note.start < 0 || note.start >= clipLen) continue;
+    let phase = (note.start - offset) % clipLen;
+    if (phase < 0) phase += clipLen;
+    for (let tau = phase; tau < length; tau += clipLen) out.push({ ...note, start: tau });
+  }
+  return out;
+}
+
+/**
+ * Pure: where in a clip an arrangement position falls, or null when no placement of that clip covers
+ * it (DAW-8.9). The inverse of `tileClipNotes`: a note at clip beat `b` sounds at
+ * `startBeat + ((b - offset) mod clipLen)`, so arrangement beat `position` is clip beat
+ * `(position - startBeat + offset) mod clipLen`. Half-open like the scheduler, so a placement's end is
+ * the next one's start rather than both.
+ */
+export function clipBeatAt(
+  position: number,
+  placements: readonly Pick<Placement, "clipId" | "startBeat" | "offset" | "length">[],
+  clipId: string,
+  clipLen: number,
+): number | null {
+  if (clipLen <= 0) return null;
+  const covering = placements.find(
+    (placement) =>
+      placement.clipId === clipId &&
+      position >= placement.startBeat &&
+      position < placement.startBeat + placement.length,
+  );
+  if (!covering) return null;
+  const phase = (position - covering.startBeat + covering.offset) % clipLen;
+  return phase < 0 ? phase + clipLen : phase;
+}
+
+/**
+ * Pure: metronome clicks (one per shown beat) whose continuous onset lands in [fromBeat, toBeat).
+ * Continuous beat 0 = playback start = the loop's start, so a continuous beat `b` maps to the musical
+ * beat `loopStart + (b mod loopLen)`; the click is accented on each bar downbeat. `beatUnit` is the
+ * shown-beat size in beats (1 for x/4, 0.5 for x/8), so x/8 clicks eighths and the bar accent still
+ * lands on the downbeat. Iterating by click *index* keeps the bar test exact for fractional bars.
+ * Matches the note scheduler's half-open range so clicks and notes line up tick to tick.
+ */
+export function metronomeClicksInBeatRange(
+  fromBeat: number,
+  toBeat: number,
+  loopStart: number,
+  loopLen: number,
+  beatsPerBar: number,
+  beatUnit: number = 1,
+): { atBeat: number; accent: boolean }[] {
+  const out: { atBeat: number; accent: boolean }[] = [];
+  if (loopLen <= 0 || beatsPerBar <= 0 || beatUnit <= 0 || toBeat <= fromBeat) return out;
+  const unitsPerBar = Math.max(1, Math.round(beatsPerBar / beatUnit)); // shown beats per bar (numerator)
+  for (let index = Math.max(0, Math.ceil(fromBeat / beatUnit - 1e-9)); index * beatUnit < toBeat; index++) {
+    const atBeat = index * beatUnit;
+    if (atBeat < fromBeat) continue;
+    const musical = loopStart + (((atBeat % loopLen) + loopLen) % loopLen);
+    out.push({ atBeat, accent: Math.round(musical / beatUnit) % unitsPerBar === 0 });
+  }
+  return out;
+}
+
+export class Scheduler implements TransportClock {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private unsubscribe: (() => void) | null = null;
+  /** When true, the transport schedules a metronome click on every beat. */
+  private metronomeEnabled = false;
+
+  private anchorBeat = 0;
+  private anchorTime = 0;
+  private lastBps = 2;
+  private scheduledUntilBeats = 0;
+
+  private readonly engine: AudioEngine;
+  private readonly project: ProjectStore;
+  private readonly onStateChange?: (playing: boolean) => void;
+
+  constructor(engine: AudioEngine, project: ProjectStore, onStateChange?: (playing: boolean) => void) {
+    this.engine = engine;
+    this.project = project;
+    this.onStateChange = onStateChange;
+  }
+
+  get isPlaying(): boolean {
+    return this.timer !== null;
+  }
+
+  // --- TransportClock (read by MIDI devices to place events on the tempo grid) ---
+  get playing(): boolean {
+    return this.timer !== null;
+  }
+  get currentTime(): number {
+    return this.engine.currentTime;
+  }
+  get secondsPerBeat(): number {
+    return 60 / this.project.tempo;
+  }
+  /** Continuous (unlooped) beats since play start at audio-clock `time`, from the live anchor. */
+  continuousBeatAtTime(time: number): number {
+    return this.anchorBeat + (time - this.anchorTime) * this.lastBps;
+  }
+
+  /** Toggle the metronome click (read by `tick` each lookahead pass). */
+  setMetronomeEnabled(on: boolean): void {
+    this.metronomeEnabled = on;
+  }
+
+  /**
+   * Start the transport. `atTime` anchors beat 0 to a specific AudioContext time
+   * (defaults to now); the recorder passes the count-in's downbeat so the transport
+   * metronome continues the count-in grid exactly in phase, free of setTimeout jitter.
+   */
+  play(atTime?: number): void {
+    if (this.timer !== null || !this.engine.started) return;
+    this.anchorTime = atTime ?? this.engine.currentTime;
+    this.anchorBeat = 0;
+    this.scheduledUntilBeats = 0;
+    this.lastBps = this.project.tempo / 60;
+    this.unsubscribe = this.project.subscribe(() => this.reanchor());
+    this.tick();
+    this.timer = setInterval(() => this.tick(), LOOKAHEAD_MS);
+    this.onStateChange?.(true);
+  }
+
+  stop(): void {
+    if (this.timer === null) return;
+    clearInterval(this.timer);
+    this.timer = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    for (const track of this.project.getTracks()) this.engine.getNoteTarget(track.id)?.allNotesOff();
+    this.engine.stopAllAudio();
+    this.onStateChange?.(false);
+  }
+
+  /** Looped position in beats for the playhead (sweeps the loop region); 0 when stopped. */
+  getPositionBeats(): number {
+    if (this.timer === null) return 0;
+    const loopStart = this.project.loopStart;
+    const loopLen = this.project.length - loopStart;
+    const cont = this.anchorBeat + (this.engine.currentTime - this.anchorTime) * this.lastBps;
+    return loopLen > 0 ? loopStart + (cont % loopLen) : 0;
+  }
+
+  /**
+   * Where in one clip the transport is, for that clip's editor playhead; null when stopped or when
+   * nothing is playing this clip right now (DAW-8.9). The editors used to take the arrangement
+   * position modulo the clip length, which drew a moving cursor in a clip the arrangement had not
+   * reached. Resolved the way `tick` resolves what to play, launched clip included, so the cursor is
+   * where the sound is.
+   */
+  clipPositionBeats(trackId: string, clipId: string): number | null {
+    if (this.timer === null) return null;
+    const track = this.project.getTrack(trackId);
+    const clip = track?.clips.find((candidate) => candidate.id === clipId);
+    if (!track || !clip || !("store" in clip)) return null;
+    const loopStart = this.project.loopStart;
+    const placements = track.launchedClipId
+      ? [{ clipId: track.launchedClipId, startBeat: loopStart, offset: 0, length: this.project.length - loopStart }]
+      : track.placements;
+    return clipBeatAt(this.getPositionBeats(), placements, clipId, clip.store.getClip().lengthBeats);
+  }
+
+  /**
+   * Looped beat position at an arbitrary audio-clock `time`, using the current
+   * anchor (valid while playing). Recording uses this to map the capture's start
+   * time to the arrangement beat where the take should land.
+   */
+  beatAtTime(time: number): number {
+    const loopStart = this.project.loopStart;
+    const loopLen = this.project.length - loopStart;
+    const cont = this.anchorBeat + (time - this.anchorTime) * this.lastBps;
+    return loopLen > 0 ? loopStart + (cont % loopLen) : cont;
+  }
+
+  private reanchor(): void {
+    const now = this.engine.currentTime;
+    this.anchorBeat += (now - this.anchorTime) * this.lastBps;
+    this.anchorTime = now;
+    this.lastBps = this.project.tempo / 60;
+  }
+
+  private tick(): void {
+    const bpm = this.project.tempo;
+    const bps = bpm / 60;
+    const loopStart = this.project.loopStart;
+    const loopLen = this.project.length - loopStart;
+    const now = this.engine.currentTime;
+    const horizonBeats = this.anchorBeat + (now + SCHEDULE_AHEAD_SEC - this.anchorTime) * bps;
+
+    /**
+     * **Never schedule the past** (DAW-32). `scheduledUntilBeats` is wherever the last tick
+     * reached and nothing else pulls it forward, so a tick that does not run leaves it behind
+     * while the audio clock carries on regardless.
+     *
+     * Without this floor the next tick's window spans the whole stall, and every note that came
+     * due inside it is scheduled at a time already past - which Web Audio plays *immediately*,
+     * so a two-second stall at 120bpm fires four beats of material in one instant. That is what
+     * a phone reported as "jumping through time, like it's catching up".
+     *
+     * Skipping the gap is the right answer rather than a concession. The transport is not lost:
+     * the position comes from the audio clock, so it has been correct throughout, and only
+     * scheduling fell behind. Dropping the missed window resumes exactly where the clock says
+     * playback should be, which is what a transport is for.
+     */
+    const nowBeats = this.anchorBeat + (now - CATCH_UP_GRACE_SEC - this.anchorTime) * bps;
+    const fromBeats = Math.max(this.scheduledUntilBeats, nowBeats);
+    if (horizonBeats <= fromBeats) return;
+
+    // Resolve the project groove once per tick (cheap; the per-note math is in the
+    // instrument loop). amount 0 / Straight makes grooveAt a no-op, so no branch needed.
+    const { id: grooveId, amount: grooveAmount } = this.project.getGroove();
+    const groove = grooveById(grooveId);
+
+    if (this.metronomeEnabled) {
+      for (const { atBeat, accent } of metronomeClicksInBeatRange(
+        fromBeats,
+        horizonBeats,
+        loopStart,
+        loopLen,
+        this.project.beatsPerBar,
+        this.project.beatUnit,
+      )) {
+        const when = this.anchorTime + (atBeat - this.anchorBeat) / bps;
+        this.engine.scheduleClick(when, accent);
+      }
+    }
+
+    for (const track of this.project.getTracks()) {
+      if (track.muted) continue;
+      // A launched clip overrides the arrangement: play it as one full-region
+      // placement, so the existing tiling loops it over the transport.
+      const placements = track.launchedClipId
+        ? [{ id: "__launch", clipId: track.launchedClipId, startBeat: loopStart, offset: 0, length: loopLen }]
+        : track.placements;
+      if (track.kind === "instrument") {
+        // Route through the note pipeline (MIDI devices -> instrument), not the raw instrument.
+        const noteTarget = this.engine.getNoteTarget(track.id);
+        if (!noteTarget) continue;
+        // Flatten the arrangement: each placement contributes its clip's notes,
+        // tiled across its window (looping a clip whose window outruns it) and
+        // shifted to the placement's start on the arrangement.
+        const events: NoteEvent[] = [];
+        for (const p of placements) {
+          const clip = track.clips.find((c) => c.id === p.clipId);
+          if (!clip) continue;
+          const c = clip.store.getClip();
+          for (const n of tileClipNotes(c.notes, c.lengthBeats, p.offset, p.length)) {
+            events.push({ ...n, start: p.startBeat + n.start });
+          }
+        }
+        for (const { note, atBeat } of notesStartingInBeatRange(events, fromBeats, horizonBeats, loopLen, loopStart)) {
+          // Groove nudges the onset + scales velocity at schedule time (notes untouched).
+          const shift = grooveAt(groove, atBeat, grooveAmount);
+          // `Math.max(now, ...)` is for the groove, not for lateness: a swing under 50% gives a
+          // negative `offsetBeats`, which can pull a note at the very start of the window a few
+          // milliseconds behind the clock. (It used to double as the thing that turned a stalled
+          // tick into a burst of simultaneous notes; the floor above is what stops that now.)
+          const when = Math.max(now, this.anchorTime + (atBeat - this.anchorBeat) / bps + shift.offsetBeats / bps);
+          const velocity = clamp(note.velocity * shift.velocityScale, 0, 1);
+          noteTarget.playNote(note.pitch, beatsToSeconds(note.length, bpm), velocity, when);
+        }
+      } else {
+        // Each audio placement triggers the clip's loop region at its start,
+        // re-triggering every region-length so a placement longer than the region
+        // repeats (loops) it; the engine plays exactly that slice of the buffer.
+        for (const p of placements) {
+          const clip = track.clips.find((c) => c.id === p.clipId);
+          if (!clip) continue;
+          const regionSec = (clip.loopEndSec ?? clip.durationSec) - (clip.loopStartSec ?? 0);
+          const clipBeats = regionSec > 0 ? (regionSec * bpm) / 60 : Infinity;
+          for (let tau = 0; tau < p.length; tau += Math.max(GRID, clipBeats)) {
+            for (const atBeat of onsetsInBeatRange(p.startBeat + tau, fromBeats, horizonBeats, loopLen, loopStart)) {
+              const when = this.anchorTime + (atBeat - this.anchorBeat) / bps;
+              // Cut playback at the next loop boundary so a region that overruns the
+              // loop (its length doesn't divide loopLen) is truncated instead of
+              // overlapping the loop's restart (the double-trigger bug).
+              const maxBeats = (Math.floor(atBeat / loopLen) + 1) * loopLen - atBeat;
+              this.engine.scheduleAudioClip(track.id, clip, when, maxBeats / bps);
+            }
+          }
+        }
+      }
+    }
+    this.scheduledUntilBeats = horizonBeats;
+  }
+
+  dispose(): void {
+    this.stop();
+  }
+}

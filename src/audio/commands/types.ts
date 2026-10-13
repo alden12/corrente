@@ -1,0 +1,220 @@
+/**
+ * The authored edit vocabulary: every durable change to the project, as a
+ * serializable command. This is the keystone for undo/redo, the activity feed,
+ * version history, and (next) the on-disk file format - all projections of one
+ * append-only, authored command stream (see apm: "Thesis").
+ *
+ * The vocabulary reuses the MCP wire protocol's edit shapes (`ServerToBrowser`)
+ * so the two systems can't drift, minus the non-edits (navigation, live notes,
+ * transport), plus the browser-only audio edits that have no wire message yet.
+ */
+import type { ServerToBrowser } from "../mcp/protocol";
+import type { PatchValues } from "../params/types";
+import type { NoteEvent } from "../sequencer/types";
+import type { ProjectData } from "../project/types";
+
+// Who authored an edit. `"you"` is the default id for a user who has not set one; any other bare
+// value is a human user id (multi-user). An AI agent's edit is authored `agent:<userId>`, naming the
+// user who drove it - see `authors.ts` for why the driver rides in the author string. A free string,
+// not a union, so a collaborator's id flows through the edit stream as-is; `ReservedVoice` names the
+// one value with a fixed meaning and colour.
+export type ReservedVoice = "you";
+export type Author = ReservedVoice | (string & {});
+
+/** Protocol messages that are NOT durable edits (navigation / live / transport / history RPC / feed note). */
+type NonEditType =
+  | "selectTrack"
+  | "selectClip"
+  | "noteOn"
+  | "noteOff"
+  | "allNotesOff"
+  | "transport"
+  | "historyRequest"
+  | "patchRequest"
+  | "note";
+
+/** The durable-edit subset of the MCP protocol (shapes shared, never duplicated). */
+export type ProtocolEdit = Exclude<ServerToBrowser, { type: NonEditType }>;
+
+/** Browser-originated edits with no wire message yet (audio is local-only so far). */
+export type LocalEdit =
+  | {
+      type: "addAudioTrack";
+      id: string;
+      fileId: string;
+      name?: string;
+      durationSec?: number;
+      startBeat?: number;
+      gain?: number;
+      groupId?: string;
+      /** Placement length in beats. Derived from `durationSec` at the tempo of the moment, and
+       *  pinned by a dispatch so a replay at another tempo lays it out the same (DAW-36). */
+      length?: number;
+    }
+  | {
+      type: "setAudioClip";
+      trackId: string;
+      clipId?: string;
+      patch: { gain?: number; name?: string; loopStartSec?: number; loopEndSec?: number; gridOffsetSec?: number };
+    }
+  | {
+      // Create an EMPTY audio track (no clip yet) - the audio peer of `createTrack`
+      // with an empty instrument. Recording a take or dropping a clip fills it later.
+      type: "createAudioTrack";
+      id: string;
+      name?: string;
+      groupId?: string;
+    }
+  | {
+      // Add an audio clip (e.g. a recorded take) to an EXISTING audio track's pool
+      // and place it. Clip + placement ids are pre-minted by the caller and carried
+      // here, so replaying the command reproduces the same ids exactly.
+      type: "addAudioClip";
+      trackId: string;
+      id: string;
+      placementId: string;
+      fileId: string;
+      name?: string;
+      durationSec?: number;
+      gain?: number;
+      startBeat?: number;
+      /** Placement length in beats, pinned at dispatch. See `addAudioTrack.length` (DAW-36). */
+      length?: number;
+    }
+  | {
+      // Add a note clip (a recorded MIDI take) to an EXISTING instrument track's
+      // pool and place it, punching in over whatever it overlaps. Clip + placement
+      // ids and every note id are pre-minted by the caller and carried here, so
+      // replaying the command reproduces the same ids and notes exactly.
+      type: "addNoteClip";
+      trackId: string;
+      id: string;
+      placementId: string;
+      name?: string;
+      notes: NoteEvent[];
+      lengthBeats: number;
+      startBeat: number;
+    }
+  | {
+      // Add an instrument track from a saved patch (instrument + params + effect
+      // chain). Effect ids are pre-minted by the caller and carried here, so
+      // replaying the command reproduces the same track/effect ids exactly.
+      type: "createTrackFromPatch";
+      id: string;
+      name?: string;
+      groupId?: string;
+      /** Length of the seed clip, pinned at dispatch. See `createTrack.lengthBeats` (DAW-36). */
+      lengthBeats?: number;
+      instrumentType: string;
+      params: PatchValues;
+      effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      /**
+       * A recorded take to start the track with, in place of the empty seed clip: what was
+       * played on a sound being tried in Explore (COMM-1.4.1). Carried in this one edit so the
+       * new track and its take are a single undo step. Ids are pre-minted, as in `addNoteClip`.
+       */
+      take?: {
+        id: string;
+        placementId: string;
+        name?: string;
+        notes: NoteEvent[];
+        lengthBeats: number;
+        startBeat: number;
+      };
+    }
+  | {
+      // Apply a patch to an EXISTING instrument track (for auditioning a patch on the
+      // current track): replaces its instrument, params, and effect chain, keeping the
+      // track's clips, name, and mix. Effect ids are pre-minted by the caller (carried
+      // here) so replay reproduces them. `name` is only for the activity-feed phrasing.
+      type: "applyPatch";
+      trackId: string;
+      name?: string;
+      instrumentType: string;
+      params: PatchValues;
+      effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+    }
+  | {
+      // Add an imported sample to the project library. The bytes are already in the
+      // content-addressed store (contentHash); the id is pre-minted by the caller so
+      // replaying reproduces the same library entry. Browser-only (Node can't hash a
+      // local file), so this lives in LocalEdit, not the MCP protocol.
+      type: "addSample";
+      id: string;
+      name: string;
+      contentHash: string;
+      source?: string;
+    }
+  | { type: "removeSample"; id: string }
+  | {
+      // Rename the project. The name is project state (in project.json), so a rename syncs across a
+      // shared session and rides undo/redo + history like any edit; meta.json keeps a copy as the
+      // library's list index. Browser-only for now (no MCP wire message).
+      type: "renameProject";
+      name: string;
+    }
+  | {
+      // A version-history *commit marker*: a durable "save this version" point in the authored edit
+      // stream. It changes no project state (applyEdit no-ops it), so it rides the sync pipeline like any
+      // edit - queued offline, assigned an authoritative `seq` by the authority, broadcast to peers - and
+      // the commit DAG is derived from these markers (HEAD = the latest marker's seq; a commit spans the
+      // edits between it and the previous marker). No mutable HEAD pointer, so concurrent commits can't
+      // race. See HOST-6.
+      type: "commit";
+      message: string;
+    }
+  | {
+      // A version-history *revert*: jump the whole project back to a past version's state. Unlike a
+      // commit marker (a no-op pointer), a revert changes state - so it carries the target `project`
+      // snapshot inline and `applyEdit` replays it with `project.load`. Embedding the snapshot keeps it a
+      // plain forward edit: it rides the sync pipeline, applies optimistically, replays on peers, and
+      // self-anchors on replay, with zero special-casing in the realtime authority. Rare + explicit, so
+      // the snapshot payload is acceptable (unlike frequent commits, which stay lightweight markers). It
+      // is also a history node: `message` names it ("Revert to ..."). See HOST-6.2.
+      type: "loadSnapshot";
+      project: ProjectData;
+      message: string;
+    };
+
+/** Every durable, authored edit. Serializable by construction. */
+export type EditCommand = ProtocolEdit | LocalEdit;
+
+/** One entry in the append-only activity log: an authored, timestamped command. */
+export interface EditEntry {
+  seq: number;
+  /**
+   * Stable identity of the edit, minted by whoever made it (DAW-34 stage E).
+   *
+   * `seq` is an ORDER, and in a shared session it is the authority's to assign, so it is not an
+   * identity: the client numbers its own entries optimistically and the authority renumbers them.
+   * An undo step has to name one edit and keep naming it - across a reload, across a renumbering,
+   * and on a peer's machine - so it names this instead.
+   *
+   * Optional because logs written before it exist. Such an entry cannot be undone (nothing can name
+   * it), which is why `EditLog` always sets one on anything it creates.
+   */
+  id?: string;
+  command: EditCommand;
+  author: Author;
+  time: number;
+  /** What this entry records. Absent = a normal edit (back-compat). "note" is a feed-only annotation
+   *  folded into the one authored stream (text on `command`); skipped by forward replay. */
+  kind?: "edit" | "undo" | "redo" | "note";
+  /** Display override for non-edit entries (e.g. "Undid: Added note"). */
+  label?: string;
+  /**
+   * For an `undo` or `redo` entry: the `id` of the edit it takes back or puts back (DAW-34 stage E).
+   *
+   * This is the tombstone. It makes an undo a fact *in* the log rather than a set held beside it, so
+   * the log alone says what the project is: replay every edit except the ones a tombstone above them
+   * takes back. Append-only and itself ordered, so replaying only as far as some seq honours only
+   * the tombstones at or below it - an older state stays what it was rather than acquiring undos
+   * that happened after it.
+   */
+  undoes?: string;
+}
+
+/** The single mutation entry point handed to the UI and the MCP bridge. */
+export type Dispatch = (command: EditCommand, author?: Author) => void;

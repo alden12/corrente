@@ -1,0 +1,831 @@
+/**
+ * The project repository: the one seam the app uses to load/save the project
+ * document and its audio samples. It reads/writes a *bundle* (see `bundleStore.ts`)
+ * with this layout - the v1 of the on-disk format in apm: "Project format and local-first data":
+ *
+ *   project.daw/
+ *     manifest.json     formatVersion, project id, project-schema version
+ *     project.json      the materialized ProjectData snapshot (working state) + headSeq marker
+ *     edits.json        the unified authored stream: edits + feed notes, seq-ordered (the feed)
+ *     meta.json         human-facing name + modified time
+ *     samples/<sha256>  audio sample bytes, content-addressed (dedup + integrity)
+ *     history/          the commit DAG: refs.json + commits/<id>.json (keyframe + delta)
+ *
+ * Samples are content-addressed: `putSample` hashes the bytes and stores them under
+ * that hash, so the same file imported twice is stored once and a clip's `fileId`
+ * doubles as an integrity check.
+ */
+import { projectSummarySchema, summarizeProject, type ProjectSummary } from "./projects/summary";
+import { ProjectStore } from "./project/projectStore";
+import type { ProjectData } from "./project/types";
+import { projectDataSchema } from "./project/schema";
+import type { Author, EditCommand, EditEntry } from "./commands/types";
+import type { FeedNote } from "./commands/editLog";
+import { type BundleStore, getProjectStorage } from "./bundleStore";
+import { migrateDocument, PROJECT_SCHEMA } from "./project/documentMigration";
+import { headFromLog, rebuildWithout } from "./commands/replay";
+import { commitKeyframePath } from "./history/paths";
+import {
+  emptyKeyframeIndex,
+  KEYFRAME_INDEX_PATH,
+  KEYFRAME_RETAIN_WINDOW,
+  oldestBase,
+  planKeyframes,
+  rebuildBase,
+  retainedKeyframePath,
+  type KeyframeIndex,
+} from "./history/keyframes";
+import { randomUuid } from "./randomUuid";
+
+/** `project.json` carries this keyframe marker: the edit `seq` the snapshot reflects, so load
+ *  knows which log tail to replay on top. A persistence detail (the domain ignores it); the
+ *  server's non-strict `projectDataSchema` tolerates the extra key. */
+type PersistedProject = ProjectData & { headSeq?: number };
+
+/** Whether the offline cache already holds this keyframe slot at the seq the ring index claims - the
+ *  question the read-through store cannot answer, since it tries the remote first. A slot at another
+ *  seq was overwritten since, so it needs fetching again. */
+async function cachedAtSeq(cache: BundleStore, path: string, seq: number): Promise<boolean> {
+  try {
+    const raw = await cache.readText(path);
+    if (!raw) return false;
+    return (JSON.parse(raw) as { headSeq?: number }).headSeq === seq;
+  } catch {
+    return false; // absent or unparseable reads as "not held", so it is fetched
+  }
+}
+
+/** Fold the edit log's high-water seq (edits + feed notes share the counter). */
+const highWaterSeq = (log: { seq: number }[], notes: { seq: number }[]): number =>
+  Math.max(-1, ...log.map((entry) => entry.seq), ...notes.map((note) => note.seq));
+
+/* -- The unified authored stream: edits and feed notes are one seq-ordered log. A note is encoded as
+      a kind:"note" entry carrying its text on the command (structural; skipped by forward replay), so
+      the delta stream (edits.json / the `edits` table) is the single home for both - no parallel
+      notes.json/log.json. `toStream`/`fromStream` convert at the persistence boundary; the in-memory
+      EditLog keeps edits and notes as separate lists (its API is unchanged). ------------------------ */
+
+/** Encode a feed note as a stream entry. */
+const noteToEntry = (note: FeedNote): EditEntry => ({
+  seq: note.seq,
+  // Not a real EditCommand (replay never applies it); the wire/schema treat command structurally.
+  command: { type: "note", text: note.text } as unknown as EditCommand,
+  author: note.author,
+  time: note.time,
+  kind: "note",
+});
+
+/** Merge edits + notes into the single stream, seq-ordered. */
+const toStream = (entries: EditEntry[], notes: FeedNote[]): EditEntry[] =>
+  [...entries, ...notes.map(noteToEntry)].sort((a, b) => a.seq - b.seq);
+
+/** Dedup entries by seq (later arrays win on conflict) and sort ascending. */
+const mergeBySeq = (...streams: EditEntry[][]): EditEntry[] => {
+  const bySeq = new Map<number, EditEntry>();
+  for (const stream of streams) for (const entry of stream) bySeq.set(entry.seq, entry);
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+};
+
+/** Split a stream back into edits (incl. undo/redo) and feed notes. */
+const fromStream = (stream: EditEntry[]): { entries: EditEntry[]; notes: FeedNote[] } => {
+  const entries: EditEntry[] = [];
+  const notes: FeedNote[] = [];
+  for (const entry of stream) {
+    if (entry.kind === "note") {
+      const text = (entry.command as { text?: unknown }).text;
+      notes.push({
+        seq: entry.seq,
+        text: typeof text === "string" ? text : "",
+        author: entry.author,
+        time: entry.time,
+      });
+    } else {
+      entries.push(entry);
+    }
+  }
+  return { entries, notes };
+};
+
+/** `JSON.parse` that says which bundle file failed, rather than raising a bare SyntaxError from a
+ *  call stack five frames from the filename. */
+function parseJson<T>(raw: string, detail: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch (cause) {
+    throw new UnreadableProjectError(detail, { cause });
+  }
+}
+
+/** An empty project at seq -1: a valid rebuild floor only when the log still holds the project's
+ *  first edit, since then there is nothing below it that could have been lost with the keyframe. */
+const genesisBase = (firstSeq: number): { project: ProjectData; seq: number } | null =>
+  firstSeq <= 0 ? { project: new ProjectStore(false).snapshot(), seq: -1 } : null;
+
+const FORMAT_VERSION = 1;
+/** Bound the persisted log (commands are tiny); deeper history is slice 15B. */
+const MAX_PERSISTED_ENTRIES = 2000;
+
+export interface StoredProject {
+  project: ProjectData;
+  log: EditEntry[];
+  /** Feed notes (intent narration); empty for bundles written before notes were persisted. */
+  notes: FeedNote[];
+}
+
+/**
+ * There is a project here and it cannot be read: `project.json` is gone or is not a project, or the
+ * log would not replay onto it (DAW-38, the recovery action).
+ *
+ * The distinction this type exists to draw is between that and `load` returning null, which means
+ * "nothing is saved here yet" - and which the caller answers by writing the live store straight over
+ * the top. Making the two the same value is how a damaged bundle got quietly replaced by an empty
+ * one, taking a log that could have rebuilt it along too. So: a project that cannot be read is
+ * offered a rebuild, never overwritten.
+ *
+ * `detail` is for the dialog: one clause saying which part failed, not a stack.
+ */
+export class UnreadableProjectError extends Error {
+  // A declared field assigned in the body, rather than a `readonly detail` parameter property:
+  // the tsconfigs set `erasableSyntaxOnly`, which rules out the syntax that emits code.
+  readonly detail: string;
+
+  constructor(detail: string, options?: { cause?: unknown }) {
+    super(`the saved project could not be read: ${detail}`, options);
+    this.name = "UnreadableProjectError";
+    this.detail = detail;
+  }
+}
+
+/** A bundle as a flat path -> bytes map (what gets zipped into a `.daw.zip`). */
+export type BundleFiles = Record<string, Uint8Array>;
+
+/**
+ * One node in the version-history DAG: the authored edits it bundles and a pointer
+ * to its parent. Storage is **keyframe + delta** (like video): most commits store
+ * only their `entries` (the semantic delta) and reconstruct on demand by replaying
+ * forward from the nearest ancestor that carries a `snapshot` (a keyframe). A
+ * keyframe is written for the root, every Nth commit, a revert (a discontinuity),
+ * and any commit containing undo/redo entries (which can't be replayed forward) -
+ * so every delta commit is pure-forward and replays exactly. The DAG is the durable
+ * source of truth; `project.json` is the working-state cache of where HEAD is.
+ */
+export interface Commit {
+  id: string;
+  parent: string | null;
+  author: Author;
+  message: string;
+  time: number;
+  /** A system auto-checkpoint vs a named version (saved by a user or an agent). */
+  auto: boolean;
+  entryCount: number;
+  /** Present only on keyframes; delta commits omit it and replay forward (materialize). */
+  snapshot?: ProjectData;
+  entries: EditEntry[];
+  /** Feed notes swept into this commit (intent narration). Omitted when none. */
+  notes?: FeedNote[];
+  /** Highest edit seq this commit includes (so reload knows where history ends). */
+  lastSeq: number;
+}
+
+/** Branch tips + the current branch (HEAD). Linear for now; branches are 15C. */
+export interface Refs {
+  head: string;
+  branches: Record<string, string | null>;
+}
+
+interface Manifest {
+  formatVersion: number;
+  projectId: string;
+  projectSchema: number;
+}
+
+export class ProjectRepository {
+  private projectId: string | null = null;
+  private name = "Untitled";
+  private saveChain: Promise<void> = Promise.resolve();
+  private readonly store: BundleStore;
+  /** Highest SEALED edit seq already synced (entries below are immutable; the last, still-coalescing
+   *  entry sits above it and is re-sent each append so its final value lands). */
+  private syncedThroughSeq = -1;
+  /** Edit seq the last-written `project.json` keyframe reflects (the replay floor). */
+  private lastKeyframeSeq = -1;
+  /** The retained-keyframe ring's slot -> seq map, cached so the cadence check costs no read. Null
+   *  until first loaded from the bundle. */
+  private keyframeIndex: KeyframeIndex | null = null;
+
+  /** Which project this repository is for, or null before one has been loaded or saved. Read by the
+   *  per-tab undo store, which keys its stacks by project (DAW-34 stage E). */
+  get id(): string | null {
+    return this.projectId;
+  }
+
+  constructor(store: BundleStore, projectId: string | null = null) {
+    this.store = store;
+    this.projectId = projectId;
+  }
+
+  /** Seq the last keyframe reflects; drives the autosave keyframe cadence. -1 = never keyframed. */
+  keyframeSeq(): number {
+    return this.lastKeyframeSeq;
+  }
+
+  /** The project's display name (from meta.json; "Untitled" until loaded/renamed). */
+  getName(): string {
+    return this.name;
+  }
+
+  /** The project at a glance for the Projects list, refreshed whenever a snapshot is written. */
+  private summary: ProjectSummary | null = null;
+
+  /** meta.json body (name, a fresh modified-time, the summary) - the library's queryable index. */
+  private metaJson(): string {
+    return JSON.stringify({ name: this.name, modifiedAt: new Date().toISOString(), summary: this.summary });
+  }
+
+  /** Rename the project: update the in-memory name and persist meta.json immediately. */
+  async setName(name: string): Promise<void> {
+    this.name = name;
+    await this.store.writeText("meta.json", this.metaJson());
+  }
+
+  /** Rewrite meta.json (bumps modifiedAt) without a full keyframe - used by the page-hide flush so
+   *  the library's modified-time, and its summary when given the project, are current after a short
+   *  session. Serialized with the other writes. */
+  touchMeta(project?: ProjectData): Promise<void> {
+    if (project) this.summary = summarizeProject(project);
+    const run = () => this.store.writeText("meta.json", this.metaJson());
+    this.saveChain = this.saveChain.then(run, run);
+    return this.saveChain;
+  }
+
+  /**
+   * The stored HEAD keyframe: `project.json`, upcast, and the seq it reflects. Null if no bundle has
+   * been written yet.
+   *
+   * Split out of `load` because a live session needs exactly this and none of the rest (DAW-41). When
+   * a tombstone takes back an edit the session has already folded into its seed, it cannot rebuild
+   * without that edit - but the authority has, and wrote the result here, so re-reading this file is
+   * the recovery. Deliberately does NOT read the log or replay: the caller has its own entries above
+   * this keyframe and replays them itself.
+   */
+  async readHeadKeyframe(): Promise<{ project: ProjectData; seq: number } | null> {
+    const manifestRaw = await this.store.readText("manifest.json");
+    if (!manifestRaw) return null;
+    const manifest = parseJson<Manifest>(manifestRaw, "manifest.json is not readable");
+    this.projectId = manifest.projectId;
+    const projectRaw = await this.store.readText("project.json");
+    if (!projectRaw) return null;
+    const raw = parseJson<unknown>(projectRaw, "project.json is not readable");
+    const migrated = (await this.upcast(raw, manifest).catch((cause: unknown) => {
+      throw new UnreadableProjectError("project.json could not be brought up to date", { cause });
+    })) as PersistedProject;
+    const { headSeq, ...base } = migrated;
+    // Shape-checked, not re-materialized: what comes back is fed straight to `ProjectStore.load`, and
+    // a file that parses as JSON but is not a project is exactly the damage the recovery action is
+    // for. The parsed value is thrown away and the original kept, so an unknown key written by a
+    // newer build survives a load by an older one.
+    if (!projectDataSchema.safeParse(base).success) {
+      throw new UnreadableProjectError("project.json is not a project");
+    }
+    return { project: base as ProjectData, seq: headSeq ?? -1 };
+  }
+
+  /** The authored stream, with a log that will not parse reported as damage rather than as a bare
+   *  SyntaxError - it is as much a part of the project as the keyframe is. */
+  private readStream(sinceSeq: number, limit?: number): Promise<EditEntry[]> {
+    return this.store.readEdits(sinceSeq, limit).catch((cause: unknown) => {
+      throw new UnreadableProjectError("the edit log is not readable", { cause });
+    });
+  }
+
+  /**
+   * Load the working snapshot + log; null if no bundle has been written yet.
+   *
+   * Throws `UnreadableProjectError` when there IS a project here and it cannot be read - see that
+   * type. A bundle with no keyframe is only "nothing saved yet" if it has no log either; with a log
+   * it is a project whose state file is gone, and `rebuildFromLog` is how it comes back.
+   */
+  async load(): Promise<StoredProject | null> {
+    const head = await this.readHeadKeyframe();
+    if (!head) {
+      // `readStream`, not a swallowed read: a log that will not parse next to a missing keyframe is
+      // the one combination where reading it as "nothing saved here yet" would overwrite both.
+      if ((await this.readStream(-1, 1)).length === 0) return null;
+      throw new UnreadableProjectError("project.json is missing");
+    }
+    const { project: baseProject, seq: keyframeSeq } = head;
+    await this.readName();
+    // Read the unified authored stream (edits + notes), bounded to a recent window for the feed.
+    let stream = await this.readStream(-1, MAX_PERSISTED_ENTRIES);
+    // Guard: if the capped window did not reach back to the keyframe, read the full tail so replay is
+    // complete (only fires with > MAX_PERSISTED_ENTRIES edits since the last keyframe - shouldn't
+    // happen in normal use, where a keyframe lands every KEYFRAME_EDIT_INTERVAL edits).
+    if (stream.length > 0 && stream[0].seq > keyframeSeq + 1) {
+      stream = mergeBySeq(await this.readStream(keyframeSeq), stream);
+    }
+    const { entries, notes } = fromStream(stream);
+
+    // Reconstruct HEAD from the keyframe + the edit tail: the keyframe (`project.json`) reflects seq
+    // `headSeq`; replay the edits after it through `applyEdit` to reach the true working state (notes
+    // and the undo/redo reflog markers are skipped - not pure-forward). A bundle with no `headSeq`
+    // reads as -1, which says "this keyframe is the genesis project" - so the whole log replays onto
+    // it, which is what an unmarked `project.json` means.
+    //
+    // The tombstones are worked out over the WHOLE log before a base is chosen, because one of them
+    // can take back an edit that is already baked into the keyframe, and replaying forward from that
+    // keyframe cannot remove it (DAW-34 stage E).
+    const keyframe = { project: baseProject, seq: keyframeSeq };
+    const project = await headFromLog({
+      base: keyframe,
+      entries,
+      olderBase: (belowSeq) => this.rebuildBaseFor(belowSeq, keyframe.seq),
+    }).catch((cause: unknown) => {
+      throw new UnreadableProjectError("the edit log would not replay onto it", { cause });
+    });
+    this.lastKeyframeSeq = keyframeSeq;
+    // Everything on disk is already sealed history, so nothing at/below the max needs re-sending.
+    this.syncedThroughSeq = Math.max(keyframeSeq, highWaterSeq(entries, notes));
+    return { project, log: entries, notes };
+  }
+
+  /** Adopt the bundle's display name, and its summary, from meta.json. A missing or unreadable one
+   *  costs a label and never data, so it is not damage: the name also rides the project state itself.
+   *  The summary is kept so a meta.json written before the next keyframe (a rename, a page-hide
+   *  touch) carries it forward rather than wiping the project's thumbnail. */
+  private async readName(): Promise<void> {
+    const metaRaw = await this.store.readText("meta.json").catch(() => null);
+    if (!metaRaw) return;
+    try {
+      const meta = JSON.parse(metaRaw) as { name?: string; summary?: unknown };
+      this.name = meta.name ?? this.name;
+      const summary = projectSummarySchema.safeParse(meta.summary);
+      if (summary.success) this.summary = summary.data;
+    } catch {
+      // keep the default name
+    }
+  }
+
+  /**
+   * Rebuild the working project from the log alone, for a bundle whose keyframe cannot be read
+   * (DAW-38, the recovery action). Null when there is nothing to rebuild it from.
+   *
+   * This is the client's half of the reason the log is the durable truth and `project.json` only a
+   * cache of where HEAD got to: replay is exact (DAW-36 made commands self-contained), so a keyframe
+   * can be lost without the project going with it. The authority does exactly this on its own behalf
+   * in `Room.recomputeHead`, from an empty store at seq -1 when no keyframe is usable.
+   *
+   * The floor is the newest retained keyframe BELOW the log's first entry - not the oldest one, which
+   * would replay a tail that does not reach it - or an empty project when the log still holds the
+   * project's first edit, since then nothing sits below it to have been lost. Null when neither
+   * exists, because replaying a tail onto the wrong floor yields a project that looks fine and is not
+   * the one that was saved. The caller offers a fork at that point rather than a plausible lie.
+   */
+  async rebuildFromLog(): Promise<StoredProject | null> {
+    const stream = await this.store.readEdits(-1).catch(() => []);
+    if (stream.length === 0) return null;
+    await this.readName();
+    const { entries, notes } = fromStream(stream);
+    const headSeq = highWaterSeq(entries, notes);
+    const base = (await this.rebuildBaseFor(stream[0].seq, headSeq)) ?? genesisBase(stream[0].seq);
+    // A base further down than the log reaches is not a floor, it is a gap: the entries between the
+    // two were pruned, so replaying this tail onto it silently drops them.
+    if (!base || base.seq < stream[0].seq - 1) return null;
+    // `headFromLog` rather than a bare replay, for the same reason `load` uses it: a tombstone in the
+    // tail can take back an edit baked into the floor, and only walking to an older base removes it.
+    const project = await headFromLog({
+      base,
+      entries,
+      olderBase: (belowSeq) => this.rebuildBaseFor(belowSeq, headSeq),
+    });
+    return { project, log: entries, notes };
+  }
+
+  /**
+   * Bring a just-read document up to the current schema. If the manifest's version is
+   * behind, chain the registered upcasters, then heal the bundle in place (rewrite
+   * project.json + manifest at the version reached) so we upcast at most once. A no-op
+   * when the bundle is already current (the common case; the registry is empty today).
+   */
+  private async upcast(rawDocument: unknown, manifest: Manifest): Promise<ProjectData> {
+    const fromVersion = manifest.projectSchema ?? 0;
+    if (fromVersion >= PROJECT_SCHEMA) return rawDocument as ProjectData;
+    const { data, version } = migrateDocument(rawDocument, fromVersion, PROJECT_SCHEMA);
+    if (version > fromVersion) {
+      await this.store.writeText("project.json", JSON.stringify(data));
+      await this.store.writeText("manifest.json", JSON.stringify({ ...manifest, projectSchema: version }));
+    }
+    return data as ProjectData;
+  }
+
+  /**
+   * Append the authored stream delta (edits + feed notes, merged and seq-ordered). Sends everything
+   * above the last sealed seq; the last EDIT may still be coalescing, so it is re-sent each call (the
+   * store upserts by seq) to carry its final value. Sealing is by the edits (notes never coalesce and
+   * are idempotent upserts), so a note appended after an edit can't prematurely seal it. Serialized
+   * with saves.
+   */
+  appendEdits(entries: EditEntry[], notes: FeedNote[] = []): Promise<void> {
+    const run = async () => {
+      const toSend = toStream(entries, notes).filter((entry) => entry.seq > this.syncedThroughSeq);
+      if (toSend.length === 0) return;
+      await this.store.appendEdits(toSend);
+      // Seal all but the last edit (only it can still coalesce, so keep re-sending it).
+      if (entries.length >= 2) this.syncedThroughSeq = entries[entries.length - 2].seq;
+    };
+    this.saveChain = this.saveChain.then(run, run);
+    return this.saveChain;
+  }
+
+  /**
+   * Write the working snapshot as a keyframe: `project.json` records the edit `seq` it reflects
+   * (`headSeq`), so load replays only the tail after it, and `meta.json` rides along. The feed lives
+   * entirely in the append stream now (no log.json/notes.json). Writes are serialized.
+   */
+  writeKeyframe(project: ProjectData, headSeq: number): Promise<void> {
+    const run = () => this.writeKeyframeNow(project, headSeq);
+    this.saveChain = this.saveChain.then(run, run);
+    return this.saveChain;
+  }
+
+  private async writeKeyframeNow(project: ProjectData, headSeq: number): Promise<void> {
+    if (!this.projectId) this.projectId = `p-${randomUuid().slice(0, 8)}`;
+    const manifest: Manifest = {
+      formatVersion: FORMAT_VERSION,
+      projectId: this.projectId,
+      projectSchema: PROJECT_SCHEMA,
+    };
+    const keyframe: PersistedProject = { ...project, headSeq };
+    this.summary = summarizeProject(project);
+    await this.store.writeText("manifest.json", JSON.stringify(manifest));
+    await this.store.writeText("project.json", JSON.stringify(keyframe));
+    await this.store.writeText("meta.json", this.metaJson());
+    this.lastKeyframeSeq = headSeq;
+    await this.retainKeyframe(keyframe, headSeq);
+  }
+
+  /**
+   * Keep a copy of this keyframe in the retained ring, every `KEYFRAME_RETAIN_INTERVAL` edits, so
+   * undo has a base from BEFORE an edit rather than only the head snapshot, which is always after it
+   * (DAW-34 stage B). Best-effort, like the keyframe itself: the edit log is the durable truth, and
+   * a ring that missed a write just means an older undo is out of reach.
+   *
+   * Local projects only, in practice. A hosted project's ring is written by the authority, which
+   * owns its log - `attachAutosave` is deliberately not attached there.
+   */
+  private async retainKeyframe(keyframe: PersistedProject, headSeq: number): Promise<void> {
+    const index = this.keyframeIndex ?? (await this.readKeyframeIndex());
+    const plan = planKeyframes(index, headSeq);
+    this.keyframeIndex = plan.index;
+    if (!plan.write) return;
+    await this.store.writeText(retainedKeyframePath(plan.write.slot), JSON.stringify(keyframe));
+    await this.store.writeText(KEYFRAME_INDEX_PATH, JSON.stringify(plan.index));
+  }
+
+  /** The stored ring index, healed to the right shape (absent, truncated or corrupt all read as
+   *  empty rather than throwing - a lost ring costs undo depth, not data). */
+  private async readKeyframeIndex(): Promise<KeyframeIndex> {
+    const raw = await this.store.readText(KEYFRAME_INDEX_PATH);
+    if (!raw) return emptyKeyframeIndex();
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as KeyframeIndex) : emptyKeyframeIndex();
+    } catch {
+      return emptyKeyframeIndex();
+    }
+  }
+
+  /**
+   * The project as it would be if `excluding` had never been dispatched (DAW-34 stage C): the newest
+   * retained keyframe below the earliest excluded edit, with the log above it replayed minus those.
+   *
+   * Null when the ring does not reach back far enough, which is what makes an undo that old
+   * unavailable rather than wrong. A project keyframes its initial state at seq -1 when it is
+   * created, so a young project is covered from its first edit.
+   */
+  async rebuildExcluding(
+    excluding: ReadonlySet<string>,
+    entries: readonly EditEntry[],
+    headSeq: number,
+  ): Promise<ProjectData | null> {
+    if (excluding.size === 0) return null;
+    // The base has to sit below the EARLIEST excluded edit, and the ids say nothing about order, so
+    // the seqs come from the log. An id the log does not hold excludes nothing, so it is skipped
+    // rather than treated as reaching back to the beginning of time.
+    const seqs = entries.filter((entry) => entry.id !== undefined && excluding.has(entry.id)).map((e) => e.seq);
+    if (seqs.length === 0) return null;
+    const base = await this.rebuildBaseFor(Math.min(...seqs), headSeq);
+    return base ? rebuildWithout(base.project, base.seq, entries, excluding) : null;
+  }
+
+  /**
+   * Pull the retained keyframe ring into the offline cache, so offline undo depth is the ring rather
+   * than luck (DAW-34 stage E).
+   *
+   * Reads are read-through: a slot lands in the cache the first time something reads it, and the only
+   * thing that reads one is an undo that needs exactly that base. So going offline, the cache held
+   * whichever slots an undo had happened to want while online - undo depth decided by what you did
+   * beforehand rather than by the ring. This reads the ones it is missing, once, while there is still
+   * a network.
+   *
+   * `cache` is the raw cache bundle for this project (`getLocalCacheBundle`), used only to ask what is
+   * already held: the read-through store cannot answer that, because it tries the remote first. A slot
+   * the cache holds at the seq the index claims is skipped, so this costs nothing on a reload and at
+   * most one ring's worth of snapshots the first time.
+   *
+   * Best-effort, like the ring itself: a fetch that fails costs undo depth, never data. Returns how
+   * many slots a rebuild could now use offline, which is the one number that says whether this
+   * worked - the caller fires and forgets, so it is read by the tests.
+   */
+  async warmRebuildBases(headSeq: number, cache: BundleStore | null): Promise<number> {
+    if (!cache) return 0; // no offline cache to warm (local-only mode, or no OPFS)
+    const index = await this.readKeyframeIndex();
+    this.keyframeIndex = index;
+    const floor = headSeq - KEYFRAME_RETAIN_WINDOW;
+    // Slots the ring says hold a keyframe a rebuild could still start from. One below the floor has
+    // had the edits above it pruned, so fetching it would buy nothing.
+    const live = index
+      .map((seq, slot) => ({ seq, slot }))
+      .filter((entry): entry is { seq: number; slot: number } => entry.seq !== null && entry.seq >= floor);
+    const held = await Promise.all(
+      live.map(async (entry) => {
+        const path = retainedKeyframePath(entry.slot);
+        if (await cachedAtSeq(cache, path, entry.seq)) return true;
+        // The read-through fetch IS the warm: reading through the store mirrors the value into the
+        // cache on the way past. Then ask the cache again rather than trusting the read, because a
+        // read-through serves its own cache when the remote is unreachable - so a non-null answer can
+        // be the very copy that needed replacing. The count means "slots a rebuild could use".
+        try {
+          await this.store.readText(path);
+        } catch {
+          return false;
+        }
+        return cachedAtSeq(cache, path, entry.seq);
+      }),
+    );
+    return held.filter(Boolean).length;
+  }
+
+  /** The oldest retained keyframe still usable, which is how far back undo can reach after a
+   *  reload. Null when the ring holds nothing that old. */
+  async oldestRebuildBase(headSeq: number): Promise<{ seq: number; project: ProjectData } | null> {
+    const index = this.keyframeIndex ?? (await this.readKeyframeIndex());
+    this.keyframeIndex = index;
+    return this.readRetained(oldestBase(index, headSeq));
+  }
+
+  /**
+   * The base a rebuild should start from when excluding edit `seq`: the newest retained keyframe
+   * strictly below it, with the seq it reflects so the caller knows which tail to replay. Null when
+   * the ring does not reach that far back, which is what makes an undo refused rather than wrong.
+   *
+   * Validated, not cast, for the same reason `readUndo` is: what comes back is fed straight to
+   * `ProjectStore.load`, and the OPFS path is not shape-checked by anything else.
+   */
+  async rebuildBaseFor(seq: number, headSeq: number): Promise<{ seq: number; project: ProjectData } | null> {
+    const index = this.keyframeIndex ?? (await this.readKeyframeIndex());
+    this.keyframeIndex = index;
+    return this.readRetained(rebuildBase(index, seq, headSeq));
+  }
+
+  /** Read one ring slot, checking it still holds the seq the index claims. */
+  private async readRetained(
+    base: { slot: number; seq: number } | null,
+  ): Promise<{ seq: number; project: ProjectData } | null> {
+    if (!base) return null;
+    const raw = await this.store.readText(retainedKeyframePath(base.slot));
+    if (!raw) return null;
+    try {
+      const stored = JSON.parse(raw) as Record<string, unknown>;
+      // A slot whose seq disagrees with the index was overwritten under us: treat it as absent
+      // rather than replaying the wrong tail onto it.
+      if (stored.headSeq !== base.seq) return null;
+      delete stored.headSeq;
+      const parsed = projectDataSchema.safeParse(stored);
+      return parsed.success ? { seq: base.seq, project: parsed.data as ProjectData } : null;
+    } catch {
+      return null; // not JSON at all
+    }
+  }
+
+  /** A full write (keyframe + the whole stream appended) for non-autosave callers:
+   *  switch/create/import. */
+  save(project: ProjectData, log: EditEntry[], notes: FeedNote[] = []): Promise<void> {
+    this.writeKeyframe(project, highWaterSeq(log, notes));
+    return this.appendEdits(log, notes);
+  }
+
+  /** Store an audio sample, returning its content hash (its `fileId`). Dedups. */
+  async putSample(blob: Blob): Promise<string> {
+    const hash = await sha256hex(await blob.arrayBuffer());
+    const path = `samples/${hash}`;
+    if (!(await this.store.exists(path))) await this.store.writeBlob(path, blob);
+    return hash;
+  }
+
+  /** Read an audio sample by its content hash (ready for decodeAudioData). */
+  async getSample(id: string): Promise<ArrayBuffer> {
+    const buf = await this.store.readBlob(`samples/${id}`);
+    if (!buf) throw new Error(`sample not found: ${id}`);
+    return buf;
+  }
+
+  hasSample(id: string): Promise<boolean> {
+    return this.store.exists(`samples/${id}`);
+  }
+
+  /**
+   * The current project as a readable bundle (path -> bytes): pretty-printed manifest / project /
+   * meta JSON, the unified authored stream (`edits.json`: edits + notes), plus the referenced samples
+   * as real `.wav` bytes. The UI zips this into a portable `.daw.zip`. This is the same shape the
+   * disk-folder backend (15D) will write uncompressed, so export and on-disk are one format. Pass the
+   * live snapshot + log + notes so it is always current.
+   */
+  async exportBundle(project: ProjectData, log: EditEntry[], notes: FeedNote[] = []): Promise<BundleFiles> {
+    if (!this.projectId) this.projectId = `p-${randomUuid().slice(0, 8)}`;
+    const manifest: Manifest = {
+      formatVersion: FORMAT_VERSION,
+      projectId: this.projectId,
+      projectSchema: PROJECT_SCHEMA,
+    };
+    const files: BundleFiles = {
+      "manifest.json": json(manifest),
+      "project.json": json(project),
+      "edits.json": json(toStream(log, notes)),
+      "meta.json": json({ name: this.name, modifiedAt: new Date().toISOString() }),
+    };
+    for (const id of referencedSampleIds(project)) {
+      const buf = await this.store.readBlob(`samples/${id}`);
+      if (buf) files[`samples/${id}.wav`] = new Uint8Array(buf);
+    }
+    return files;
+  }
+
+  /** Load a bundle file map (from an unzipped `.daw.zip`), replacing the project. Reads the unified
+   *  `edits.json` stream (edits + feed notes). */
+  async importBundle(files: BundleFiles): Promise<StoredProject> {
+    const project = JSON.parse(text(files["project.json"])) as ProjectData;
+    if (!project?.tracks) throw new Error("bundle: missing project.json");
+    const stream = files["edits.json"] ? (JSON.parse(text(files["edits.json"])) as EditEntry[]) : [];
+    const { entries: log, notes } = fromStream(stream);
+    for (const [path, bytes] of Object.entries(files)) {
+      if (!path.startsWith("samples/")) continue;
+      const id = path.slice("samples/".length).replace(/\.[^.]*$/, ""); // strip dir + extension -> content hash
+      if (id && !(await this.store.exists(`samples/${id}`)))
+        await this.store.writeBlob(`samples/${id}`, new Blob([bytes as BlobPart]));
+    }
+    // A repository made for a project keeps its own id, so importing a file makes a new project from
+    // it rather than a second one under the exported project's id. Only a bare one adopts the file's.
+    if (!this.projectId) {
+      try {
+        this.projectId = (JSON.parse(text(files["manifest.json"])) as Manifest).projectId;
+      } catch {
+        this.projectId = null;
+      }
+    }
+    try {
+      this.name = (JSON.parse(text(files["meta.json"])) as { name?: string }).name ?? this.name;
+    } catch {
+      // keep the current name
+    }
+    await this.save(project, log, notes);
+    return { project, log, notes };
+  }
+
+  // The undo/redo stacks used to live here, as `undo.json` in the bundle. They are per-tab session
+  // state now (`undoSession.ts`), because they are neither durable project data nor anything another
+  // reader of the bundle should see - see the note there (DAW-34 stage E).
+
+  // ---- version history (the commit DAG, under history/) ----
+
+  writeCommit(commit: Commit): Promise<void> {
+    // Minified: commits are internal storage, not the readable export artifact
+    // (that is project.json / the .daw.zip), and delta commits are tiny.
+    return this.store.writeText(`history/commits/${commit.id}.json`, JSON.stringify(commit));
+  }
+
+  async readCommit(id: string): Promise<Commit | null> {
+    const raw = await this.store.readText(`history/commits/${id}.json`);
+    return raw ? (JSON.parse(raw) as Commit) : null;
+  }
+
+  async readRefs(): Promise<Refs | null> {
+    const raw = await this.store.readText("history/refs.json");
+    return raw ? (JSON.parse(raw) as Refs) : null;
+  }
+
+  writeRefs(refs: Refs): Promise<void> {
+    return this.store.writeText("history/refs.json", JSON.stringify(refs, null, 2));
+  }
+
+  // ---- server-authoritative history (Phase B2, remote mode) ----
+
+  /**
+   * The authoritative authored stream (edits + version-history markers), oldest first, from `sinceSeq`.
+   * In remote mode the backing store serves it from the server (live) or the offline mirror, so the
+   * remote `VersionStore` derives history from the log's `commit` / `loadSnapshot` markers - each carrying
+   * the authoritative `seq` the authority assigned. No `limit` reads the whole retained log (bounded in
+   * practice: keyframing keeps it to a recent window plus the always-retained markers).
+   */
+  readEditStream(sinceSeq = -1, limit?: number): Promise<EditEntry[]> {
+    return this.store.readEdits(sinceSeq, limit);
+  }
+
+  /** A commit's pinned keyframe (full snapshot at the marker's seq), or null if not written yet. Used to
+   *  materialise a version for diff / revert without replaying the log. */
+  async readKeyframe(seq: number): Promise<ProjectData | null> {
+    const raw = await this.store.readText(commitKeyframePath(seq));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    delete parsed.headSeq; // drop the keyframe marker; the rest is the ProjectData snapshot
+    return parsed as unknown as ProjectData;
+  }
+}
+
+/** Content hashes of every sample the project's audio clips reference. */
+function referencedSampleIds(project: ProjectData): string[] {
+  const ids = new Set<string>();
+  for (const track of project.tracks) {
+    if (track.kind !== "audio") continue;
+    for (const clip of track.clips ?? []) if (clip.fileId) ids.add(clip.fileId);
+  }
+  return [...ids];
+}
+
+/** Pretty-printed JSON as bytes (readable inside the zip). */
+function json(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value, null, 2));
+}
+
+function text(bytes: Uint8Array | undefined): string {
+  return bytes ? new TextDecoder().decode(bytes) : "";
+}
+
+async function sha256hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** localStorage key holding the current project id (shared source of truth with the library). */
+const CURRENT_PROJECT_KEY = "corrente:current-project";
+
+let current: { id: string; repo: ProjectRepository } | null = null;
+
+function readCurrentId(): string {
+  const stored = typeof localStorage !== "undefined" ? localStorage.getItem(CURRENT_PROJECT_KEY) : null;
+  return stored || "default";
+}
+
+const currentListeners = new Set<() => void>();
+
+/** Point the app-wide repository at project `id` (rebuilds it over that bundle). */
+export function setCurrentProject(id: string): void {
+  if (typeof localStorage !== "undefined") localStorage.setItem(CURRENT_PROJECT_KEY, id);
+  current = { id, repo: new ProjectRepository(getProjectStorage().bundle(id), id) };
+  for (const listener of currentListeners) listener();
+}
+
+/** Subscribe to project switches. Returns an unsubscribe fn. */
+export function subscribeCurrentProject(listener: () => void): () => void {
+  currentListeners.add(listener);
+  return () => currentListeners.delete(listener);
+}
+
+/**
+ * The project whose *contents* are in the live store, which is not the same thing as the
+ * current id.
+ *
+ * `setCurrentProject` repoints the repository synchronously, but the store keeps the previous
+ * project until a load finishes several `await`s later (two OPFS writes, for a new project).
+ * In that window the current id and anything read off the live store belong to different
+ * projects, so pairing them produces a URL, or a header, naming one project with another's
+ * name. Reported from CI, where the gap is wide enough to see.
+ *
+ * Read this rather than a "switching" flag: a flag has to be cleared, and a path that
+ * repoints without loading would leave it stuck. A last-loaded id just stays stale, which
+ * degrades to "do not update yet" rather than "never update again".
+ */
+let loadedId: string | null = null;
+
+export function markProjectLoaded(id: string): void {
+  loadedId = id;
+  for (const listener of currentListeners) listener();
+}
+
+/** The id of the project the live store actually holds, or null before the first load. */
+export function loadedProjectId(): string | null {
+  return loadedId;
+}
+
+/** The id of the project the app is currently working on. */
+export function currentProjectId(): string {
+  return current?.id ?? readCurrentId();
+}
+
+/**
+ * The repository for the current project. Samples, history, and the working snapshot
+ * all live in that project's bundle; a project switch repoints this (setCurrentProject).
+ */
+export function getRepository(): ProjectRepository {
+  if (!current) setCurrentProject(readCurrentId());
+  return current!.repo;
+}

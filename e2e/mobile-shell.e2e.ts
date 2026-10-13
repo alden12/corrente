@@ -1,0 +1,1844 @@
+import { test, expect, type Page } from "@playwright/test";
+import {
+  dismissStart,
+  openExploreCategory,
+  swapFromExplore,
+  openGroupCard,
+  openSettingsPage,
+  openTimingSettings,
+  setCountIn,
+} from "./support/app";
+
+/**
+ * The touch shell (MOBILE-1, restructured by MOBILE-5). At phone/tablet size the app swaps
+ * the four-region desktop grid for a pinned transport, the arrangement, and an **editor
+ * sheet** over it that is dragged or thrown between three detents.
+ *
+ * The throw maths itself (velocity fitting, projection, snapping) is pure and covered by
+ * unit tests in `test/detents.test.ts`; what is worth a browser is the wiring - that the
+ * arrangement stays live behind the sheet, that each detent leaves the surfaces a usable
+ * and *reachable* box, and that exactly one surface owns the shell's ⋮.
+ *
+ * The gesture layer (pinch, long-press) is MOBILE-2 and not covered here.
+ */
+
+const PHONE = { width: 390, height: 844 };
+const LANDSCAPE = { width: 844, height: 390 };
+const TABLET = { width: 1024, height: 768 };
+
+/** Dismiss the audio-start modal so the shell is interactive. */
+
+/**
+ * Going to the home screen, or coming back. Driven by hand because Playwright cannot actually
+ * background a page: `visibilityState` is redefined (configurably, so it can be redefined again)
+ * and the event the app listens for is dispatched.
+ */
+async function setVisibility(page: Page, state: "hidden" | "visible") {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, "visibilityState", { value, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
+}
+
+const shell = (page: Page) => page.locator("[data-device-tier]");
+const desktopRail = (page: Page) => page.locator('[class*="grid-area:rail"]');
+const sheet = (page: Page) => page.getByTestId("editor-sheet");
+/**
+ * One of the sheet's Edit / Clips / Rack segments. Scoped, so it cannot match the desktop's
+ * editor tabs. A `radio` rather than a `tab`: the switch is a `Segmented` now, which says
+ * "these are the options and this is the one you are on" instead of three separate buttons.
+ */
+const segment = (page: Page, name: string) => sheet(page).getByRole("radio", { name });
+const grabber = (page: Page) => page.getByRole("slider", { name: "Editor height" });
+const trackHeader = (page: Page) => page.locator("[data-track-id]").first().locator("> div").first();
+const detentOf = (page: Page) => sheet(page).getAttribute("data-detent");
+/** The bottom tab bar (MOBILE-19), which the editor sheet now sits on rather than the screen edge. */
+const tabBar = (page: Page) => page.getByRole("navigation", { name: "Places" });
+const tab = (page: Page, name: string) => tabBar(page).getByRole("button", { name, exact: true });
+const tabBarTop = async (page: Page) => (await tabBar(page).boundingBox())!.y;
+const pads = (page: Page) => page.locator('[data-section="pads"]');
+const pad = (page: Page, name: string) => pads(page).getByRole("button", { name, exact: true });
+
+/** How far the pads hang below the sheet's own bottom edge. Anything over 0 is a clipped pad. */
+const padsOverflow = (page: Page) =>
+  page.evaluate(() => {
+    const section = document.querySelector('[data-section="pads"]')!.getBoundingClientRect();
+    const sheetBox = document.querySelector('[data-testid="editor-sheet"]')!.getBoundingClientRect();
+    return Math.round(section.bottom - sheetBox.bottom);
+  });
+
+/** Press a pad and hold it, so the note has a length to record. */
+async function holdPad(page: Page, name: string, ms: number) {
+  const box = (await pad(page, name).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(ms);
+  await page.mouse.up();
+}
+
+/**
+ * Step the sheet to a detent from the keyboard. Deterministic where a synthetic flick is
+ * not - the velocity projection has its own unit tests, so the browser only needs to prove
+ * that landing on a detent lays the surfaces out correctly.
+ */
+async function setDetent(page: Page, target: "peek" | "half" | "full") {
+  const order = ["peek", "half", "full"];
+  await grabber(page).focus();
+  for (let step = 0; step < order.length; step++) {
+    const current = await detentOf(page);
+    if (current === target) break;
+    await page.keyboard.press(order.indexOf(current!) < order.indexOf(target) ? "ArrowUp" : "ArrowDown");
+  }
+  await expect.poll(() => detentOf(page)).toBe(target);
+  // Wait for the settle to *commit* rather than for a fixed time. `data-detent` flips the
+  // instant the key is pressed, but the sheet is still mid-spring, laid out at full height
+  // with a transform until it comes to rest - so measuring on the attribute alone reads the
+  // travelling size, and any fixed timeout is only as good as the longest throw in the suite.
+  // `data-moving` is cleared by the commit, so its absence is the honest signal it has landed.
+  await expect(sheet(page)).not.toHaveAttribute("data-moving");
+}
+
+/**
+ * Open the top bar's "+" (MOBILE-19.4). Retried because `Menu` dismisses itself on any scroll and
+ * a surface that has just mounted may still be restoring its own scroll offset, which can close
+ * the popover the instant it opens.
+ */
+async function openAdd(page: Page) {
+  const menu = page.getByRole("menu").first();
+  await expect(async () => {
+    // Only tap when it is not already open - the trigger toggles, so a blind retry would
+    // close the menu the previous attempt had just managed to open.
+    if (!(await menu.isVisible())) await page.getByRole("button", { name: "Add to the arrangement" }).tap();
+    await expect(menu).toBeVisible({ timeout: 800 });
+  }).toPass({ timeout: 10_000 });
+}
+
+/** The roll, at the detent that gives it room, ready to be tapped at. */
+async function openRoll(page: Page) {
+  await page.goto("/");
+  await dismissStart(page);
+  await setDetent(page, "full");
+  await segment(page, "Edit").tap();
+  await expect(page.getByTestId("roll-scroll")).toBeVisible();
+  await settleRollScroll(page);
+}
+
+/**
+ * Wait for the roll to stop scrolling itself.
+ *
+ * The roll frames its notes after a resize, coalesced by `FIT_SETTLE_MS` (150ms), and opening the
+ * sheet is a resize. On an unloaded machine that lands long before the test touches anything; under
+ * parallel load it can land *during* a later gesture, which moves the grid out from under the
+ * finger. A drag driven in absolute viewport coordinates then reads a different row than it aimed
+ * at, and the note lands a couple of rows out - a failure that looks like broken drag maths and is
+ * really an unsynchronised test.
+ */
+async function settleRollScroll(page: Page) {
+  const scrollTop = () => page.getByTestId("roll-scroll").evaluate((element) => element.scrollTop);
+  await expect
+    .poll(
+      async () => {
+        const before = await scrollTop();
+        await page.waitForTimeout(200); // longer than FIT_SETTLE_MS, so a pending fit has landed
+        return (await scrollTop()) === before;
+      },
+      { message: "the roll's self-fit settled" },
+    )
+    .toBe(true);
+}
+
+/**
+ * Tap empty grid to make a note (MOBILE-7). A tap creates *and* selects, so the handles that
+ * appear bracket the new note - which is a more direct grip on its geometry than picking it out
+ * from among its neighbours, since each handle sits exactly on one of its ends.
+ */
+async function addNote(page: Page, { fromBottom }: { fromBottom?: number } = {}) {
+  const before = await page.getByTestId("note").count();
+  const view = (await page.getByTestId("roll-scroll").boundingBox())!;
+  const y = fromBottom === undefined ? view.y + view.height / 2 : view.y + view.height - fromBottom;
+  await page.touchscreen.tap(view.x + 120, y);
+  await expect(page.getByTestId("note")).toHaveCount(before + 1);
+  await expect(page.getByTestId("note-handle-end")).toBeVisible();
+}
+
+const handleCentre = async (page: Page, edge: "start" | "end") => {
+  const box = (await page.getByTestId(`note-handle-${edge}`).boundingBox())!;
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+
+/** Drag one finger, in steps, so the move handler sees the travel rather than a teleport. */
+async function touchDrag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+  const cdp = await page.context().newCDPSession(page);
+  const at = (fraction: number) => [
+    { x: from.x + (to.x - from.x) * fraction, y: from.y + (to.y - from.y) * fraction, id: 1 },
+  ];
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(0) });
+  for (const fraction of [0.25, 0.5, 0.75, 1]) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(fraction) });
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
+
+test.describe("phone", () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  /**
+   * MOBILE-2, hit-target floors. Two separate defects, and either one alone was enough to
+   * make the loop markers undraggable by finger:
+   *
+   * - the handle was the 8px bar you can see and nothing more, against a 44px finger;
+   * - `loopEnd` had no `touch-action: none`, so the scroll container claimed the gesture
+   *   before the first move arrived and even a perfect hit did nothing.
+   *
+   * Driven with real touch events through CDP rather than `page.mouse`, because the mouse
+   * reproduces neither of them: a cursor hits 8px fine and never competes with a scroller.
+   */
+  test("the loop markers can be dragged with a finger, not just a cursor", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    const end = page.getByTestId("arr-scroll").getByRole("slider", { name: "Loop length" });
+    const before = Number(await end.getAttribute("aria-valuenow"));
+    // The default loop ends well off the right of a 390px screen, so reach it the way a
+    // person would rather than dispatching a touch at a coordinate outside the viewport.
+    await end.scrollIntoViewIfNeeded();
+    const box = (await end.boundingBox())!;
+
+    // The floor itself, stated as a number: the box you can hit, not the bar you can see.
+    expect(box.width, "a finger-sized target on a coarse pointer").toBeGreaterThanOrEqual(40);
+
+    // The browser tells us whether it took the gesture away from us. This is the precise
+    // statement of the `touch-action` half of the defect: without it the scroll container
+    // claims the drag and the browser fires `pointercancel`, which `beginPointerDrag` does
+    // not listen for, so the drag simply stops part-way.
+    await page.evaluate(() => {
+      (window as unknown as { cancelled: boolean }).cancelled = false;
+      window.addEventListener(
+        "pointercancel",
+        () => ((window as unknown as { cancelled: boolean }).cancelled = true),
+        true,
+      );
+    });
+
+    // Real touch events, through the browser's own input pipeline - `page.mouse` reproduces
+    // neither defect, because a cursor hits 8px comfortably and never races the scroller.
+    // The press lands 4px inside the box's left edge, clear of the 8px bar at its centre, so
+    // it would have missed the old handle completely.
+    const cdp = await page.context().newCDPSession(page);
+    const y = box.y + box.height / 2;
+    // A stable `id` across the sequence, or each move reads as a fresh touch rather than the
+    // same finger continuing, and no drag is assembled from them at all.
+    const touch = (type: string, x: number) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
+      });
+
+    await touch("touchStart", box.x + 4);
+    await touch("touchMove", box.x - 30);
+    await touch("touchMove", box.x - 80);
+    await touch("touchEnd", 0);
+
+    // **Not** "did it move at all". With the fix backed out this lands on 15 rather than 16:
+    // the one move that precedes `pointercancel` gets through, so a "moved" assertion passes
+    // on the bug. What is broken is that it stops following, so the distance is the assertion.
+    await expect
+      .poll(async () => Number(await end.getAttribute("aria-valuenow")), {
+        message: "the loop end followed the finger the whole way",
+      })
+      .toBeLessThan(before - 2);
+    expect(
+      await page.evaluate(() => (window as unknown as { cancelled: boolean }).cancelled),
+      "the scroller never took the gesture",
+    ).toBe(false);
+  });
+
+  /**
+   * MOBILE-2, the gesture half. Pinch was not merely missing: with no handler and no
+   * `touch-action` on the scrollers the gesture was unclaimed, so the browser took it as a
+   * **page** zoom - scaling the app's own chrome and breaking the layout.
+   *
+   * So there are two things to prove, and the second is the one that was actually wrong:
+   * the surface zooms, and the page does not.
+   */
+  test("pinch zooms the surface, not the whole page", async ({ page }) => {
+    // Seed the zoom, rather than reading it back as "whatever is stored, or 0". The key is
+    // only written once something changes it, so an unseeded baseline of 0 is beaten by any
+    // write at all - the assertion would have passed on a pinch that set the wrong value.
+    const BASELINE = 24;
+    await page.addInitScript((zoom) => localStorage.setItem("corrente:arr-zoom", String(zoom)), BASELINE);
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    const scroller = page.getByTestId("arr-scroll");
+    const box = (await scroller.boundingBox())!;
+    const zoom = () => page.evaluate(() => Number(localStorage.getItem("corrente:arr-zoom")));
+    expect(await zoom()).toBe(BASELINE);
+
+    // `visualViewport.scale` is the browser's own page zoom. It is 1 until something pinches
+    // the document itself, which is exactly the defect.
+    const pageScale = () => page.evaluate(() => visualViewport?.scale ?? 1);
+    expect(await pageScale()).toBe(1);
+
+    const cdp = await page.context().newCDPSession(page);
+    const y = box.y + box.height / 2;
+    const midX = box.x + box.width / 2;
+    const spread = (half: number) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [
+          { x: midX - half, y, id: 1 },
+          { x: midX + half, y, id: 2 },
+        ],
+      });
+
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [
+        { x: midX - 40, y, id: 1 },
+        { x: midX + 40, y, id: 2 },
+      ],
+    });
+    // Spreading apart zooms in. Several steps, because the gesture reports per-move ratios.
+    for (const half of [60, 80, 100, 120]) await spread(half);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+
+    // Tracked the whole gesture, not merely moved. The fingers go from 80px apart to 240px,
+    // so the scale should roughly treble; asserting "greater than baseline" would pass on the
+    // bug this fixes, where the browser took the pan after one move and the zoom stopped dead
+    // a pixel in.
+    await expect.poll(zoom, { message: "the time axis tracked the whole pinch" }).toBeGreaterThan(BASELINE * 2);
+    expect(await pageScale(), "the page itself never zoomed").toBe(1);
+  });
+
+  /**
+   * The roll is the surface with two continuous scales, so its pinch decomposes: fingers
+   * spread vertically scale pitch and say nothing about time. That "say nothing" is the part
+   * worth a test - two fingers on a vertical line are a few noisy pixels apart horizontally,
+   * and using that as a ratio would jerk the time axis every frame.
+   */
+  test("a vertical pinch in the roll scales pitch and leaves time alone", async ({ page }) => {
+    const ROWS = 12;
+    const BEATS = 64;
+    await page.addInitScript(
+      ([rows, beats]) => {
+        localStorage.setItem("corrente:roll-zoom-y", String(rows));
+        localStorage.setItem("corrente:roll-zoom-x", String(beats));
+      },
+      [ROWS, BEATS],
+    );
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+    await segment(page, "Edit").tap();
+
+    const box = (await page.getByTestId("roll-scroll").boundingBox())!;
+    const stored = (key: string) => page.evaluate((k) => Number(localStorage.getItem(k)), key);
+
+    const cdp = await page.context().newCDPSession(page);
+    const x = box.x + box.width / 2;
+    const midY = box.y + box.height / 2;
+    const points = (half: number) => [
+      { x, y: midY - half, id: 1 },
+      { x, y: midY + half, id: 2 },
+    ];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(30) });
+    for (const half of [45, 60, 75]) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: points(half) });
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+
+    await expect.poll(() => stored("corrente:roll-zoom-y"), { message: "rows got taller" }).toBeGreaterThan(ROWS);
+    expect(await stored("corrente:roll-zoom-x"), "the time axis was left alone").toBe(BEATS);
+  });
+
+  /**
+   * A rubber-band selection needs a pointer you can place precisely and a second one to
+   * modify with. On a phone the same drag is how you pan and half of how you pinch, so it
+   * fought both: a two-finger zoom in the roll drew a selection box across the notes.
+   * MOBILE-7 has the touch editing model that replaces it (select, then handles).
+   */
+  test("dragging on empty roll grid does not rubber-band on touch", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+    await segment(page, "Edit").tap();
+
+    const box = (await page.getByTestId("roll-scroll").boundingBox())!;
+    const cdp = await page.context().newCDPSession(page);
+    const y = box.y + box.height / 2;
+    const at = (x: number) => [{ x, y, id: 1 }];
+
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(box.x + 80) });
+    for (const x of [110, 150, 190]) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(box.x + x) });
+    }
+    // Checked mid-gesture: the box is torn down on release, so looking afterwards would pass
+    // whether or not it was ever drawn.
+    const marquees = await page.getByTestId("roll-marquee").count();
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+
+    expect(marquees, "no rubber-band from a finger").toBe(0);
+  });
+
+  /**
+   * Two fingers reposition as well as resize - you pinch to frame a bar, not merely to make
+   * it bigger. The browser cannot do the panning for us here, because declining the gesture
+   * to get the zoom declines its pan along with it, so the centroid's travel is applied in
+   * the same frame as the scale.
+   *
+   * Also guards the other half of what a pinch must not do: leave notes behind it. Each
+   * finger is a `pointerdown` on the grid, and the roll's empty-space press creates a note on
+   * release unless something recorded that it moved.
+   */
+  test("two fingers pan the roll as well as zoom it, and leave no notes behind", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+    await segment(page, "Edit").tap();
+
+    const scroller = page.getByTestId("roll-scroll");
+    const box = (await scroller.boundingBox())!;
+    const scrollLeft = () => scroller.evaluate((el) => el.scrollLeft);
+    const notes = () => page.getByTestId("note").count();
+
+    const before = { scroll: await scrollLeft(), notes: await notes() };
+
+    // Both fingers travel the same way, keeping their separation: a pure pan, so whatever
+    // moves has to be the view rather than the scale.
+    const cdp = await page.context().newCDPSession(page);
+    const y = box.y + box.height / 2;
+    const pair = (centre: number) => [
+      { x: centre - 50, y, id: 1 },
+      { x: centre + 50, y, id: 2 },
+    ];
+    const midX = box.x + box.width / 2;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pair(midX) });
+    for (const offset of [-25, -50, -75, -100]) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pair(midX + offset) });
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+
+    await expect
+      .poll(scrollLeft, { message: "dragging two fingers left moved the view right" })
+      .toBeGreaterThan(before.scroll);
+    expect(await notes(), "a pinch is not a note").toBe(before.notes);
+  });
+
+  /**
+   * MOBILE-7. Touch has no hover, no modifiers and a 44px finger, so the roll's 6px drag-edge
+   * does not transfer - and widening it in place is not the fix, because at a 12px row height
+   * every note would become its neighbour's grab target. Selection is the substitute: only the
+   * selected note grows handles, so there are only ever two of them and they can be as big as a
+   * finger needs.
+   */
+  test("a selected note grows handles a finger can actually hit", async ({ page }) => {
+    await openRoll(page);
+    await addNote(page);
+
+    for (const edge of ["start", "end"] as const) {
+      const box = (await page.getByTestId(`note-handle-${edge}`).boundingBox())!;
+      expect(box.width, `the ${edge} handle is a finger wide`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `the ${edge} handle is a finger tall`).toBeGreaterThanOrEqual(44);
+    }
+    // The hit area is not the paint, but the paint still has to read as a grip: drawn at the
+    // note's own 12px height the bar disappears into the note, same colour and same box. It
+    // stands proud at both ends instead, while staying well inside the box that catches the
+    // finger - a bar the size of the hit area would swallow three rows of the grid.
+    const hit = (await page.getByTestId("note-handle-end").boundingBox())!;
+    const bar = (await page.getByTestId("note-handle-end").locator("div").boundingBox())!;
+    expect(bar.height, "the bar stands proud of the note").toBeGreaterThan(16);
+    expect(bar.height, "but it is the grip, not the hit area").toBeLessThan(hit.height);
+  });
+
+  /**
+   * A fingertip parked on a 12px note covers the note, and pitch is exactly the axis where you
+   * need to see where you have got to. The grip sits clear of the note and drags it from there.
+   */
+  test("the move grip drags the note from clear of it", async ({ page }) => {
+    await openRoll(page);
+    await addNote(page);
+
+    const before = await handleCentre(page, "end");
+    const grip = (await page.getByTestId("note-move").boundingBox())!;
+    expect(grip.y, "the grip is below the note, not on it").toBeGreaterThanOrEqual(before.y + 6);
+
+    // 32px right is two snap cells at the default zoom, 24px up is two 12px rows: both axes,
+    // and both landing on a specific place rather than merely somewhere else.
+    const from = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
+    await touchDrag(page, from, { x: from.x + 32, y: from.y - 24 });
+
+    // Both axes read from one measurement, and polled together. Polling x and then asserting y
+    // separately is a race: the drag interpolates, so x can reach its final snap cell a frame
+    // before y reaches its row, which satisfies the poll and then reads a y that is still moving.
+    await expect
+      .poll(
+        async () => {
+          const after = await handleCentre(page, "end");
+          return { x: Math.round(after.x), y: Math.round(after.y) };
+        },
+        { message: "the note moved in time and in pitch" },
+      )
+      .toEqual({ x: Math.round(before.x) + 32, y: Math.round(before.y) - 24 });
+  });
+
+  /**
+   * The grip goes above the note when there is no room below it. A grip you have to scroll to
+   * reach is worse than one on the other side, and the bottom row of the view is exactly where
+   * you end up when you scroll to something.
+   */
+  test("the move grip flips above the note at the bottom of the view", async ({ page }) => {
+    await openRoll(page);
+    // Made 24px off the bottom edge, which is less room below it than the grip needs.
+    await addNote(page, { fromBottom: 24 });
+
+    const note = await handleCentre(page, "end");
+    const grip = (await page.getByTestId("note-move").boundingBox())!;
+    expect(grip.y + grip.height, "the grip went above the note rather than off the bottom").toBeLessThanOrEqual(note.y);
+  });
+
+  /**
+   * Each handle moves its own end and leaves the other alone. The start handle is the one the
+   * implicit drag-edge never offered: there was no room to put a second invisible 6px strip at
+   * the other end of a note that can be 16px wide.
+   */
+  test("a handle resizes from its own end, and leaves the other where it was", async ({ page }) => {
+    await openRoll(page);
+    await addNote(page);
+
+    const before = { start: await handleCentre(page, "start"), end: await handleCentre(page, "end") };
+    const width = () =>
+      Promise.all([handleCentre(page, "start"), handleCentre(page, "end")]).then(([start, end]) =>
+        Math.round(end.x - start.x),
+      );
+    const startX = async () => Math.round((await handleCentre(page, "start")).x);
+    const endX = async () => Math.round((await handleCentre(page, "end")).x);
+    const original = await width();
+
+    // 32px at the default zoom is exactly two snap cells (64px to the beat, snapping to 1/4),
+    // so the note has to land on a specific width rather than merely somewhere wider.
+    await touchDrag(page, before.end, { x: before.end.x + 32, y: before.end.y });
+    await expect.poll(width, { message: "dragging the end handle right made the note longer" }).toBe(original + 32);
+    expect(await startX(), "the start stayed put").toBe(Math.round(before.start.x));
+
+    // The other end: the start moves and the end holds, which is what taking hold of that end
+    // of anything means. Getting this backwards would slide the whole note instead.
+    const held = await endX();
+    const grabStart = await handleCentre(page, "start");
+    await touchDrag(page, grabStart, { x: grabStart.x + 16, y: grabStart.y });
+    await expect
+      .poll(startX, { message: "dragging the start handle right moved the start" })
+      .toBe(Math.round(before.start.x) + 16);
+    expect(await endX(), "the end stayed put").toBe(held);
+    expect(await width(), "so the note is shorter by exactly what the start moved").toBe(original + 32 - 16);
+  });
+
+  /**
+   * The actions hang off the note, not off a bar pinned to the screen - which costs no
+   * permanent space, and landscape has none to give. The price is that a note scrolled out of
+   * view would take its own actions with it, so the kebab is clamped into the visible slice of
+   * the roll. An affordance you have to scroll to find is one you stop reaching for.
+   */
+  test("the note's actions stay on screen when the note does not", async ({ page }) => {
+    await openRoll(page);
+    await addNote(page);
+
+    const scroller = page.getByTestId("roll-scroll");
+    const view = (await scroller.boundingBox())!;
+    await scroller.evaluate((element) => {
+      element.scrollLeft = 5000; // past the end; the browser clamps it to as far right as it goes
+    });
+
+    await expect
+      .poll(async () => Math.round((await page.getByTestId("note-actions").boundingBox())!.x), {
+        message: "the kebab did not follow the note off the left edge",
+      })
+      .toBeGreaterThanOrEqual(Math.round(view.x));
+    const box = (await page.getByTestId("note-actions").boundingBox())!;
+    expect(Math.round(box.x + box.width), "and its far edge is inside the roll too").toBeLessThanOrEqual(
+      Math.round(view.x + view.width),
+    );
+  });
+
+  /**
+   * The actions themselves. Velocity is an inline fader rather than a submenu, because submenus
+   * open on hover and touch has none; it renders as note fill strength, which is what earns the
+   * right to drop the velocity lane on a phone.
+   */
+  test("the note's kebab sets velocity, duplicates and deletes", async ({ page }) => {
+    await openRoll(page);
+    await addNote(page);
+    const notes = page.getByTestId("note");
+    const before = await notes.count();
+    const kebab = page.getByRole("button", { name: "Note actions" });
+    // Fill strength is 0.45 + 0.55 * velocity, so a velocity reads back off the note.
+    const velocity = async () =>
+      (Number(await notes.last().evaluate((element) => getComputedStyle(element).opacity)) - 0.45) / 0.55;
+
+    await kebab.tap();
+    await page.getByRole("menuitem", { name: "Duplicate" }).tap();
+    await expect(notes).toHaveCount(before + 1);
+
+    // Quantize lives here on touch (MOBILE-19.4), beside the note it acts on.
+    await kebab.tap();
+    await page.getByRole("menuitem", { name: "Quantize" }).tap();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    await kebab.tap();
+    const fader = page.getByRole("slider", { name: "Velocity" });
+    const track = (await fader.boundingBox())!;
+    await fader.tap({ position: { x: track.width * 0.3, y: track.height / 2 } });
+    await expect.poll(velocity, { message: "the note took the velocity the track was tapped at" }).toBeCloseTo(0.3, 1);
+
+    // The point of a fader over a row of presets: a value between the presets is reachable, and
+    // two taps a tenth apart have to land a tenth apart rather than on the same option.
+    await fader.tap({ position: { x: track.width * 0.4, y: track.height / 2 } });
+    await expect.poll(velocity, { message: "and a value a preset row could not have offered" }).toBeCloseTo(0.4, 1);
+
+    // Still open, which is the point of an inline row: you set a velocity, hear it, and adjust
+    // without finding the note and its kebab again. Every other row dismisses, so Delete is
+    // reachable from here without reopening anything.
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.getByRole("menuitem", { name: "Delete" }).tap();
+    await expect(notes).toHaveCount(before);
+    await expect(page.getByTestId("note-actions"), "and the handles go with it").toHaveCount(0);
+  });
+
+  /**
+   * MOBILE-8. `env(safe-area-inset-*)` is 0 in every browser with no inset to report, so this
+   * drives the *simulated* ones (`safeAreaSimulation.ts`) - which exist because the layout was
+   * otherwise impossible to look at anywhere but a notched phone, which is how it came to be
+   * half-implemented.
+   *
+   * The split is the point of the test. Both sheets are absolutely positioned, so padding on
+   * an ancestor resolves against its *padding box* and leaves them exactly where they were:
+   * they have to carry their own, and this is what would catch someone "simplifying" that
+   * back into one padded container.
+   *
+   * A device still has the last word on whether iOS reports the insets we assumed. What this
+   * settles is whether the app does anything with them.
+   */
+  test("every edge of the shell is padded back from the display's insets", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    const INSETS = { top: 59, bottom: 34, left: 12, right: 21 };
+    await page.evaluate((insets) => {
+      (window as unknown as { simulateInsets: (i: typeof insets) => void }).simulateInsets(insets);
+    }, INSETS);
+    // The same values the URL path would set, so a phone can be pointed at `?insets=notch`
+    // and see what this asserts.
+
+    const padding = (locator: ReturnType<Page["locator"]>, edge: string) =>
+      locator.evaluate((element, side) => getComputedStyle(element).getPropertyValue(`padding-${side}`), edge);
+
+    // The top bar: the edges a notch and the corner radii actually eat. Its own padding is
+    // 6px, so the inset winning here is also the `max()` doing its job.
+    const topBar = page.locator("[data-device-tier] > div").first();
+    expect(await padding(topBar, "top")).toBe(`${INSETS.top}px`);
+    expect(await padding(topBar, "left")).toBe(`${INSETS.left}px`);
+    expect(await padding(topBar, "right")).toBe(`${INSETS.right}px`);
+
+    // The editor sheet, abspos against the workspace and so given nothing by its padding. Its
+    // foot no longer reaches the display's edge - the tab bar does, and carries that inset.
+    const editor = sheet(page);
+    expect(await padding(editor, "left")).toBe(`${INSETS.left}px`);
+    expect(await padding(tabBar(page), "bottom")).toBe(`${INSETS.bottom}px`);
+    expect(await padding(tabBar(page), "left")).toBe(`${INSETS.left}px`);
+
+    // The agent sheet, abspos against the shell for the same reason. Only the outer side
+    // matters horizontally - its inner edge faces the app, not the display.
+    await page.getByRole("button", { name: "Agent" }).tap();
+    const agent = page.getByRole("dialog", { name: "Agent" });
+    expect(await padding(agent, "top")).toBe(`${INSETS.top}px`);
+    expect(await padding(agent, "bottom")).toBe(`${INSETS.bottom}px`);
+    expect(await padding(agent, "right")).toBe(`${INSETS.right}px`);
+  });
+
+  test("swaps in the touch shell: the arrangement, with an editor sheet over it", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    await expect(shell(page)).toHaveAttribute("data-device-tier", "phone");
+    // The desktop spine is gone entirely - this is a swap, not a reflow.
+    await expect(desktopRail(page)).toHaveCount(0);
+
+    // The arrangement is the background, not one option among four.
+    await expect(page.locator('[class*="grid-area:timeline"]')).toBeVisible();
+    await expect(sheet(page)).toBeVisible();
+    // The tab bar it replaced is gone, and with it the "which surface am I on" question.
+    await expect(page.getByRole("tablist", { name: "Views" })).toHaveCount(0);
+
+    // One transport, above everything, and only one.
+    await expect(page.getByRole("button", { name: "Record" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /play|stop/i }).first()).toBeVisible();
+  });
+
+  test("opens at Half, showing the track that is already selected", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // There is always a track and a clip selected, so there is always something to edit and
+    // showing it presumes nothing. Opening parked read as the editor having failed to open.
+    await expect.poll(() => detentOf(page)).toBe("half");
+    await expect(segment(page, "Edit")).toBeVisible();
+    await expect(page.getByTestId("roll-scroll")).toBeVisible();
+
+    // Still a sheet over a live arrangement, not a full-screen editor.
+    const box = (await sheet(page).boundingBox())!;
+    expect(box.height, "leaves the arrangement half the screen").toBeLessThan(PHONE.height * 0.7);
+    expect(Math.abs(box.y + box.height - (await tabBarTop(page))), "and sits on the tab bar").toBeLessThan(2);
+  });
+
+  test("minimised is the preview bar, and a tap on it opens the sheet (MOBILE-19.1)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    // The header and nothing else: the track, a glance at its clip, and the way back up.
+    const box = (await sheet(page).boundingBox())!;
+    expect(box.height, "minimised is just the header").toBeLessThan(80);
+    expect(Math.abs(box.y + box.height - (await tabBarTop(page))), "and it sits on the tab bar").toBeLessThan(2);
+    await expect(segment(page, "Edit")).toHaveCount(0);
+
+    await sheet(page).getByRole("button", { name: "Open the editor" }).tap();
+    await expect.poll(() => detentOf(page)).toBe("half");
+  });
+
+  test("opens on the lane headers, not on beat 0", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // Phone portrait scrolls its header column rather than sticking it, so beat 0 is the
+    // *right* edge of the track names. Opening there hides them before you have touched
+    // anything; the shared offset starts unset so the surface opens at its left edge.
+    await expect.poll(() => page.getByTestId("arr-scroll").evaluate((el) => el.scrollLeft)).toBe(0);
+    await expect(page.locator("[data-track-id]").first()).toBeVisible();
+  });
+
+  test("choosing a track leaves a parked sheet where it is", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    // Tapping lanes is looking around, not a request to edit: the editor stays parked.
+    await trackHeader(page).tap();
+    await page.waitForTimeout(300);
+    expect(await detentOf(page)).toBe("peek");
+
+    // A new track from Explore is selected, and named in the parked bar, without raising it.
+    await tab(page, "Explore").tap();
+    await openExploreCategory(page, "Instruments");
+    await page.getByRole("button", { name: 'Add "Sampler" as a new track', exact: true }).tap();
+    await expect(sheet(page).getByText("sampler", { exact: true })).toBeVisible();
+    expect(await detentOf(page)).toBe("peek");
+  });
+
+  test("scrolling the arrangement while parked is not a request to edit", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    await page.getByTestId("arr-scroll").evaluate((el) => (el.scrollLeft = 400));
+    await page.waitForTimeout(300);
+    // Hence a click handler rather than a pointerdown: a scroll leaves no click behind.
+    expect(await detentOf(page)).toBe("peek");
+  });
+
+  test("the roll centres on the notes at whatever height the sheet settles at", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // Centred means the same content row sits at the middle of the viewport whatever the
+    // viewport's height is - so this sum is the invariant, not the scroll offset.
+    const centredOn = () =>
+      page.getByTestId("roll-scroll").evaluate((el) => Math.round(el.scrollTop + el.clientHeight / 2));
+
+    await setDetent(page, "half");
+    const atHalf = await centredOn();
+    await setDetent(page, "full");
+
+    // Polled, not read once: the re-fit waits for the run of resizes to stop, so it lands a
+    // beat after the sheet commits its layout. Reading immediately catches the pre-fit value.
+    //
+    // The roll is mounted while the sheet is parked (0px tall) and is held at the full
+    // workspace height mid-throw, so fitting at either of those moments centres for a
+    // viewport that is not the one you end up with. Only the settled height is true.
+    await expect
+      .poll(async () => Math.abs((await centredOn()) - atHalf), { message: `centred on ${atHalf} at Half` })
+      .toBeLessThanOrEqual(2);
+  });
+
+  test("the roll stops re-centring once you have scrolled it yourself", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+
+    const roll = page.getByTestId("roll-scroll");
+    await roll.evaluate((el) => (el.scrollTop = el.scrollHeight - el.clientHeight));
+    const parked = await roll.evaluate((el) => Math.round(el.scrollTop));
+
+    await setDetent(page, "half");
+    // Re-fitting on every resize is what keeps Half honest; handing over on the first real
+    // scroll is what keeps it from overriding you afterwards.
+    expect(await roll.evaluate((el) => Math.round(el.scrollTop))).toBe(parked);
+  });
+
+  test("the drag is not the only way: tap the preview to open, the keyboard steps every detent", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    await sheet(page).getByRole("button", { name: "Open the editor", exact: true }).tap();
+    await expect.poll(() => detentOf(page)).toBe("half");
+
+    const height = sheet(page).getByRole("slider", { name: "Editor height" });
+    await height.press("ArrowUp");
+    await expect.poll(() => detentOf(page)).toBe("full");
+    await height.press("ArrowDown");
+    await height.press("ArrowDown");
+    await expect.poll(() => detentOf(page)).toBe("peek");
+  });
+
+  test("each segment hosts one surface, and the transport survives switching", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    await segment(page, "Edit").tap();
+    await expect(page.getByTestId("roll-scroll")).toBeVisible();
+
+    await segment(page, "Clips").tap();
+    await expect(page.getByRole("button", { name: /^\+ Clip$/ })).toBeVisible();
+
+    await segment(page, "Rack").tap();
+    await expect(page.getByRole("button", { name: "Save as patch" })).toBeVisible();
+
+    await expect(page.getByRole("button", { name: "Record" })).toHaveCount(1);
+  });
+
+  /**
+   * The bug that made the sheet unusable on a device: it was laid out at the full workspace
+   * height and merely translated down, so at Half the roll's scroller was ~800px tall inside
+   * a ~400px window. It never overflowed, so it never scrolled, and every row below the fold
+   * was unreachable. "Transform while moving, commit layout on settle" is what fixes it.
+   */
+  test("every detent leaves the editor a box that fits on screen and scrolls", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    for (const detent of ["half", "full"] as const) {
+      await setDetent(page, detent);
+      await segment(page, "Edit").tap();
+      // Wait on the surface itself rather than measuring into a re-render.
+      await expect(page.getByTestId("roll-scroll")).toBeVisible();
+
+      const sheetBox = (await sheet(page).boundingBox())!;
+      expect(sheetBox.y + sheetBox.height, `sheet bottom at ${detent}`).toBeLessThanOrEqual(PHONE.height + 1);
+
+      const roll = await page.getByTestId("roll-scroll").evaluate((el) => ({
+        bottom: Math.round(el.getBoundingClientRect().bottom),
+        canScroll: el.scrollHeight > el.clientHeight,
+      }));
+      expect(roll.bottom, `roll bottom at ${detent}`).toBeLessThanOrEqual(PHONE.height);
+      expect(roll.canScroll, `roll scrolls at ${detent}`).toBe(true);
+    }
+  });
+
+  test("the arrangement stays behind the sheet, and gets the band above it", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    const timeline = page.locator('[class*="grid-area:timeline"]');
+
+    await setDetent(page, "peek");
+    const parked = (await timeline.boundingBox())!;
+    await setDetent(page, "half");
+    const raised = (await timeline.boundingBox())!;
+
+    // It is not merely occluded - it lays out in what is left, so its own scrollers stay
+    // on screen rather than sitting underneath the sheet.
+    expect(raised.height, "the arrangement gives up height to the sheet").toBeLessThan(parked.height);
+    expect(raised.height, "but never disappears").toBeGreaterThan(40);
+    const sheetBox = (await sheet(page).boundingBox())!;
+    expect(raised.y + raised.height).toBeLessThanOrEqual(sheetBox.y + 2);
+  });
+
+  /**
+   * MOBILE-17. Placing a clip was HTML5 drag-and-drop from the rail, which touch never fires, so a
+   * phone could not put a clip on the timeline at all. A tap on empty lane drops the paste marker,
+   * and the marker's kebab offers the active clip, Paste and Create clip.
+   */
+  test("a tap on empty lane offers to place the active clip there", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+    const lane = page.getByTestId("lane").first();
+    const placements = lane.getByTestId("placement");
+    const before = await placements.count();
+
+    // Past the default clip, which fills the whole visible lane on a phone.
+    const box = (await lane.boundingBox())!;
+    await lane.tap({ position: { x: box.width - 40, y: box.height / 2 } });
+    await page.getByTestId("marker-actions").getByRole("button", { name: "Marker actions" }).tap();
+    await page.getByRole("menuitem", { name: /^Place .* here$/ }).tap();
+
+    await expect(placements).toHaveCount(before + 1);
+  });
+
+  test("the marker's kebab creates a clip, and pastes one copied from a clip's kebab", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+    const lane = page.getByTestId("lane").first();
+    const placements = lane.getByTestId("placement");
+    const before = await placements.count();
+    const box = (await lane.boundingBox())!;
+    const tapLaneAt = (fraction: number) => lane.tap({ position: { x: box.width * fraction, y: box.height / 2 } });
+    const markerMenu = () => page.getByTestId("marker-actions").getByRole("button", { name: "Marker actions" }).tap();
+
+    await tapLaneAt(0.9);
+    await markerMenu();
+    await expect(page.getByRole("menuitem", { name: "Paste" })).toBeDisabled();
+    await page.getByRole("menuitem", { name: "Create clip" }).tap();
+    await expect(placements).toHaveCount(before + 1);
+
+    // The new clip is selected; copy it from its own kebab, then paste it at a fresh marker.
+    await page.getByTestId("clip-actions").getByRole("button", { name: "Clip actions" }).tap();
+    await page.getByRole("menuitem", { name: "Copy" }).tap();
+    await tapLaneAt(0.7);
+    await markerMenu();
+    await page.getByRole("menuitem", { name: "Paste" }).tap();
+    await expect(placements).toHaveCount(before + 2);
+  });
+
+  test("the marker's kebab waits for its own tap, even where the finger just was", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+    const lane = page.getByTestId("lane").nth(0);
+    const box = (await lane.boundingBox())!;
+    // Past the default clip, and just left of where the kebab will render, so a kebab mounted on
+    // pointerup would sit under the finger when the tap's click arrives.
+    await lane.tap({ position: { x: box.width * 0.7, y: box.height / 2 } });
+    await expect(page.getByRole("button", { name: "Marker actions" })).toBeVisible();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  test("a clip copied on one track pastes onto another", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+    await page.getByRole("button", { name: "Group actions" }).first().tap();
+    await page.getByRole("menuitem", { name: "Add MIDI track" }).tap();
+    const lanes = page.getByTestId("lane");
+    await expect(lanes).toHaveCount(2);
+    const target = lanes.nth(1);
+    const before = await target.getByTestId("placement").count();
+
+    await lanes.nth(0).getByTestId("placement").first().tap();
+    await page.getByTestId("clip-actions").getByRole("button", { name: "Clip actions" }).tap();
+    await page.getByRole("menuitem", { name: "Copy" }).tap();
+    const box = (await target.boundingBox())!;
+    await target.tap({ position: { x: box.width * 0.7, y: box.height / 2 } });
+    await page.getByTestId("marker-actions").getByRole("button", { name: "Marker actions" }).tap();
+    await page.getByRole("menuitem", { name: "Paste" }).tap();
+
+    await expect(target.getByTestId("placement")).toHaveCount(before + 1);
+  });
+
+  test("tapping a track selects it without moving the sheet - it is not modal", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "half");
+
+    await trackHeader(page).tap();
+
+    // The whole reason this cannot be an off-the-shelf bottom sheet: the arrangement behind
+    // stays live, so selection never has to imply navigation.
+    await expect.poll(() => detentOf(page)).toBe("half");
+    await expect(page.locator('[class*="grid-area:timeline"]')).toBeVisible();
+  });
+
+  test("the arrangement keeps its scroll position when the sheet moves", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    const scroller = () => page.getByTestId("arr-scroll");
+
+    await scroller().evaluate((el) => (el.scrollLeft = 500));
+    await expect.poll(() => scroller().evaluate((el) => el.scrollLeft)).toBe(500);
+
+    // Raising the sheet resizes the arrangement, which is exactly when a restored offset
+    // is easiest to lose.
+    await setDetent(page, "full");
+    await setDetent(page, "peek");
+    await expect.poll(() => scroller().evaluate((el) => el.scrollLeft)).toBe(500);
+  });
+
+  test("scrolling the arrangement back to the start does not snap forward again", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    const scroller = page.getByTestId("arr-scroll");
+
+    // The shared view offset used to floor at beat 0 and get pushed back into the DOM, so
+    // scrolling left into the header gutter yanked you forward to the gutter's edge.
+    await scroller.evaluate((el) => (el.scrollLeft = 500));
+    await scroller.evaluate((el) => (el.scrollLeft = 0));
+    await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBe(0);
+
+    await scroller.evaluate((el) => (el.scrollLeft = 60));
+    await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBe(60);
+  });
+
+  test("dragging the header moves the sheet and it settles on a detent", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    // The whole header is the drag surface, not just the grabber pill - caught here by the
+    // track name. The clip preview beside it drags too (below).
+    const header = (await sheet(page).boundingBox())!;
+    const startX = header.x + 40;
+    const startY = header.y + 20;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) await page.mouse.move(startX, startY - step * 40);
+    await page.mouse.up();
+
+    // Dragged well up and released: it lands on a detent rather than wherever it was let go.
+    await expect.poll(() => detentOf(page)).not.toBe("peek");
+    await page.waitForTimeout(500);
+    const box = (await sheet(page).boundingBox())!;
+    expect(Math.abs(box.y + box.height - (await tabBarTop(page))), "still anchored to the tab bar").toBeLessThan(2);
+  });
+
+  test("a drag that starts on the minimised clip preview moves the sheet too (DAW-58)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek");
+
+    // It was a button, and the drag skips buttons, so a swipe started on it went nowhere.
+    const preview = (await sheet(page).getByRole("button", { name: "Open the editor" }).boundingBox())!;
+    const startX = preview.x + preview.width / 2;
+    const startY = preview.y + preview.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) await page.mouse.move(startX, startY - step * 40);
+    await page.mouse.up();
+    await expect.poll(() => detentOf(page)).not.toBe("peek");
+  });
+
+  test("full covers the whole workspace (MOBILE-19.1)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+
+    // No sliver of arrangement any more: the sheet's top meets the workspace's.
+    const workspaceTop = await sheet(page).evaluate((el) => el.parentElement!.getBoundingClientRect().top);
+    const box = (await sheet(page).boundingBox())!;
+    expect(Math.abs(box.y - workspaceTop), "the sheet reaches the top of the workspace").toBeLessThan(2);
+  });
+
+  test("undo and redo are in the top bar, and tempo is on the Timing settings page", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    const undo = page.getByRole("button", { name: "Undo" });
+    const redo = page.getByRole("button", { name: "Redo" });
+    await expect(undo).toBeDisabled();
+    await expect(redo).toBeDisabled();
+
+    // Tempo gave up its top-bar slot for them; it is a field on the Timing page (MOBILE-19), so
+    // any tempo in the range is reachable rather than a list of presets.
+    await expect(page.getByRole("spinbutton", { name: /tempo/i })).toHaveCount(0);
+    await openTimingSettings(page);
+    const tempo = page.getByRole("spinbutton", { name: "Tempo" });
+    await tempo.fill("173");
+    await tempo.press("Enter");
+    await page.getByRole("button", { name: "Close settings" }).tap();
+    await expect(undo).toBeEnabled();
+
+    await openTimingSettings(page);
+    await expect(page.getByRole("spinbutton", { name: "Tempo" })).toHaveValue("173");
+    await page.getByRole("button", { name: "Close settings" }).tap();
+
+    await undo.tap();
+    await expect(redo).toBeEnabled();
+  });
+
+  /**
+   * Adding is the top bar's "+" (MOBILE-19.4), and the timing settings are on the settings panel's
+   * Timing page - count-in and groove are project settings, not the arrangement's or the roll's
+   * (MOBILE-11).
+   */
+  test("adding is the top bar's +, and the project's settings are in settings", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await segment(page, "Edit").tap();
+    await setDetent(page, "half");
+
+    const tracks = page.locator("[data-track-id]");
+    const before = await tracks.count();
+    await openAdd(page);
+    await page.getByRole("menuitem", { name: "Add group" }).tap();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await openAdd(page);
+    await expect(page.getByRole("menuitem", { name: "New MIDI track in" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    expect(await tracks.count()).toBe(before);
+
+    await expect(page.getByRole("button", { name: "More controls" })).toHaveCount(0);
+    await openTimingSettings(page);
+    await expect(page.getByRole("radiogroup", { name: "Count-in" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Groove" })).toBeVisible();
+  });
+
+  test("beats per bar is a field too, so the whole 1-32 range is reachable", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    await openTimingSettings(page);
+    const beats = page.getByRole("spinbutton", { name: "Beats per bar" });
+    // 11/4 was not on the old preset list, and is inside the schema's range.
+    await beats.fill("11");
+    await beats.press("Enter");
+    await page.getByRole("combobox", { name: "Beat unit" }).selectOption("8");
+    await page.getByRole("button", { name: "Close settings" }).tap();
+    await openTimingSettings(page);
+    await expect(page.getByRole("spinbutton", { name: "Beats per bar" })).toHaveValue("11");
+    await expect(page.getByRole("combobox", { name: "Beat unit" })).toHaveValue("8");
+  });
+
+  test("the roll has no toolbar or menu of its own on touch", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await segment(page, "Edit").tap();
+    await expect(page.getByTestId("roll-scroll")).toBeVisible();
+
+    // The toolbar row is hidden, so its label is not shown...
+    await expect(page.getByText("Piano roll", { exact: true })).toBeHidden();
+
+    // ...and nor is a tools menu in its place (MOBILE-19.4): its settings are the settings panel's
+    // Piano roll page, zoom is the pinch, and Quantize is on a selected note's own menu.
+    await expect(page.getByRole("button", { name: "Notes tools" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Arrangement tools" })).toHaveCount(0);
+  });
+
+  /** The "+" adds to the arrangement, so it is there with the Studio and not over Explore. */
+  test("the top bar's + belongs to the Studio", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    const add = page.getByRole("button", { name: "Add to the arrangement" });
+    await expect(add).toBeVisible();
+    await tab(page, "Explore").tap();
+    await expect(add).toHaveCount(0);
+    await tab(page, "Studio").tap();
+    await expect(add).toBeVisible();
+  });
+
+  test("the editors' settings are settings pages on touch, and what they set reaches the surface", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await segment(page, "Edit").tap();
+
+    await openSettingsPage(page, "Arrangement");
+    await page.getByRole("radiogroup", { name: "Arrangement snap" }).getByRole("radio", { name: "Bar" }).click();
+    await openSettingsPage(page, "Piano roll");
+    const grid = page.getByRole("radiogroup", { name: "Piano roll grid" });
+    await grid.getByRole("radio", { name: "1/8T" }).click();
+    await page.getByRole("button", { name: "Close settings" }).tap();
+
+    // One value, not a copy: reopening shows what was chosen, and the roll's snap follows it.
+    await openSettingsPage(page, "Piano roll");
+    await expect(grid.getByRole("radio", { name: "1/8T" })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("button", { name: "Close settings" }).tap();
+    await openSettingsPage(page, "Arrangement");
+    await expect(
+      page.getByRole("radiogroup", { name: "Arrangement snap" }).getByRole("radio", { name: "Bar" }),
+    ).toHaveAttribute("aria-checked", "true");
+  });
+
+  test("three tabs switch places, and the Studio keeps its editor behind them (MOBILE-19)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
+    await expect(sheet(page)).toBeVisible();
+
+    await tab(page, "Explore").tap();
+    // One view, so no strip of views to switch between: straight to the category tiles.
+    await expect(page.getByRole("navigation", { name: "Explore views" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Instruments\b/ })).toBeVisible();
+    await expect(sheet(page)).toBeHidden();
+
+    // Projects opens on the project you have open (DAW-58).
+    await tab(page, "Projects").tap();
+    await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
+
+    // Hidden, not unmounted: the sheet comes back at the detent it was left at.
+    await tab(page, "Studio").tap();
+    await expect(sheet(page)).toBeVisible();
+    expect(await detentOf(page)).toBe("half");
+  });
+
+  test("Projects lists every project, names a new one first, and switches between them (MOBILE-19.3)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await tab(page, "Projects").tap();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    const open = page.getByRole("region", { name: "Open project" });
+    const title = open.getByTitle("Double-click to rename");
+    await expect(open.getByText("OPEN NOW")).toBeVisible();
+    const firstName = (await title.textContent())?.trim() ?? "";
+    await expect(open.getByText(/BPM · 4\/4 · 1 track/)).toBeVisible();
+
+    // "+ New" asks for a name first, and Cancel makes nothing.
+    await page.getByRole("button", { name: "+ New" }).tap();
+    await page.getByRole("button", { name: "Cancel" }).tap();
+    await expect(title).toHaveText(firstName);
+    await page.getByRole("button", { name: "+ New" }).tap();
+    await page.getByRole("textbox", { name: "Name" }).fill("Night Drive");
+    await page.getByRole("button", { name: "Create" }).tap();
+    await expect(title).toHaveText("Night Drive");
+
+    // One list keeps the open project too, marked, beside the other one.
+    const recent = page.getByRole("list", { name: "Projects" });
+    await expect(recent.getByRole("button", { name: "Open Night Drive" })).toHaveAttribute("aria-current", "true");
+    // Opening another one goes into its page (DAW-58); back up, it is the open one.
+    await recent.getByRole("button", { name: `Open ${firstName}` }).tap();
+    await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    await expect(title).toHaveText(firstName);
+    await expect(recent.getByRole("button", { name: "Open Night Drive" })).toBeVisible();
+
+    // The box filters the list by name.
+    await page.getByRole("searchbox", { name: "Filter projects" }).fill("night");
+    await expect(recent.getByRole("listitem")).toHaveCount(1);
+    await page.getByRole("searchbox", { name: "Filter projects" }).fill("");
+    await expect(recent.getByRole("listitem")).toHaveCount(2);
+
+    // The card's thumbnail goes inside the project, and back comes out again.
+    await open.getByRole("button", { name: `Open ${firstName}` }).tap();
+    await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    await expect(open).toBeVisible();
+  });
+
+  test("tapping the tab you are on takes it back to its start (DAW-58)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // Explore: from a category page back to Explore home.
+    await tab(page, "Explore").tap();
+    await openExploreCategory(page, "Instruments");
+    await tab(page, "Explore").tap();
+    await expect(page.getByRole("heading", { name: "Instruments", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Instruments\b/ })).toBeVisible();
+
+    // Projects: it opens on the project you have open, and from the list a tap comes back to it.
+    await tab(page, "Projects").tap();
+    await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    await expect(page.getByRole("region", { name: "Open project" })).toBeVisible();
+    await tab(page, "Projects").tap();
+    await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
+  });
+
+  test("opening another project from the list goes into its page (DAW-58)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await tab(page, "Projects").tap();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    const open = page.getByRole("region", { name: "Open project" });
+    const firstName = ((await open.getByTitle("Double-click to rename").textContent()) ?? "").trim();
+    await page.getByRole("button", { name: "+ New" }).tap();
+    await page.getByRole("textbox", { name: "Name" }).fill("Night Drive");
+    await page.getByRole("button", { name: "Create" }).tap();
+    await expect(open.getByTitle("Double-click to rename")).toHaveText("Night Drive");
+
+    await page
+      .getByRole("list", { name: "Projects" })
+      .getByRole("button", { name: `Open ${firstName}` })
+      .tap();
+    await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    await expect(open.getByTitle("Double-click to rename")).toHaveText(firstName);
+  });
+
+  test("inside a project, choosing a track takes you to it in the Studio (MOBILE-19.3)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await tab(page, "Projects").tap();
+
+    // The project's chips, and its tracks with their chains.
+    await expect(page.getByRole("button", { name: /BPM$/ })).toBeVisible();
+    await openGroupCard(page, "main");
+    const tracks = page.getByRole("region", { name: "main" });
+    await expect(tracks.getByTestId("tree-track")).toHaveCount(1);
+    await expect(tracks.getByText("Subtractive", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: /Add a track to main/i }).tap();
+    await page.getByRole("menuitem", { name: "New MIDI track" }).tap();
+    await expect(tracks.getByTestId("tree-track")).toHaveCount(2);
+    await tracks.getByTestId("tree-track").first().tap();
+    await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
+    await expect(sheet(page).getByText("subtractive", { exact: true })).toBeVisible();
+  });
+
+  test("swapping a sound from Explore goes back to the Studio, so you can see what it just did", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(sheet(page).getByText("subtractive", { exact: true })).toBeVisible();
+
+    await tab(page, "Explore").tap();
+    await openExploreCategory(page, "Instruments");
+    await swapFromExplore(page, "FM", "tap");
+
+    // The track it changed is in the Studio, so that is where you land; staying on a
+    // full-screen tab would show nothing happening.
+    await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
+    await expect(sheet(page).getByText("fm", { exact: true })).toBeVisible();
+  });
+
+  test("the pads sit under the roll, in the key they say they are in", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // In C major the in-scale pads are the white keys, closing on the octave above - the
+    // closing tonic is what gives the leading tone a gap to sit in.
+    const names = await pads(page)
+      .locator("[data-pitches]")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+    expect(names).toEqual(["C#3", "D#3", "F#3", "G#3", "A#3", "C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4"]);
+    // Under the roll, not beside it: you play a phrase and watch it land without moving.
+    const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
+    expect((await pads(page).boundingBox())!.y).toBeGreaterThan(roll.y);
+  });
+
+  test("playing the pads records a take - the phone can capture, not just arrange", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // Count-in is a timing setting, on the Timing page with the others (MOBILE-11, MOBILE-19).
+    await setCountIn(page, "None");
+
+    const record = page.getByRole("button", { name: "Record", exact: true });
+    await record.tap();
+    await expect(record).toHaveAttribute("aria-pressed", "true");
+
+    // Held with the mouse rather than tapped: a tap has no duration, and a note's duration
+    // is the thing being captured.
+    await holdPad(page, "C3", 140);
+    await holdPad(page, "E3", 140);
+    await expect(page.getByTestId("ghost-note")).toHaveCount(2);
+
+    await record.tap();
+    await expect(record).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("lane").getByText("Take 1")).toBeVisible();
+  });
+
+  test("chords mode turns each pad into its chord, with the variations stacked above", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+
+    // The base row is each degree's triad, closing on the tonic, as the note row does.
+    const base = await pads(page)
+      .locator('[data-chord-row="0"] [data-pitches]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+    expect(base).toEqual(["C", "Dm", "Em", "F", "G", "Am", "B°", "C"]);
+    // Rows of variations come with room: raised, the sheet shows the default three.
+    await setDetent(page, "full");
+    await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "G7" })).toBeVisible();
+
+    // One press plays the whole chord, and it records as its notes.
+    const record = page.getByRole("button", { name: "Record", exact: true });
+    await setCountIn(page, "None");
+    await record.tap();
+    await holdPad(page, "Am", 140);
+    await expect(page.getByTestId("ghost-note")).toHaveCount(3);
+    await record.tap();
+
+    // The octave arrows move the chords, as they move the notes.
+    await expect(pads(page).getByText("C3", { exact: true })).toBeVisible();
+    await pads(page).getByRole("button", { name: "Higher octave" }).tap();
+    await expect(pads(page).getByText("C4", { exact: true })).toBeVisible();
+    await expect(pad(page, "C").first()).toHaveAttribute("data-pitches", "60,64,67");
+  });
+
+  test("arranging the chords: move one in its column, star it, hide it, and scroll to the rest", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+    await setDetent(page, "full");
+
+    // Every variation is reachable by scrolling, however few rows are on show.
+    const scroller = pads(page).locator("[data-chord-scroll]");
+    const top = scroller.locator("[data-chord-row]").last();
+    await expect(top).not.toBeInViewport();
+    await scroller.evaluate((element) => element.scrollTo({ top: -element.scrollHeight }));
+    await expect(top).toBeInViewport();
+    await scroller.evaluate((element) => element.scrollTo({ top: 0 }));
+    await page.screenshot({ path: "test-results/chord-pads.png" });
+
+    // Popular by default: the iii column leads with E, the V of vi, not its 7th.
+    await expect(
+      pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "E", exact: true }),
+    ).toBeVisible();
+    // Type puts the same family in every row.
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitem", { name: "Arrange by" }).click();
+    await page.getByRole("menuitemradio", { name: "Type" }).click();
+    await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Em7" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitem", { name: "Edit chords…" }).click();
+    // Editing, a tap selects rather than plays.
+    await pad(page, "Dsus4").tap();
+    await expect(pad(page, "Dsus4")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("ghost-note")).toHaveCount(0);
+
+    // Down, in its own column: it swaps with the 7th below it there, and only there.
+    await pads(page).getByRole("button", { name: "Move down" }).tap();
+    await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Dsus4" })).toBeVisible();
+    await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Em7" })).toBeVisible();
+
+    await pads(page).getByRole("button", { name: "Star as a favourite" }).tap();
+    await expect(pad(page, "Dsus4")).toContainText("★");
+    await page.screenshot({ path: "test-results/chord-edit.png" });
+
+    // Hidden, it is gone once editing is done.
+    await pads(page).getByRole("button", { name: "Hide" }).tap();
+    await pads(page).getByRole("button", { name: "Done" }).tap();
+    await expect(pad(page, "Dsus4")).toHaveCount(0);
+    // Editing switched it to Custom, and the arrangement is kept across a reload.
+    await page.reload();
+    await dismissStart(page);
+    await setDetent(page, "full");
+    await expect(pad(page, "Dsus4")).toHaveCount(0);
+    await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Em7" })).toBeVisible();
+  });
+
+  test("the roll folds away like the pads do, giving the pads the sheet for more rows of chords", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+    const rows = () => pads(page).locator("[data-chord-row]").count();
+    const more = pads(page).getByRole("button", { name: "More chord rows" });
+    while (await more.isEnabled()) await more.tap();
+    const shared = await pads(page).evaluate((section) => section.getBoundingClientRect().height);
+
+    // Two sections, one style: the roll's header folds it exactly as the pads' header folds them.
+    const roll = page.locator('[data-section="roll"]');
+    await roll.getByRole("button", { expanded: true }).tap();
+    await expect(page.getByTestId("roll-scroll")).toHaveCount(0);
+    while (await more.isEnabled()) await more.tap();
+    expect(await pads(page).evaluate((section) => section.getBoundingClientRect().height)).toBeGreaterThan(shared);
+    expect(await rows()).toBeGreaterThan(1);
+    // Every row that fits, stretched into the rest: no gap under the folded roll worth a row, and
+    // nothing pushed past the foot of the sheet.
+    const layout = await page.evaluate(() => {
+      const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      return {
+        gap: box('[data-section="pads"]').top - box('[data-section="roll"]').bottom,
+        overflow: box('[data-chord-row="0"]').bottom - innerHeight,
+      };
+    });
+    expect(layout.gap).toBeLessThan(16);
+    expect(layout.overflow).toBeLessThanOrEqual(0);
+
+    // Asking for a surface unfolds it.
+    await page.getByRole("radio", { name: "Clips" }).click();
+    await expect(page.locator('[data-section="clips"]')).toHaveAttribute("data-open", "true");
+    await page.getByRole("radio", { name: "Edit" }).click();
+    await expect(page.getByTestId("roll-scroll")).toBeVisible();
+  });
+
+  test("a long chord name shrinks to fit its pad rather than overflowing it", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+    // F# minor: sharp roots, and a half-diminished seventh on the second degree (G#m7♭5).
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitem", { name: "Key" }).click();
+    await page.getByRole("menuitemradio", { name: "F#" }).click();
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitem", { name: "Scale" }).click();
+    await page.getByRole("menuitemradio", { name: "minor", exact: true }).click();
+    await setDetent(page, "full");
+    const more = pads(page).getByRole("button", { name: "More chord rows" });
+    while (await more.isEnabled()) await more.tap();
+
+    await expect(pad(page, "G#m7♭5")).toBeVisible();
+    const overflowing = await pads(page)
+      .locator("[data-pitches] > span:first-child")
+      .evaluateAll((labels) =>
+        labels
+          .filter((label) => label.getBoundingClientRect().width > label.parentElement!.clientWidth)
+          .map((label) => label.textContent),
+      );
+    expect(overflowing).toEqual([]);
+  });
+
+  test("sliding sideways runs the notes under your finger, without latching them", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    const from = (await pad(page, "C3").boundingBox())!;
+    const to = (await pad(page, "E3").boundingBox())!;
+    const lane = from.y + from.height / 2;
+    await page.mouse.move(from.x + from.width / 2, lane);
+    await page.mouse.down();
+    await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "true");
+
+    // Along the row, so the axis lock reads it as a slide rather than as the sustain drag.
+    await page.mouse.move(to.x + to.width / 2, lane, { steps: 8 });
+    await expect(pad(page, "E3"), "the note follows the finger").toHaveAttribute("aria-pressed", "true");
+    await expect(pad(page, "C3"), "and the one it left goes quiet").toHaveAttribute("aria-pressed", "false");
+
+    // A slide never latches: it committed to the other axis on its first 8px, so letting go
+    // leaves nothing sounding however far down the row it wandered.
+    await page.mouse.up();
+    await expect(pad(page, "E3")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("the pads stay under whichever surface is showing, so you can play while you tweak", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    for (const name of ["Clips", "Rack"]) {
+      await segment(page, name).tap();
+      await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
+      expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
+    }
+
+    // And they still play from there, which is the point: hearing what a device does to a
+    // note without leaving the device to play one.
+    const box = (await pad(page, "C3").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.up();
+    await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("dragging down off a pad latches it, and the next note lets it go", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    const box = (await pad(page, "C3").boundingBox())!;
+    // From the pad's top edge, so a 50px drag is still on screen at the bottom of the sheet.
+    await page.mouse.move(box.x + box.width / 2, box.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + 54, { steps: 4 });
+    await page.mouse.up();
+    await expect(pad(page, "C3"), "still sounding with nothing holding it").toHaveAttribute("aria-pressed", "true");
+
+    // Playing a new note releases the held ones - the simple rule, shipped knowing you can
+    // then only hold *instead of* playing.
+    await pad(page, "E3").tap();
+    await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("the octave range grows in whole rows, and the roll grows with the sheet too", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "half");
+
+    const grow = page.getByRole("button", { name: /More octaves/ });
+    const rows = () => pads(page).locator("[data-pad-row]").count();
+    const rollHeight = async () => (await page.getByTestId("roll-scroll").boundingBox())!.height;
+    expect(await rows()).toBe(1);
+
+    /** Ask for octaves until the sheet stops giving them, and report what it settled on. */
+    const fill = async () => {
+      for (let press = 0; press < 10 && !(await grow.isDisabled()); press++) await grow.tap();
+      // The part only a browser can tell you: what it stopped at still fits inside the
+      // sheet rather than under its bottom edge.
+      expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
+      return { rows: await rows(), roll: await rollHeight() };
+    };
+
+    const half = await fill();
+    await setDetent(page, "full");
+    const full = await fill();
+
+    // Both surfaces grow, which is the point: the pads take a *share* of the editor, so
+    // raising the sheet buys rows and notes rather than spending it all on pads. A flat
+    // reserve for the roll left it the same sliver at every detent, and a ratio is what says
+    // "materially more" - the bug this guards is a roll that comes back the same size.
+    //
+    // Deliberately not an absolute pixel figure. Rows fit in whole steps, so how much room is
+    // left over for the roll depends on the pad row height, and an absolute threshold silently
+    // encodes that: shortening the accidentals by 4px packs one more row into the same share
+    // and takes the difference out of exactly this number.
+    expect(full.rows).toBeGreaterThan(half.rows);
+    expect(full.roll).toBeGreaterThan(half.roll * 1.1);
+    expect(half.roll, "the roll is readable even at Half, with the pads filled").toBeGreaterThan(120);
+
+    // The count is a request, not a promise: dropping back gives the rows away and raising
+    // the sheet again honours what was asked for, without asking again.
+    await setDetent(page, "half");
+    expect(await rows()).toBe(half.rows);
+    await setDetent(page, "full");
+    expect(await rows()).toBe(full.rows);
+  });
+
+  test("a long submenu stays on screen instead of running off the bottom", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // The pads' key menu sits at the bottom of the sheet and its Key list is twelve rows,
+    // which opened level with its own row would put most of them under the fold.
+    await page.getByRole("button", { name: "Key and scale" }).tap();
+    await page.getByRole("menuitem", { name: "Key" }).click();
+    const submenu = page.getByRole("menu").last(); // the flyout, nested inside the popover
+    const box = (await submenu.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(PHONE.height);
+  });
+
+  test("the agent is a top-bar button, opening a sheet over the app", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    const composer = page.getByRole("textbox", { name: /message the agent/i });
+    await page.getByRole("button", { name: "Agent" }).tap();
+    const agent = page.getByRole("dialog", { name: "Agent" });
+    await expect(agent).toBeVisible();
+    await expect(composer).toBeVisible();
+
+    // Closing keeps it mounted, so a conversation in flight survives a look at the work.
+    await page.keyboard.press("Escape");
+    await expect(agent).toHaveAttribute("inert", "");
+    await expect(page.getByRole("textbox", { name: /message the agent/i, includeHidden: true })).toHaveCount(1);
+  });
+});
+
+test.describe("phone, landscape", () => {
+  test.use({ viewport: LANDSCAPE, hasTouch: true, isMobile: true });
+
+  test("gets its own detents, because it is wide but very short", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    await setDetent(page, "full");
+    // Of the *workspace*, which is what a detent is a fraction of - the viewport also
+    // holds the top bar, so measuring against that folds in a constant and tells you less.
+    const share = await sheet(page).evaluate((el) => el.clientHeight / (el.parentElement?.clientHeight ?? 1));
+    // Its Full covers more than a portrait phone's 0.86, or the sliver left over on a
+    // ~390px-tall screen would be too small to be worth leaving.
+    expect(share).toBeGreaterThan(0.9);
+  });
+
+  test("needs no special case: the editor has the sheet to itself", async ({ page }) => {
+    // A rack taller than the viewport used to squeeze the roll to nothing when the two
+    // shared a surface. They no longer do.
+    await page.addInitScript(() => localStorage.setItem("corrente:devices-height", "600"));
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+    await segment(page, "Edit").tap();
+
+    // The pads do share it, and at ~390px tall they take most of what the roll had. That is
+    // what their disclosure is for: collapsing them hands the height straight back.
+    await pads(page).getByRole("button", { expanded: true }).tap();
+    const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
+    expect(roll.height, "the roll has the sheet to itself").toBeGreaterThan(120);
+    expect(roll.width, "and the full width").toBeGreaterThan(700);
+  });
+
+  test("the velocity lane starts folded away on touch, and its setting brings it back", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "full");
+    await segment(page, "Edit").tap();
+
+    // 56px of lane is a whole row of pads, and velocity still reads as note fill strength -
+    // so on touch the lane is off until it is asked for.
+    const lane = page.getByTitle("Velocity - drag a bar");
+    await expect(lane).toBeHidden();
+    await openSettingsPage(page, "Piano roll");
+    await page.getByRole("radiogroup", { name: "Velocity lane" }).getByRole("radio", { name: "On" }).click();
+    await page.getByRole("button", { name: "Close settings" }).tap();
+    await expect(lane).toBeVisible();
+  });
+
+  test("says there is no room to play rather than showing half a pad", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    // ~133px of editor at Half is not one row of pads plus the controls to drive it, however
+    // the numbers are shuffled. Full is, once the controls fold into the section's header.
+    await setDetent(page, "half");
+    await expect(pads(page)).toContainText("Raise the sheet to play");
+    await expect(pads(page).locator("[data-pitches]")).toHaveCount(0);
+
+    await setDetent(page, "full");
+    await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
+    expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
+    // Landscape is short but wide, so the header has the width to take the controls.
+    await expect(pads(page).getByRole("button", { name: "Key and scale" })).toBeVisible();
+  });
+});
+
+test.describe("tablet", () => {
+  test.use({ viewport: TABLET, hasTouch: true, isMobile: true });
+
+  test("gets the touch shell too, tiered as tablet", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(shell(page)).toHaveAttribute("data-device-tier", "tablet");
+    await expect(sheet(page)).toBeVisible();
+    await expect(desktopRail(page)).toHaveCount(0);
+  });
+
+  test("has the same tabs, and docks the agent beside the workspace", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(tabBar(page)).toBeVisible();
+
+    // Docked, not a sheet: no scrim, and it sits beside the workspace rather than over it.
+    await page.getByRole("button", { name: "Agent" }).tap();
+    const agent = page.getByRole("complementary", { name: "Agent" });
+    await expect(agent).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Agent" })).toHaveCount(0);
+    expect((await agent.boundingBox())!.x, "agent on the right").toBeGreaterThan(TABLET.width / 2);
+
+    // The sheet belongs to the workspace column: the docked agent owns its full height, so
+    // the sheet must end where the agent starts rather than sliding underneath it.
+    const sheetBox = (await sheet(page).boundingBox())!;
+    expect(sheetBox.x + sheetBox.width, "sheet ends before the agent").toBeLessThanOrEqual(
+      (await agent.boundingBox())!.x + 1,
+    );
+
+    // The top bar's ✦ (the docked panel has an "Agent" control of its own).
+    await page.getByRole("button", { name: "Agent" }).first().tap();
+    await expect(agent).toHaveCount(0);
+  });
+});
+
+test.describe("desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("keeps the four-region grid, its own toolbars and no editor sheet", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(shell(page)).toHaveCount(0);
+    await expect(desktopRail(page)).toBeVisible();
+    await expect(sheet(page)).toHaveCount(0);
+  });
+
+  test("a window too narrow for the grid falls back to the touch shell", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(desktopRail(page)).toBeVisible();
+
+    await page.setViewportSize({ width: 700, height: 900 });
+    await expect(shell(page)).toBeVisible();
+    await expect(sheet(page)).toBeVisible();
+    await expect(desktopRail(page)).toHaveCount(0);
+  });
+});
+
+test.describe("phone (arrangement clips)", () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  /** The timeline, with the seed track's block on screen. */
+  async function openTimeline(page: Page) {
+    await page.goto("/");
+    await dismissStart(page);
+    await setDetent(page, "peek"); // get the editor sheet out of the arrangement's way
+    await expect(page.getByTestId("placement").first()).toBeVisible();
+  }
+
+  /**
+   * The same answer as the roll's notes, reached by the same component (MOBILE-7): selection is
+   * the substitute for hover, so only the selected clip carries handles and they can be
+   * finger-sized. What differs is what an edge drag *means* - trim, not resize - and that a clip
+   * gets no move grip, being tall enough to grab directly and moving only in time.
+   */
+  test("a selected clip grows finger-sized handles and a kebab", async ({ page }) => {
+    await openTimeline(page);
+    await page.getByTestId("placement").first().tap();
+
+    for (const edge of ["start", "end"] as const) {
+      const box = (await page.getByTestId(`clip-handle-${edge}`).boundingBox())!;
+      expect(box.width, `the ${edge} handle is a touch target`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `the ${edge} handle is a touch target`).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByTestId("clip-actions"), "the kebab is for touch only").toBeVisible();
+    await expect(page.getByTestId("clip-move"), "a clip needs no move grip").toHaveCount(0);
+  });
+
+  test("the kebab deletes the clip", async ({ page }) => {
+    await openTimeline(page);
+    const before = await page.getByTestId("placement").count();
+    await page.getByTestId("placement").first().tap();
+
+    await page.getByTestId("clip-actions").getByRole("button").tap();
+    await page.getByRole("menuitem", { name: "Delete" }).tap();
+
+    await expect(page.getByTestId("placement")).toHaveCount(before - 1);
+  });
+});
+
+test.describe("phone (backgrounding)", () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  /**
+   * DAW-33. A backgrounded page has its timers throttled, and the scheduler is a timer: it wakes,
+   * finds the window it should have covered already gone past, and skips it (DAW-32). So a
+   * minimised phone plays a sparse, arrhythmic version of the project to nobody. There is nothing
+   * worth preserving in that, so hiding the app stops the transport.
+   */
+  test("minimising the app stops the transport", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
+
+    await setVisibility(page, "hidden");
+
+    await expect(page.getByRole("button", { name: /Play/ }), "the transport stopped").toBeVisible();
+  });
+
+  /**
+   * The half of DAW-33 that the transport cannot reach. A hidden page's audio thread is starved
+   * rather than stopped, so it underruns and repeats itself - audible as a gargle even with
+   * nothing playing - and `currentTime` runs on unattended, so coming back means racing across
+   * the gap. Suspending stops the render and freezes the clock; both symptoms go with it.
+   */
+  test("minimising the app parks the audio thread, and returning wakes it", async ({ page }) => {
+    // Instrumented at the prototype rather than read off the engine: the context is private to
+    // `AudioEngine`, and a hook to expose it would be production surface bought for one assertion.
+    await page.addInitScript(() => {
+      const calls: string[] = [];
+      (window as unknown as { __contextCalls: string[] }).__contextCalls = calls;
+      for (const name of ["suspend", "resume"] as const) {
+        const real = AudioContext.prototype[name];
+        AudioContext.prototype[name] = function patched(this: AudioContext) {
+          calls.push(name);
+          return real.call(this);
+        };
+      }
+    });
+    const calls = () => page.evaluate(() => (window as unknown as { __contextCalls: string[] }).__contextCalls);
+
+    await page.goto("/");
+    await dismissStart(page); // starting audio resumes the context, which is not what we are asserting
+    await page.evaluate(() => ((window as unknown as { __contextCalls: string[] }).__contextCalls.length = 0));
+
+    await setVisibility(page, "hidden");
+    await expect.poll(calls, { message: "the audio thread was parked" }).toContain("suspend");
+
+    await setVisibility(page, "visible");
+    await expect.poll(calls, { message: "the audio thread woke again" }).toContain("resume");
+  });
+});

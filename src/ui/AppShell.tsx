@@ -1,0 +1,502 @@
+/**
+ * The app shell. Owns the project (tracks), the AudioEngine, and the Scheduler;
+ * handles the audio-start gesture and computer-keyboard input (to the selected
+ * track); restores/persists the project; bridges to MCP; and hosts the dialogs.
+ *
+ * The *layout* is a swappable shell (MOBILE-1): `DesktopShell` is the video-editor
+ * spine (activity rail + library | center | agent, timeline), `MobileShell` is the
+ * touch layout (pinned transport, one view, bottom tabs). Everything above is shared,
+ * so mobile is another projection of the same stores rather than a fork.
+ */
+import { openProjectsPage } from "./projects/projectsPage";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ProjectStore } from "../audio/project/projectStore";
+import { AudioEngine } from "../audio/engine/AudioEngine";
+import { Scheduler } from "../audio/sequencer/scheduler";
+import { connectMcpBridge, localBridgeReachable, type McpStatus } from "../audio/mcp/bridge";
+import { Recorder } from "../audio/recording/recorder";
+import { LiveNotes } from "../audio/live/liveNotes";
+import { SoundPreview } from "../audio/live/preview";
+import { noteUsed } from "./explore/recent/store";
+import { MidiInput } from "../audio/midi/midiInput";
+import { attachAutosave, attachUndoPersistence } from "../audio/persistence";
+import { initProjects, forkProjectFromSnapshot } from "../audio/projects/operations";
+import { listProjects, subscribeProjects } from "../audio/projects/library";
+import {
+  currentProjectId,
+  loadedProjectId,
+  setCurrentProject,
+  subscribeCurrentProject,
+} from "../audio/projectRepository";
+import {
+  reportUnreadableProject,
+  rebuildProjectState,
+  startProjectBeside,
+  subscribeUnreadableProject,
+} from "../audio/projects/recovery";
+import { readCurrentUser, subscribeCurrentUser } from "./currentUser";
+import type { SharedSession } from "../audio/sync/sharedSession";
+import { followProjectSessions } from "../audio/sync/projectSession";
+import type { ConflictInfo } from "../audio/sync/conflict";
+import type { ProjectData } from "../audio/project/types";
+import { requestPersistentStorage } from "../audio/bundleStore";
+import type { WsStatus } from "../contract/client";
+import { OfflineBanner, LoadingOverlay } from "./ConnectionStatus";
+import { UpdateNotice } from "./UpdateNotice";
+import { applyUpdate, useUpdateWaiting } from "../pwa/serviceWorkerUpdate";
+import { ConflictDialog } from "./ConflictDialog";
+import { RecoveryDialog } from "./RecoveryDialog";
+import { takeAuthReturnPath } from "../auth/session";
+import { VersionStore } from "../audio/commands/history";
+import { useProject } from "../audio/project/useProject";
+import { projectIdFromLocation, projectIdFromPath, syncProjectUrl } from "./projectUrl";
+import { useRememberedSelection } from "./rememberedSelection";
+import { EditLog } from "../audio/commands/editLog";
+import { setDragGestureScope } from "./dragGesture";
+import { type LibraryView } from "./ActivityRail";
+import { DesktopShell } from "./shell/DesktopShell";
+import { MobileShell } from "./shell/MobileShell";
+import { useDeviceShape } from "./shell/useDeviceShape";
+import { useBackgroundAudio } from "./shell/useBackgroundAudio";
+import type { ShellProps } from "./shell/types";
+import { SettingsPanel, type SettingsTab } from "./SettingsPanel";
+import { SharePanel } from "./SharePanel";
+import { useAgentConfig } from "./useAgentConfig";
+import { useAuthorColors, useSyncAuthorColorVars } from "./useAuthorColors";
+import { useResolvedTheme } from "./theme";
+import { AuthorColorsProvider } from "./authorColorsContext";
+import { activeKey } from "../audio/agent/config";
+import { StartDialog } from "./StartDialog";
+import { usePersistentBoolean, usePersistentString } from "./usePersistent";
+import { readAutoQuantize } from "./quantizeSettings";
+import { readRecordOffsetMs } from "./recordOffset";
+import { readOutputDeviceId } from "./outputDevice";
+import { isTypingTarget } from "./typingTarget";
+
+const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
+
+// Computer-keyboard -> MIDI note, one octave from C4 (the classic tracker layout).
+const KEY_MAP: Record<string, number> = {
+  a: 60,
+  w: 61,
+  s: 62,
+  e: 63,
+  d: 64,
+  f: 65,
+  t: 66,
+  g: 67,
+  y: 68,
+  h: 69,
+  u: 70,
+  j: 71,
+  k: 72,
+};
+
+export function AppShell() {
+  const [projectStore] = useState(() => new ProjectStore());
+  const [engine] = useState(() => new AudioEngine());
+  const [editLog] = useState(() => new EditLog(projectStore));
+  const [started, setStarted] = useState(false);
+  const [startError, setStartError] = useState<string | undefined>();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [scheduler] = useState(() => new Scheduler(engine, projectStore, setIsPlaying));
+  // MIDI devices read the transport (tempo/beat grid/playing) through the scheduler. Wire it before
+  // any device is built (engine.start happens on a later user gesture, so this effect runs first).
+  useEffect(() => engine.setTransportClock(scheduler), [engine, scheduler]);
+  const [recorder] = useState(
+    () => new Recorder(engine, scheduler, projectStore, editLog.dispatch, readAutoQuantize, readRecordOffsetMs),
+  );
+  // Live-note routing (selected instrument + recorder + sustain), shared by the
+  // computer keyboard and hardware MIDI so both get velocity and pedal handling.
+  // The sound being tried in Explore (COMM-1.4.1): live notes play it, and a take records it
+  // onto a new track.
+  const [preview] = useState(() => new SoundPreview(engine, noteUsed));
+  // In an effect, not the initializer: React may run an initializer twice and keep only one result.
+  useEffect(() => recorder.setPreviewSource(preview), [recorder, preview]);
+  const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
+  const [midiInput] = useState(
+    () =>
+      new MidiInput({
+        onNoteOn: (note, velocity) => liveNotes.noteOn(note, velocity),
+        onNoteOff: (note) => liveNotes.noteOff(note),
+        onSustain: (down) => liveNotes.setSustain(down),
+      }),
+  );
+  const [mcpStatus, setMcpStatus] = useState<McpStatus>(() => (localBridgeReachable() ? "connecting" : "disconnected"));
+  // Sync-connection state (remote mode only; null in local/no-sync mode). `projectLoaded` gates the
+  // load overlay; `sawPeerEdit` marks the project as collaborative so the offline banner warns.
+  const [syncStatus, setSyncStatus] = useState<WsStatus | null>(null);
+  const [projectLoaded, setProjectLoaded] = useState(false);
+  const [sawPeerEdit, setSawPeerEdit] = useState(false);
+  // A reconnect conflict awaiting the user's choice (remote mode only). Held by the shared session; the
+  // dialog resolves it. `sessionRef` lets the dialog call back into the live session.
+  const [conflict, setConflict] = useState<{ info: ConflictInfo; myState: ProjectData } | null>(null);
+  // A project whose saved state could not be read (DAW-38). Nothing is being autosaved while this is
+  // set - the boot chain stopped before attaching it - so the damaged bundle stays as it was found
+  // until the dialog resolves.
+  const [recovery, setRecovery] = useState<{ detail: string } | null>(null);
+  useEffect(() => subscribeUnreadableProject((detail) => setRecovery({ detail })), []);
+  const sessionRef = useRef<SharedSession | null>(null);
+  const projectList = useSyncExternalStore(subscribeProjects, listProjects);
+  // Shared = someone shared it with us (role "editor") or we have seen a peer edit this session (so an
+  // owner with active collaborators warns too). Owner-with-idle-members isn't caught yet - a cheap
+  // server "shared" flag on the listing would close that; deferred to the conflict-flow increment.
+  const isSharedProject = sawPeerEdit || projectList.find((meta) => meta.id === currentProjectId())?.role === "editor";
+  const dispatch = editLog.dispatch;
+
+  // Which single library view is on show, and whether the panels are collapsed. These
+  // live here rather than in the desktop shell because `selectView` below
+  // expands the library panel as a side effect of changing the view. Panel *geometry*
+  // (widths, the timeline split) is private to the desktop shell.
+  const [libCollapsed, setLibCollapsed] = usePersistentBoolean("corrente:lib-collapsed", false);
+  const [libView, setLibView] = usePersistentString<LibraryView>("corrente:lib-view", "explore", LIBRARY_VIEWS);
+  const [agentCollapsed, setAgentCollapsed] = usePersistentBoolean("corrente:agent-collapsed", true);
+  const deviceShape = useDeviceShape();
+  // Null when the settings panel is closed. Open, it names the tab to show when a caller means one
+  // (the agent panel's link asks for Agent); the logo names none, and gets the tab you left it on.
+  const [settings, setSettings] = useState<{ tab?: SettingsTab } | null>(null);
+  // The project being shared (its id + name), or null when the Share panel is closed.
+  const [share, setShare] = useState<{ id: string; name: string } | null>(null);
+  const agentConfig = useAgentConfig();
+  const authorColors = useAuthorColors();
+  useSyncAuthorColorVars(authorColors);
+  // The palette is re-lit for a white ground, so every author-tinted surface needs to know
+  // which one it is on (see authorStyle.ts).
+  const theme = useResolvedTheme();
+  // The current user id (default "you"), stamped on local edits and used to paint *my* edits as the
+  // "you" hue while peers get their own colour (perspective-relative; see authorColors.ts).
+  const currentUser = useSyncExternalStore(subscribeCurrentUser, readCurrentUser, readCurrentUser);
+
+  // Rail interaction: a non-active icon selects its view (opening the panel if
+  // collapsed); the active icon toggles the panel collapsed.
+  const selectView = (view: LibraryView) => {
+    // Projects opens on the project you have open, with the list one step up (2026-10-13).
+    if (view === "project" && view !== libView) openProjectsPage("inside");
+    setLibView(view);
+    if (libCollapsed) setLibCollapsed(false);
+  };
+
+  // Stamp local edits with the current user id, so in a shared session each user's edits carry their
+  // identity (and colour). Temporary until real auth supplies the id.
+  useEffect(() => editLog.setLocalAuthor(currentUser), [editLog, currentUser]);
+
+  // Tell the drag layer which log a drag belongs to, so a drag is one entry and one authoritative
+  // edit however long it takes (DAW-8.13). Registered here because this is where the log lives;
+  // no draggable component has to know about it.
+  useEffect(() => {
+    setDragGestureScope(editLog);
+    return () => setDragGestureScope(null);
+  }, [editLog]);
+
+  const project = useProject(projectStore);
+  const selectedTrack = project.selectedTrackId ? projectStore.getTrack(project.selectedTrackId) : undefined;
+
+  /**
+   * A project has a link (`projectUrl.ts`): the URL names whichever project is open, and a URL
+   * that names one opens it.
+   *
+   * Read **once**, before anything can rewrite it - the sync below runs as soon as the project
+   * loads, so a link read any later would be reading what we had just written over it.
+   *
+   * Falling back to the path we left from when signing in: an OAuth round trip returns to the
+   * origin (see `signInWithProvider`), so on that boot the link is in the tab's memory rather
+   * than in the address bar. The sync below then puts it back on screen.
+   */
+  const linkedProjectId = useRef(projectIdFromLocation() ?? projectIdFromPath(takeAuthReturnPath() ?? ""));
+  const openProjectId = useSyncExternalStore(subscribeCurrentProject, currentProjectId);
+  const storeHolds = useSyncExternalStore(subscribeCurrentProject, loadedProjectId);
+  useRememberedSelection(storeHolds, projectStore, project.selectedTrackId);
+  useEffect(() => {
+    // Not before the library has opened something: until then the id is a placeholder, and
+    // pointing the address bar at it would clobber the link we were asked to open.
+    //
+    // And not while those two disagree. `setCurrentProject` repoints synchronously, but the
+    // store keeps the previous project until a load finishes some `await`s later, so during a
+    // switch `openProjectId` is the new project and `project.name` is still the old one's -
+    // which would put the old name's slug on the new project's URL. CI caught it; the gap is
+    // milliseconds locally and long enough there to see.
+    if (projectLoaded && storeHolds === openProjectId) syncProjectUrl(openProjectId, project.name);
+  }, [projectLoaded, storeHolds, openProjectId, project.name]);
+
+  const versionStore = useMemo(() => new VersionStore(projectStore, editLog), [projectStore, editLog]);
+
+  // Open the current project from the multi-project library (enumerates bundles,
+  // seeds the first project on a fresh install, and loads the persisted current one
+  // + its version history), then autosave on any change and auto-checkpoint. Async
+  // (OPFS); autosave/checkpoints attach only after, to avoid a redundant re-save.
+  useEffect(() => {
+    let active = true;
+    let disposePersistence = () => {};
+    let disposeUndo = () => {};
+    let disposeCheckpoints = () => {};
+    // Best-effort: keep the offline cache + write-queue from being evicted under storage pressure.
+    void requestPersistentStorage();
+    void initProjects({ projectStore, editLog, versionStore }, { preferId: linkedProjectId.current })
+      .then(() => {
+        if (!active) return;
+        // With a remote backend, edits ride the live WS channel and the authority persists them (the
+        // client no longer appends over HTTP): open a shared session and route each dispatched edit to it.
+        // Local-only backend keeps the HTTP/OPFS autosave. Version-history checkpoints stay client-side
+        // either way until Phase B moves them server-side.
+        const apiUrl = import.meta.env?.VITE_DAW_API_URL;
+        if (apiUrl) {
+          // One session per open project, replaced on every switch (HOST-24): see projectSession.ts.
+          disposePersistence = followProjectSessions(
+            { projectStore, editLog, versionStore, apiUrl },
+            {
+              onStatus: (status) => {
+                if (active) setSyncStatus(status);
+              },
+              // A session opening or closing means a different project: whether it is shared is learned
+              // afresh, and a clash belongs to the project it was raised in, so resolving it against the
+              // next one would discard or fork the wrong thing.
+              onSession: (session) => {
+                sessionRef.current = session;
+                if (!active) return;
+                setSawPeerEdit(false);
+                setConflict(null);
+              },
+              // A peer's edit marks the project collaborative, so the offline banner warns.
+              onPeerEdit: () => {
+                if (active) setSawPeerEdit(true);
+              },
+              onConflict: (info, myState) => {
+                if (active) setConflict({ info, myState });
+              },
+            },
+          );
+        } else {
+          disposePersistence = attachAutosave(projectStore, editLog);
+        }
+        // Both modes, deliberately (DAW-8.15). The project itself is saved by whichever branch ran
+        // above - autosave locally, the shared session when hosted - but the undo stacks belong to
+        // neither, and used to ride the local keyframe. That left a hosted session never writing
+        // them at all, so undo after a reload there was working from whatever a project switch last
+        // happened to leave behind.
+        disposeUndo = attachUndoPersistence(editLog);
+        disposeCheckpoints = versionStore.attach();
+      })
+      .catch((error) => {
+        // A project that cannot be read is a question for the user, not a line in the console: the
+        // log is still here and can rebuild it, and the one thing that must not happen meanwhile is
+        // an autosave writing the empty live store over it. Reported rather than set directly, so the
+        // switch path (`ProjectsHome`) raises the same dialog.
+        if (!reportUnreadableProject(error)) console.warn("[corrente] project load failed:", error);
+      })
+      .finally(() => {
+        if (active) setProjectLoaded(true);
+      });
+    return () => {
+      active = false;
+      disposePersistence();
+      disposeUndo();
+      disposeCheckpoints();
+    };
+  }, [projectStore, editLog, versionStore]);
+
+  useEffect(
+    () => () => {
+      midiInput.disable();
+      recorder.dispose();
+      scheduler.dispose();
+      engine.dispose();
+    },
+    [midiInput, recorder, scheduler, engine],
+  );
+
+  useEffect(() => {
+    // Only where the local MCP server could be listening; elsewhere it is refusals and retries.
+    if (!localBridgeReachable()) return;
+    const handle = connectMcpBridge(
+      { projectStore, engine, scheduler, editLog, versionStore },
+      { onStatus: setMcpStatus },
+    );
+    return () => handle.dispose();
+  }, [projectStore, engine, scheduler, editLog, versionStore]);
+
+  // Undo / redo (Cmd/Ctrl-Z, Shift+Cmd/Ctrl-Z), unless typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      if (e.shiftKey) editLog.redo();
+      else editLog.undo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editLog]);
+
+  const updateWaiting = useUpdateWaiting();
+
+  // Hiding a touch app stops the transport and parks the audio thread (DAW-33).
+  useBackgroundAudio({ engine, scheduler, recorder, enabled: deviceShape.tier !== "desktop" });
+
+  // Space anywhere toggles play/stop, unless typing in a field (scheduler.play
+  // is a no-op until audio is started).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      if (scheduler.isPlaying) {
+        if (recorder.isActive)
+          void recorder.stop(); // finalize the take, not just stop
+        else scheduler.stop();
+      } else scheduler.play();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [scheduler, recorder]);
+
+  // Computer-keyboard plays the selected track's instrument (polyphonic) through the
+  // shared live-note router, which handles per-note instrument routing and sustain.
+  // Touch tiers only: the desktop shell plays the whole keyboard in key (`useKeyboardPlaying`).
+  const keyboardInShell = deviceShape.tier === "desktop";
+  useEffect(() => {
+    if (!started || keyboardInShell) return;
+    const onDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (isTypingTarget(e.target)) return; // don't play while typing (but toggles/knobs are fine)
+      if (e.metaKey || e.ctrlKey || e.altKey) return; // a shortcut (Cmd+A), not a note
+      const midi = KEY_MAP[e.key.toLowerCase()];
+      if (midi !== undefined) liveNotes.noteOn(midi);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      const midi = KEY_MAP[e.key.toLowerCase()];
+      if (midi !== undefined) liveNotes.noteOff(midi);
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [started, keyboardInShell, liveNotes]);
+
+  const handleStart = async () => {
+    try {
+      await engine.start(projectStore);
+    } catch (error) {
+      // Surface it in the dialog rather than rejecting into nothing: the most likely cause
+      // is an insecure context (no AudioWorklet), and the failure is otherwise completely
+      // silent - the button appears dead and the modal never goes away.
+      setStartError(error instanceof Error ? error.message : "The audio engine failed to start.");
+      return;
+    }
+    setStartError(undefined);
+    setStarted(true);
+    // Route to the remembered output device (if any) now that the context exists.
+    const outputId = readOutputDeviceId();
+    if (outputId) void engine.setOutputDevice(outputId);
+    // Best-effort: pick up a plugged-in MIDI keyboard from this user gesture. If the
+    // browser blocks it (or has no Web MIDI), the MIDI settings tab shows the state.
+    void midiInput.enable();
+  };
+
+  // The one prop bag both shells render against. Everything below this line is shared;
+  // only the layout differs (see shell/types.ts).
+  const shellProps: ShellProps = {
+    projectStore,
+    scheduler,
+    recorder,
+    editLog,
+    versionStore,
+    dispatch,
+    liveNotes,
+    preview,
+    selectedTrack,
+    isPlaying,
+    started,
+    mcpStatus,
+    syncStatus,
+    hasApiKey: activeKey(agentConfig) !== "",
+    libView,
+    onSelectView: selectView,
+    libCollapsed,
+    onToggleLibCollapsed: () => setLibCollapsed(!libCollapsed),
+    agentCollapsed,
+    onSetAgentCollapsed: setAgentCollapsed,
+    onOpenAgentSettings: () => setSettings({ tab: "agent" }),
+    onOpenSettings: () => setSettings({}),
+    onOpenTiming: () => setSettings({ tab: "timing" }),
+    onOpenShare: (id, name) => setShare({ id, name }),
+  };
+
+  return (
+    <AuthorColorsProvider value={{ config: authorColors, self: currentUser, theme }}>
+      {/* `dvh`, not `vh`: mobile browsers count their collapsing address bar in `vh`, so
+          a `100vh` shell puts the bottom tabs under the chrome until the user scrolls. */}
+      <div className="flex flex-col h-dvh overflow-hidden bg-ground text-ink">
+        {updateWaiting && <UpdateNotice onReload={applyUpdate} />}
+        {syncStatus === "offline" && <OfflineBanner shared={!!isSharedProject} />}
+        {deviceShape.tier === "desktop" ? (
+          <DesktopShell {...shellProps} />
+        ) : (
+          <MobileShell {...shellProps} shape={deviceShape} />
+        )}
+        {settings && (
+          <SettingsPanel
+            agentConfig={agentConfig}
+            authorColors={authorColors}
+            editLog={editLog}
+            midiInput={midiInput}
+            recorder={recorder}
+            engine={engine}
+            projectStore={projectStore}
+            dispatch={dispatch}
+            initialTab={settings.tab}
+            touch={deviceShape.tier !== "desktop"}
+            onClose={() => setSettings(null)}
+          />
+        )}
+        {share && <SharePanel projectId={share.id} projectName={share.name} onClose={() => setShare(null)} />}
+        {!started && <StartDialog onStart={handleStart} error={startError} />}
+        {!projectLoaded && <LoadingOverlay />}
+        {recovery && (
+          <RecoveryDialog
+            detail={recovery.detail}
+            // A reload rather than re-running the boot chain by hand: the bundle is well-formed again,
+            // so an ordinary start is the whole of the recovery. Same move the fork below makes.
+            onRebuild={async () => {
+              const outcome = await rebuildProjectState();
+              if (outcome.status === "rebuilt") window.location.reload();
+              return outcome.status === "rebuilt";
+            }}
+            onFork={async () => {
+              // Named off the library listing rather than the live store: after a failed SWITCH the
+              // store still holds the project we came from, and this is about the one we could not open.
+              const damaged = projectList.find((meta) => meta.id === currentProjectId())?.name ?? "Untitled";
+              await startProjectBeside(`${damaged} (recovered)`);
+              window.location.reload();
+            }}
+          />
+        )}
+        {conflict && (
+          <ConflictDialog
+            info={conflict.info}
+            onTakeTheirs={() => {
+              sessionRef.current?.discardPending(); // drop our held edits; converge on the peer's version
+              setConflict(null);
+            }}
+            onKeepMine={() => {
+              const { myState } = conflict;
+              void (async () => {
+                try {
+                  // Fork a copy carrying our offline edits, then converge the shared project on the peer's
+                  // version and reload into the copy (a fresh session attaches to the new project).
+                  const id = await forkProjectFromSnapshot(myState, `${myState.name} (copy)`);
+                  await sessionRef.current?.discardPending(); // durably clear the original's held queue first
+                  setCurrentProject(id);
+                  window.location.reload();
+                } catch (error) {
+                  console.warn("[corrente] keep-mine fork failed:", error);
+                }
+              })();
+            }}
+          />
+        )}
+      </div>
+    </AuthorColorsProvider>
+  );
+}

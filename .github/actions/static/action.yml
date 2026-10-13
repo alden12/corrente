@@ -1,0 +1,22 @@
+name: Static checks + build
+description: >-
+  Lint, format, build and the type checks. The same yarn scripts exist at the public repo's root and
+  the private monorepo's (which delegates them to its workspaces), so this serves both.
+runs:
+  using: composite
+  steps:
+    - name: Lint
+      shell: bash
+      run: yarn lint
+
+    - name: Format check (Prettier)
+      shell: bash
+      run: yarn format:check
+
+    - name: Typecheck + build (tsc -b + vite)
+      shell: bash
+      run: yarn build
+
+    - name: Typecheck the MCP servers (DOM-free)
+      shell: bash
+      run: yarn check:server
