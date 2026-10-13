@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { EngineBank, PlanRejected } from "../src/audio/bank/bank";
 import { EVENT, EventQueue } from "../src/audio/bank/events";
 import { BLOCK } from "../src/audio/bank/exports";
+import { TEST_INSTRUMENTS } from "../src/audio/bank/testInstruments";
 import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import type { DeviceDefinition } from "../src/audio/definitions/format";
@@ -221,4 +222,25 @@ describe("EngineBank", () => {
     bank.noteOn(0, 60, 1, 0);
     expect(render(bank, 1)[0]).toBeCloseTo(0.2, 6);
   });
+});
+
+describe("the new engine's test instruments", () => {
+  it.each(TEST_INSTRUMENTS.map((instrument) => [instrument.type, instrument] as const))(
+    "%s compiles against its params and sounds",
+    (_type, { schema, definition }) => {
+      const compiled = compileDefinition(definition, { params: schema.map((spec) => spec.id) });
+      const defaults = Object.fromEntries(
+        schema.map((spec) => [spec.id, spec.kind === "number" ? spec.default : 0] as const),
+      );
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, compiled, defaults);
+      bank.noteOn(0, 57, 1, 0);
+      const sound = Array.from({ length: 100 }, (_, block) => {
+        bank.process((block * BLOCK) / RATE);
+        return Array.from(bank.output(0, 0));
+      }).flat();
+      expect(Math.max(...sound.map(Math.abs))).toBeGreaterThan(0.05);
+      expect(sound.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 4)).toBe(true);
+    },
+  );
 });

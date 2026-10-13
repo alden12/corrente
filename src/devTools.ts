@@ -6,6 +6,7 @@
  * contains none of the bench's strings).
  */
 import { renderRebuildBench, wantsRebuildBench } from "./ui/rebuildBenchPage";
+import { registerTestInstruments } from "./audio/bank/testInstruments";
 
 /**
  * Install them, and say whether one has **taken over the page** - which is the caller's cue not to
@@ -23,6 +24,11 @@ export function installDevTools(): boolean {
     void renderRebuildBench();
     return true;
   }
+
+  // Instruments on the new engine to try it with (INST-36.5), before any device moves over. Not in
+  // the e2e run, whose tests count what the library holds. Synchronous, so they are registered
+  // before a project that uses one opens.
+  if (import.meta.env.MODE !== "test") registerTestInstruments();
 
   // The offline-render e2e harness: the `window.__daw*` hooks the Playwright suite calls. See
   // `audio/engine/renderHarness.ts` and AGENT-4.1.

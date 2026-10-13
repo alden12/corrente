@@ -1,0 +1,100 @@
+/**
+ * The main thread's engine banks (INST-36.5): a track slot for each device that plays on the new
+ * engine, in a worklet node shared with up to TRACKS_PER_BANK - 1 others. A bank is made when every
+ * slot is taken, and stopped when its last device goes.
+ *
+ * Per audio context, since a worklet module and its nodes belong to one (offline renders have their
+ * own). engine.wasm is fetched once and handed to each bank as it's made.
+ */
+import engineUrl from "../../../engine/engine.wasm?url";
+import workletUrl from "./engine.worklet.ts?worker&url";
+import { BANK_PROCESSOR, TRACKS_PER_BANK, type BankOptions, type FromBank, type ToBank } from "./messages";
+
+/** One device's place in a bank. */
+export interface BankSlot {
+  /** The bank's node; this slot plays on its output `track`. */
+  readonly node: AudioWorkletNode;
+  readonly track: number;
+  post(message: ToBank): void;
+  /** Free the slot: the track goes quiet, and the bank stops if it was the last. */
+  release(): void;
+}
+
+interface Bank {
+  node: AudioWorkletNode;
+  taken: boolean[];
+  /** Told what became of each slot's plan. */
+  listeners: (((message: FromBank) => void) | undefined)[];
+}
+
+let engineBytes: Promise<ArrayBuffer> | null = null;
+const fetchEngine = () =>
+  (engineBytes ??= fetch(engineUrl).then((response) => {
+    if (!response.ok) throw new Error(`couldn't load the audio engine (${response.status})`);
+    return response.arrayBuffer();
+  }));
+
+interface Pool {
+  bytes: ArrayBuffer;
+  banks: Bank[];
+}
+
+const pools = new WeakMap<BaseAudioContext, Promise<Pool>>();
+const poolFor = (context: BaseAudioContext) => {
+  let pool = pools.get(context);
+  if (!pool) {
+    pool = Promise.all([fetchEngine(), context.audioWorklet.addModule(workletUrl)]).then(([bytes]) => ({
+      bytes,
+      banks: [],
+    }));
+    pools.set(context, pool);
+  }
+  return pool;
+};
+
+// Synchronous, so slots taken together (a project's tracks, as it opens) fill one bank before
+// another is made.
+const newBank = (context: BaseAudioContext, bytes: ArrayBuffer): Bank => {
+  const processorOptions: BankOptions = { bytes: bytes.slice(0), tracks: TRACKS_PER_BANK };
+  const node = new AudioWorkletNode(context, BANK_PROCESSOR, {
+    numberOfInputs: 0,
+    numberOfOutputs: TRACKS_PER_BANK,
+    outputChannelCount: Array.from({ length: TRACKS_PER_BANK }, () => 2),
+    processorOptions,
+  });
+  const bank: Bank = { node, taken: Array.from({ length: TRACKS_PER_BANK }, () => false), listeners: [] };
+  node.port.onmessage = ({ data }: MessageEvent<FromBank>) => bank.listeners[data.track]?.(data);
+  return bank;
+};
+
+/**
+ * A free slot in one of the context's banks. `listener` hears whether each plan it's given loaded
+ * (the compiler checks plans first, so a refusal is a bug, not a typo).
+ */
+export const takeSlot = async (context: BaseAudioContext, listener: (message: FromBank) => void): Promise<BankSlot> => {
+  const { bytes, banks } = await poolFor(context);
+  let bank = banks.find((candidate) => candidate.taken.includes(false));
+  if (!bank) {
+    bank = newBank(context, bytes);
+    banks.push(bank);
+  }
+  const owner = bank;
+  const track = owner.taken.indexOf(false);
+  owner.taken[track] = true;
+  owner.listeners[track] = listener;
+  const post = (message: ToBank) => owner.node.port.postMessage(message);
+  return {
+    node: owner.node,
+    track,
+    post,
+    release: () => {
+      post({ type: "unload", track });
+      owner.taken[track] = false;
+      owner.listeners[track] = undefined;
+      if (owner.taken.includes(true)) return;
+      post({ type: "stop" });
+      owner.node.disconnect();
+      banks.splice(banks.indexOf(owner), 1);
+    },
+  };
+};

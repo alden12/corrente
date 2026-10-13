@@ -30,6 +30,9 @@ export class PlanRejected extends Error {
 
 const frequencyOf = (note: number) => 440 * 2 ** ((note - 69) / 12);
 
+/** A plan with nothing in it: no nodes, no steps, no outputs. What a free track plays. */
+const EMPTY_PLAN = Int32Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
 interface Track {
   plan: CompiledPlan | null;
   voices: VoiceAllocator;
@@ -87,6 +90,20 @@ export class EngineBank {
     plan.params.forEach((source, index) =>
       this.engine.eng_init_param(track, index, resolveNumber(state.values[source.param] ?? 0, source)),
     );
+    this.queue.clear(track);
+  }
+
+  /** Empty a track (its device went): it plays nothing, its queued events and knob values are dropped. */
+  unload(track: number): void {
+    const state = this.trackAt(track);
+    const pointer = this.engine.eng_malloc(EMPTY_PLAN.length * 4);
+    new Int32Array(this.engine.memory.buffer, pointer, EMPTY_PLAN.length).set(EMPTY_PLAN);
+    this.engine.eng_load(track, pointer, EMPTY_PLAN.length);
+    this.engine.eng_free(pointer);
+    this.view();
+    state.plan = null;
+    state.voices = new VoiceAllocator(0);
+    state.values = {};
     this.queue.clear(track);
   }
 
