@@ -1,0 +1,612 @@
+{
+  "faust": "2.88.0",
+  "blocks": [
+    {
+      "name": "add",
+      "kind": 0,
+      "description": "Adds two signals.",
+      "inputs": [
+        {
+          "name": "a",
+          "min": -24000,
+          "max": 24000
+        },
+        {
+          "name": "b",
+          "min": -24000,
+          "max": 24000
+        }
+      ],
+      "outputs": [
+        {
+          "name": "sum",
+          "min": -48000,
+          "max": 48000
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    },
+    {
+      "name": "adsr",
+      "kind": 1,
+      "description": "An attack, decay, sustain, release envelope from 0 to 1, following a gate.",
+      "inputs": [
+        {
+          "name": "gate",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "envelope",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "controls": [
+        {
+          "name": "attack",
+          "min": 0,
+          "max": 30,
+          "unit": "s",
+          "init": 0.005
+        },
+        {
+          "name": "decay",
+          "min": 0,
+          "max": 30,
+          "unit": "s",
+          "init": 0.2
+        },
+        {
+          "name": "sustain",
+          "min": 0,
+          "max": 1,
+          "init": 1
+        },
+        {
+          "name": "release",
+          "min": 0,
+          "max": 30,
+          "unit": "s",
+          "init": 0.2
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "envelopes.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "envelopes.lib/adsr",
+          "author": "Yann Orlarey and Andrey Bundin"
+        },
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "ladder",
+      "kind": 2,
+      "description": "A zero-delay-feedback Moog ladder low-pass, which self-oscillates as resonance nears 1.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -2,
+          "max": 2
+        }
+      ],
+      "controls": [
+        {
+          "name": "cutoff",
+          "min": 20,
+          "max": 20000,
+          "unit": "Hz",
+          "init": 4000
+        },
+        {
+          "name": "resonance",
+          "min": 0,
+          "max": 1,
+          "init": 0
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "vaeffects.lib/moogLadder",
+          "author": "Dario Sanfilippo",
+          "licence": "LicenseRef-STK-4.3"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "lowpass",
+      "kind": 3,
+      "description": "A resonant two-pole low-pass, the counterpart of Web Audio's biquad, whose peak at the cutoff rises with q. A state-variable filter, so it stays stable however fast the cutoff moves.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -40,
+          "max": 40
+        }
+      ],
+      "controls": [
+        {
+          "name": "cutoff",
+          "min": 20,
+          "max": 20000,
+          "unit": "Hz",
+          "init": 4000
+        },
+        {
+          "name": "q",
+          "min": 0.1,
+          "max": 40,
+          "init": 0.707
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "filters.lib/svf",
+          "author": "Oleg Nesterov",
+          "copyright": "Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "meter",
+      "kind": 4,
+      "description": "Passes its signal through unchanged and shows its level on a meter, as a channel meter does: it rises at once and falls back over about 300 ms.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [
+        {
+          "name": "level",
+          "min": 0,
+          "max": 2
+        }
+      ],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "mul",
+      "kind": 5,
+      "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
+      "inputs": [
+        {
+          "name": "a",
+          "min": -24000,
+          "max": 24000
+        },
+        {
+          "name": "b",
+          "min": -24000,
+          "max": 24000
+        }
+      ],
+      "outputs": [
+        {
+          "name": "product",
+          "min": -576000000,
+          "max": 576000000
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    },
+    {
+      "name": "noise",
+      "kind": 6,
+      "description": "White noise.",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "noise",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    },
+    {
+      "name": "onepole",
+      "kind": 7,
+      "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [
+        {
+          "name": "cutoff",
+          "min": 20,
+          "max": 20000,
+          "unit": "Hz",
+          "init": 8000
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "filters.lib/lowpass",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/lowpass0_highpass1",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/tf1",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/tf1s",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "pan",
+      "kind": 8,
+      "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "left",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "right",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [
+        {
+          "name": "pan",
+          "min": 0,
+          "max": 1,
+          "init": 0.5
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "period",
+      "kind": 9,
+      "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
+      "inputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        },
+        {
+          "name": "offset",
+          "min": 0,
+          "max": 100,
+          "unit": "samples"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "period",
+          "min": -100,
+          "max": 96000,
+          "unit": "samples"
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "pitch",
+      "kind": 10,
+      "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
+      "inputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 6144000,
+          "unit": "Hz"
+        }
+      ],
+      "controls": [
+        {
+          "name": "semitones",
+          "min": -96,
+          "max": 96,
+          "init": 0
+        }
+      ],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    },
+    {
+      "name": "saw",
+      "kind": 11,
+      "description": "A band-limited sawtooth.",
+      "inputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "oscillators.lib/saw2ptr",
+          "author": "Julius O. Smith III",
+          "licence": "LicenseRef-STK-4.3"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "shaper",
+      "kind": 12,
+      "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [
+        {
+          "name": "drive",
+          "min": 1,
+          "max": 100,
+          "init": 1
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "sine",
+      "kind": 13,
+      "description": "A sine wave.",
+      "inputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "delay",
+      "kind": 1000,
+      "description": "A delay line: its signal, `length` samples late, interpolated between samples. In a feedback loop it lets the loop run in chunks rather than a sample at a time.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "length",
+          "min": 0,
+          "max": 4094,
+          "unit": "samples"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    }
+  ]
+}

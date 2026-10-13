@@ -85,8 +85,19 @@ treat these as labels that tie related code together, not as links to follow.
   building the app use that file as is: no Rust, Faust or Docker needed.
 - **Changing anything under `engine/` means `yarn engine:build`** (needs Docker; the pinned toolchain
   image builds itself on first use, about 10 minutes, or longer on an ARM Mac, which emulates the x86
-  CI builds on so both produce the same bytes) **and committing the new `engine.wasm`** with
-  the change. CI rebuilds it and fails if the hash differs.
+  CI builds on so both produce the same bytes) **and committing the new `engine.wasm`** (and
+  catalogue and credits) with the change. CI rebuilds them and fails if any differs.
+- **A block declares what it is** in its source: `declare description`, `declare input_ports` and
+  `declare output_ports` (each port `name min max [unit]`, comma-separated), with `[unit:...]` on
+  sliders. The build turns these and Faust's own description into **`engine/catalogue.json`** (every
+  block's ports, ranges and licences, what the plan compiler and the MCP read) and
+  **`engine/CREDITS.md`**, both committed with `engine.wasm` and checked the same way.
+- **Ranges are real:** `test/engineBlocks.test.ts` drives every block across its declared input
+  ranges and fails if an output leaves its declared range. It found a biquad that blew up under fast
+  modulation, so a failure there is usually the block, not the range.
+- **Library licences are an allow list** (`ALLOWED_LICENCES` in `engine/catalogue.ts`): a block using
+  library code under any other licence fails the build. Faust's libraries include GPL-only code, so
+  adding a licence is a deliberate decision, not a fix to make the build pass.
 - The toolchain's versions are pinned in `engine/toolchain/Dockerfile`. Bumping one changes the
   engine's output, so it is its own change, with the rebuilt `engine.wasm`.
 - Rust in the engine is written to be read by people new to Rust: a short note on any Rust concept

@@ -1,4 +1,5 @@
 # Build output and generated artifacts
+engine/catalogue.json
 dist
 coverage
 playwright-report

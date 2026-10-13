@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "engine/compile.ts"]
+  "include": ["vite.config.ts", "engine/compile.ts", "engine/catalogue.ts"]
 }

@@ -1,8 +1,9 @@
 import("stdfaust.lib");
-// A zero-delay-feedback Moog ladder low-pass. Audio input: signal.
-// Control inputs (read every 32 samples, so the coefficients are not recomputed per sample):
-// cutoff (Hz), resonance (0..1, self-oscillates near 1).
-cutoff = hslider("[0]cutoff", 4000, 20, 20000, 0);
+declare description "A zero-delay-feedback Moog ladder low-pass, which self-oscillates as resonance nears 1.";
+declare input_ports "signal -1 1";
+declare output_ports "signal -2 2";
+// Controls are read every 32 samples, so the coefficients are not recomputed per sample.
+cutoff = hslider("[0]cutoff[unit:Hz]", 4000, 20, 20000, 0);
 resonance = hslider("[1]resonance", 0, 0, 1, 0);
 process = ve.moogLadder(normFreq, q)
 with {
