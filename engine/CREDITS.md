@@ -17,10 +17,31 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 - `envelopes.lib/adsr`, by Yann Orlarey and Andrey Bundin
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
+### chorus
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `oscillators.lib/lf_sawpos`, by Bart Brouns, revised by Stéphane Letz, under LicenseRef-STK-4.3
+
+### compressor
+
+- `analyzers.lib/amp_follower_ar`, by Jonatan Liljedahl, revised by Romain Michon
+- `compressors.lib/compression_gain_mono`, by Julius O. Smith III, Copyright (C) 2014-2020 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `signals.lib/onePoleSwitching`, by Jonatan Liljedahl, revised by Dario Sanfilippo, under LicenseRef-STK-4.3
+
+### hold
+
+- `basics.lib/sAndH`, by Romain Michon
+
 ### ladder
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 - `vaeffects.lib/moogLadder`, by Dario Sanfilippo, under LicenseRef-STK-4.3
+
+### lfo
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `oscillators.lib/lf_sawpos`, by Bart Brouns, revised by Stéphane Letz, under LicenseRef-STK-4.3
 
 ### lowpass
 
@@ -47,6 +68,22 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
+### pulse
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `oscillators.lib/lf_sawpos`, by Bart Brouns, revised by Stéphane Letz, under LicenseRef-STK-4.3
+- `oscillators.lib/sawN`, by Julius O. Smith III, under LicenseRef-STK-4.3
+
+### reverb
+
+- `filters.lib/allpass_comb`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `filters.lib/lowpass`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `filters.lib/lowpass0_highpass1`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `filters.lib/tf1`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `filters.lib/tf1s`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `routes.lib/hadamard`, by Remy Muller, revised by Romain Michon
+
 ### saw
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
@@ -58,6 +95,11 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 
 ### sine
 
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
+### svf
+
+- `filters.lib/svf`, by Oleg Nesterov, Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>, under LicenseRef-STK-4.3
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
 ## Licence texts

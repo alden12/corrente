@@ -100,8 +100,216 @@
       ]
     },
     {
-      "name": "ladder",
+      "name": "chorus",
       "kind": 2,
+      "description": "A stereo chorus: each channel mixed with a copy of itself, delayed by a few milliseconds that drift with a slow LFO, the two channels a quarter cycle apart.",
+      "inputs": [
+        {
+          "name": "left",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "right",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "left",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "right",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [
+        {
+          "name": "rate",
+          "min": 0.01,
+          "max": 5,
+          "unit": "Hz",
+          "init": 0.6
+        },
+        {
+          "name": "depth",
+          "min": 0,
+          "max": 1,
+          "init": 0.5
+        },
+        {
+          "name": "delay",
+          "min": 1,
+          "max": 30,
+          "unit": "ms",
+          "init": 12
+        },
+        {
+          "name": "mix",
+          "min": 0,
+          "max": 1,
+          "init": 0.5
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "oscillators.lib/lf_sawpos",
+          "author": "Bart Brouns, revised by Stéphane Letz",
+          "licence": "LicenseRef-STK-4.3"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "compressor",
+      "kind": 3,
+      "description": "A stereo compressor: both channels turned down together when the louder passes the threshold, then made up by the gain. Its meter shows the reduction in dB.",
+      "inputs": [
+        {
+          "name": "left",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "right",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "left",
+          "min": -16,
+          "max": 16
+        },
+        {
+          "name": "right",
+          "min": -16,
+          "max": 16
+        }
+      ],
+      "controls": [
+        {
+          "name": "threshold",
+          "min": -60,
+          "max": 0,
+          "unit": "dB",
+          "init": -18
+        },
+        {
+          "name": "ratio",
+          "min": 1,
+          "max": 20,
+          "init": 4
+        },
+        {
+          "name": "attack",
+          "min": 0.0001,
+          "max": 1,
+          "unit": "s",
+          "init": 0.01
+        },
+        {
+          "name": "release",
+          "min": 0.001,
+          "max": 2,
+          "unit": "s",
+          "init": 0.1
+        },
+        {
+          "name": "makeup",
+          "min": 0,
+          "max": 24,
+          "unit": "dB",
+          "init": 0
+        }
+      ],
+      "meters": [
+        {
+          "name": "reduction",
+          "min": -60,
+          "max": 0,
+          "unit": "dB"
+        }
+      ],
+      "credits": [
+        {
+          "source": "analyzers.lib/amp_follower_ar",
+          "author": "Jonatan Liljedahl, revised by Romain Michon"
+        },
+        {
+          "source": "compressors.lib/compression_gain_mono",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2014-2020 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "signals.lib/onePoleSwitching",
+          "author": "Jonatan Liljedahl, revised by Dario Sanfilippo",
+          "licence": "LicenseRef-STK-4.3"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "hold",
+      "kind": 4,
+      "description": "Sample and hold: takes its signal's value each time the trigger rises above 0.5, and holds it until the next. With noise in, it makes random steps.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "trigger",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "basics.lib/sAndH",
+          "author": "Romain Michon"
+        }
+      ],
+      "licences": []
+    },
+    {
+      "name": "ladder",
+      "kind": 5,
       "description": "A zero-delay-feedback Moog ladder low-pass, which self-oscillates as resonance nears 1.",
       "inputs": [
         {
@@ -152,8 +360,62 @@
       ]
     },
     {
+      "name": "lfo",
+      "kind": 6,
+      "description": "A low-frequency oscillator with sine, triangle, saw and square outputs from -1 to 1, all starting their cycle together: sine and triangle rise from 0, the square is high for the first half, the saw climbs from -1. Its rate can move every sample.",
+      "inputs": [
+        {
+          "name": "rate",
+          "min": 0,
+          "max": 100,
+          "unit": "Hz"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "sine",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "triangle",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "saw",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "square",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "oscillators.lib/lf_sawpos",
+          "author": "Bart Brouns, revised by Stéphane Letz",
+          "licence": "LicenseRef-STK-4.3"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
       "name": "lowpass",
-      "kind": 3,
+      "kind": 7,
       "description": "A resonant two-pole low-pass, the counterpart of Web Audio's biquad, whose peak at the cutoff rises with q. A state-variable filter, so it stays stable however fast the cutoff moves.",
       "inputs": [
         {
@@ -206,7 +468,7 @@
     },
     {
       "name": "meter",
-      "kind": 4,
+      "kind": 8,
       "description": "Passes its signal through unchanged and shows its level on a meter, as a channel meter does: it rises at once and falls back over about 300 ms.",
       "inputs": [
         {
@@ -244,7 +506,7 @@
     },
     {
       "name": "mul",
-      "kind": 5,
+      "kind": 9,
       "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
       "inputs": [
         {
@@ -272,7 +534,7 @@
     },
     {
       "name": "noise",
-      "kind": 6,
+      "kind": 10,
       "description": "White noise.",
       "inputs": [],
       "outputs": [
@@ -289,7 +551,7 @@
     },
     {
       "name": "onepole",
-      "kind": 7,
+      "kind": 11,
       "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
       "inputs": [
         {
@@ -354,7 +616,7 @@
     },
     {
       "name": "pan",
-      "kind": 8,
+      "kind": 12,
       "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
       "inputs": [
         {
@@ -398,7 +660,7 @@
     },
     {
       "name": "period",
-      "kind": 9,
+      "kind": 13,
       "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
       "inputs": [
         {
@@ -438,7 +700,7 @@
     },
     {
       "name": "pitch",
-      "kind": 10,
+      "kind": 14,
       "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
       "inputs": [
         {
@@ -469,8 +731,162 @@
       "licences": []
     },
     {
+      "name": "pulse",
+      "kind": 15,
+      "description": "A band-limited pulse wave whose width can move every sample (pulse-width modulation): width 0.5 is a square from -1 to 1. It has no DC offset, as an analog synth's output has none, so a narrow pulse reaches towards 2 on its short side. An octave down, it is a sub-oscillator.",
+      "inputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        },
+        {
+          "name": "width",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -2,
+          "max": 2
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "oscillators.lib/lf_sawpos",
+          "author": "Bart Brouns, revised by Stéphane Letz",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "oscillators.lib/sawN",
+          "author": "Julius O. Smith III",
+          "licence": "LicenseRef-STK-4.3"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "reverb",
+      "kind": 16,
+      "description": "A stereo algorithmic reverb (Zita-Rev1): a short pre-delay, then a dense tail that decays over the time set, faster in the highs above the damping frequency.",
+      "inputs": [
+        {
+          "name": "left",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "right",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "left",
+          "min": -2,
+          "max": 2
+        },
+        {
+          "name": "right",
+          "min": -2,
+          "max": 2
+        }
+      ],
+      "controls": [
+        {
+          "name": "predelay",
+          "min": 0,
+          "max": 100,
+          "unit": "ms",
+          "init": 20
+        },
+        {
+          "name": "decay",
+          "min": 0.2,
+          "max": 10,
+          "unit": "s",
+          "init": 2.5
+        },
+        {
+          "name": "damping",
+          "min": 1500,
+          "max": 20000,
+          "unit": "Hz",
+          "init": 6000
+        },
+        {
+          "name": "mix",
+          "min": 0,
+          "max": 1,
+          "init": 0.3
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "filters.lib/allpass_comb",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/lowpass",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/lowpass0_highpass1",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/tf1",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "filters.lib/tf1s",
+          "author": "Julius O. Smith III",
+          "copyright": "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        },
+        {
+          "source": "routes.lib/hadamard",
+          "author": "Remy Muller, revised by Romain Michon"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
       "name": "saw",
-      "kind": 11,
+      "kind": 17,
       "description": "A band-limited sawtooth.",
       "inputs": [
         {
@@ -509,7 +925,7 @@
     },
     {
       "name": "shaper",
-      "kind": 12,
+      "kind": 18,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -548,7 +964,7 @@
     },
     {
       "name": "sine",
-      "kind": 13,
+      "kind": 19,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -577,6 +993,69 @@
       ],
       "licences": [
         "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "svf",
+      "kind": 20,
+      "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
+      "inputs": [
+        {
+          "name": "signal",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "lowpass",
+          "min": -40,
+          "max": 40
+        },
+        {
+          "name": "bandpass",
+          "min": -40,
+          "max": 40
+        },
+        {
+          "name": "highpass",
+          "min": -40,
+          "max": 40
+        }
+      ],
+      "controls": [
+        {
+          "name": "cutoff",
+          "min": 20,
+          "max": 20000,
+          "unit": "Hz",
+          "init": 1000
+        },
+        {
+          "name": "q",
+          "min": 0.1,
+          "max": 40,
+          "init": 0.707
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "filters.lib/svf",
+          "author": "Oleg Nesterov",
+          "copyright": "Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>",
+          "licence": "LicenseRef-STK-4.3"
+        },
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
       ]
     },
     {

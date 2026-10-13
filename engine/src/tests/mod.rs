@@ -86,7 +86,6 @@ struct SectionWords {
     steps: Vec<(i32, Vec<i32>)>,
 }
 
-// TS: class PlanBuilder { params = 0; voices = 4; latency = 0; sections = [new SectionWords(), ...]; voiceOut: Input[] = []; trackOut = [voiceSum(0), voiceSum(1)] }
 struct PlanBuilder {
     params: i32,
     voices: i32,
