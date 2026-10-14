@@ -22,6 +22,8 @@ interface LivePiece {
   piece: ChainPiece;
   /** In order: one effect, or a run's slots (one, or one per effect if the run split). */
   effects: Effect[];
+  /** What keys it, for a keyed effect's run (part 5): another key makes it again. */
+  key?: AudioNode;
 }
 
 export class ChainEffects {
@@ -31,49 +33,54 @@ export class ChainEffects {
 
   /**
    * Bring the live pieces in line with `chain`: make the new ones, drop the gone, remake the changed.
-   * `stageAt` gives the stage of the effect at each place in the chain.
+   * `stageAt` gives the stage of the effect at each place in the chain; `keys`, the key of each
+   * effect another track keys, by id (part 5: none until a project can say so, DAW-63).
    */
   reconcile(
     context: BaseAudioContext,
     chain: EffectInstance[],
     edited: Set<string>,
     stageAt: (index: number) => number = trackEffectStage,
+    keys: ReadonlyMap<string, AudioNode> = new Map(),
   ): void {
     const place = new Map(chain.map((effect, index) => [effect.id, index]));
     const stageOf = (effect: EffectInstance) => stageAt(place.get(effect.id)!);
-    const pieces = piecesOf(chain);
+    const keyOf = (piece: ChainPiece) =>
+      piece.kind === "run" ? piece.effects.map((effect) => keys.get(effect.id)).find((key) => key) : undefined;
+    const pieces = piecesOf(chain, new Set(keys.keys()));
     const wanted = new Map(pieces.map((piece) => [pieceKey(piece), piece]));
     // Runs that went, on one slot: one may be reloaded as a run that came.
     const gone: LivePiece[] = [];
     for (const [key, live] of this.live) {
       const { piece, effects } = live;
       const next = wanted.get(key);
-      const stale = !next || (piece.kind === "single" && edited.has(piece.effect.type));
+      const stale = !next || (piece.kind === "single" && edited.has(piece.effect.type)) || keyOf(next) !== live.key;
       const moved =
         next !== undefined && effects[0]?.stage !== undefined && effects[0].stage !== stageOf(firstOf(next));
       if (!stale && !moved) continue;
       this.live.delete(key);
-      if (!next && piece.kind === "run" && effects.length === 1) gone.push(live);
+      if (!next && piece.kind === "run" && effects.length === 1 && !live.key) gone.push(live);
       else effects.forEach((effect) => effect.dispose());
     }
-    for (const [key, piece] of wanted) {
-      const live = this.live.get(key);
+    for (const [id, piece] of wanted) {
+      const live = this.live.get(id);
       if (live) {
         live.piece = piece;
         if (piece.kind === "run")
           (live.effects as EngineEffect[]).forEach((effect) => applyBypass(effect, effect.bypass, piece.effects));
         continue;
       }
-      const reloaded = piece.kind === "run" ? this.reloadGone(gone, piece.effects, stageOf) : undefined;
+      const key = keyOf(piece);
+      const reloaded = piece.kind === "run" && !key ? this.reloadGone(gone, piece.effects, stageOf) : undefined;
       if (reloaded) {
-        this.live.set(key, { piece, effects: [reloaded] });
+        this.live.set(id, { piece, effects: [reloaded] });
         continue;
       }
       const effects =
         piece.kind === "run"
-          ? runEffects(context, piece.effects, stageOf)
+          ? runEffects(context, piece.effects, stageOf, keys)
           : [createEffect(piece.effect.type, context, piece.effect.params, { stage: stageOf(piece.effect) })];
-      this.live.set(key, { piece, effects });
+      this.live.set(id, { piece, effects, ...(key ? { key } : {}) });
     }
     gone.forEach(({ effects }) => effects.forEach((effect) => effect.dispose()));
     this.order = pieces.map(pieceKey);
@@ -95,7 +102,13 @@ export class ChainEffects {
         piece.effects.some((effect) => ids.has(effect.id)) &&
         live[0].stage === stageOf(effects[0]),
     );
-    const plan = index >= 0 ? chainPlan(effects.map(memberOf), false) : undefined;
+    const plan =
+      index >= 0
+        ? chainPlan(
+            effects.map((effect) => memberOf(effect)),
+            false,
+          )
+        : undefined;
     if (!plan) return undefined;
     const [{ effects: live }] = gone.splice(index, 1);
     const effect = live[0] as EngineEffect;

@@ -19,6 +19,8 @@ export interface ChainMember {
   key: string;
   type: string;
   store: ParamStore;
+  /** Keyed by another track (part 5): its sidechain is the slot's. */
+  keyed?: boolean;
 }
 
 /** Which devices a chain's plan is made of, in order, and each effect's bypass param. */
@@ -41,7 +43,7 @@ export interface ChainPlan extends ChainLayout {
 export const chainPlan = (members: ChainMember[], instrument: boolean): ChainPlan | undefined => {
   const links = members.map((member, index): ChainLink | undefined => {
     const spec = engineDevice(member.type);
-    return spec && { key: member.key, ...spec, effect: !(instrument && index === 0) };
+    return spec && { key: member.key, ...spec, effect: !(instrument && index === 0), keyed: member.keyed };
   });
   if (links.some((link) => !link)) return undefined;
   const composed = composeChain(links as ChainLink[]);
@@ -100,11 +102,12 @@ export const ownerOf = (keys: string[], name: string): string | undefined =>
     .filter((key) => name.startsWith(linkPrefix(key)))
     .reduce<string | undefined>((longest, key) => (longest && longest.length >= key.length ? longest : key), undefined);
 
-/** An effect instance as a chain member. */
-export const memberOf = (effect: EffectInstance): ChainMember => ({
+/** An effect instance as a chain member; `keyed` if another track keys it. */
+export const memberOf = (effect: EffectInstance, keyed = false): ChainMember => ({
   key: effect.id,
   type: effect.type,
   store: effect.params,
+  ...(keyed ? { keyed } : {}),
 });
 
 /** Whether an effect runs on the new engine. */
@@ -113,18 +116,23 @@ export const isEngineEffect = (effect: EffectInstance): boolean => engineDevice(
 /** A piece of a chain: a run of engine effects (one plan), or any other effect on its own. */
 export type ChainPiece = { kind: "run"; effects: EffectInstance[] } | { kind: "single"; effect: EffectInstance };
 
-/** A chain cut into pieces: consecutive engine effects together, the rest one by one. */
-export const piecesOf = (effects: EffectInstance[]): ChainPiece[] =>
-  effects.reduce<ChainPiece[]>((pieces, effect) => {
+/**
+ * A chain cut into pieces: consecutive engine effects together, the rest one by one. An effect
+ * another track keys (by id in `keyed`) is a run of its own: its slot's sidechain is its key, and
+ * it sits at a later stage than the key's track.
+ */
+export const piecesOf = (effects: EffectInstance[], keyed: ReadonlySet<string> = new Set()): ChainPiece[] =>
+  effects.reduce<ChainPiece[]>((pieces, effect, index) => {
     const last = pieces[pieces.length - 1];
     if (!isEngineEffect(effect)) return [...pieces, { kind: "single", effect }];
-    if (last?.kind === "run") return [...pieces.slice(0, -1), { kind: "run", effects: [...last.effects, effect] }];
+    const joins = last?.kind === "run" && !keyed.has(effect.id) && !keyed.has(effects[index - 1].id);
+    if (joins) return [...pieces.slice(0, -1), { kind: "run", effects: [...last.effects, effect] }];
     return [...pieces, { kind: "run", effects: [effect] }];
   }, []);
 
-/** The engine effects straight after an engine instrument: the run its plan takes in. */
-export const leadingRun = (effects: EffectInstance[]): EffectInstance[] => {
-  const end = effects.findIndex((effect) => !isEngineEffect(effect));
+/** The engine effects straight after an engine instrument: the run its plan takes in, up to a keyed one. */
+export const leadingRun = (effects: EffectInstance[], keyed: ReadonlySet<string> = new Set()): EffectInstance[] => {
+  const end = effects.findIndex((effect) => !isEngineEffect(effect) || keyed.has(effect.id));
   return effects.slice(0, end < 0 ? effects.length : end);
 };
 
@@ -152,17 +160,21 @@ export const runEffects = (
   context: BaseAudioContext,
   run: EffectInstance[],
   stageOf: (effect: EffectInstance) => number,
+  keys: ReadonlyMap<string, AudioNode> = new Map(),
 ): EngineEffect[] => {
-  const whole = chainPlan(run.map(memberOf), false);
+  const member = (effect: EffectInstance) => memberOf(effect, keys.has(effect.id));
+  const whole = chainPlan(run.map(member), false);
   const parts = whole
     ? [{ plan: whole, effects: run }]
-    : run.map((effect) => ({ plan: chainPlan([memberOf(effect)], false), effects: [effect] }));
+    : run.map((effect) => ({ plan: chainPlan([member(effect)], false), effects: [effect] }));
   return parts.flatMap(({ plan, effects }) => {
     if (!plan) {
       console.error(`${effects[0].type}: too heavy for the engine`);
       return [];
     }
-    const effect = new EngineEffect(context, plan.plan, plan.sources, stageOf(effects[0]), plan);
+    // A keyed effect is a run of its own (piecesOf), so a part has at most one key.
+    const key = effects.map((each) => keys.get(each.id)).find((node) => node !== undefined);
+    const effect = new EngineEffect(context, plan.plan, plan.sources, stageOf(effects[0]), plan, key);
     applyBypass(effect, plan.bypass, effects);
     return [effect];
   });

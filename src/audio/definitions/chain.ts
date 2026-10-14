@@ -12,6 +12,9 @@
  *   `mix` param (if its schema has one) times not `bypass`, 0 or 1, which the chain adds. Moving
  *   either ramps, with no reload: mix over its `smoothMs`, bypass over 20 ms (a faster crossfade
  *   between two different sounds thumps). A bypassed effect still runs.
+ * - **A sidechain is the effect's own input unless it's keyed:** `input.sidechainLeft/Right` in an
+ *   effect read what comes before it, so a compressor compresses itself, unless the link is `keyed`
+ *   (another track feeds the slot's sidechain; such an effect is a piece of its own, chainPlan.ts).
  * - **A late effect's dry path is as late:** an effect whose definition declares `latency` has its
  *   input delayed by as much on the way to the crossfade, so dry and wet line up at any mix.
  *
@@ -37,6 +40,8 @@ export interface ChainLink {
   schema: ParamSchema;
   /** An effect: its input is what comes before it, and it gets mix and bypass. */
   effect: boolean;
+  /** An effect keyed by another track: its sidechain reads the slot's, not its own input. */
+  keyed?: boolean;
 }
 
 /** A chain as one device. */
@@ -99,6 +104,8 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
     const rename = (reference: string): string => {
       if (reference === "input.left" && !first) return before[0];
       if (reference === "input.right" && !first) return before[1];
+      if (reference === "input.sidechainLeft" && link.effect && !link.keyed) return before[0];
+      if (reference === "input.sidechainRight" && link.effect && !link.keyed) return before[1];
       if (SHARED_SIGNALS.has(reference) || reference.startsWith("input.")) return reference;
       return `${prefix}${reference}`;
     };

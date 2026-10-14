@@ -37,6 +37,13 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 
 - `basics.lib/sAndH`, by Romain Michon
 
+### keyedcompressor
+
+- `analyzers.lib/amp_follower_ar`, by Jonatan Liljedahl, revised by Romain Michon
+- `compressors.lib/compression_gain_mono`, by Julius O. Smith III, Copyright (C) 2014-2020 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `signals.lib/onePoleSwitching`, by Jonatan Liljedahl, revised by Dario Sanfilippo, under LicenseRef-STK-4.3
+
 ### ladder
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception

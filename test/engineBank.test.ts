@@ -480,6 +480,7 @@ describe("the new engine's test instruments", () => {
 });
 
 describe("the new engine's test effects", () => {
+  const RINGS = new Set(["engine-echo", "engine-resonator"]);
   it.each(TEST_EFFECTS.map((effect) => [effect.type, effect] as const))(
     "%s compiles against its params and processes its input",
     (_type, { schema, definition }) => {
@@ -497,8 +498,10 @@ describe("the new engine's test effects", () => {
         bank.process((block * BLOCK) / RATE);
         return Array.from(bank.output(0, 0));
       }).flat();
+      expect(Math.max(...sound.map(Math.abs))).toBeGreaterThan(0.01);
+      // The echo and resonator ring on after their input stops; a compressor doesn't.
       const after = sound.slice(60 * BLOCK);
-      expect(Math.max(...after.map(Math.abs))).toBeGreaterThan(0.01);
+      if (RINGS.has(_type)) expect(Math.max(...after.map(Math.abs))).toBeGreaterThan(0.01);
       expect(sound.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 4)).toBe(true);
     },
   );

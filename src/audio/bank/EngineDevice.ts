@@ -38,7 +38,7 @@ import type { ParamStore } from "../params/store";
 import type { ParamValue } from "../params/types";
 import type { SampleAudio } from "./bank";
 import type { FromBank, ToBank } from "./messages";
-import { mainInput, takeSlot, type BankSlot } from "./pool";
+import { mainInput, sidechainInput, takeSlot, type BankSlot } from "./pool";
 
 /** Where a device's slot is: which stage of the signal flow, and audio to feed its input. */
 export interface DevicePlace {
@@ -46,6 +46,8 @@ export interface DevicePlace {
   stage: number;
   /** What to play into the slot's input, for an effect. */
   input?: AudioNode;
+  /** What to play into the slot's sidechain input: a keyed effect's key (INST-36.7 part 5). */
+  sidechain?: AudioNode;
 }
 
 /**
@@ -80,6 +82,7 @@ export class EngineDevice {
   readonly output: GainNode;
   readonly context: BaseAudioContext;
   private readonly input: AudioNode | undefined;
+  private readonly sidechain: AudioNode | undefined;
   private slot: BankSlot | null = null;
   private waiting: ToBank[] = [];
   private unsubscribe: (() => void)[] = [];
@@ -108,6 +111,7 @@ export class EngineDevice {
   ) {
     this.context = context;
     this.input = place.input;
+    this.sidechain = place.sidechain;
     this.output = new GainNode(context);
     this.plan = plan;
     this.sources = sources;
@@ -131,6 +135,7 @@ export class EngineDevice {
       this.slot = slot;
       slot.node.connect(this.output, slot.track);
       this.input?.connect(slot.node, 0, mainInput(slot.track));
+      this.sidechain?.connect(slot.node, 0, sidechainInput(slot.track));
       this.loadPlan();
       this.waiting.forEach((message) => slot.post({ ...message, track: slot.track } as ToBank));
       this.waiting = [];
@@ -263,6 +268,7 @@ export class EngineDevice {
     if (!this.slot) return;
     this.slot.node.disconnect(this.output, this.slot.track);
     this.input?.disconnect(this.slot.node, 0, mainInput(this.slot.track));
+    this.sidechain?.disconnect(this.slot.node, 0, sidechainInput(this.slot.track));
     this.slot.release();
     this.slot = null;
   }

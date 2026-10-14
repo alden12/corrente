@@ -130,6 +130,58 @@ describe("chain pieces", () => {
   });
 });
 
+describe("sidechains", () => {
+  registerTestInstruments();
+  const effect = (id: string, type: string) => ({ id, type, bypassed: false, params: new ParamStore([]) });
+
+  it("make a keyed effect a run of its own, which an instrument doesn't take in", () => {
+    const chain = [
+      effect("a", "engine-echo"),
+      effect("k", "engine-sidechain-compressor"),
+      effect("b", "engine-resonator"),
+    ];
+    const keyed = new Set(["k"]);
+    expect(
+      piecesOf(chain, keyed).map((piece) => (piece.kind === "run" ? piece.effects.map(({ id }) => id) : [])),
+    ).toEqual([["a"], ["k"], ["b"]]);
+    expect(leadingRun(chain, keyed).map(({ id }) => id)).toEqual(["a"]);
+    // Not keyed, the compressor runs with the rest.
+    expect(piecesOf(chain).length).toBe(1);
+  });
+
+  const compressor = device("engine-sidechain-compressor");
+  /** The compressor as a chain of one, keyed or not: its level out, quiet tone in and loud bursts on the sidechain. */
+  const level = (keyed: boolean, bursts: boolean) => {
+    const composed = composeChain([
+      { key: "c", definition: compressor.definition, schema: compressor.schema, effect: true, keyed },
+    ]);
+    const bank = new EngineBank(wasm, RATE, 1);
+    bank.load(0, compileDefinition(composed.definition, { params: composed.schema }), defaultsOf(composed.schema));
+    const out = Array.from({ length: 100 }, (_, block) => {
+      [0, 1].forEach((channel) =>
+        bank.input(0, channel).forEach((_, index, input) => {
+          input[index] = 0.05 * Math.sin((2 * Math.PI * 220 * (block * BLOCK + index)) / RATE);
+        }),
+      );
+      [2, 3].forEach((channel) => bank.input(0, channel).fill(bursts ? 0.9 : 0));
+      bank.process((block * BLOCK) / RATE);
+      return Array.from(bank.output(0, 0));
+    }).flat();
+    return Math.max(...out.slice(50 * BLOCK).map(Math.abs));
+  };
+
+  it("duck a keyed compressor when its key is loud, and leave it alone when it isn't", () => {
+    expect(level(true, false)).toBeGreaterThan(0.045);
+    // -24 dB threshold, 8:1: a key at 0.9 takes the quiet tone down by well over half.
+    expect(level(true, true)).toBeLessThan(0.02);
+  });
+
+  it("key an unkeyed compressor from its own input, whatever is on the sidechain", () => {
+    // The quiet tone is under the threshold, so it passes; the sidechain's bursts aren't heard.
+    expect(level(false, true)).toBeGreaterThan(0.045);
+  });
+});
+
 describe("keeping state across a reload", () => {
   it("keeps the devices in both chains, and fades out and back in the ones that change order", () => {
     expect(chainEdit(["instrument", "a"], ["instrument", "b", "a"])).toEqual({

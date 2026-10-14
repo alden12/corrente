@@ -26,10 +26,11 @@ export class EngineEffect implements Effect {
     sources: ParamSources,
     stage: number,
     chain?: ChainLayout,
+    sidechain?: AudioNode,
   ) {
     this.input = new GainNode(context);
     this.stage = stage;
-    this.device = new EngineDevice(context, plan, sources, { stage, input: this.input }, chain);
+    this.device = new EngineDevice(context, plan, sources, { stage, input: this.input, sidechain }, chain);
     this.output = this.device.output;
     if (chain) this.bypass = chain.bypass;
   }

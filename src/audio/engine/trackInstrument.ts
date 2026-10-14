@@ -29,11 +29,13 @@ export const instrumentChain = (
   type: string,
   store: ParamStore,
   effects: EffectInstance[],
+  keyed: ReadonlySet<string> = new Set(),
 ): InstrumentChain | undefined => {
   if (!engineDevice(type)) return undefined;
   const instrument = { key: "instrument", type, store };
-  const run = leadingRun(effects);
-  const whole = run.length > 0 ? chainPlan([instrument, ...run.map(memberOf)], true) : undefined;
+  // A keyed effect (part 5) needs a later stage than its key's track, so the run stops before it.
+  const run = leadingRun(effects, keyed);
+  const whole = run.length > 0 ? chainPlan([instrument, ...run.map((effect) => memberOf(effect))], true) : undefined;
   if (whole) return { plan: whole, absorbed: run };
   const alone = chainPlan([instrument], true);
   return alone && { plan: alone, absorbed: [] };
