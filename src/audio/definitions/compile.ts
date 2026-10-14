@@ -10,6 +10,17 @@
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
 import { DEFAULT_VOICES, SAMPLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
+
+/** A sample zone as the bank uses it (INST-36.6): every range filled in. */
+export interface PlanZone {
+  /** The sample param it plays. */
+  param: string;
+  root: number;
+  keys: [number, number];
+  velocities: [number, number];
+  start: number;
+  end: number;
+}
 import { costOf, overCap, type Cost, type CostedNode } from "./cost";
 import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
 import type { ParamSchema } from "../params/types";
@@ -61,6 +72,8 @@ export interface CompiledPlan {
   words: Int32Array;
   /** The engine's params in order: param source i is `params[i]` of the device's params. */
   params: ParamSource[];
+  /** Sample zones, in order: a note takes the first that fits. Absent without zones. */
+  zones?: PlanZone[];
   voices: number;
   /** What it costs to run, as shares of a phone's audio thread (cost.ts). */
   cost: Cost;
@@ -240,11 +253,15 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
   );
 
   // Params, each binding once.
-  const sampleParams = new Set(
-    Object.values(definition.nodes).flatMap((node) =>
-      (SAMPLE_INPUTS[node.block] ?? []).map((port) => (node.inputs?.[port] as ParamBinding).param),
+  const zones = definition.zones;
+  const sampleParams = new Set([
+    ...Object.values(definition.nodes).flatMap((node) =>
+      (SAMPLE_INPUTS[node.block] ?? [])
+        .map((port) => node.inputs?.[port])
+        .flatMap((input) => (typeof input === "object" && "param" in input ? [input.param] : [])),
     ),
-  );
+    ...(zones ?? []).map((zone) => zone.sample.param),
+  ]);
   const params: ParamSource[] = [];
   const paramIndex = (binding: ParamBinding) => {
     const source: ParamSource = {
@@ -337,11 +354,25 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     resolved.trackOut.length,
     ...resolved.trackOut.flatMap((source) => encode(source, "post", -1)),
   ];
+  // A zone's sample param is the bank's to read, so it's a param of the plan though no node reads it.
+  zones?.forEach((zone) => paramIndex(zone.sample));
   // Params are numbered as the words are written, so the header, which counts them, goes on last.
   const words = Int32Array.from([params.length, resolved.voices, definition.latency ?? 0, ...body]);
   return {
     words,
     params,
+    ...(zones
+      ? {
+          zones: zones.map((zone) => ({
+            param: zone.sample.param,
+            root: zone.root,
+            keys: zone.keys ?? [0, 127],
+            velocities: zone.velocities ?? [0, 1],
+            start: zone.start ?? 0,
+            end: zone.end ?? 1,
+          })),
+        }
+      : {}),
     voices: resolved.voices,
     cost,
     steps: Object.fromEntries(

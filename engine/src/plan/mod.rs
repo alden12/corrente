@@ -26,7 +26,8 @@
 //!   1 Previous (node, port)  the same, a sample late: a feedback edge in a one-sample loop
 //!   2 Param (param, 0)       a param of the track, ramped over each block
 //!   3 Const (0, bits)        a literal
-//!   4 Voice (signal, 0)      the voice's frequency, gate, velocity, note or seed (voice section only)
+//!   4 Voice (signal, 0)      the voice's frequency, gate, velocity, note, seed, or its zone's sample,
+//!                            root, start or end (voice section only)
 //!   5 Shared (node, port)    a pre section node's output (voice and post sections)
 //!   6 VoiceSum (channel, 0)  the voices summed (post section and track output)
 //!   7 Input (channel, 0)     the track's audio input: 0 and 1 main, 2 and 3 sidechain
@@ -69,12 +70,18 @@ pub const CHANNELS: usize = 2;
 pub const MAX_INPUTS: usize = 4;
 /// Per-voice signals: the note's frequency, its gate, its velocity, its note number (MIDI, 60 is
 /// middle C) and a seed (a random number from 0 to 1 drawn at each note on, for drift and variation).
-pub const VOICE_SIGNALS: usize = 5;
+/// Then the sample zone the note picked (INST-36.6), set by JS after the note on: its sample slot,
+/// root note, start and end.
+pub const VOICE_SIGNALS: usize = 9;
 pub const SIGNAL_FREQ: usize = 0;
 pub const SIGNAL_GATE: usize = 1;
 pub const SIGNAL_VELOCITY: usize = 2;
 pub const SIGNAL_NOTE: usize = 3;
 pub const SIGNAL_SEED: usize = 4;
+pub const SIGNAL_SAMPLE: usize = 5;
+pub const SIGNAL_ROOT: usize = 6;
+pub const SIGNAL_START: usize = 7;
+pub const SIGNAL_END: usize = 8;
 /// Host signals, the same for every track: the tempo (beats a minute), the beat (counted from where
 /// the transport started, running on while it's stopped), whether it's playing (0 or 1), and how
 /// long a beat is in seconds and in samples (so a delay syncs to the tempo without dividing).

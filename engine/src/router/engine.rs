@@ -75,6 +75,14 @@ impl Engine {
         }
     }
 
+    /// Set a voice's zone signal: see `Track::set_voice_signal`.
+    // TS: this.tracks[track]?.setVoiceSignal(slot, signal, value)
+    pub fn set_voice_signal(&mut self, track: usize, slot: usize, signal: usize, value: f32) {
+        if let Some(track) = self.tracks.get_mut(track) {
+            track.set_voice_signal(slot, signal, value);
+        }
+    }
+
     // TS: this.tracks[track]?.noteOff(slot, offset)
     pub fn note_off(&mut self, track: usize, slot: usize, offset: i32) {
         if let Some(track) = self.tracks.get_mut(track) {

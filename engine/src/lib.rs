@@ -166,6 +166,17 @@ pub extern "C" fn eng_note_on(track: i32, slot: i32, offset: i32, frequency: f32
     }
 }
 
+/// Set one of the zone signals (5 sample slot, 6 root note, 7 start, 8 end) of the note just started
+/// in a track's voice slot, for the coming block: the sample zone JS picked for it. Other signals,
+/// and slots not sounding, are ignored.
+// TS: if (track >= 0 && slot >= 0 && signal >= 0) withEngine((engine) => engine.setVoiceSignal(track, slot, signal, value));
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_voice_signal(track: i32, slot: i32, signal: i32, value: f32) {
+    if let (Some(track), Some(slot), Some(signal)) = (index(track), index(slot), index(signal)) {
+        with_engine(|engine| engine.set_voice_signal(track, slot, signal, value));
+    }
+}
+
 /// Release the note in a track's voice slot, `offset` samples into the coming block.
 // TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOff(track, slot, offset));
 #[unsafe(no_mangle)]

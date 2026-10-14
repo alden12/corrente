@@ -12,7 +12,7 @@ use super::render::{Render, Unit};
 use super::sampler::Sample;
 use super::sources::{Context, Sources};
 use super::{BLOCK, NO_SIGNALS, NO_VOICE_SUM, SILENCE, SILENT_SLOT, SLOT, Slot};
-use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SEED, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
+use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
 
 /// One section's state, in a track or in one voice: a unit per node and a buffer per node output.
 struct SectionState {
@@ -364,6 +364,18 @@ impl Track {
         x ^= x << 5;
         self.seeds = x;
         (x as f64 / 4_294_967_296.0) as f32
+    }
+
+    /// Set one of a sounding voice's zone signals for the whole coming block: how JS gives a note the
+    /// sample zone it picked, right after its note on. The whole block, not from the note's sample on,
+    /// because controls read their inputs at the start of every CONTROL samples: a sampler must see
+    /// its zone at the read before the gate rises. Nothing sounds before the gate, so nothing is lost.
+    // TS: const voice = this.voiceMut(slot); if (voice?.active && signal >= SIGNAL_SAMPLE && signal < VOICE_SIGNALS) voice.fillSignal(signal, -1, value);
+    pub(super) fn set_voice_signal(&mut self, slot: usize, signal: usize, value: f32) {
+        let Some(voice) = self.voice_mut(slot).filter(|voice| voice.active) else { return };
+        if (SIGNAL_SAMPLE..VOICE_SIGNALS).contains(&signal) {
+            voice.fill_signal(signal, -1, value);
+        }
     }
 
     // TS: const voice = this.voiceMut(slot); if (!voice?.active) return; voice.released = true; ...

@@ -324,6 +324,75 @@ describe("EngineBank", () => {
       expect(bank.output(0, 0)[10]).toBeCloseTo(10 / RATE, 6);
     });
 
+    describe("zones", () => {
+      /** Low keys play `low`, at their own pitch from 48; soft high notes `soft`, hard ones `hard`'s second half. */
+      const zoned = compileDefinition({
+        format: 1,
+        zones: [
+          { sample: { param: "low" }, root: 48, keys: [0, 59] },
+          { sample: { param: "soft" }, root: 60, keys: [60, 72], velocities: [0, 0.5] },
+          { sample: { param: "hard" }, root: 60, keys: [60, 72], velocities: [0.5, 1], start: 0.5 },
+        ],
+        nodes: {
+          player: {
+            block: "sampler",
+            voice: true,
+            inputs: {
+              frequency: "voice.frequency",
+              gate: "voice.gate",
+              sample: "voice.sample",
+              root: "voice.root",
+              start: "voice.start",
+              end: "voice.end",
+            },
+          },
+        },
+        voice: "player.left",
+      });
+      /** A second of one value. */
+      const flat = (value: number) => ({ channels: [new Float32Array(RATE).fill(value)], rate: RATE });
+      const zonedBank = () => {
+        const bank = new EngineBank(wasm, RATE, 1);
+        bank.load(0, zoned);
+        bank.setSample(0, "low", "low", flat(0.1));
+        bank.setSample(0, "soft", "soft", flat(0.2));
+        bank.setSample(0, "hard", "hard", { channels: [ramp], rate: RATE });
+        return bank;
+      };
+      /** What one note alone plays, a block of it. */
+      const played = (note: number, velocity: number) => {
+        const bank = zonedBank();
+        bank.noteOn(0, note, velocity, 0);
+        bank.process(0);
+        return Array.from(bank.output(0, 0));
+      };
+
+      it("plays each note the first zone it fits, by key and velocity", () => {
+        expect(played(48, 1)[10]).toBeCloseTo(0.1, 6);
+        expect(played(64, 0.3)[10]).toBeCloseTo(0.2 * 0.3, 6);
+        // Hard: the ramp from halfway, at its own speed on 60 (the voice is scaled by velocity).
+        expect(played(60, 1)[10]).toBeCloseTo(0.5 + 10 / RATE, 6);
+      });
+
+      it("lets a note no zone fits go by without a sound or a voice", () => {
+        const bank = zonedBank();
+        bank.noteOn(0, 80, 1, 0);
+        bank.process(0);
+        expect(bank.output(0, 0).every((sample) => sample === 0)).toBe(true);
+        expect(bank.engine.eng_voice_active(0, 0)).toBe(0);
+      });
+
+      it("restarts held notes in their zones in a new plan", () => {
+        const bank = zonedBank();
+        bank.noteOn(0, 48, 1, 0);
+        bank.process(0);
+        bank.load(0, zoned);
+        bank.process(BLOCK * SAMPLE);
+        bank.process(2 * BLOCK * SAMPLE);
+        expect(bank.output(0, 0)[10]).toBeCloseTo(0.1, 6);
+      });
+    });
+
     it("refuses a sample that won't fit, leaving the param as it was", () => {
       const bank = new EngineBank(wasm, RATE, 1);
       bank.load(0, sampler);
@@ -368,7 +437,8 @@ describe("the new engine's test instruments", () => {
       schema
         .filter((spec) => spec.kind === "sample")
         .forEach((spec) => bank.setSample(0, spec.id, "sine", { channels: [sine], rate: RATE }));
-      bank.noteOn(0, 57, 1, 0);
+      // A kit's first pad, or A3.
+      bank.noteOn(0, definition.zones?.[0].root ?? 57, 1, 0);
       const sound = Array.from({ length: 100 }, (_, block) => {
         bank.process((block * BLOCK) / RATE);
         return Array.from(bank.output(0, 0));

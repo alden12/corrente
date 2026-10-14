@@ -19,6 +19,8 @@ import {
   RESERVED_NAMES,
   SAMPLE_INPUTS,
   singleInputSchema,
+  ZONE_SIGNALS,
+  zonesSchema,
   type DeviceDefinition,
   type InputValue,
   type ParamBinding,
@@ -111,14 +113,33 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
     return spec;
   };
 
-  /** An input that names a sample: a sample param, as it is (the bank turns it into a slot). */
+  /** A sample param, as a sample input or a zone names it: one the device has, of the sample kind. */
+  const checkSampleParam = (binding: ParamBinding, path: (string | number)[]) => {
+    const spec = params?.find((candidate) => candidate.id === binding.param);
+    if (params && !spec) checkParam(binding, path);
+    else if (spec && spec.kind !== "sample") problem(path, `${binding.param} is a ${spec.kind} param, not a sample`);
+  };
+
+  /**
+   * An input that names a sample: a sample param, as it is (the bank turns it into a slot), or with
+   * zones, `voice.sample`, the sample of the zone each note took.
+   */
   const checkSampleInput = (value: InputValue, path: (string | number)[]) => {
+    if (value === "voice.sample" && definition.zones) return;
     const plain =
       typeof value === "object" && !Array.isArray(value) && "param" in value && Object.keys(value).length === 1;
-    if (!plain) return problem(path, "takes a sample param as { param }, with no scale, offset or table");
-    const spec = params?.find((candidate) => candidate.id === value.param);
-    if (params && !spec) checkParam(value, path);
-    else if (spec && spec.kind !== "sample") problem(path, `${value.param} is a ${spec.kind} param, not a sample`);
+    if (!plain)
+      return problem(
+        path,
+        `takes a sample param as { param }, with no scale, offset or table${definition.zones ? ', or "voice.sample"' : ""}`,
+      );
+    checkSampleParam(value, path);
+  };
+
+  /** A zone signal read in a definition with no zones, which would always read 0. */
+  const checkZoneSignal = (reference: string, path: (string | number)[]) => {
+    if (!definition.zones && (ZONE_SIGNALS as readonly string[]).includes(reference))
+      problem(path, `${reference} is the sample zone a note took, and there are no zones`);
   };
 
   /** A tempo-synced length's beats: a note division, or a param that can be read as one. */
@@ -147,8 +168,10 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
         const path = ["nodes", name, "inputs", port, ...(Array.isArray(value) ? [index] : [])];
         if (typeof item === "number") return;
         if (typeof item === "string" || isScaled(item)) {
-          const source = referenceTo(typeof item === "string" ? item : item.from, nodes);
+          const reference = typeof item === "string" ? item : item.from;
+          const source = referenceTo(reference, nodes);
           if (typeof source === "string") problem(path, source);
+          checkZoneSignal(reference, path);
           if (typeof item !== "string") {
             [item.scale, item.offset].forEach((amount) => {
               if (typeof amount === "object") checkParam(amount, path);
@@ -166,6 +189,13 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       .filter((port) => node.inputs?.[port] === undefined)
       .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which sample it plays)")),
   );
+
+  definition.zones?.forEach((zone, index) => {
+    checkSampleParam(zone.sample, ["zones", index, "sample"]);
+    if (zone.keys && zone.keys[0] > zone.keys[1]) problem(["zones", index, "keys"], "the lowest key comes first");
+    if (zone.velocities && zone.velocities[0] > zone.velocities[1])
+      problem(["zones", index, "velocities"], "the lowest velocity comes first");
+  });
 
   const voiceNodes = Object.keys(nodes).filter((name) => nodes[name].voice);
   channelsOf(definition.voice).forEach((reference) => {
@@ -200,17 +230,19 @@ export const definitionSchemaFor = (params?: ParamSchema) =>
       nodes: z.record(nodeName, nodeSchema),
       voice: channelsSchema.optional(),
       output: channelsSchema.optional(),
+      zones: zonesSchema.optional(),
     })
     .superRefine((definition, context) => checkAcross(definition as DeviceDefinition, params, context));
 
 /**
  * Where a problem is, as people write it: `osc.frequency` for an input, `osc` for the rest of a node,
- * the field's name otherwise.
+ * `zones[2].keys` for part of a zone, the field's name otherwise.
  */
 const whereOf = (path: readonly PropertyKey[]): string => {
   const [field, name, part, port] = path.map(String);
   if (field === "nodes" && name !== undefined)
     return part === "inputs" && port !== undefined ? `${name}.${port}` : name;
+  if (field === "zones" && name !== undefined) return `zones[${name}]${part === undefined ? "" : `.${part}`}`;
   return field ?? "the definition";
 };
 

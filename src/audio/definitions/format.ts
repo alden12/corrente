@@ -39,6 +39,10 @@
  *   path round them passes through a `delay`.
  * - **`voice`** is what each voice plays (one output, or two for left and right), and **`output`**
  *   what the track plays: the voices summed unless it says otherwise.
+ * - **`zones`** (INST-36.6) map notes to samples: each a sample param, its root note, and the keys
+ *   and velocities it plays. A note takes the first zone that fits it (none: it doesn't sound), and
+ *   its voice reads the zone as `voice.sample`, `voice.root`, `voice.start` and `voice.end`, wired to
+ *   a sampler. A drum kit is a zone per pad.
  */
 import { z } from "zod";
 
@@ -56,7 +60,14 @@ export const VOICE_SIGNALS = {
   "voice.velocity": 2,
   "voice.note": 3,
   "voice.seed": 4,
+  "voice.sample": 5,
+  "voice.root": 6,
+  "voice.start": 7,
+  "voice.end": 8,
 } as const;
+
+/** The voice signals that only mean something in a definition with zones: the zone the note took. */
+export const ZONE_SIGNALS = ["voice.sample", "voice.root", "voice.start", "voice.end"] as const;
 /**
  * The host's signals, the same for every track and readable anywhere: the tempo (beats a minute),
  * the beat (counted from where the transport started, running on while it's stopped), playing (0 or
@@ -154,6 +165,30 @@ export const RESERVED_NAMES = ["voice", "voices", "input", "host"];
  */
 export const SAMPLE_INPUTS: Record<string, readonly string[]> = { sampler: ["sample"] };
 
+/** A sample param named as it is: what a sample input or a zone takes. */
+export const sampleBindingSchema = z.strictObject({ param: z.string().min(1) });
+
+const noteNumber = z.number().int().min(0).max(127);
+const unit = z.number().min(0).max(1);
+
+/**
+ * A sample zone: which sample (a sample param), the note it plays at its own pitch (`root`), the
+ * keys and velocities it answers (both ends included; every key and velocity if left out), and the
+ * part of it to play (fractions, the whole sample if left out).
+ */
+export const zoneSchema = z.strictObject({
+  sample: sampleBindingSchema,
+  root: noteNumber,
+  keys: z.tuple([noteNumber, noteNumber]).optional(),
+  velocities: z.tuple([unit, unit]).optional(),
+  start: unit.optional(),
+  end: unit.optional(),
+});
+
+/** The most zones a definition may have. */
+export const MAX_ZONES = 128;
+export const zonesSchema = z.array(zoneSchema).min(1).max(MAX_ZONES);
+
 export const nodeSchema = z
   .object({
     block: z.string().min(1),
@@ -178,9 +213,11 @@ export const definitionSchema = z
     nodes: z.record(z.string().regex(NODE_NAME, "node names are a letter then letters, digits and _"), nodeSchema),
     voice: channelsSchema.optional(),
     output: channelsSchema.optional(),
+    zones: zonesSchema.optional(),
   })
   .strict();
 
+export type Zone = z.infer<typeof zoneSchema>;
 export type ParamBinding = z.infer<typeof paramBindingSchema>;
 export type ScaledReference = z.infer<typeof scaledReferenceSchema>;
 export type Synced = z.infer<typeof syncedSchema>;

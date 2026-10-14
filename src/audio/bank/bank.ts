@@ -18,9 +18,17 @@
  *   ahead (decision 4 of INST-36). The memory only grows on init, load and loading a sample, so
  *   views are re-made then (the addresses the engine gave stay put).
  */
-import type { CompiledPlan } from "../definitions/compile";
+import type { CompiledPlan, PlanZone } from "../definitions/compile";
 import { resolveNumber } from "../graph/table";
-import { BLOCK, EMPTY_SAMPLE, INPUT_CHANNELS, OUTPUT_CHANNELS, startEngine, type EngineExports } from "./exports";
+import {
+  BLOCK,
+  EMPTY_SAMPLE,
+  INPUT_CHANNELS,
+  OUTPUT_CHANNELS,
+  startEngine,
+  ZONE_SIGNAL,
+  type EngineExports,
+} from "./exports";
 import { EVENT, EventQueue, type TimedEvent } from "./events";
 import type { Transport } from "./messages";
 import { VoiceAllocator } from "./voices";
@@ -35,6 +43,20 @@ export class PlanRejected extends Error {
 }
 
 const frequencyOf = (note: number) => 440 * 2 ** ((note - 69) / 12);
+
+/**
+ * The first of a plan's zones a note fits, by key and velocity. A plain indexed loop: it runs while
+ * rendering, where a closure or an iterator would be garbage.
+ */
+const zoneFor = (zones: PlanZone[], note: number, velocity: number): PlanZone | undefined => {
+  for (let index = 0; index < zones.length; index++) {
+    const zone = zones[index];
+    const [lowKey, highKey] = zone.keys;
+    const [lowVelocity, highVelocity] = zone.velocities;
+    if (note >= lowKey && note <= highKey && velocity >= lowVelocity && velocity <= highVelocity) return zone;
+  }
+  return undefined;
+};
 
 /** A plan with nothing in it: no nodes, no steps, no outputs. What a free track plays. */
 const EMPTY_PLAN = Int32Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -117,10 +139,7 @@ export class EngineBank {
           : resolveNumber(state.values[source.param] ?? 0, source),
       ),
     );
-    held.forEach(({ note, velocity }) => {
-      const slot = state.voices.noteOn(note, velocity, 0, state.sounding);
-      this.engine.eng_note_on(track, slot, 0, frequencyOf(note), velocity, note);
-    });
+    held.forEach(({ note, velocity }) => this.startNote(track, note, velocity, 0, 0));
   }
 
   /** Empty a track (its device went): it plays nothing, its queued events and knob values are dropped. */
@@ -285,12 +304,28 @@ export class EngineBank {
   }
 
   private playNoteOn(event: TimedEvent, offset: number): void {
-    const state = this.tracks[event.track];
-    if (!state) return;
-    if (state.voices.slots === 0) return;
-    const slot = state.voices.noteOn(event.target, event.value, event.time, state.sounding);
-    if (state.voices.cut >= 0) this.engine.eng_note_cut(event.track, state.voices.cut, offset);
-    this.engine.eng_note_on(event.track, slot, offset, frequencyOf(event.target), event.value, event.target);
+    this.startNote(event.track, event.target, event.value, event.time, offset);
+  }
+
+  /**
+   * Start a note in a voice slot, cutting the voice it steals, `offset` samples into the coming
+   * block. With zones, the note takes the first that fits and its voice is told which, and a note no
+   * zone fits doesn't sound (or take a voice).
+   */
+  private startNote(track: number, note: number, velocity: number, time: number, offset: number): void {
+    const state = this.tracks[track];
+    if (!state || state.voices.slots === 0) return;
+    const zones = state.plan?.zones;
+    const zone = zones && zoneFor(zones, note, velocity);
+    if (zones && !zone) return;
+    const slot = state.voices.noteOn(note, velocity, time, state.sounding);
+    if (state.voices.cut >= 0) this.engine.eng_note_cut(track, state.voices.cut, offset);
+    this.engine.eng_note_on(track, slot, offset, frequencyOf(note), velocity, note);
+    if (!zone) return;
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.sample, state.values[zone.param] ?? EMPTY_SAMPLE);
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.root, zone.root);
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.start, zone.start);
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.end, zone.end);
   }
 
   private playNoteOff(event: TimedEvent, offset: number): void {

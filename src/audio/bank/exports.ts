@@ -18,6 +18,8 @@ export interface EngineExports {
   /** `note` is the MIDI note number. */
   eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number, note: number): void;
   eng_note_off(track: number, slot: number, offset: number): void;
+  /** Sets a zone signal (ZONE_SIGNAL) of the note just started in a slot, for the coming block. */
+  eng_voice_signal(track: number, slot: number, signal: number, value: number): void;
   /** Fades a slot's voice out over a block from `offset`, then frees it. */
   eng_note_cut(track: number, slot: number, offset: number): void;
   eng_voice_active(track: number, slot: number): number;
@@ -45,6 +47,8 @@ export interface EngineExports {
   eng_block_meters(kind: number): number;
 }
 
+/** The voice signals a note's sample zone fills, by the engine's numbers (engine/src/plan/mod.rs). */
+export const ZONE_SIGNAL = { sample: 5, root: 6, start: 7, end: 8 } as const;
 /** Sample slots in an engine. The last is kept empty: a sample param with no sample points at it. */
 export const SAMPLE_SLOTS = 256;
 export const EMPTY_SAMPLE = SAMPLE_SLOTS - 1;

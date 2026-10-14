@@ -518,6 +518,49 @@ describe("definitions the compiler refuses", () => {
       expect(plan.params).toEqual([{ param: "kit", scale: 1, offset: 0, sample: true }]);
     });
 
+    describe("zones", () => {
+      const drum = { id: "drum", label: "Drum", kind: "sample", default: "" } as const;
+      const zonedWith = (zones: unknown, sample: unknown = "voice.sample", root: unknown = "voice.root") => ({
+        format: 1,
+        zones,
+        nodes: {
+          x: {
+            block: "sampler",
+            voice: true,
+            inputs: { frequency: "voice.frequency", gate: "voice.gate", sample, root },
+          },
+        },
+        voice: "x",
+      });
+
+      it("fills in each zone's ranges and gives the bank its sample params", () => {
+        const plan = compileDefinition(zonedWith([{ sample: { param: "drum" }, root: 36, keys: [36, 36] }]), {
+          params: [drum],
+        });
+        expect(plan.zones).toEqual([{ param: "drum", root: 36, keys: [36, 36], velocities: [0, 1], start: 0, end: 1 }]);
+        expect(plan.params).toEqual([{ param: "drum", scale: 1, offset: 0, sample: true }]);
+      });
+
+      it("checks zones, and keeps zone signals for definitions with zones", () => {
+        expect(
+          problemsOf(zonedWith([{ sample: { param: "level" }, root: 36, keys: [40, 36], velocities: [1, 0] }]), [
+            drum,
+            { id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 1 },
+          ]),
+        ).toEqual([
+          "zones[0].sample: level is a number param, not a sample",
+          "zones[0].keys: the lowest key comes first",
+          "zones[0].velocities: the lowest velocity comes first",
+        ]);
+        expect(problemsOf(zonedWith(undefined, "voice.sample", 60))).toEqual([
+          "x.sample: takes a sample param as { param }, with no scale, offset or table",
+        ]);
+        expect(problemsOf(zonedWith(undefined, { param: "drum" }), [drum])).toEqual([
+          "x.root: voice.root is the sample zone a note took, and there are no zones",
+        ]);
+      });
+    });
+
     it("wants a sampler's sample to be a sample param, as it is", () => {
       expect(problemsOf(playing())).toEqual(["x.sample: needs a sample param (which sample it plays)"]);
       expect(problemsOf(playing(3))).toEqual([

@@ -5,7 +5,7 @@ import { EngineBank } from "../src/audio/bank/bank";
 import { BLOCK } from "../src/audio/bank/exports";
 import { CATALOGUE } from "../src/audio/definitions/catalogue";
 import { compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
-import type { DeviceDefinition } from "../src/audio/definitions/format";
+import type { DeviceDefinition, InputValue } from "../src/audio/definitions/format";
 
 /**
  * What each block costs to run (INST-36.4's cost cap), in engine/costs.json. Timings depend on the
@@ -49,10 +49,14 @@ const alone = (name: string): DeviceDefinition => {
 };
 
 /** Blocks that need more than their inputs to do their work: a sampler plays a sample, round a loop. */
-const SETUP: Record<string, { inputs: Record<string, number>; start: (bank: EngineBank) => void }> = {
+const SETUP: Record<string, { inputs: Record<string, InputValue>; start: (bank: EngineBank) => void }> = {
   sampler: {
-    inputs: { loop: 1, sample: 0 },
-    start: (bank) => bank.loadSample(0, [new Float32Array(RATE * 10).fill(0.5), new Float32Array(RATE * 10)], RATE),
+    inputs: { loop: 1, sample: { param: "sound" } },
+    start: (bank) =>
+      bank.setSample(0, "sound", "ten seconds", {
+        channels: [new Float32Array(RATE * 10).fill(0.5), new Float32Array(RATE * 10)],
+        rate: RATE,
+      }),
   },
 };
 

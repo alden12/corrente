@@ -8,12 +8,15 @@ import { compileDefinition } from "../definitions/compile";
 import type { DeviceDefinition } from "../definitions/format";
 import { registerInstrument } from "../instruments/catalog";
 import { registerInstrumentFactory } from "../instruments/registry";
-import type { ParamSchema } from "../params/types";
+import type { ParamSchema, ParamSpec } from "../params/types";
+import { BUILTIN_SAMPLES, builtinRef } from "../samples/catalog";
 import { EngineInstrument } from "./EngineInstrument";
 
 interface TestInstrument {
   type: string;
   label: string;
+  /** Where the library shelves it: Synths unless it says. */
+  family?: string;
   schema: ParamSchema;
   definition: DeviceDefinition;
 }
@@ -224,12 +227,61 @@ const sampler: TestInstrument = {
   },
 };
 
-export const TEST_INSTRUMENTS = [pluck, wobble, sampler];
+/** The built-in kit's pads, each on its General MIDI drum note. */
+const PADS = BUILTIN_SAMPLES.filter((sample) => sample.gmNote !== undefined);
+
+/**
+ * A drum kit as sample zones (INST-36.6): a zone per pad on its General MIDI note, each a sample param
+ * you can swap, played at its own pitch through one sampler. Soft hits (below a quarter velocity)
+ * play the snare's first half only, to show velocity zones. No envelope: each hit plays out.
+ */
+const drums: TestInstrument = {
+  type: "engine-drums",
+  label: "Drums (new engine)",
+  family: "Percussion",
+  schema: [
+    ...PADS.map((pad): ParamSpec => ({ id: pad.id, label: pad.name, kind: "sample", default: builtinRef(pad.id) })),
+    { id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 },
+  ],
+  definition: {
+    format: 1,
+    voices: 16,
+    zones: PADS.flatMap((pad) => {
+      const key = pad.gmNote!;
+      const zone = { sample: { param: pad.id }, root: key, keys: [key, key] as [number, number] };
+      return pad.id === "snare"
+        ? [
+            { ...zone, velocities: [0, 0.25] as [number, number], end: 0.5 },
+            { ...zone, velocities: [0.25, 1] as [number, number] },
+          ]
+        : [zone];
+    }),
+    nodes: {
+      player: {
+        block: "sampler",
+        voice: true,
+        inputs: {
+          frequency: "voice.frequency",
+          gate: "voice.gate",
+          sample: "voice.sample",
+          root: "voice.root",
+          start: "voice.start",
+          end: "voice.end",
+        },
+      },
+      left: { block: "mul", voice: true, inputs: { a: "player.left", b: { param: "level" } } },
+      right: { block: "mul", voice: true, inputs: { a: "player.right", b: { param: "level" } } },
+    },
+    voice: ["left", "right"],
+  },
+};
+
+export const TEST_INSTRUMENTS = [pluck, wobble, sampler, drums];
 
 /** Put the test instruments in the library. */
 export const registerTestInstruments = (): void =>
-  TEST_INSTRUMENTS.forEach(({ type, label, schema, definition }) => {
+  TEST_INSTRUMENTS.forEach(({ type, label, family = "Synths", schema, definition }) => {
     const plan = compileDefinition(definition, { params: schema });
-    registerInstrument({ type, label, schema, family: "Synths", custom: true });
+    registerInstrument({ type, label, schema, family, custom: true });
     registerInstrumentFactory(type, (context, store) => new EngineInstrument(context, store, plan));
   });

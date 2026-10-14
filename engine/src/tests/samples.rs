@@ -168,3 +168,37 @@ fn dragging_the_end_in_and_out_again_plays_on_from_where_it_was() {
         assert!(out.iter().enumerate().all(|(index, &sample)| near(sample, (128 + index) as f32 * 0.001)));
     }
 }
+
+#[test]
+fn each_voice_plays_the_zone_it_was_given() {
+    // The sampler's slot, root, start and end come from the voice's zone signals.
+    let controls = vec![voice(SIGNAL_SAMPLE), voice(SIGNAL_ROOT), voice(SIGNAL_START), voice(SIGNAL_END), constant(0.0)];
+    let plan = PlanBuilder::new()
+        .node(KIND_SAMPLER, vec![voice(SIGNAL_FREQ), voice(SIGNAL_GATE)], controls)
+        .step(NODE, vec![0])
+        .voice_out(vec![port(0, 0), port(0, 1)]);
+    let mut engine = plan.loaded();
+    engine.reserve_sample(1, 1000, 1, RATE as f32).expect("room").fill(0.25);
+    engine.reserve_sample(2, 1000, 1, RATE as f32).expect("room").fill(-0.5);
+    // A kick on its own key, so it plays at its own speed: slot 1, root 36, the whole sample.
+    let zone = |engine: &mut Engine, slot: usize, sample: f32, root: f32| {
+        [(SIGNAL_SAMPLE, sample), (SIGNAL_ROOT, root), (SIGNAL_START, 0.0), (SIGNAL_END, 1.0)]
+            .into_iter()
+            .for_each(|(signal, value)| engine.set_voice_signal(0, slot, signal, value));
+    };
+    engine.note_on(0, 0, 0, 65.41, 1.0, 36.0);
+    zone(&mut engine, 0, 1.0, 36.0);
+    let first = render(&mut engine, 1);
+    assert!(first.iter().all(|&sample| near(sample, 0.25)));
+    // A second note, 10 samples in (between control reads), in its own zone: the two sum from it.
+    engine.note_on(0, 1, 10, 73.42, 1.0, 38.0);
+    zone(&mut engine, 1, 2.0, 38.0);
+    let both = render(&mut engine, 1);
+    assert!(both[..10].iter().all(|&sample| near(sample, 0.25)));
+    assert!(both[10..].iter().all(|&sample| near(sample, -0.25)));
+    // A signal that isn't a zone's, or a slot not sounding, is left alone.
+    engine.set_voice_signal(0, 0, SIGNAL_GATE, 0.0);
+    engine.set_voice_signal(0, 3, SIGNAL_SAMPLE, 2.0);
+    assert!(render(&mut engine, 1).iter().all(|&sample| near(sample, -0.25)));
+    assert!(!engine.voice_active(0, 3));
+}
