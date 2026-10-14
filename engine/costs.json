@@ -1,0 +1,31 @@
+{
+  "about": "Nanoseconds per 128-sample block on the machine that measured them (`yarn engine:costs`): each block run once a block, a voice's own cost beyond its blocks, and how many times dearer a block is in a loop run a sample at a time. src/audio/definitions/cost.ts scales them to a phone.",
+  "blocks": {
+    "add": 164,
+    "adsr": 808,
+    "chorus": 2543,
+    "compressor": 2154,
+    "hold": 694,
+    "ladder": 2958,
+    "lfo": 1150,
+    "loopgain": 4232,
+    "lowpass": 1330,
+    "meter": 886,
+    "mul": 153,
+    "noise": 132,
+    "onepole": 845,
+    "pan": 237,
+    "period": 239,
+    "pitch": 168,
+    "pulse": 780,
+    "reverb": 6939,
+    "saw": 443,
+    "select": 441,
+    "shaper": 568,
+    "sine": 697,
+    "svf": 1335,
+    "delay": 276
+  },
+  "voice": 909,
+  "sampleLoop": 20.8
+}

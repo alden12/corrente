@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DefinitionError, compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
-import type { DeviceDefinition } from "../src/audio/definitions/format";
+import {
+  HOST_SIGNALS,
+  TRACK_INPUTS,
+  VOICE_SIGNALS,
+  VOICE_SUM,
+  type DeviceDefinition,
+} from "../src/audio/definitions/format";
+import { EXAMPLE, definitionFormatDoc } from "../src/audio/definitions/describe";
+import { CATALOGUE } from "../src/audio/definitions/catalogue";
 import type { ParamSchema } from "../src/audio/params/types";
 import { startEngine } from "../src/audio/bank/exports";
 import { engineValueOf } from "../src/audio/definitions/values";
@@ -356,6 +364,42 @@ describe("signals, and lengths kept in time with the tempo", () => {
   });
 });
 
+describe("what a definition costs", () => {
+  it("adds up its blocks once for the track and once a voice", () => {
+    const voiceOf = (voices: number) =>
+      compileDefinition({
+        format: 1,
+        voices,
+        nodes: {
+          osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+          verb: { block: "reverb", inputs: { left: "voices.left", right: "voices.right" } },
+        },
+        voice: "osc",
+        output: ["verb.left", "verb.right"],
+      }).cost;
+    const [one, eight] = [voiceOf(1), voiceOf(8)];
+    expect(one.perVoice).toBeGreaterThan(0);
+    expect(eight.shared).toBe(one.shared);
+    expect(eight.total).toBeCloseTo(eight.shared + 8 * eight.perVoice, 9);
+  });
+
+  it("refuses a definition a phone couldn't run", () => {
+    // A reverb in every one of 64 voices.
+    expect(
+      problemsOf({
+        format: 1,
+        voices: 64,
+        nodes: { verb: { block: "reverb", voice: true, inputs: { left: "voice.gate", right: "voice.gate" } } },
+        voice: "verb",
+      }),
+    ).toEqual([
+      expect.stringMatching(
+        /^voices: too heavy for a phone: 64 voices at about [\d.]+% each is about [\d.]+% of its audio thread, over the 25.0% a device may take/,
+      ),
+    ]);
+  });
+});
+
 describe("definitions the compiler refuses", () => {
   const voiceWith = (nodes: DeviceDefinition["nodes"], voice = "x") => ({ format: 1, nodes, voice });
 
@@ -452,5 +496,17 @@ describe("definitions the compiler refuses", () => {
     expect(problemsOf(voiceWith({ voice: { block: "noise", voice: true } }, "voice"))).toContain(
       "voice: the name is kept for signals (voice, voices, input, host)",
     );
+  });
+});
+
+describe("the format's description", () => {
+  it("describes every signal and block, and its example compiles", () => {
+    const doc = definitionFormatDoc();
+    const signals = [VOICE_SIGNALS, VOICE_SUM, TRACK_INPUTS, HOST_SIGNALS].flatMap((group) => Object.keys(group));
+    expect(Object.keys(doc.signals).sort()).toEqual(signals.sort());
+    expect(doc.blocks.map((block) => block.name)).toEqual(CATALOGUE.blocks.map((block) => block.name));
+    const release = { id: "release", label: "Release", kind: "number", min: 1, max: 2000, default: 200 } as const;
+    const cutoff = { id: "cutoff", label: "Cutoff", kind: "number", min: 20, max: 8000, default: 900 } as const;
+    expect(() => compileDefinition(EXAMPLE, { params: [release, cutoff] })).not.toThrow();
   });
 });

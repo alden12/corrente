@@ -23,6 +23,7 @@
     "engine:build": "node engine/compile.ts",
     "engine:check": "node engine/compile.ts --check",
     "engine:test": "node engine/compile.ts --test",
+    "engine:costs": "MEASURE_COSTS=1 vitest run test/engineCosts.test.ts",
     "portraits": "tsx scripts/generatePortraits.ts",
     "preview": "vite preview"
   },

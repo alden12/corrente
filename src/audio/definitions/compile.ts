@@ -10,6 +10,7 @@
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
 import { DEFAULT_VOICES, type DeviceDefinition, type ParamBinding } from "./format";
+import { costOf, overCap, type Cost, type CostedNode } from "./cost";
 import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
 import type { ParamSchema } from "../params/types";
 import { channelsOf, referenceTo, sourcesOf, underlying, type InputSource, type Source } from "./references";
@@ -59,6 +60,8 @@ export interface CompiledPlan {
   /** The engine's params in order: param source i is `params[i]` of the device's params. */
   params: ParamSource[];
   voices: number;
+  /** What it costs to run, as shares of a phone's audio thread (cost.ts). */
+  cost: Cost;
   /** Each section's steps by node name (sums show as `node.input+n`), for tests and describing. */
   steps: Record<Section, { mode: StepMode; nodes: string[] }[]>;
 }
@@ -273,6 +276,18 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     }),
   ) as Record<Section, Step[]>;
 
+  // What it costs, and whether a phone could run it.
+  const costed = (section: Section): CostedNode[] =>
+    steps[section].flatMap((step) =>
+      step.nodes.map((index) => ({
+        block: planned[section][index].block.name,
+        sampleLoop: step.mode === "sample-loop",
+      })),
+    );
+  const cost = costOf([...costed("pre"), ...costed("post")], costed("voice"), resolved.voices);
+  const tooHeavy = overCap(cost, resolved.voices);
+  if (tooHeavy) throw new DefinitionError([`${resolved.voices > 0 ? "voices" : "nodes"}: ${tooHeavy}`]);
+
   // The words.
   const floatBits = (value: number) => new Int32Array(Float32Array.of(value).buffer)[0];
   const stepOf = (section: Section, node: number) => steps[section].find((step) => step.nodes.includes(node))!;
@@ -320,6 +335,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     words,
     params,
     voices: resolved.voices,
+    cost,
     steps: Object.fromEntries(
       SECTIONS.map((section) => [
         section,

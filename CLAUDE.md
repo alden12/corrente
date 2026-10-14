@@ -95,6 +95,9 @@ treat these as labels that tie related code together, not as links to follow.
 - **Ranges are real:** `test/engineBlocks.test.ts` drives every block across its declared input
   ranges and fails if an output leaves its declared range. It found a biquad that blew up under fast
   modulation, so a failure there is usually the block, not the range.
+- **A new block needs its cost measured:** `yarn engine:costs` times every block in the built
+  `engine.wasm` and writes `engine/costs.json` (committed; a test fails until it has every block). The
+  plan compiler uses it to refuse a device a phone couldn't run (`src/audio/definitions/cost.ts`).
 - **Library licences are an allow list** (`ALLOWED_LICENCES` in `engine/catalogue.ts`): a block using
   library code under any other licence fails the build. Faust's libraries include GPL-only code, so
   adding a licence is a deliberate decision, not a fix to make the build pass.
