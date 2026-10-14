@@ -49,3 +49,5 @@ export interface BankOptions {
 export const BANK_PROCESSOR = "engine-bank";
 /** Tracks per worklet node (decision 2 of INST-36: about 16, to share the cost of a node). */
 export const TRACKS_PER_BANK = 16;
+/** Node inputs per track: its main input (left, right), then its sidechain (left, right). */
+export const INPUTS_PER_TRACK = 2;

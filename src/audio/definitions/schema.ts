@@ -17,6 +17,7 @@ import {
   MAX_VOICES,
   NODE_NAME,
   RESERVED_NAMES,
+  FIXED_INPUTS,
   SAMPLE_INPUTS,
   singleInputSchema,
   TABLE_INPUTS,
@@ -167,6 +168,8 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       const inputPath = ["nodes", name, "inputs", port];
       if (SAMPLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, inputPath, !!definition.zones);
       if (TABLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, inputPath, false);
+      if (FIXED_INPUTS[node.block]?.includes(port) && typeof value !== "number")
+        return problem(inputPath, "takes a number: it's set once, when the device loads");
       listOf(value).forEach((item, index) => {
         const path = ["nodes", name, "inputs", port, ...(Array.isArray(value) ? [index] : [])];
         if (typeof item === "number") return;

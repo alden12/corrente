@@ -9,5 +9,12 @@ export interface Effect {
   readonly input: AudioNode;
   /** The processed signal; connect into the next effect or the track gain. */
   readonly output: AudioNode;
+  /**
+   * The stage of the signal flow it was made for, if it cares (an effect on the new engine, INST-36.7):
+   * moved to a place with another stage, it's made again rather than moved.
+   */
+  readonly stage?: number;
+  /** Resolves once it's ready to sound (an engine effect's plan and samples are in), for offline renders. */
+  ready?(): Promise<void>;
   dispose(): void;
 }

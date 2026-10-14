@@ -1,12 +1,12 @@
 /**
  * An engine bank's worklet (INST-36.5): one AudioWorkletNode running up to TRACKS_PER_BANK tracks in
  * one engine, each track on its own stereo output, so the mixer, sends and freezing stay per track.
- * Everything it does is EngineBank's; this only carries messages in and copies each track's block
- * out. `process` creates nothing (garbage collection on the audio thread is a click).
+ * Everything it does is EngineBank's; this only carries messages in, copies each track's audio
+ * input in (a main input and a sidechain per track, INST-36.7), and copies each track's block out. `process` creates nothing (garbage collection on the audio thread is a click).
  */
 import { EngineBank, PlanRejected } from "./bank";
-import { OUTPUT_CHANNELS } from "./exports";
-import { BANK_PROCESSOR, type BankOptions, type FromBank, type ToBank } from "./messages";
+import { INPUT_CHANNELS, OUTPUT_CHANNELS } from "./exports";
+import { BANK_PROCESSOR, INPUTS_PER_TRACK, type BankOptions, type FromBank, type ToBank } from "./messages";
 
 class EngineBankProcessor extends AudioWorkletProcessor {
   private readonly bank: EngineBank;
@@ -54,9 +54,21 @@ class EngineBankProcessor extends AudioWorkletProcessor {
     this.port.onmessage = ({ data }: MessageEvent<ToBank>) => (handlers[data.type] as (message: ToBank) => void)(data);
   }
 
-  process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     // Returning false lets the browser drop the processor.
     if (this.stopped) return false;
+    // Each track's main input and sidechain into the engine's input channels (0, 1 and 2, 3). An
+    // input with nothing connected has no channels: silence.
+    for (let track = 0; track < this.loaded.length; track++) {
+      if (!this.loaded[track]) continue;
+      for (let channel = 0; channel < INPUT_CHANNELS; channel++) {
+        const input = inputs[track * INPUTS_PER_TRACK + (channel >> 1)];
+        const source = input?.[channel & 1] ?? input?.[0];
+        const target = this.bank.input(track, channel);
+        if (source) target.set(source);
+        else target.fill(0);
+      }
+    }
     this.bank.process(currentTime);
     // Plain loops: a closure per block would be garbage.
     for (let track = 0; track < outputs.length; track++) {

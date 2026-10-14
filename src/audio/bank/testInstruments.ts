@@ -1,6 +1,6 @@
 /**
- * Instruments to try the new engine with in development (INST-36.5), before any device moves over
- * (INST-36.8). Registered by devTools.ts, so they never ship: no project on the real deployment may
+ * Instruments and effects to try the new engine with in development (INST-36.5, INST-36.7), before
+ * any device moves over (INST-36.8). Registered by devTools.ts, so they never ship: no project on the real deployment may
  * hold a new-engine device until the old format converts and retires (decided 2026-10-14). They go
  * when the built-ins convert.
  */
@@ -10,6 +10,9 @@ import { registerInstrument } from "../instruments/catalog";
 import { registerInstrumentFactory } from "../instruments/registry";
 import type { ParamSchema, ParamSpec } from "../params/types";
 import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../samples/catalog";
+import { registerEffect } from "../effects/catalog";
+import { registerEffectFactory } from "../effects/registry";
+import { EngineEffect } from "./EngineEffect";
 import { EngineInstrument } from "./EngineInstrument";
 
 interface TestInstrument {
@@ -341,10 +344,116 @@ const wavetable: TestInstrument = {
 
 export const TEST_INSTRUMENTS = [pluck, wobble, sampler, drums, wavetable];
 
-/** Put the test instruments in the library. */
-export const registerTestInstruments = (): void =>
+/** The uniform wet/dry an effect's schema carries, crossfaded around it (BaseEffect). */
+const MIX: ParamSpec = { id: "mix", label: "Mix", kind: "number", min: 0, max: 1, default: 0.35, smoothMs: 20 };
+
+/** Note divisions an echo can be timed to, in time with the tempo. */
+const DIVISIONS = ["1/16", "1/8T", "1/8", "1/8.", "1/4", "1/4.", "1/2"];
+
+/**
+ * An echo (INST-36.7): a delay each side, timed to the tempo, each feeding the other through a
+ * damping filter, so repeats bounce left and right and darken as they fade. The feedback loop runs
+ * through the delays, in chunks; the delays are sized for 4 seconds.
+ */
+const echo: TestInstrument = {
+  type: "engine-echo",
+  label: "Echo (new engine)",
+  schema: [
+    { id: "time", label: "Time", kind: "enum", options: DIVISIONS, default: "1/8." },
+    { id: "feedback", label: "Feedback", kind: "number", min: 0, max: 0.95, default: 0.5 },
+    {
+      id: "tone",
+      label: "Tone",
+      kind: "number",
+      min: 200,
+      max: 16000,
+      default: 3500,
+      unit: "Hz",
+      taper: "exponential",
+    },
+    MIX,
+  ],
+  definition: {
+    format: 1,
+    nodes: {
+      left: {
+        block: "delay",
+        inputs: {
+          signal: ["input.left", "fromRight"],
+          length: { beats: { param: "time" }, as: "samples" },
+          size: 4 * 48000,
+        },
+      },
+      right: {
+        block: "delay",
+        inputs: {
+          signal: ["input.right", "fromLeft"],
+          length: { beats: { param: "time" }, as: "samples" },
+          size: 4 * 48000,
+        },
+      },
+      darkLeft: { block: "onepole", inputs: { signal: "left", cutoff: { param: "tone" } } },
+      darkRight: { block: "onepole", inputs: { signal: "right", cutoff: { param: "tone" } } },
+      fromLeft: { block: "mul", inputs: { a: "darkLeft", b: { param: "feedback" } } },
+      fromRight: { block: "mul", inputs: { a: "darkRight", b: { param: "feedback" } } },
+    },
+    output: ["left", "right"],
+  },
+};
+
+/**
+ * A resonator (INST-36.7): each side a comb filter, a delay one period of `pitch` long fed back
+ * through a damping filter, ringing at that pitch and its harmonics for about `decay` (`loopgain`).
+ */
+const resonator: TestInstrument = {
+  type: "engine-resonator",
+  label: "Resonator (new engine)",
+  schema: [
+    { id: "pitch", label: "Pitch", kind: "number", min: 40, max: 2000, default: 220, unit: "Hz", taper: "exponential" },
+    { id: "decay", label: "Decay", kind: "number", min: 0.05, max: 10, default: 1.5, unit: "s", taper: "exponential" },
+    {
+      id: "tone",
+      label: "Tone",
+      kind: "number",
+      min: 500,
+      max: 16000,
+      default: 6000,
+      unit: "Hz",
+      taper: "exponential",
+    },
+    MIX,
+  ],
+  definition: {
+    format: 1,
+    nodes: {
+      period: { block: "period", inputs: { frequency: { param: "pitch" }, offset: 0.5 } },
+      ring: { block: "loopgain", inputs: { period: "period", time: { param: "decay" } } },
+      left: { block: "delay", inputs: { signal: [{ from: "input.left", scale: 0.2 }, "backLeft"], length: "period" } },
+      right: {
+        block: "delay",
+        inputs: { signal: [{ from: "input.right", scale: 0.2 }, "backRight"], length: "period" },
+      },
+      dampLeft: { block: "onepole", inputs: { signal: "left", cutoff: { param: "tone" } } },
+      dampRight: { block: "onepole", inputs: { signal: "right", cutoff: { param: "tone" } } },
+      backLeft: { block: "mul", inputs: { a: "dampLeft", b: "ring" } },
+      backRight: { block: "mul", inputs: { a: "dampRight", b: "ring" } },
+    },
+    output: ["left", "right"],
+  },
+};
+
+export const TEST_EFFECTS = [echo, resonator];
+
+/** Put the test instruments and effects in the library. */
+export const registerTestInstruments = (): void => {
   TEST_INSTRUMENTS.forEach(({ type, label, family = "Synths", schema, definition }) => {
     const plan = compileDefinition(definition, { params: schema });
     registerInstrument({ type, label, schema, family, custom: true });
     registerInstrumentFactory(type, (context, store) => new EngineInstrument(context, store, plan));
   });
+  TEST_EFFECTS.forEach(({ type, label, schema, definition }) => {
+    const plan = compileDefinition(definition, { params: schema });
+    registerEffect({ type, label, schema, custom: true });
+    registerEffectFactory(type, (context, store, place) => new EngineEffect(context, store, plan, place.stage));
+  });
+};

@@ -41,3 +41,22 @@ fn a_delay_loop_runs_in_chunks_and_echoes_on_time() {
         assert!((sample - expected(n)).abs() < 1e-6, "sample {n}: {sample}, expected {}", expected(n));
     });
 }
+
+#[test]
+fn a_delay_holds_as_long_as_its_size_and_no_longer() {
+    // An impulse into a delay `length` samples long, the ring `size` (a literal in the plan).
+    let echo = |size: Option<f32>, length: f32| {
+        let controls = size.map_or(vec![], |size| vec![constant(size)]);
+        PlanBuilder::new().voices(0).node_in(POST, KIND_DELAY, vec![input(0), constant(length)], controls).step_in(POST, NODE, vec![0]).track_out(vec![buffer(0)])
+    };
+    let first_sound = |plan: PlanBuilder, blocks: usize| {
+        let mut engine = plan.loaded();
+        engine.input_mut(0, 0).expect("track 0")[0] = 1.0;
+        let out = render(&mut engine, blocks);
+        out.iter().position(|&sample| sample != 0.0)
+    };
+    // A second at 48 kHz, in a ring sized for it.
+    assert_eq!(first_sound(echo(Some(48000.0), 48000.0), 400), Some(48000));
+    // Without a size, the ring holds 4094 samples, so a longer delay is cut to that.
+    assert_eq!(first_sound(echo(None, 48000.0), 40), Some(4094));
+}

@@ -12,13 +12,13 @@
 //! - `let Unit::Faust { block, controls, .. } = unit else { return };` takes `unit` apart if it is a
 //!   Faust unit, and returns otherwise; `..` skips the fields it doesn't name.
 
-use super::delay::DelayLine;
+use super::delay::{DEFAULT_SIZE, DelayLine};
 use super::sampler::SamplerState;
 use super::wavetable::WavetableState;
 use super::sources::{Context, Sources};
 use super::{BLOCK, CONTROL, Slot};
 use crate::faust::{self, Block, ParamIndex};
-use crate::plan::{MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Section, StepMode};
+use crate::plan::{MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Section, Source, StepMode};
 
 /// What a node is when it runs: a Faust block with its sliders, a delay line, a sample player or a
 /// wavetable oscillator.
@@ -32,9 +32,15 @@ pub(super) enum Unit {
 }
 
 impl Unit {
-    pub(super) fn new(node: &Node, sample_rate: i32) -> Self {
+    /// The unit for a node, made when its plan loads. `constants` are the plan's literals, which a
+    /// delay's `size` is read from.
+    pub(super) fn new(node: &Node, sample_rate: i32, constants: &[f32]) -> Self {
         match node.kind {
-            NodeKind::Delay => Unit::Delay(DelayLine::new()),
+            // TS: const size = node.control[0]?.type === "const" ? constants[node.control[0].index] : DEFAULT_SIZE
+            NodeKind::Delay => Unit::Delay(DelayLine::new(match node.control.first() {
+                Some(&Source::Const(index)) => constants[index].max(0.0) as usize,
+                _ => DEFAULT_SIZE,
+            })),
             NodeKind::Sampler => Unit::Sampler(SamplerState::new(sample_rate)),
             NodeKind::Wavetable => Unit::Wavetable(WavetableState::new(sample_rate)),
             NodeKind::Faust(kind) => {

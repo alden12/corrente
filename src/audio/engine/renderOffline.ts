@@ -13,6 +13,7 @@
  */
 import { createInstrument } from "../instruments/registry";
 import { createEffect } from "../effects/registry";
+import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
 import { loadWorklets } from "../worklets";
 import { setTransport as setEngineTransport } from "../bank/pool";
 import { renderIsolated } from "./renderIsolated";
@@ -108,8 +109,10 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   });
   const parentInput = (parentId: string | null): AudioNode =>
     (parentId ? groupInputs.get(parentId) : undefined) ?? master;
+  const effects: Effect[] = [];
   for (const { group, input, output } of groupOutputs) {
-    disposables.push(...connectChain(ctx, input, group.effects, output));
+    const depth = groupDepth(groups, group.id);
+    effects.push(...connectChain(ctx, input, group.effects, output, (index) => groupEffectStage(depth, index)));
     output.connect(parentInput(group.parentId));
     output.gain.value = group.muted ? 0 : group.volume;
   }
@@ -124,7 +127,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       const gain = ctx.createGain();
       const instrument = createInstrument(track.instrumentType, ctx, track.params);
       instruments.push(instrument);
-      disposables.push(instrument, ...connectChain(ctx, instrument.output, track.effects, gain));
+      disposables.push(instrument);
+      effects.push(...connectChain(ctx, instrument.output, track.effects, gain));
       gain.connect(parentInput(track.parentId));
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
 
@@ -148,7 +152,7 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       // Audio track: input -> effects -> gain -> group tree; its clips are scheduled below.
       const input = ctx.createGain();
       const gain = ctx.createGain();
-      disposables.push(...connectChain(ctx, input, track.effects, gain));
+      effects.push(...connectChain(ctx, input, track.effects, gain));
       gain.connect(parentInput(track.parentId));
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
       scheduleFns.push(() => scheduleAudioTrack(ctx, track, input, audioBuffers, loopStart, project.length, bpm));
@@ -157,7 +161,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
 
   // Decode audio-clip buffers + wait for instrument assets (sampler/drumkit buffers) before
   // rendering - offline render runs to completion immediately, so anything undecoded renders silent.
-  await Promise.all(instruments.map((instrument) => instrument.ready?.()));
+  disposables.push(...effects);
+  await Promise.all([...instruments, ...effects].map((device) => device.ready?.()));
   await decodeAudioClips(ctx, tracks, audioBuffers);
 
   // Schedule all notes inside one suspend(0): a worklet note is a port message, and a message
@@ -204,13 +209,20 @@ function buildMidiChain(
   return devices[0] ?? instrument;
 }
 
-/** Create + connect an effect chain: input -> fx1 -> ... -> output (skipping bypassed). */
-function connectChain(ctx: BaseAudioContext, input: AudioNode, chain: EffectInstance[], output: AudioNode): Effect[] {
+/** Create + connect an effect chain: input -> fx1 -> ... -> output (skipping bypassed), each placed
+ *  at `stageAt` its index, as AudioEngine places them (INST-36.7). */
+function connectChain(
+  ctx: BaseAudioContext,
+  input: AudioNode,
+  chain: EffectInstance[],
+  output: AudioNode,
+  stageAt: (index: number) => number = trackEffectStage,
+): Effect[] {
   const created: Effect[] = [];
   let cursor: AudioNode = input;
-  for (const instance of chain) {
+  for (const [index, instance] of chain.entries()) {
     if (instance.bypassed) continue;
-    const effect = createEffect(instance.type, ctx, instance.params);
+    const effect = createEffect(instance.type, ctx, instance.params, { stage: stageAt(index) });
     cursor.connect(effect.input);
     cursor = effect.output;
     created.push(effect);

@@ -9,6 +9,7 @@
  */
 import { createInstrument } from "../instruments/registry";
 import { createEffect } from "../effects/registry";
+import { trackEffectStage } from "../bank/stages";
 import { instrumentSchema } from "../instruments/catalog";
 import { effectSchema } from "../effects/catalog";
 import { ParamStore } from "../params/store";
@@ -86,8 +87,11 @@ export async function renderIsolated(
   // complete BEFORE constructing any AudioWorkletNode.
   await loadWorklets(ctx);
 
-  const effects = (chain.effects ?? []).map((device) =>
-    createEffect(device.type, ctx, storeFor(effectSchema(device.type), device.params)),
+  // Each in its own stage, as on a track, so engine effects never loop through one bank (INST-36.7).
+  const effects = (chain.effects ?? []).map((device, index) =>
+    createEffect(device.type, ctx, storeFor(effectSchema(device.type), device.params), {
+      stage: trackEffectStage(index),
+    }),
   );
   // Chain the effects in order, ending at the destination; the head is where the input goes.
   const head = effects.reduceRight<AudioNode>((next, effect) => {
@@ -116,5 +120,7 @@ export async function renderIsolated(
     source.start(0);
   }
 
+  // An engine effect's plan has to be in before the render runs past it (INST-36.7).
+  await Promise.all(effects.map((effect) => effect.ready?.()));
   return ctx.startRendering();
 }

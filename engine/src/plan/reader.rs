@@ -76,7 +76,8 @@ impl Reader<'_> {
         // value, naming it `faust`, again with a condition. The match gives back a pair, which `let
         // (kind, outputs) =` takes apart.
         let (kind, outputs) = match kind {
-            KIND_DELAY if audio.len() == 2 => (NodeKind::Delay, 1),
+            // Signal and length in, and its size as a control if the plan gives one.
+            KIND_DELAY if audio.len() == 2 && control.len() <= 1 => (NodeKind::Delay, 1),
             // Frequency and gate in, every control given, left and right out.
             KIND_SAMPLER if audio.len() == 2 && control.len() == SAMPLER_CONTROLS => (NodeKind::Sampler, 2),
             // Frequency and position in, the table's slot as its control, one signal out.

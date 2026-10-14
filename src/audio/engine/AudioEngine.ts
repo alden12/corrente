@@ -20,6 +20,7 @@ import type { AudioClipData } from "../project/types";
 import { createInstrument, registerInstrumentFactory } from "../instruments/registry";
 import type { Instrument } from "../instruments/types";
 import { createEffect, registerEffectFactory } from "../effects/registry";
+import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
 import type { Effect } from "../effects/types";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
@@ -309,7 +310,8 @@ export class AudioEngine {
     // Group effect chains and routing.
     for (const group of groups) {
       const node = this.groupNodes.get(group.id)!;
-      this.reconcileEffects(node.effects, group.effects, edited);
+      const depth = groupDepth(groups, group.id);
+      this.reconcileEffects(node.effects, group.effects, edited, (index) => groupEffectStage(depth, index));
       this.rewireChain(node.input, node.effects, group.effects, node.output);
       node.output.disconnect();
       node.output.connect(this.parentInput(group.parentId));
@@ -387,18 +389,25 @@ export class AudioEngine {
   }
 
   /** Create effects for new instances, dispose effects no longer in the chain, and rebuild any
-   *  whose custom definition was `edited`. */
-  private reconcileEffects(live: Map<string, Effect>, chain: EffectInstance[], edited: Set<string>): void {
+   *  whose custom definition was `edited`, or (an engine effect) that moved to another stage of the
+   *  signal flow (`stageAt` its place in the chain), which its bank can't follow (INST-36.7). */
+  private reconcileEffects(
+    live: Map<string, Effect>,
+    chain: EffectInstance[],
+    edited: Set<string>,
+    stageAt: (index: number) => number = trackEffectStage,
+  ): void {
     const ctx = this.ctx!;
+    const stages = new Map(chain.map((fx, index) => [fx.id, stageAt(index)]));
     const want = new Set(chain.filter((fx) => !edited.has(fx.type)).map((fx) => fx.id));
     for (const [id, fx] of live) {
-      if (!want.has(id)) {
+      if (!want.has(id) || (fx.stage !== undefined && fx.stage !== stages.get(id))) {
         fx.dispose();
         live.delete(id);
       }
     }
     for (const fx of chain) {
-      if (!live.has(fx.id)) live.set(fx.id, createEffect(fx.type, ctx, fx.params));
+      if (!live.has(fx.id)) live.set(fx.id, createEffect(fx.type, ctx, fx.params, { stage: stages.get(fx.id)! }));
     }
   }
 

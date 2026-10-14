@@ -613,6 +613,18 @@ describe("definitions the compiler refuses", () => {
     });
   });
 
+  it("wants a delay's size as a number, since it's set once", () => {
+    const echo = (size: unknown) => ({
+      format: 1,
+      nodes: { echo: { block: "delay", inputs: { signal: "input.left", length: 1000, size } } },
+      output: "echo",
+    });
+    expect(problemsOf(echo(48000))).toEqual([]);
+    expect(problemsOf(echo({ param: "size" }), ["size"])).toEqual([
+      "echo.size: takes a number: it's set once, when the device loads",
+    ]);
+  });
+
   it("checks params against the device's, and keeps signal names for signals", () => {
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "volume" }, b: 1 } } }), ["level"]),

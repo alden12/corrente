@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { EngineBank, PlanRejected } from "../src/audio/bank/bank";
 import { EVENT, EventQueue } from "../src/audio/bank/events";
 import { BLOCK } from "../src/audio/bank/exports";
-import { TEST_INSTRUMENTS } from "../src/audio/bank/testInstruments";
+import { TEST_EFFECTS, TEST_INSTRUMENTS } from "../src/audio/bank/testInstruments";
 import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import type { DeviceDefinition } from "../src/audio/definitions/format";
@@ -477,4 +477,49 @@ describe("the new engine's test instruments", () => {
       expect(sound.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 4)).toBe(true);
     },
   );
+});
+
+describe("the new engine's test effects", () => {
+  it.each(TEST_EFFECTS.map((effect) => [effect.type, effect] as const))(
+    "%s compiles against its params and processes its input",
+    (_type, { schema, definition }) => {
+      const compiled = compileDefinition(definition, { params: schema });
+      const defaults = Object.fromEntries(
+        schema.map((spec) => [spec.id, spec.kind === "number" ? spec.default : 0] as const),
+      );
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, compiled, defaults);
+      // A tenth of a second of noise in, then silence: the effect rings on after it.
+      const sound = Array.from({ length: 200 }, (_, block) => {
+        [0, 1].forEach((channel) =>
+          bank.input(0, channel).forEach((_, index, input) => (input[index] = block < 40 ? Math.random() - 0.5 : 0)),
+        );
+        bank.process((block * BLOCK) / RATE);
+        return Array.from(bank.output(0, 0));
+      }).flat();
+      const after = sound.slice(60 * BLOCK);
+      expect(Math.max(...after.map(Math.abs))).toBeGreaterThan(0.01);
+      expect(sound.every((sample) => Number.isFinite(sample) && Math.abs(sample) < 4)).toBe(true);
+    },
+  );
+
+  it("echoes in time with the tempo", () => {
+    const echo = TEST_EFFECTS.find((effect) => effect.type === "engine-echo")!;
+    const bank = new EngineBank(wasm, RATE, 1);
+    bank.load(0, compileDefinition(echo.definition, { params: echo.schema }), {
+      time: echo.schema[0].kind === "enum" ? echo.schema[0].options.indexOf("1/4") : 0,
+      feedback: 0,
+      tone: 16000,
+    });
+    bank.setTransport({ time: 0, beat: 0, tempo: 120, playing: true });
+    // One click on the left: a quarter note at 120 is half a second later.
+    const sound = Array.from({ length: 200 }, (_, block) => {
+      bank.input(0, 0).fill(0);
+      if (block === 0) bank.input(0, 0)[0] = 1;
+      bank.process((block * BLOCK) / RATE);
+      return Array.from(bank.output(0, 0));
+    }).flat();
+    const loudest = sound.reduce((best, sample, index) => (Math.abs(sample) > Math.abs(sound[best]) ? index : best), 0);
+    expect(Math.abs(loudest - RATE / 2)).toBeLessThan(4);
+  });
 });

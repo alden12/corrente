@@ -93,9 +93,10 @@ pub(super) struct Track {
 }
 
 impl SectionState {
-    fn new(section: &Section, sample_rate: i32) -> Self {
+    /// A unit and buffers for every node; `constants` are the plan's literals (a delay's size).
+    fn new(section: &Section, sample_rate: i32, constants: &[f32]) -> Self {
         SectionState {
-            units: section.nodes.iter().map(|node| Unit::new(node, sample_rate)).collect(),
+            units: section.nodes.iter().map(|node| Unit::new(node, sample_rate, constants)).collect(),
             // TS: Array.from({ length: section.bufferCount }, () => new Float32Array(SLOT))
             buffers: vec![SILENT_SLOT; section.buffer_count],
         }
@@ -116,9 +117,9 @@ impl SectionState {
 }
 
 impl Voice {
-    fn new(section: &Section, sample_rate: i32) -> Self {
+    fn new(section: &Section, sample_rate: i32, constants: &[f32]) -> Self {
         Voice {
-            state: SectionState::new(section, sample_rate),
+            state: SectionState::new(section, sample_rate, constants),
             signals: [SILENT_SLOT; VOICE_SIGNALS],
             current: [0.0; VOICE_SIGNALS],
             active: false,
@@ -155,9 +156,9 @@ impl Graph {
             params: vec![ParamSource::default(); plan.param_count],
             // TS: plan.constants.map((value) => new Float32Array(SLOT).fill(value))
             constants: plan.constants.iter().map(|&value| [value; SLOT]).collect(),
-            pre: SectionState::new(&plan.pre, sample_rate),
-            post: SectionState::new(&plan.post, sample_rate),
-            voices: (0..plan.voice_count + SPARE_VOICES).map(|_| Voice::new(&plan.voice, sample_rate)).collect(),
+            pre: SectionState::new(&plan.pre, sample_rate, &plan.constants),
+            post: SectionState::new(&plan.post, sample_rate, &plan.constants),
+            voices: (0..plan.voice_count + SPARE_VOICES).map(|_| Voice::new(&plan.voice, sample_rate, &plan.constants)).collect(),
             plan,
         }
     }

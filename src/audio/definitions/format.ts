@@ -172,6 +172,12 @@ export const SAMPLE_INPUTS: Record<string, readonly string[]> = { sampler: ["sam
  */
 export const TABLE_INPUTS: Record<string, readonly string[]> = { wavetable: ["table"] };
 
+/**
+ * Controls read once, when the device loads, so they take a plain number: a delay's `size` is how
+ * much memory its ring gets.
+ */
+export const FIXED_INPUTS: Record<string, readonly string[]> = { delay: ["size"] };
+
 /** A sample param named as it is: what a sample input or a zone takes. */
 export const sampleBindingSchema = z.strictObject({ param: z.string().min(1) });
 

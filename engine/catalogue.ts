@@ -98,13 +98,13 @@ export const NATIVE_BLOCKS: BlockSpec[] = [
     name: "delay",
     kind: 1000,
     description:
-      "A delay line: its signal, `length` samples late, interpolated between samples. In a feedback loop it lets the loop run in chunks rather than a sample at a time.",
+      "A delay line: its signal, `length` samples late, interpolated between samples. `size` is the longest `length` it holds, a number set once (a voice's string wants a few thousand samples, an echo seconds' worth; memory grows with it, per voice for a voice node). In a feedback loop it lets the loop run in chunks rather than a sample at a time.",
     inputs: [
       { name: "signal", min: -1, max: 1 },
-      { name: "length", min: 0, max: 4094, unit: "samples" },
+      { name: "length", min: 0, max: 2097150, unit: "samples" },
     ],
     outputs: [{ name: "signal", min: -1, max: 1 }],
-    controls: [],
+    controls: [{ name: "size", min: 2, max: 2097150, init: 4094, unit: "samples" }],
     meters: [],
     credits: [],
     licences: [],

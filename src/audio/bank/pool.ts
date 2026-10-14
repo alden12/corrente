@@ -8,8 +8,10 @@
  */
 import engineUrl from "../../../engine/engine.wasm?url";
 import workletUrl from "./engine.worklet.ts?worker&url";
+import { INSTRUMENT_STAGE } from "./stages";
 import {
   BANK_PROCESSOR,
+  INPUTS_PER_TRACK,
   TRACKS_PER_BANK,
   type BankOptions,
   type FromBank,
@@ -29,6 +31,8 @@ export interface BankSlot {
 
 interface Bank {
   node: AudioWorkletNode;
+  /** The stage every slot in it serves. */
+  stage: number;
   taken: boolean[];
   /** Told what became of each slot's plan. */
   listeners: (((message: FromBank) => void) | undefined)[];
@@ -74,30 +78,43 @@ const poolFor = (context: BaseAudioContext) => {
 
 // Synchronous, so slots taken together (a project's tracks, as it opens) fill one bank before
 // another is made.
-const newBank = (context: BaseAudioContext, bytes: ArrayBuffer): Bank => {
+const newBank = (context: BaseAudioContext, bytes: ArrayBuffer, stage: number): Bank => {
   const processorOptions: BankOptions = { bytes: bytes.slice(0), tracks: TRACKS_PER_BANK };
   const node = new AudioWorkletNode(context, BANK_PROCESSOR, {
-    numberOfInputs: 0,
+    // Each track's main input and its sidechain, stereo (a mono source plays in both channels).
+    numberOfInputs: TRACKS_PER_BANK * INPUTS_PER_TRACK,
+    channelCount: 2,
+    channelCountMode: "explicit",
+    channelInterpretation: "speakers",
     numberOfOutputs: TRACKS_PER_BANK,
     outputChannelCount: Array.from({ length: TRACKS_PER_BANK }, () => 2),
     processorOptions,
   });
-  const bank: Bank = { node, taken: Array.from({ length: TRACKS_PER_BANK }, () => false), listeners: [] };
+  const bank: Bank = { node, stage, taken: Array.from({ length: TRACKS_PER_BANK }, () => false), listeners: [] };
   node.port.onmessage = ({ data }: MessageEvent<FromBank>) => bank.listeners[data.track]?.(data);
   const transport = transports.get(context);
   if (transport) node.port.postMessage({ type: "transport", ...transport } satisfies ToBank);
   return bank;
 };
 
+/** The node input a slot's main audio goes into. */
+export const mainInput = (track: number): number => track * INPUTS_PER_TRACK;
+/** The node input a slot's sidechain goes into. */
+export const sidechainInput = (track: number): number => track * INPUTS_PER_TRACK + 1;
+
 /**
- * A free slot in one of the context's banks. `listener` hears whether each plan it's given loaded
- * (the compiler checks plans first, so a refusal is a bug, not a typo).
+ * A free slot in one of the context's banks for `stage`. `listener` hears whether each plan it's
+ * given loaded (the compiler checks plans first, so a refusal is a bug, not a typo).
  */
-export const takeSlot = async (context: BaseAudioContext, listener: (message: FromBank) => void): Promise<BankSlot> => {
+export const takeSlot = async (
+  context: BaseAudioContext,
+  listener: (message: FromBank) => void,
+  stage: number = INSTRUMENT_STAGE,
+): Promise<BankSlot> => {
   const { bytes, banks } = await poolFor(context);
-  let bank = banks.find((candidate) => candidate.taken.includes(false));
+  let bank = banks.find((candidate) => candidate.stage === stage && candidate.taken.includes(false));
   if (!bank) {
-    bank = newBank(context, bytes);
+    bank = newBank(context, bytes, stage);
     banks.push(bank);
   }
   const owner = bank;

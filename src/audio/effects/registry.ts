@@ -18,8 +18,13 @@ import { filter } from "./graph/filter";
 import { chorus } from "./graph/chorus";
 import { bitcrusher } from "./graph/bitcrusher";
 import { DEFAULT_EFFECT } from "./catalog";
+import { trackEffectStage, type EffectPlace } from "../bank/stages";
 
-type EffectFactory = (ctx: BaseAudioContext, store: ParamStore) => Effect;
+/**
+ * Makes an effect. `place` says where in the signal flow it sits, which only an effect on the new
+ * engine uses (its bank's stage, INST-36.7); the rest ignore it.
+ */
+type EffectFactory = (ctx: BaseAudioContext, store: ParamStore, place: EffectPlace) => Effect;
 
 const FACTORIES = new Map<string, EffectFactory>();
 
@@ -28,9 +33,15 @@ export function registerEffectFactory(type: string, factory: EffectFactory): voi
   FACTORIES.set(type, factory);
 }
 
-export function createEffect(type: string, ctx: BaseAudioContext, store: ParamStore): Effect {
+/** Make an effect of `type` (the default if unknown), first in a track's chain unless `place` says. */
+export function createEffect(
+  type: string,
+  ctx: BaseAudioContext,
+  store: ParamStore,
+  place: EffectPlace = { stage: trackEffectStage(0) },
+): Effect {
   const make = FACTORIES.get(type) ?? FACTORIES.get(DEFAULT_EFFECT)!;
-  return make(ctx, store);
+  return make(ctx, store, place);
 }
 
 // --- built-in factories (self-registered) ---------------------------------
