@@ -165,6 +165,11 @@ export class EngineDevice {
     }, FADE_OUT_MS);
   }
 
+  /** How many samples late the plan's output is. */
+  get latency(): number {
+    return this.plan.latency;
+  }
+
   /** Set a plan param no store holds (a chain's bypass), now and for every later plan. */
   setFixed(param: string, value: number): void {
     if (this.fixed.get(param) === value) return;

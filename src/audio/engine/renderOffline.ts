@@ -13,6 +13,7 @@
  */
 import { createEffect } from "../effects/registry";
 import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
+import { compensate, compensator, setCompensation, type MixNode } from "./latency";
 import { piecesOf, runEffects } from "../bank/chainPlan";
 import { trackInstrument } from "./trackInstrument";
 import { loadWorklets } from "../worklets";
@@ -110,11 +111,24 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   });
   const parentInput = (parentId: string | null): AudioNode =>
     (parentId ? groupInputs.get(parentId) : undefined) ?? master;
+  // Each track and group goes to its parent through a delay making up for what's later beside it
+  // (INST-36.7, latency.ts), as in AudioEngine; set once every chain is built.
+  const delays = new Map<string, DelayNode>();
+  const mixTracks: MixNode[] = [];
+  const mixGroups: MixNode[] = [];
+  const route = (into: MixNode[], from: AudioNode, node: MixNode) => {
+    const delay = compensator(ctx);
+    delays.set(node.id, delay);
+    from.connect(delay).connect(parentInput(node.parentId));
+    into.push(node);
+  };
+  const latencyOf = (chain: Effect[]) => chain.reduce((total, effect) => total + (effect.latency ?? 0), 0);
   const effects: Effect[] = [];
   for (const { group, input, output } of groupOutputs) {
     const depth = groupDepth(groups, group.id);
-    effects.push(...connectChain(ctx, input, group.effects, output, (index) => groupEffectStage(depth, index)));
-    output.connect(parentInput(group.parentId));
+    const chain = connectChain(ctx, input, group.effects, output, (index) => groupEffectStage(depth, index));
+    effects.push(...chain);
+    route(mixGroups, output, { id: group.id, parentId: group.parentId, latency: latencyOf(chain) });
     output.gain.value = group.muted ? 0 : group.volume;
   }
 
@@ -129,8 +143,13 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       const { instrument, absorbed } = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
       instruments.push(instrument);
       disposables.push(instrument);
-      effects.push(...connectChain(ctx, instrument.output, track.effects.slice(absorbed.length), gain));
-      gain.connect(parentInput(track.parentId));
+      const chain = connectChain(ctx, instrument.output, track.effects.slice(absorbed.length), gain);
+      effects.push(...chain);
+      route(mixTracks, gain, {
+        id: track.id,
+        parentId: track.parentId,
+        latency: (instrument.latency ?? 0) + latencyOf(chain),
+      });
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
 
       // MIDI-device note chain (d0 -> ... -> instrument); notes enter at the head. The device
@@ -153,12 +172,15 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       // Audio track: input -> effects -> gain -> group tree; its clips are scheduled below.
       const input = ctx.createGain();
       const gain = ctx.createGain();
-      effects.push(...connectChain(ctx, input, track.effects, gain));
-      gain.connect(parentInput(track.parentId));
+      const chain = connectChain(ctx, input, track.effects, gain);
+      effects.push(...chain);
+      route(mixTracks, gain, { id: track.id, parentId: track.parentId, latency: latencyOf(chain) });
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
       scheduleFns.push(() => scheduleAudioTrack(ctx, track, input, audioBuffers, loopStart, project.length, bpm));
     }
   }
+
+  compensate(mixTracks, mixGroups).delays.forEach((samples, id) => setCompensation(delays.get(id)!, samples, 0));
 
   // Decode audio-clip buffers + wait for instrument assets (sampler/drumkit buffers) before
   // rendering - offline render runs to completion immediately, so anything undecoded renders silent.

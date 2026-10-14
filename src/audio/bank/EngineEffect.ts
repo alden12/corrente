@@ -45,6 +45,11 @@ export class EngineEffect implements Effect {
     this.device.setFixed(param, value);
   }
 
+  /** How many samples late its output is. */
+  get latency(): number {
+    return this.device.latency;
+  }
+
   /** Resolves once the plan and its samples are with the engine. */
   ready(): Promise<void> {
     return this.device.ready();

@@ -54,6 +54,11 @@ export class EngineInstrument implements Instrument {
     this.device.send({ type: "allOff", time: this.device.context.currentTime });
   }
 
+  /** How many samples late its output is. */
+  get latency(): number {
+    return this.device.latency;
+  }
+
   /** Resolves once the plan and its samples are with the engine, so an offline render doesn't start silent. */
   ready(): Promise<void> {
     return this.device.ready();

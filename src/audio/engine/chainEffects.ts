@@ -121,6 +121,15 @@ export class ChainEffects {
     cursor.connect(dest);
   }
 
+  /** How many samples late the chain as wired makes its signal: its effects' latencies summed. */
+  latency(): number {
+    return this.order
+      .flatMap((key) => this.live.get(key) ?? [])
+      .filter(({ piece }) => !(piece.kind === "single" && piece.effect.bypassed))
+      .flatMap(({ effects }) => effects)
+      .reduce((total, effect) => total + (effect.latency ?? 0), 0);
+  }
+
   /** Every live effect, in no particular order. */
   effects(): Effect[] {
     return [...this.live.values()].flatMap(({ effects }) => effects);

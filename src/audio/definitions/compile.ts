@@ -79,6 +79,8 @@ export interface CompiledPlan {
   /** Sample zones, in order: a note takes the first that fits. Absent without zones. */
   zones?: PlanZone[];
   voices: number;
+  /** How many samples late its output is (the definition's `latency`), for the mixer to make up. */
+  latency: number;
   /** What it costs to run, as shares of a phone's audio thread (cost.ts). */
   cost: Cost;
   /** Each section's steps by node name (sums show as `node.input+n`), for tests and describing. */
@@ -399,6 +401,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
         }
       : {}),
     voices: resolved.voices,
+    latency: definition.latency ?? 0,
     cost,
     nodes: Object.fromEntries(
       SECTIONS.map((section) => [

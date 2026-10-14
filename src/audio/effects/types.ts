@@ -14,6 +14,8 @@ export interface Effect {
    * moved to a place with another stage, it's made again rather than moved.
    */
   readonly stage?: number;
+  /** How many samples late its output is, if any (INST-36.7): the mixer delays the other tracks to match. */
+  readonly latency?: number;
   /** Resolves once it's ready to sound (an engine effect's plan and samples are in), for offline renders. */
   ready?(): Promise<void>;
   dispose(): void;

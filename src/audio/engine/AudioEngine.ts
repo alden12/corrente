@@ -24,6 +24,7 @@ import { groupDepth, groupEffectStage } from "../bank/stages";
 import { EngineInstrument } from "../bank/EngineInstrument";
 import { ChainEffects } from "./chainEffects";
 import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
+import { compensate, compensator, setCompensation } from "./latency";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
@@ -73,6 +74,11 @@ interface GroupNode {
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
+  /**
+   * Each track's and group's way to its parent: a delay making up for what's later beside it
+   * (INST-36.7, latency.ts), at none when nothing in the project is late.
+   */
+  private readonly compensators = new Map<string, DelayNode>();
   private master: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   /** A master-level bus for the metronome click (independent of any track). */
@@ -279,6 +285,7 @@ export class AudioEngine {
         node.effects.dispose();
         node.input.disconnect();
         node.output.disconnect();
+        this.dropCompensator(id);
         this.groupNodes.delete(id);
       }
     }
@@ -289,6 +296,7 @@ export class AudioEngine {
         for (const device of node.midiDevices.values()) device.dispose();
         node.instrument.dispose();
         node.gain.disconnect();
+        this.dropCompensator(id);
         this.nodes.delete(id);
       }
     }
@@ -299,6 +307,7 @@ export class AudioEngine {
         node.effects.dispose();
         node.input.disconnect();
         node.gain.disconnect();
+        this.dropCompensator(id);
         this.audioNodes.delete(id);
       }
     }
@@ -321,8 +330,7 @@ export class AudioEngine {
       const depth = groupDepth(groups, group.id);
       node.effects.reconcile(ctx, group.effects, edited, (index) => groupEffectStage(depth, index));
       node.effects.wire(node.input, node.output);
-      node.output.disconnect();
-      node.output.connect(this.parentInput(group.parentId));
+      this.route(group.id, node.output, group.parentId);
       node.output.gain.setTargetAtTime(group.muted ? 0 : group.volume, ctx.currentTime, 0.01);
     }
 
@@ -366,8 +374,7 @@ export class AudioEngine {
         node.effects.wire(node.instrument.output, node.gain);
         // MIDI devices decorate the note path (no audio), terminating in the instrument.
         this.reconcileMidiDevices(node, track);
-        node.gain.disconnect();
-        node.gain.connect(this.parentInput(track.parentId));
+        this.route(track.id, node.gain, track.parentId);
         node.gain.gain.setTargetAtTime(mutedTracks.has(track.id) ? 0 : track.volume, ctx.currentTime, 0.01);
       } else {
         let node = this.audioNodes.get(track.id);
@@ -377,12 +384,50 @@ export class AudioEngine {
         }
         node.effects.reconcile(ctx, track.effects, edited);
         node.effects.wire(node.input, node.gain);
-        node.gain.disconnect();
-        node.gain.connect(this.parentInput(track.parentId));
+        this.route(track.id, node.gain, track.parentId);
         node.gain.gain.setTargetAtTime(mutedTracks.has(track.id) ? 0 : track.volume, ctx.currentTime, 0.01);
         for (const clip of track.clips) this.ensureDecoded(clip.fileId);
       }
     }
+    this.compensateLatency(ctx);
+  }
+
+  /** Route a track or group into its parent through its compensating delay. */
+  private route(id: string, from: AudioNode, parentId: string | null): void {
+    let delay = this.compensators.get(id);
+    if (!delay) {
+      delay = compensator(this.ctx!);
+      this.compensators.set(id, delay);
+    }
+    from.disconnect();
+    from.connect(delay);
+    delay.disconnect();
+    delay.connect(this.parentInput(parentId));
+  }
+
+  /** Set every compensating delay from how late each track's and group's own chain is. */
+  private compensateLatency(ctx: AudioContext): void {
+    const project = this.project!;
+    const mixNode = (id: string, parentId: string | null, latency: number) => ({ id, parentId, latency });
+    const tracks = project.getTracks().map((track) => {
+      const node = track.kind === "instrument" ? this.nodes.get(track.id) : this.audioNodes.get(track.id);
+      const own = node && "instrument" in node ? (node.instrument.latency ?? 0) : 0;
+      return mixNode(track.id, track.parentId, own + (node?.effects.latency() ?? 0));
+    });
+    const groups = project
+      .getGroups()
+      .map((group) => mixNode(group.id, group.parentId, this.groupNodes.get(group.id)?.effects.latency() ?? 0));
+    const { delays } = compensate(tracks, groups);
+    delays.forEach((samples, id) => {
+      const delay = this.compensators.get(id);
+      if (delay) setCompensation(delay, samples, ctx.currentTime);
+    });
+  }
+
+  /** Drop a track's or group's compensating delay, as it goes. */
+  private dropCompensator(id: string): void {
+    this.compensators.get(id)?.disconnect();
+    this.compensators.delete(id);
   }
 
   /** The bus a child routes into: its parent group's input, or master at top level. */
@@ -795,6 +840,7 @@ export class AudioEngine {
       node.output.disconnect();
     }
     this.groupNodes.clear();
+    [...this.compensators.keys()].forEach((id) => this.dropCompensator(id));
     this.audioBuffers.clear();
     this.decoding.clear();
     this.metronomeGain?.disconnect();

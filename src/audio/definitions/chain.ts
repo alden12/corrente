@@ -12,6 +12,8 @@
  *   `mix` param (if its schema has one) times not `bypass`, 0 or 1, which the chain adds. Moving
  *   either ramps, with no reload: mix over its `smoothMs`, bypass over 20 ms (a faster crossfade
  *   between two different sounds thumps). A bypassed effect still runs.
+ * - **A late effect's dry path is as late:** an effect whose definition declares `latency` has its
+ *   input delayed by as much on the way to the crossfade, so dry and wet line up at any mix.
  *
  * Pure and DOM-free: the engines compose, the bank never sees anything but the compiled plan.
  */
@@ -155,11 +157,20 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
           b: { param: namespaced(BYPASS), scale: -1, offset: 1 },
         },
       };
+      const late = link.definition.latency ?? 0;
       previous = (["left", "right"] as const).map((side, channel) => {
         nodes[`${prefix}wet_${side}`] = { block: "mul", inputs: { a: played[channel], b: `${prefix}wet` } };
+        if (late > 0)
+          nodes[`${prefix}late_${side}`] = {
+            block: "delay",
+            inputs: { signal: before[channel], length: late, size: late },
+          };
         nodes[`${prefix}dry_${side}`] = {
           block: "mul",
-          inputs: { a: before[channel], b: { from: `${prefix}wet`, scale: -1, offset: 1 } },
+          inputs: {
+            a: late > 0 ? `${prefix}late_${side}` : before[channel],
+            b: { from: `${prefix}wet`, scale: -1, offset: 1 },
+          },
         };
         nodes[`${prefix}out_${side}`] = {
           block: "add",

@@ -15,6 +15,8 @@ export interface Instrument {
   playNote(midi: number, durationSec: number, velocity?: number, when?: number): void;
   allNotesOff(): void;
   dispose(): void;
+  /** How many samples late its output is, if any (INST-36.7): the mixer delays the other tracks to match. */
+  readonly latency?: number;
   /**
    * Resolves once the instrument's async assets (e.g. decoded samples) are loaded, so an
    * offline render can wait before `startRendering` (which runs to completion immediately -
