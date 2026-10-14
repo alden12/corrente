@@ -89,7 +89,10 @@ export const ALLOWED_LICENCES: Record<string, string> = {
   MIT: "MIT",
 };
 
-/** Blocks the engine implements itself, in Rust, rather than from Faust (engine/src/router/delay.rs). */
+/**
+ * Blocks the engine implements itself, in Rust, rather than from Faust (engine/src/router/delay.rs
+ * and sampler.rs).
+ */
 export const NATIVE_BLOCKS: BlockSpec[] = [
   {
     name: "delay",
@@ -102,6 +105,30 @@ export const NATIVE_BLOCKS: BlockSpec[] = [
     ],
     outputs: [{ name: "signal", min: -1, max: 1 }],
     controls: [],
+    meters: [],
+    credits: [],
+    licences: [],
+  },
+  {
+    name: "sampler",
+    kind: 1001,
+    description:
+      "Plays a sample the engine holds, from `start` each time `gate` rises, `frequency` over the `root` note's times its own speed (so pitch and length move together), interpolated between frames. Stops at `end`, or with `loop` on goes round from `start` to `end`. `start` and `end` are fractions of the sample. Stereo out; a mono sample plays in both.",
+    inputs: [
+      { name: "frequency", min: 0, max: 24000, unit: "Hz" },
+      { name: "gate", min: 0, max: 1 },
+    ],
+    outputs: [
+      { name: "left", min: -1, max: 1 },
+      { name: "right", min: -1, max: 1 },
+    ],
+    controls: [
+      { name: "sample", min: 0, max: 255, init: 0 },
+      { name: "root", min: 0, max: 127, init: 60 },
+      { name: "start", min: 0, max: 1, init: 0 },
+      { name: "end", min: 0, max: 1, init: 1 },
+      { name: "loop", min: 0, max: 1, init: 0 },
+    ],
     meters: [],
     credits: [],
     licences: [],

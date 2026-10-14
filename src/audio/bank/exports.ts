@@ -27,6 +27,12 @@ export interface EngineExports {
   eng_output(track: number, channel: number): number;
   /** Where the transport is at the start of the coming block. */
   eng_transport(beat: number, tempo: number, playing: number): void;
+  /**
+   * Makes room for a sample in a slot (0 to 255) and returns where to write it, each channel's frames
+   * in turn; 0 if it won't fit. Memory may grow.
+   */
+  eng_sample_reserve(slot: number, frames: number, channels: number, rate: number): number;
+  eng_sample_free(slot: number): void;
   eng_process(): void;
   eng_track_peak(track: number, channel: number): number;
   eng_track_silent(track: number): number;

@@ -1,7 +1,7 @@
 //! Reading a plan's words into sections, checking each source against the section it is read in.
 
 use super::order::runs_in_order;
-use super::{CHANNELS, HOST_SIGNALS, KIND_DELAY, MAX_INPUTS, MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Place, REJECTED, Section, Source, Step, StepMode, VOICE_SIGNALS};
+use super::{CHANNELS, HOST_SIGNALS, KIND_DELAY, KIND_SAMPLER, SAMPLER_CONTROLS, MAX_INPUTS, MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Place, REJECTED, Section, Source, Step, StepMode, VOICE_SIGNALS};
 use crate::faust;
 
 /// Reads words in order, collecting the plan's constants as it goes. Past the end it reads 0 and
@@ -77,6 +77,8 @@ impl Reader<'_> {
         // (kind, outputs) =` takes apart.
         let (kind, outputs) = match kind {
             KIND_DELAY if audio.len() == 2 => (NodeKind::Delay, 1),
+            // Frequency and gate in, every control given, left and right out.
+            KIND_SAMPLER if audio.len() == 2 && control.len() == SAMPLER_CONTROLS => (NodeKind::Sampler, 2),
             // A Faust block's compute needs exactly as many inputs as it declares.
             faust if faust::inputs(faust) == Some(audio.len()) => (NodeKind::Faust(faust as usize), faust::outputs(faust).unwrap_or(0)),
             _ => return Err(REJECTED),

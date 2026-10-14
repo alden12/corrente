@@ -54,6 +54,9 @@ use reader::Reader;
 // TS: export const KIND_DELAY = 1000; and so on. Rust constants need their type written.
 /// Native kinds sit above the Faust ones.
 pub const KIND_DELAY: i32 = 1000;
+pub const KIND_SAMPLER: i32 = 1001;
+/// The sampler's controls: sample slot, root note, start, end, loop.
+pub const SAMPLER_CONTROLS: usize = 5;
 /// The most audio inputs a node may have.
 pub const MAX_PORTS: usize = 16;
 /// The most outputs a node may have.
@@ -130,10 +133,11 @@ impl Source {
     }
 }
 
-// TS: type NodeKind = { type: "faust"; kind: number } | { type: "delay" }
+// TS: type NodeKind = { type: "faust"; kind: number } | { type: "delay" } | { type: "sampler" }
 pub enum NodeKind {
     Faust(usize),
     Delay,
+    Sampler,
 }
 
 // A `struct` is a plain object type with named fields; `pub` makes a field readable outside this file.

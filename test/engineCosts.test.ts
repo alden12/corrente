@@ -45,7 +45,15 @@ const timeOf = (plan: CompiledPlan, start: (bank: EngineBank) => void = () => {}
 const alone = (name: string): DeviceDefinition => {
   const block = CATALOGUE.blocks.find((candidate) => candidate.name === name)!;
   const inputs = Object.fromEntries(block.inputs.map((port) => [port.name, (port.min + port.max) / 2]));
-  return { format: 1, nodes: { only: { block: name, inputs } }, output: "only" };
+  return { format: 1, nodes: { only: { block: name, inputs: { ...inputs, ...SETUP[name]?.inputs } } }, output: "only" };
+};
+
+/** Blocks that need more than their inputs to do their work: a sampler plays a sample, round a loop. */
+const SETUP: Record<string, { inputs: Record<string, number>; start: (bank: EngineBank) => void }> = {
+  sampler: {
+    inputs: { loop: 1, sample: 0 },
+    start: (bank) => bank.loadSample(0, [new Float32Array(RATE * 10).fill(0.5), new Float32Array(RATE * 10)], RATE),
+  },
 };
 
 describe.runIf(process.env.MEASURE_COSTS)("measuring", () => {
@@ -54,7 +62,7 @@ describe.runIf(process.env.MEASURE_COSTS)("measuring", () => {
     const blocks = Object.fromEntries(
       CATALOGUE.blocks.map((block) => [
         block.name,
-        Math.max(0, Math.round(timeOf(compileDefinition(alone(block.name))) - empty)),
+        Math.max(0, Math.round(timeOf(compileDefinition(alone(block.name)), SETUP[block.name]?.start) - empty)),
       ]),
     );
     // A voice's own cost beyond its blocks: 64 voices of one `mul`, all held.

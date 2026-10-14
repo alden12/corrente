@@ -260,6 +260,36 @@ describe("EngineBank", () => {
     expect(bank.output(0, 0)[0]).toBeCloseTo(5, 4);
   });
 
+  it("plays a sample it was given, pitched by the note, through a definition's sampler", () => {
+    const bank = new EngineBank(wasm, RATE, 1);
+    const sampler = compileDefinition({
+      format: 1,
+      nodes: {
+        player: {
+          block: "sampler",
+          voice: true,
+          inputs: { frequency: "voice.frequency", gate: "voice.gate", sample: 7, root: 60 },
+        },
+      },
+      voice: ["player.left", "player.right"],
+    });
+    bank.load(0, sampler);
+    const before = bank.engine.memory.buffer.byteLength;
+    // A second of stereo, big enough to grow the memory: a ramp on the left, its negative on the right.
+    const ramp = Float32Array.from({ length: RATE }, (_, frame) => frame / RATE);
+    bank.loadSample(7, [ramp, ramp.map((value) => -value)], RATE);
+    expect(bank.engine.memory.buffer.byteLength).toBeGreaterThan(before);
+    // An octave above the root reads two frames a sample.
+    bank.noteOn(0, 72, 1, 0);
+    bank.process(0);
+    expect(bank.output(0, 0)[10]).toBeCloseTo(20 / RATE, 6);
+    expect(bank.output(0, 1)[10]).toBeCloseTo(-20 / RATE, 6);
+    bank.freeSample(7);
+    bank.process(BLOCK / RATE);
+    expect(bank.output(0, 0).every((sample) => sample === 0)).toBe(true);
+    expect(() => bank.loadSample(256, [ramp], RATE)).toThrow(RangeError);
+  });
+
   it("starts a new plan where the knobs are", () => {
     const bank = bankOf();
     bank.setParam(0, "level", 0.1, 0);

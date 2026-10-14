@@ -232,6 +232,25 @@ pub extern "C" fn eng_transport(beat: f64, tempo: f32, playing: i32) {
     with_engine(|engine| engine.set_transport(beat, tempo, playing != 0));
 }
 
+/// Make room for a sample in slot `slot` (0 to 255), `frames` long with 1 or 2 `channels` at its own
+/// `rate`, and return where JS writes it: channel 0's frames, then channel 1's. 0 if the slot doesn't
+/// exist or the sample is too big. Memory may grow, so JS makes its views again after this.
+// TS: return addressOf(withEngine((engine) => engine.reserveSample(slot, frames, channels, rate))) ?? 0
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_sample_reserve(slot: i32, frames: i32, channels: i32, rate: f32) -> *mut f32 {
+    let (Some(slot), Some(frames), Some(channels)) = (index(slot), index(frames), index(channels)) else { return std::ptr::null_mut() };
+    with_engine(|engine| engine.reserve_sample(slot, frames, channels, rate).map_or(std::ptr::null_mut(), |data| data.as_mut_ptr()))
+}
+
+/// Empty a sample slot, freeing its memory.
+// TS: if (slot >= 0) withEngine((engine) => engine.freeSample(slot))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_sample_free(slot: i32) {
+    if let Some(slot) = index(slot) {
+        with_engine(|engine| engine.free_sample(slot));
+    }
+}
+
 /// Render one block of every track. Their outputs are then at the addresses eng_output gave.
 // TS: withEngine((engine) => engine.process())
 #[unsafe(no_mangle)]

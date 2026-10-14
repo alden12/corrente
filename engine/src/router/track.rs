@@ -9,6 +9,7 @@
 //!   while the old one fades.
 
 use super::render::{Render, Unit};
+use super::sampler::Sample;
 use super::sources::{Context, Sources};
 use super::{BLOCK, NO_SIGNALS, NO_VOICE_SUM, SILENCE, SILENT_SLOT, SLOT, Slot};
 use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SEED, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
@@ -163,7 +164,7 @@ impl Graph {
 
     /// Render one block into `output`: pre, then every sounding voice into `voice_sum`, then post.
     // Taking the track's `inputs` and `voice_sum` as arguments lets two graphs share them in turn.
-    fn render(&mut self, inputs: &[Slot; MAX_INPUTS], host: &[Slot; HOST_SIGNALS], voice_sum: &mut [Slot; CHANNELS], output: &mut Output) {
+    fn render(&mut self, inputs: &[Slot; MAX_INPUTS], host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>], voice_sum: &mut [Slot; CHANNELS], output: &mut Output) {
         // TS: each param's buffer ramps from current to target across the block.
         // `let (a, b) = (x, y)` sets two variables at once, like TS array destructuring.
         // `*sample = ...` writes through the writable loan `iter_mut` handed out.
@@ -189,6 +190,7 @@ impl Graph {
             host,
             params: &self.params,
             constants: &self.constants,
+            samples,
         };
         Render { section: &plan.pre, units: &mut self.pre.units, buffers: &mut self.pre.buffers, context }.run();
 
@@ -281,10 +283,10 @@ impl Track {
     }
 
     /// Render one block into `output`, crossfading from the outgoing graph in the block after a load.
-    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS]) {
-        // TS: if (this.graph) this.graph.render(this.inputs, host, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
+    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>]) {
+        // TS: if (this.graph) this.graph.render(this.inputs, host, samples, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
         match &mut self.graph {
-            Some(graph) => graph.render(&self.inputs, host, &mut self.voice_sum, &mut self.output),
+            Some(graph) => graph.render(&self.inputs, host, samples, &mut self.voice_sum, &mut self.output),
             None => self.output.iter_mut().for_each(|channel| channel.fill(0.0)),
         }
         // TS:
@@ -294,7 +296,7 @@ impl Track {
         //   }
         //   this.fading = false;
         if let (true, Some(outgoing)) = (self.fading, &mut self.outgoing) {
-            outgoing.render(&self.inputs, host, &mut self.voice_sum, &mut self.faded);
+            outgoing.render(&self.inputs, host, samples, &mut self.voice_sum, &mut self.faded);
             self.output.iter_mut().zip(&self.faded).for_each(|(channel, faded)| {
                 channel.iter_mut().zip(faded).enumerate().for_each(|(index, (sample, &old))| {
                     let fade_in = (index + 1) as f32 / BLOCK as f32;

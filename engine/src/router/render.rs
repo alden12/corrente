@@ -13,23 +13,26 @@
 //!   Faust unit, and returns otherwise; `..` skips the fields it doesn't name.
 
 use super::delay::DelayLine;
+use super::sampler::SamplerState;
 use super::sources::{Context, Sources};
 use super::{BLOCK, CONTROL, Slot};
 use crate::faust::{self, Block, ParamIndex};
 use crate::plan::{MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Section, StepMode};
 
-/// What a node is when it runs: a Faust block with its sliders, or a delay line.
-// TS: type Unit = { type: "faust"; block: Block; controls: ParamIndex[]; meters: ParamIndex[] } | { type: "delay"; line: DelayLine }
+/// What a node is when it runs: a Faust block with its sliders, a delay line, or a sample player.
+// TS: type Unit = { type: "faust"; block: Block; controls: ParamIndex[]; meters: ParamIndex[] } | { type: "delay"; line: DelayLine } | { type: "sampler"; state: SamplerState }
 // A variant can have named fields (`Faust { ... }`) or unnamed ones (`Delay(...)`).
 pub(super) enum Unit {
     Faust { block: Box<Block>, controls: Vec<ParamIndex>, meters: Vec<ParamIndex> },
     Delay(DelayLine),
+    Sampler(SamplerState),
 }
 
 impl Unit {
     pub(super) fn new(node: &Node, sample_rate: i32) -> Self {
         match node.kind {
             NodeKind::Delay => Unit::Delay(DelayLine::new()),
+            NodeKind::Sampler => Unit::Sampler(SamplerState::new(sample_rate)),
             NodeKind::Faust(kind) => {
                 let mut block = faust::create(kind);
                 block.init(sample_rate);
@@ -40,12 +43,13 @@ impl Unit {
         }
     }
 
-    // TS: clear() { this.type === "faust" ? this.block.instanceClear() : this.line.clear() }
+    // TS: clear() { switch (this.type) { case "faust": this.block.instanceClear(); ... } }
     // `match self` on `&mut self`: each arm gets a writable loan of what the variant holds.
     pub(super) fn clear(&mut self) {
         match self {
             Unit::Faust { block, .. } => block.instance_clear(),
             Unit::Delay(line) => line.clear(),
+            Unit::Sampler(state) => state.clear(),
         }
     }
 
@@ -140,13 +144,22 @@ impl Render<'_> {
         self.section.nodes[index].is_delay()
     }
 
-    // TS: if (isDelay) return runDelay(index); for (let start = 0; start < BLOCK; start += CONTROL) runFaust(...)
+    /// Run a node that isn't a delay over [start, start + length): a Faust block or a sampler.
+    // TS: this.section.nodes[index].kind.type === "sampler" ? this.runSampler(...) : this.runFaust(...)
+    fn run_unit(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
+        match self.section.nodes[index].kind {
+            NodeKind::Sampler => self.run_sampler(index, start, length, set_controls),
+            _ => self.run_faust(index, start, length, set_controls),
+        }
+    }
+
+    // TS: if (isDelay) return runDelay(index); for (let start = 0; start < BLOCK; start += CONTROL) runUnit(...)
     // `(0..BLOCK).step_by(CONTROL)` is 0, 32, 64, 96.
     fn run_node(&mut self, index: usize) {
         if self.is_delay(index) {
             return self.run_delay(index);
         }
-        (0..BLOCK).step_by(CONTROL).for_each(|start| self.run_faust(index, start, CONTROL, true));
+        (0..BLOCK).step_by(CONTROL).for_each(|start| self.run_unit(index, start, CONTROL, true));
     }
 
     // TS: for (let sample = 0; sample < BLOCK; sample++) for (const index of members) { ... }
@@ -158,7 +171,7 @@ impl Render<'_> {
                     self.delay_read(index, sample, 1);
                     self.delay_write(index, sample, 1);
                 } else {
-                    self.run_faust(index, sample, 1, sample % CONTROL == 0);
+                    self.run_unit(index, sample, 1, sample % CONTROL == 0);
                 }
             }
         }
@@ -191,7 +204,7 @@ impl Render<'_> {
         for start in (0..BLOCK).step_by(chunk) {
             let length = chunk.min(BLOCK - start);
             delays().for_each(|index| self.delay_read(index, start, length));
-            rest().for_each(|index| self.run_faust(index, start, length, true));
+            rest().for_each(|index| self.run_unit(index, start, length, true));
             delays().for_each(|index| self.delay_write(index, start, length));
         }
     }

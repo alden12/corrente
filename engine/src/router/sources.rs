@@ -6,6 +6,7 @@
 //!   It lets the compiler prove a `Sources` is never used after the buffers it points into go away.
 
 use super::Slot;
+use super::sampler::Sample;
 use super::track::ParamSource;
 use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, MAX_OUTPUTS, Source, VOICE_SIGNALS};
 
@@ -23,6 +24,8 @@ pub(super) struct Context<'a> {
     pub(super) host: &'a [Slot; HOST_SIGNALS],
     pub(super) params: &'a [ParamSource],
     pub(super) constants: &'a [Slot],
+    /// The bank's samples, by slot, for samplers.
+    pub(super) samples: &'a [Option<Sample>],
 }
 
 /// Everything a node reads, with its own buffers split off to be written. A node only reads its own

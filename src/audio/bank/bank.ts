@@ -12,8 +12,8 @@
  * - **Edits don't click.** A new plan crossfades in over a block in the engine, and the notes held
  *   start again in it; a voice stolen for a new note fades out while the note starts in a spare slot.
  * - **`process` creates nothing**: events, voices and the views of the engine's memory are all made
- *   ahead (decision 4 of INST-36). The memory only grows on init and load, so views are re-made
- *   then (the addresses the engine gave stay put).
+ *   ahead (decision 4 of INST-36). The memory only grows on init, load and loading a sample, so
+ *   views are re-made then (the addresses the engine gave stay put).
  */
 import type { CompiledPlan } from "../definitions/compile";
 import { resolveNumber } from "../graph/table";
@@ -115,6 +115,30 @@ export class EngineBank {
     state.voices = new VoiceAllocator(0, 0);
     state.values = {};
     this.queue.clear(track);
+  }
+
+  /**
+   * Put a sample in one of the engine's sample slots (0 to 255), replacing any there: one or two
+   * channels of the same length, at the sample's own rate. A sampler names its slot, and plays it at
+   * any track's notes (INST-36.6).
+   */
+  loadSample(slot: number, channels: Float32Array[], rate: number): void {
+    const frames = channels[0]?.length ?? 0;
+    const pointer = this.engine.eng_sample_reserve(slot, frames, channels.length, rate);
+    if (pointer === 0 || channels.some((channel) => channel.length !== frames)) {
+      this.engine.eng_sample_free(slot);
+      throw new RangeError(
+        `sample slot ${slot}: ${channels.length} channels of ${frames} frames at ${rate} Hz don't fit (0 to 255, one or two channels of the same length, up to 2^24 floats)`,
+      );
+    }
+    const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);
+    channels.forEach((channel, index) => data.set(channel, index * frames));
+    this.view();
+  }
+
+  /** Empty a sample slot. A sampler still naming it plays silence. */
+  freeSample(slot: number): void {
+    this.engine.eng_sample_free(slot);
   }
 
   noteOn(track: number, note: number, velocity: number, time: number): void {
