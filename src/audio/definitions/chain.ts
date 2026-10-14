@@ -9,8 +9,9 @@
  * - **Each effect's input is what comes before it:** `input.left` and `input.right` in an effect
  *   become the previous device's output. The first device of a run of effects keeps the track's input.
  * - **Mix and bypass are params:** after each effect, its output crossfades with its input by its
- *   `mix` param (if its schema has one) times not `bypass`, a switch the chain adds. Moving either
- *   ramps over a block, with no reload. A bypassed effect still runs.
+ *   `mix` param (if its schema has one) times not `bypass`, 0 or 1, which the chain adds. Moving
+ *   either ramps, with no reload: mix over its `smoothMs`, bypass over 20 ms (a faster crossfade
+ *   between two different sounds thumps). A bypassed effect still runs.
  *
  * Pure and DOM-free: the engines compose, the bank never sees anything but the compiled plan.
  */
@@ -46,6 +47,8 @@ export interface ComposedChain {
 
 /** The param a chain adds to each effect: 1 bypasses it (an underscore, so no schema of its own clashes). */
 export const BYPASS = "_bypass";
+/** How long bypassing takes: a crossfade much shorter than this between two different sounds thumps. */
+const BYPASS_SMOOTH_MS = 20;
 /** The param an effect's schema carries for its wet/dry, if it has one. */
 const MIX = "mix";
 
@@ -134,7 +137,16 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
     } else {
       // Crossfade the effect's output with its input: wet = mix × (1 − bypass), dry = 1 − wet.
       const hasMix = link.schema.some((spec) => spec.id === MIX);
-      schema.push({ id: namespaced(BYPASS), label: "Bypass", kind: "boolean", default: false });
+      // A number rather than a switch, so it can say how long it takes; only the chain sets it.
+      schema.push({
+        id: namespaced(BYPASS),
+        label: "Bypass",
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0,
+        smoothMs: BYPASS_SMOOTH_MS,
+      });
       params[namespaced(BYPASS)] = { link: index, param: BYPASS };
       nodes[`${prefix}wet`] = {
         block: "mul",

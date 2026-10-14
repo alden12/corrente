@@ -147,6 +147,8 @@ export class EngineBank {
     if (!voicesCarried) state.voices = new VoiceAllocator(this.engine.eng_voice_slots(track), plan.voices);
     state.values = { ...state.values, ...values };
     plan.params.forEach((source, index) => {
+      if (source.smoothMs)
+        this.engine.eng_param_ramp(track, index, Math.round((source.smoothMs * this.sampleRate) / 1000));
       if (source.sample) {
         this.engine.eng_init_param(track, index, state.values[source.param] ?? EMPTY_SAMPLE);
         return;

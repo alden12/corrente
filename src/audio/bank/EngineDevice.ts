@@ -20,6 +20,8 @@
  *   block, so it fades in from the dry signal it passes through.
  * - **A removed effect is bypassed first,** and the plan without it loads a little later, once the
  *   bypass has ramped (live only; an offline render has no edits).
+ * - **Effects that change order** do both: bypassed before, faded back in after. Bypassed, the order
+ *   makes no difference, so nothing jumps, and held notes play on rather than start again.
  */
 import type { CompiledPlan } from "../definitions/compile";
 import { carryWords } from "./carry";
@@ -59,8 +61,11 @@ export const storeParams = (plan: CompiledPlan, store: ParamStore): ParamSources
       .map((source) => [source.param, { store, id: source.param }]),
   );
 
-/** How long a removed effect's bypass gets to ramp before the plan without it loads: a few blocks. */
-const FADE_OUT_MS = 20;
+/**
+ * How long a removed or moved effect's bypass gets before the plan loads: its 20 ms ramp
+ * (definitions/chain.ts) and time for the message to arrive.
+ */
+const FADE_OUT_MS = 40;
 
 /** What was last sent to the bank, to work out what a reload keeps. */
 interface Sent {
@@ -145,7 +150,7 @@ export class EngineDevice {
     this.pending = undefined;
     const before = this.sent?.chain;
     const edit = before && chain ? chainEdit(before.keys, chain.keys) : undefined;
-    const fading = (edit?.removed ?? []).flatMap((key) => before?.bypass.get(key) ?? []);
+    const fading = [...(edit?.removed ?? []), ...(edit?.moved ?? [])].flatMap((key) => before?.bypass.get(key) ?? []);
     // An offline context renders ahead without waiting, so there is no later to load at.
     if (fading.length === 0 || "startRendering" in this.context) {
       this.loadPlan(edit);
@@ -192,10 +197,12 @@ export class EngineDevice {
     const keys = [...(before?.chain?.keys ?? []), ...(chain?.keys ?? [])];
     const carry =
       edit && before ? carryWords(before.plan, plan, (name) => edit.kept.has(ownerOf(keys, name) ?? "")) : undefined;
-    // Added effects start bypassed when anything carries, then ramp to their bypass as set.
+    // Added and moved effects start bypassed when anything carries, then ramp to their bypass as set.
     const from = carry
       ? Object.fromEntries(
-          (edit?.added ?? []).flatMap((key) => chain?.bypass.get(key) ?? []).map((param) => [param, 1]),
+          [...(edit?.added ?? []), ...(edit?.moved ?? [])]
+            .flatMap((key) => chain?.bypass.get(key) ?? [])
+            .map((param) => [param, 1]),
         )
       : {};
     this.send({ type: "load", plan, values, ...(carry ? { options: { carry, from } } : {}) });

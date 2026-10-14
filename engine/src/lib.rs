@@ -155,7 +155,7 @@ pub extern "C" fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32
     carried.map_or(plan::REJECTED, |count| count as i32)
 }
 
-/// Set a track param's value; it ramps there over the next block.
+/// Set a track param's value; it ramps there over its ramp (a block unless eng_param_ramp says).
 // TS: if (track >= 0 && source >= 0) withEngine((engine) => engine.setParam(track, source, value));
 // `if let (Some(a), Some(b)) = (x, y)` runs the block only if both are present, naming them: a
 // one-case `match` on a pair.
@@ -163,6 +163,15 @@ pub extern "C" fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32
 pub extern "C" fn eng_set_param(track: i32, source: i32, value: f32) {
     if let (Some(track), Some(source)) = (index(track), index(source)) {
         with_engine(|engine| engine.set_param(track, source, value));
+    }
+}
+
+/// How many samples a track param's changes ramp over, at least one (a block unless this says).
+// TS: if (track >= 0 && source >= 0 && samples >= 0) withEngine((engine) => engine.setRamp(track, source, samples));
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_param_ramp(track: i32, source: i32, samples: i32) {
+    if let (Some(track), Some(source), Some(samples)) = (index(track), index(source), index(samples)) {
+        with_engine(|engine| engine.set_ramp(track, source, samples));
     }
 }
 

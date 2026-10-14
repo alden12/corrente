@@ -19,6 +19,8 @@ export interface EngineExports {
    */
   eng_carry(track: number, words: number, length: number): number;
   eng_set_param(track: number, source: number, value: number): void;
+  /** How many samples a param's changes ramp over, at least one (a block unless this says). */
+  eng_param_ramp(track: number, source: number, samples: number): void;
   eng_init_param(track: number, source: number, value: number): void;
   /** `note` is the MIDI note number. */
   eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number, note: number): void;

@@ -42,20 +42,43 @@ pub(super) const SPARE_VOICES: usize = 4;
 /// How long a cut voice takes to fade out, in samples.
 const CUT: usize = BLOCK;
 
-/// A param's smoothed buffer: it ramps from `current` to `target` over each block.
+/// A param's smoothed buffer: each change ramps from where it was (`from`) to `target` over `ramp`
+/// samples, a block unless JS says longer (a bypass fades over 20 ms, so it doesn't thump).
 // `Clone` lets `vec![ParamSource::default(); n]` copy it n times; it isn't `Copy` (copied
 // implicitly) because a 129-float array is too big to copy without saying so.
 #[derive(Clone)]
 pub(super) struct ParamSource {
-    current: f32,
+    from: f32,
     target: f32,
+    /// How far into the ramp it is, in samples, up to `ramp`.
+    elapsed: usize,
+    ramp: usize,
     pub(super) buffer: Slot,
 }
 
 // `Default` is a standard trait for "a sensible starting value". `Self` is the type being implemented.
 impl Default for ParamSource {
     fn default() -> Self {
-        Self { current: 0.0, target: 0.0, buffer: SILENT_SLOT }
+        Self { from: 0.0, target: 0.0, elapsed: BLOCK, ramp: BLOCK, buffer: SILENT_SLOT }
+    }
+}
+
+impl ParamSource {
+    /// Its value `ahead` samples on from where the ramp is.
+    // TS: return this.from + (this.target - this.from) * Math.min(this.elapsed + ahead, this.ramp) / this.ramp
+    fn value(&self, ahead: usize) -> f32 {
+        let done = (self.elapsed + ahead).min(self.ramp);
+        self.from + (self.target - self.from) * done as f32 / self.ramp as f32
+    }
+
+    /// Fill the block's buffer along the ramp (slot 0 is where it was), and move along it.
+    // TS: this.buffer.forEach((_, index) => (this.buffer[index] = this.value(index))); this.elapsed = Math.min(this.elapsed + BLOCK, this.ramp);
+    fn advance(&mut self) {
+        // The buffer is taken out first, so `self.value` can read the rest of `self` while it's filled.
+        let mut buffer = self.buffer;
+        buffer.iter_mut().enumerate().for_each(|(index, sample)| *sample = self.value(index));
+        self.buffer = buffer;
+        self.elapsed = (self.elapsed + BLOCK).min(self.ramp);
     }
 }
 
@@ -171,16 +194,8 @@ impl Graph {
     /// Render one block into `output`: pre, then every sounding voice into `voice_sum`, then post.
     // Taking the track's `inputs` and `voice_sum` as arguments lets two graphs share them in turn.
     fn render(&mut self, inputs: &[Slot; MAX_INPUTS], host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>], voice_sum: &mut [Slot; CHANNELS], output: &mut Output) {
-        // TS: each param's buffer ramps from current to target across the block.
-        // `let (a, b) = (x, y)` sets two variables at once, like TS array destructuring.
-        // `*sample = ...` writes through the writable loan `iter_mut` handed out.
-        self.params.iter_mut().for_each(|param| {
-            let (current, step) = (param.current, param.target - param.current);
-            param.buffer.iter_mut().enumerate().for_each(|(index, sample)| {
-                *sample = current + step * index as f32 / BLOCK as f32;
-            });
-            param.current = param.target;
-        });
+        // TS: this.params.forEach((param) => param.advance())
+        self.params.iter_mut().for_each(ParamSource::advance);
         // TS: voiceSum.forEach((channel) => channel.fill(0))
         voice_sum.iter_mut().for_each(|channel| channel.fill(0.0));
         let plan = &self.plan;
@@ -448,20 +463,33 @@ impl Track {
         voice.cut_from = usize::try_from(offset).unwrap_or(0).min(BLOCK - 1);
     }
 
-    /// Set a param's value; it ramps there over the next block.
-    // TS: const param = this.graph?.params[source]; if (param) param.target = value;
+    /// Set a param's value; it ramps there from where it is, over its ramp.
+    // TS: const param = this.graph?.params[source]; if (param) { param.from = param.value(0); param.target = value; param.elapsed = 0 }
     // `get_mut` is a safe index giving a writable loan, or None past the end.
     pub(super) fn set_param(&mut self, source: usize, value: f32) {
         if let Some(param) = self.graph.as_mut().and_then(|graph| graph.params.get_mut(source)) {
+            param.from = param.value(0);
             param.target = value;
+            param.elapsed = 0;
         }
     }
 
-    /// Jump a param to a value with no ramp (initial values).
-    // `*param = ...` replaces the whole value the loan points at.
+    /// Jump a param to a value with no ramp (initial values). Its ramp length stays.
+    // TS: Object.assign(param, { from: value, target: value, elapsed: param.ramp, buffer: new Float32Array(SLOT).fill(value) })
+    // `..*param` fills the fields not named from the param as it was (only `ramp` here).
     pub(super) fn init_param(&mut self, source: usize, value: f32) {
         if let Some(param) = self.graph.as_mut().and_then(|graph| graph.params.get_mut(source)) {
-            *param = ParamSource { current: value, target: value, buffer: [value; SLOT] };
+            *param = ParamSource { from: value, target: value, elapsed: param.ramp, buffer: [value; SLOT], ..*param };
+        }
+    }
+
+    /// How many samples a param's changes ramp over from now on: at least one. A ramp under way stops
+    /// where it is (JS sets this straight after a load, before anything moves).
+    // TS: const param = this.graph?.params[source]; if (param) { const value = param.value(0); Object.assign(param, { from: value, target: value, ramp: Math.max(samples, 1), elapsed: Math.max(samples, 1) }) }
+    pub(super) fn set_ramp(&mut self, source: usize, samples: usize) {
+        if let Some(param) = self.graph.as_mut().and_then(|graph| graph.params.get_mut(source)) {
+            let value = param.value(0);
+            *param = ParamSource { from: value, target: value, elapsed: samples.max(1), ramp: samples.max(1), ..*param };
         }
     }
 

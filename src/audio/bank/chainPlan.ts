@@ -66,24 +66,28 @@ export const chainPlan = (members: ChainMember[], instrument: boolean): ChainPla
 };
 
 /**
- * A change of a chain's devices that can keep state (part 3): the devices in both, still in the same
- * order, and those added and removed. Undefined if the ones kept have moved around, since their
- * inputs then change at once: that reload crossfades instead.
+ * A change of a chain's devices, keeping the state of those in both (part 3): which those are, and
+ * which were added and removed. If the kept ones changed order, they are all `moved`: their inputs
+ * change at once, so they fade out around the reload and back in (EngineDevice), and with them
+ * bypassed the order makes no difference to the sound. Undefined if nothing is kept.
  */
 export interface ChainEdit {
   kept: Set<string>;
   added: string[];
   removed: string[];
+  moved: string[];
 }
 
 export const chainEdit = (before: string[], after: string[]): ChainEdit | undefined => {
   const keptAfter = after.filter((key) => before.includes(key));
   const keptBefore = before.filter((key) => after.includes(key));
-  if (keptAfter.length === 0 || keptAfter.some((key, index) => keptBefore[index] !== key)) return undefined;
+  if (keptAfter.length === 0) return undefined;
+  const reordered = keptAfter.some((key, index) => keptBefore[index] !== key);
   return {
     kept: new Set(keptAfter),
     added: after.filter((key) => !before.includes(key)),
     removed: before.filter((key) => !after.includes(key)),
+    moved: reordered ? keptAfter : [],
   };
 };
 

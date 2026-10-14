@@ -67,6 +67,8 @@ export interface ParamSource {
   sample?: true;
   /** A sample param a wavetable plays: the instrument prepares it as a table (samples/tables.ts). */
   wavetable?: true;
+  /** How long a change takes to reach its value, if longer than a block: its spec's `smoothMs`. */
+  smoothMs?: number;
 }
 
 export interface CompiledPlan {
@@ -190,10 +192,11 @@ export const compileDefinition = (input: unknown, options: CompileOptions = {}):
   ];
   if (problems.length > 0) throw new DefinitionError(problems);
 
-  return plan(definition, { blocks, inputs, sectionOf, voices, voiceOut, trackOut });
+  return plan(definition, { blocks, inputs, sectionOf, voices, voiceOut, trackOut, schema: options.params });
 };
 
 interface Resolved {
+  schema?: ParamSchema;
   blocks: Record<string, BlockSpec>;
   inputs: Record<string, InputSource[][]>;
   sectionOf: Record<string, Section>;
@@ -277,7 +280,13 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     ...(zones ?? []).map((zone) => zone.sample.param),
   ]);
   const params: ParamSource[] = [];
+  const smoothing = new Map(
+    (resolved.schema ?? []).flatMap((spec) =>
+      spec.kind === "number" && spec.smoothMs ? [[spec.id, spec.smoothMs] as const] : [],
+    ),
+  );
   const paramIndex = (binding: ParamBinding) => {
+    const smoothMs = smoothing.get(binding.param);
     const source: ParamSource = {
       param: binding.param,
       scale: binding.scale ?? 1,
@@ -285,6 +294,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       ...(binding.table ? { table: binding.table } : {}),
       ...(sampleParams.has(binding.param) ? { sample: true as const } : {}),
       ...(tableParams.has(binding.param) ? { wavetable: true as const } : {}),
+      ...(smoothMs ? { smoothMs } : {}),
     };
     const key = JSON.stringify(source);
     const found = params.findIndex((existing) => JSON.stringify(existing) === key);

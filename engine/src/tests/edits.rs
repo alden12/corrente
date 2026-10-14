@@ -121,3 +121,25 @@ fn carried_voices_keep_playing_across_a_load() {
     // Held straight through: no fade, no restart.
     assert!(render(&mut engine, 2).iter().all(|&sample| sample == 1.0));
 }
+
+#[test]
+fn a_param_ramps_over_its_own_length() {
+    // The track plays param 0.
+    let plan = PlanBuilder::new().voices(0).params(1).track_out(vec![param(0)]);
+    let mut engine = plan.loaded();
+    engine.init_param(0, 0, 0.0);
+    engine.set_ramp(0, 0, 4 * BLOCK);
+    engine.set_param(0, 0, 1.0);
+    let out = render(&mut engine, 5);
+    // TS: out.forEach((sample, index) => expect(sample).toBeCloseTo(Math.min((index + 1) / (4 * BLOCK), 1)))
+    out.iter().enumerate().for_each(|(index, &sample)| {
+        let expected = ((index + 1) as f32 / (4 * BLOCK) as f32).min(1.0);
+        assert!((sample - expected).abs() < 1e-6, "sample {index}: {sample}, expected {expected}");
+    });
+    // A change halfway through a ramp starts from where it had got to.
+    engine.set_param(0, 0, 0.0);
+    render(&mut engine, 2);
+    engine.set_param(0, 0, 1.0);
+    let turned = render(&mut engine, 1);
+    assert!((turned[0] - (0.5 + 0.5 / (4 * BLOCK) as f32)).abs() < 1e-6);
+}

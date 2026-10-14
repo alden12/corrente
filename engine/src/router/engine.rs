@@ -59,7 +59,15 @@ impl Engine {
         self.tracks.get_mut(track)?.carry(words)
     }
 
-    /// Set a track param's value; it ramps there over the next block.
+    /// How many samples a track param's changes ramp over (Track::set_ramp).
+    // TS: this.tracks[track]?.setRamp(source, samples)
+    pub fn set_ramp(&mut self, track: usize, source: usize, samples: usize) {
+        if let Some(track) = self.tracks.get_mut(track) {
+            track.set_ramp(source, samples);
+        }
+    }
+
+    /// Set a track param's value; it ramps there over its ramp (a block unless set_ramp says).
     // TS: this.tracks[track]?.setParam(source, value)
     pub fn set_param(&mut self, track: usize, source: usize, value: f32) {
         if let Some(track) = self.tracks.get_mut(track) {

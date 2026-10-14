@@ -131,15 +131,16 @@ describe("chain pieces", () => {
 });
 
 describe("keeping state across a reload", () => {
-  it("keeps the devices in both chains if they stay in order", () => {
+  it("keeps the devices in both chains, and fades out and back in the ones that change order", () => {
     expect(chainEdit(["instrument", "a"], ["instrument", "b", "a"])).toEqual({
       kept: new Set(["instrument", "a"]),
       added: ["b"],
       removed: [],
+      moved: [],
     });
     expect(chainEdit(["instrument", "a", "b"], ["instrument", "b"])?.removed).toEqual(["a"]);
-    // Kept ones swapped round change their inputs at once, so that reload crossfades instead.
-    expect(chainEdit(["a", "b"], ["b", "a"])).toBeUndefined();
+    // Kept ones swapped round change their inputs at once, so they fade out and back in.
+    expect(chainEdit(["instrument", "a", "b"], ["instrument", "b", "a"])?.moved).toEqual(["instrument", "b", "a"]);
     expect(chainEdit(["a"], ["b"])).toBeUndefined();
   });
 
