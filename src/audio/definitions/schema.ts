@@ -20,9 +20,11 @@ import {
   singleInputSchema,
   type DeviceDefinition,
   type InputValue,
+  type ParamBinding,
+  type Synced,
 } from "./format";
 import type { ParamSchema } from "../params/types";
-import { channelsOf, isScaled, listOf, referenceTo } from "./references";
+import { beatsOf, channelsOf, isScaled, isSynced, listOf, referenceTo } from "./references";
 
 const NOT_WIRED = "not wired (every audio input needs a value, a param or a connection)";
 
@@ -95,6 +97,38 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
   const problem = (path: (string | number)[], message: string) => context.addIssue({ code: "custom", path, message });
   const { nodes } = definition;
 
+  /** A param binding's param, which must be the device's and something that reads as a number. */
+  const checkParam = (binding: ParamBinding, path: (string | number)[]) => {
+    if (!params) return undefined;
+    const spec = params.find((candidate) => candidate.id === binding.param);
+    if (!spec) {
+      const names = params.map((candidate) => candidate.id).join(", ") || "none";
+      problem(path, `there is no param "${binding.param}" (the device has ${names})`);
+    } else if (spec.kind === "sample") {
+      problem(path, `${binding.param} is a sample param, which can't feed an input (samples come with INST-36.6)`);
+    }
+    return spec;
+  };
+
+  /** A tempo-synced length's beats: a note division, or a param that can be read as one. */
+  const checkSynced = (item: Synced, path: (string | number)[]) => {
+    const { beats } = item;
+    if (typeof beats === "number") return;
+    if (typeof beats === "string") {
+      if (beatsOf(beats) === undefined)
+        problem(path, `"${beats}" is not a note division (try "1/8", "1/8T" or "1/8.")`);
+      return;
+    }
+    const spec = checkParam(beats, path);
+    if (spec?.kind === "enum") {
+      const odd = spec.options.filter((option) => beatsOf(option) === undefined);
+      if (odd.length > 0)
+        problem(path, `${beats.param}'s options must be note divisions ("1/8", "1/8T"), not ${odd.join(", ")}`);
+    } else if (spec && item.as === "hz") {
+      problem(path, `a rate in hz needs ${beats.param} as a choice of note divisions, not a number of beats`);
+    }
+  };
+
   Object.entries(nodes).forEach(([name, node]) =>
     Object.entries(node.inputs ?? {}).forEach(([port, value]: [string, InputValue]) =>
       listOf(value).forEach((item, index) => {
@@ -103,16 +137,15 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
         if (typeof item === "string" || isScaled(item)) {
           const source = referenceTo(typeof item === "string" ? item : item.from, nodes);
           if (typeof source === "string") problem(path, source);
+          if (typeof item !== "string") {
+            [item.scale, item.offset].forEach((amount) => {
+              if (typeof amount === "object") checkParam(amount, path);
+            });
+          }
           return;
         }
-        if (!params) return;
-        const spec = params.find((candidate) => candidate.id === item.param);
-        if (!spec) {
-          const names = params.map((candidate) => candidate.id).join(", ") || "none";
-          problem(path, `there is no param "${item.param}" (the device has ${names})`);
-        } else if (spec.kind === "sample") {
-          problem(path, `${item.param} is a sample param, which can't feed an input (samples come with INST-36.6)`);
-        }
+        if (isSynced(item)) checkSynced(item, path);
+        else checkParam(item, path);
       }),
     ),
   );

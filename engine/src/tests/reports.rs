@@ -73,12 +73,12 @@ fn rendering_allocates_nothing() {
         .track_out(vec![buffer(3)]);
     let mut engine = plan.loaded();
     engine.init_param(0, 0, 2000.0);
-    engine.note_on(0, 0, 0, 220.0, 1.0);
+    engine.note_on(0, 0, 0, 220.0, 1.0, 69.0);
     render(&mut engine, 4);
     // Loaded again, so the first block measured crossfades from the graph this replaces.
     assert!(engine.load(0, plan.plan()));
     engine.init_param(0, 0, 2000.0);
-    engine.note_on(0, 0, 0, 220.0, 1.0);
+    engine.note_on(0, 0, 0, 220.0, 1.0, 69.0);
     // Everything that happens while playing: blocks, a crossfade, param moves, notes on, off and
     // cut, reading reports.
     let count = allocations_during(|| {
@@ -87,7 +87,7 @@ fn rendering_allocates_nothing() {
             if block % 4 == 0 {
                 engine.cut(0, 1, 10);
             }
-            engine.note_on(0, 1, 5, 330.0, 0.8);
+            engine.note_on(0, 1, 5, 330.0, 0.8, 69.0);
             engine.note_off(0, 0, 3);
             engine.process();
             let _ = (engine.peak(0, 0), engine.silent(0), engine.meter(0, POST, 3, 0));
@@ -110,7 +110,7 @@ fn a_track_reports_its_peaks_and_when_it_falls_silent() {
     let mut engine = plan.loaded();
     engine.process();
     assert_eq!((engine.peak(0, 0), engine.silent(0)), (Some(0.0), Some(true)));
-    engine.note_on(0, 0, 0, 440.0, 1.0);
+    engine.note_on(0, 0, 0, 440.0, 1.0, 69.0);
     engine.process();
     assert_eq!((engine.peak(0, 1), engine.silent(0)), (Some(0.5), Some(false)));
     // The gate closes at once, so the voice finishes in the same block and the track falls silent.
@@ -143,8 +143,8 @@ fn block_meters_read_back_from_each_section() {
     engine.process();
     // No voice sounding: the voice section's meter reads 0.
     assert_eq!(engine.meter(0, VOICE, 0, 0), Some(0.0));
-    engine.note_on(0, 0, 0, 440.0, 0.3);
-    engine.note_on(0, 1, 0, 440.0, 0.8);
+    engine.note_on(0, 0, 0, 440.0, 0.3, 69.0);
+    engine.note_on(0, 1, 0, 440.0, 0.8, 69.0);
     engine.process();
     // The loudest of the voices.
     assert_eq!(engine.meter(0, VOICE, 0, 0), Some(0.8));

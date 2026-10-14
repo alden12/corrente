@@ -251,6 +251,15 @@ describe("EngineBank", () => {
     expect(bank.output(0, 0)[0]).toBeCloseTo(1, 6);
   });
 
+  it("counts the beat from where the transport was told it is", () => {
+    const bank = new EngineBank(wasm, RATE, 1);
+    bank.load(0, compileDefinition({ format: 1, nodes: {}, output: "host.beat" }));
+    bank.setTransport({ time: 0, beat: 4, tempo: 120, playing: true });
+    bank.process(0.5);
+    // Half a second at 120 beats a minute is a beat on.
+    expect(bank.output(0, 0)[0]).toBeCloseTo(5, 4);
+  });
+
   it("starts a new plan where the knobs are", () => {
     const bank = bankOf();
     bank.setParam(0, "level", 0.1, 0);

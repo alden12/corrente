@@ -27,6 +27,7 @@ describe("Scheduler integration (mocked clock)", () => {
       },
       scheduleAudioClip: () => {},
       stopAllAudio: () => {},
+      setTransport: () => {},
     };
 
     const project = new ProjectStore(false);
@@ -86,6 +87,7 @@ describe("Scheduler integration (mocked clock)", () => {
       }),
       scheduleAudioClip: () => {},
       stopAllAudio: () => {},
+      setTransport: () => {},
     };
 
     const project = new ProjectStore(false);

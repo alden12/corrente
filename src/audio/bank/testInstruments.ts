@@ -75,7 +75,7 @@ const pluck: TestInstrument = {
 
 /**
  * A saw, square or sine (a choice, through `select`) through a filter every voice shares one LFO on,
- * into a reverb on the voices summed.
+ * its rate a note division in time with the tempo, into a reverb on the voices summed.
  */
 const wobble: TestInstrument = {
   type: "engine-wobble",
@@ -94,7 +94,13 @@ const wobble: TestInstrument = {
     },
     { id: "resonance", label: "Resonance", kind: "number", min: 0.5, max: 12, default: 3, taper: "linear" },
     { id: "wobble", label: "Wobble", kind: "number", min: 0, max: 36, default: 18, unit: "st", taper: "linear" },
-    { id: "rate", label: "Rate", kind: "number", min: 0.1, max: 12, default: 2, unit: "Hz", taper: "exponential" },
+    {
+      id: "rate",
+      label: "Rate",
+      kind: "enum",
+      options: ["1/1", "1/2", "1/2.", "1/4", "1/4.", "1/4T", "1/8", "1/8.", "1/8T", "1/16"],
+      default: "1/4",
+    },
     { id: "attack", label: "Attack", kind: "number", min: 1, max: 2000, default: 5, unit: "ms", taper: "exponential" },
     {
       id: "release",
@@ -111,8 +117,8 @@ const wobble: TestInstrument = {
   definition: {
     format: 1,
     nodes: {
-      lfo: { block: "lfo", inputs: { rate: { param: "rate" } } },
-      sweep: { block: "mul", inputs: { a: "lfo.sine", b: { param: "wobble" } } },
+      // One cycle per note division, at the project's tempo.
+      lfo: { block: "lfo", inputs: { rate: { beats: { param: "rate" }, as: "hz" } } },
       saw: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
       // A pulse at half width is a square, between -1 and 1.
       square: { block: "pulse", voice: true, inputs: { frequency: "voice.frequency", width: 0.5 } },
@@ -132,7 +138,11 @@ const wobble: TestInstrument = {
           sustain: 0.8,
         },
       },
-      cutoff: { block: "pitch", voice: true, inputs: { frequency: { param: "cutoff" }, semitones: "sweep" } },
+      cutoff: {
+        block: "pitch",
+        voice: true,
+        inputs: { frequency: { param: "cutoff" }, semitones: { from: "lfo.sine", scale: { param: "wobble" } } },
+      },
       filter: { block: "svf", voice: true, inputs: { signal: "osc", cutoff: "cutoff", q: { param: "resonance" } } },
       amp: { block: "mul", voice: true, inputs: { a: "filter.lowpass", b: "envelope" } },
       // Resonance lifts the filter's peak well past 1: down to leave room for chords.

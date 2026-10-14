@@ -18,10 +18,11 @@ mod loops;
 mod playing;
 mod refusals;
 mod reports;
+mod signals;
 mod sections;
 
 use crate::faust;
-use crate::plan::{self, KIND_DELAY, SIGNAL_GATE};
+use crate::plan::{self, HOST_BEAT, HOST_BEAT_SAMPLES, HOST_PLAYING, KIND_DELAY, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SEED};
 use crate::router::{BLOCK, Engine};
 
 const RATE: i32 = 48000;
@@ -61,6 +62,9 @@ fn voice_sum(channel: i32) -> Input {
 }
 fn input(channel: i32) -> Input {
     (7, channel, 0)
+}
+fn host(signal: usize) -> Input {
+    (8, signal as i32, 0)
 }
 
 /// A Faust block's kind number, by name.
@@ -193,7 +197,7 @@ impl PlanBuilder {
     // TS: const engine = loaded(this); engine.noteOn(0, 0, offset, 440, 1); return engine;
     fn playing(&self, offset: i32) -> Engine {
         let mut engine = self.loaded();
-        engine.note_on(0, 0, offset, 440.0, 1.0);
+        engine.note_on(0, 0, offset, 440.0, 1.0, 69.0);
         engine
     }
 

@@ -28,7 +28,7 @@ fn nothing_sounds_until_a_note_plays() {
     let plan = PlanBuilder::new().node(kind("saw"), vec![voice(0)], vec![]).step(NODE, vec![0]).out(buffer(0));
     let mut engine = plan.loaded();
     assert!(render(&mut engine, 2).iter().all(|&sample| sample == 0.0));
-    engine.note_on(0, 0, 0, 440.0, 1.0);
+    engine.note_on(0, 0, 0, 440.0, 1.0, 69.0);
     assert!(render(&mut engine, 2).iter().any(|&sample| sample.abs() > 0.1));
 }
 

@@ -6,6 +6,8 @@ import type { DeviceDefinition } from "../src/audio/definitions/format";
 import type { ParamSchema } from "../src/audio/params/types";
 import { startEngine } from "../src/audio/bank/exports";
 import { engineValueOf } from "../src/audio/definitions/values";
+import { beatsOf } from "../src/audio/definitions/references";
+import { resolveNumber } from "../src/audio/graph/table";
 
 /**
  * The plan compiler (INST-36.4): definitions compiled and played in the committed engine.wasm, so a
@@ -24,7 +26,7 @@ const playing = (compiled: CompiledPlan, values: Record<string, number> = {}) =>
   expect(engine.eng_load(0, pointer, compiled.words.length)).toBe(0);
   engine.eng_free(pointer);
   compiled.params.forEach((source, index) =>
-    engine.eng_init_param(0, index, (values[source.param] ?? 0) * source.scale + source.offset),
+    engine.eng_init_param(0, index, resolveNumber(values[source.param] ?? 0, source)),
   );
   /** Render `blocks` blocks, returning the left channel; `input` fills the main input first. */
   const render = (blocks: number, input?: (sample: number) => number) =>
@@ -275,6 +277,85 @@ describe("scaled references and choices", () => {
   });
 });
 
+describe("signals, and lengths kept in time with the tempo", () => {
+  /** A track with no voices playing one input, at 120 beats a minute, playing. */
+  const trackPlaying = (input: unknown, params?: ParamSchema, values: Record<string, number> = {}) => {
+    const compiled = compileDefinition(
+      { format: 1, nodes: { out: { block: "mul", inputs: { a: input, b: 1 } } }, output: "out" },
+      { params },
+    );
+    const { engine, render } = playing(compiled, values);
+    engine.eng_transport(0, 120, 1);
+    return render(1)[64];
+  };
+  const rate = { id: "rate", label: "Rate", kind: "enum", options: ["1/4", "1/8", "1/8T"], default: "1/4" } as const;
+
+  it("reads note divisions as beats", () => {
+    expect([beatsOf("1/4"), beatsOf("1/8T"), beatsOf("1/8."), beatsOf("2/1"), beatsOf("1/x"), beatsOf("0/4")]).toEqual([
+      1,
+      1 / 3,
+      0.75,
+      8,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("turns a division into a rate or a length at the tempo", () => {
+    // 120 beats a minute: an eighth is a quarter of a second, 4 a second, 12000 samples at 48 kHz.
+    expect(trackPlaying({ beats: "1/8", as: "hz" })).toBeCloseTo(4, 4);
+    expect(trackPlaying({ beats: "1/8", as: "seconds" })).toBeCloseTo(0.25, 6);
+    expect(trackPlaying({ beats: 2, as: "samples" })).toBeCloseTo(48000, 1);
+    expect(trackPlaying("host.tempo")).toBe(120);
+    expect(trackPlaying("host.playing")).toBe(1);
+  });
+
+  it("follows a choice of divisions", () => {
+    const at = (choice: string) =>
+      trackPlaying({ beats: { param: "rate" }, as: "hz" }, [rate], { rate: engineValueOf(rate, choice) });
+    expect(at("1/4")).toBeCloseTo(2, 4);
+    expect(at("1/8T")).toBeCloseTo(6, 4);
+  });
+
+  it("scales a reference by a param, and reads a voice's note", () => {
+    const depth = { id: "depth", label: "Depth", kind: "number", min: 0, max: 1, default: 0 } as const;
+    const compiled = compileDefinition(
+      {
+        format: 1,
+        nodes: {
+          vca: {
+            block: "mul",
+            voice: true,
+            inputs: { a: "voice.note", b: { from: "voice.gate", scale: { param: "depth" } } },
+          },
+        },
+        voice: "vca",
+      },
+      { params: [depth] },
+    );
+    const { engine, render } = playing(compiled, { depth: 0.5 });
+    engine.eng_note_on(0, 0, 0, 261.63, 1, 60);
+    expect(render(1)[64]).toBeCloseTo(30, 4);
+  });
+
+  it("refuses what can't be kept in time", () => {
+    const beats = { id: "beats", label: "Beats", kind: "number", min: 0, max: 8, default: 1 } as const;
+    const odd = { ...rate, options: ["1/4", "fast"] };
+    const problems = (input: unknown, params?: ParamSchema) =>
+      problemsOf({ format: 1, nodes: { out: { block: "mul", inputs: { a: input, b: 1 } } }, output: "out" }, params);
+    expect(problems({ beats: "1/7x", as: "hz" })).toEqual([
+      'out.a: "1/7x" is not a note division (try "1/8", "1/8T" or "1/8.")',
+    ]);
+    expect(problems({ beats: { param: "rate" }, as: "hz" }, [odd])).toEqual([
+      'out.a: rate\'s options must be note divisions ("1/8", "1/8T"), not fast',
+    ]);
+    expect(problems({ beats: { param: "beats" }, as: "hz" }, [beats])).toEqual([
+      "out.a: a rate in hz needs beats as a choice of note divisions, not a number of beats",
+    ]);
+    expect(problems({ beats: { param: "beats" }, as: "seconds" }, [beats])).toEqual([]);
+  });
+});
+
 describe("definitions the compiler refuses", () => {
   const voiceWith = (nodes: DeviceDefinition["nodes"], voice = "x") => ({ format: 1, nodes, voice });
 
@@ -369,7 +450,7 @@ describe("definitions the compiler refuses", () => {
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { from: "lfo", scale: 2 }, b: 1 } } })),
     ).toEqual(['x.a: "lfo" is not a node or a signal']);
     expect(problemsOf(voiceWith({ voice: { block: "noise", voice: true } }, "voice"))).toContain(
-      "voice: the name is kept for signals (voice, voices, input)",
+      "voice: the name is kept for signals (voice, voices, input, host)",
     );
   });
 });

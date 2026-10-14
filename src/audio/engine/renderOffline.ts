@@ -14,6 +14,7 @@
 import { createInstrument } from "../instruments/registry";
 import { createEffect } from "../effects/registry";
 import { loadWorklets } from "../worklets";
+import { setTransport as setEngineTransport } from "../bank/pool";
 import { renderIsolated } from "./renderIsolated";
 import { setSampleAssets } from "../samples/sampleRegistry";
 import { soloMutedTrackIds } from "./mix";
@@ -79,6 +80,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   };
 
   await loadWorklets(ctx);
+  // The new engine's host signals follow the same timeline (INST-36.4).
+  setEngineTransport(ctx, { time: 0, beat: loopStart, tempo: bpm, playing: true });
   setSampleAssets(project.getSamples()); // so a Sampler's "asset:<id>" ref resolves
 
   // Master bus + limiter, mirroring the live engine (AudioEngine.start).

@@ -19,6 +19,7 @@ import type { CompiledPlan } from "../definitions/compile";
 import { resolveNumber } from "../graph/table";
 import { BLOCK, INPUT_CHANNELS, OUTPUT_CHANNELS, startEngine, type EngineExports } from "./exports";
 import { EVENT, EventQueue, type TimedEvent } from "./events";
+import type { Transport } from "./messages";
 import { VoiceAllocator } from "./voices";
 
 /** A plan the engine refused: the code from eng_load (-1 a bad plan, -2 the wrong length). */
@@ -49,6 +50,8 @@ export class EngineBank {
   readonly sampleRate: number;
   readonly trackCount: number;
   private readonly queue = new EventQueue();
+  /** The transport to count the beat from: stopped at 120 until told otherwise. */
+  private transport: Transport = { time: 0, beat: 0, tempo: 120, playing: false };
   private readonly tracks: Track[];
   private outputs: Float32Array[][] = [];
   private inputs: Float32Array[][] = [];
@@ -96,7 +99,7 @@ export class EngineBank {
     );
     held.forEach(({ note, velocity }) => {
       const slot = state.voices.noteOn(note, velocity, 0, state.sounding);
-      this.engine.eng_note_on(track, slot, 0, frequencyOf(note), velocity);
+      this.engine.eng_note_on(track, slot, 0, frequencyOf(note), velocity, note);
     });
   }
 
@@ -136,8 +139,18 @@ export class EngineBank {
     });
   }
 
+  /**
+   * Where the transport is from now on (`beat` at context time `time`), for the host signals every
+   * plan can read: tempo, beat, playing. Takes effect from the block it lands in.
+   */
+  setTransport(transport: Transport): void {
+    this.transport = { ...transport };
+  }
+
   /** Render the block starting at `time` (seconds): play its events, then every track. */
   process(time: number): void {
+    const { beat, tempo, playing } = this.transport;
+    this.engine.eng_transport(beat + ((time - this.transport.time) * tempo) / 60, tempo, playing ? 1 : 0);
     const end = time + BLOCK / this.sampleRate;
     for (let event = this.queue.next(end); event; event = this.queue.next(end)) {
       const offset = Math.min(BLOCK - 1, Math.max(0, Math.round((event.time - time) * this.sampleRate)));
@@ -175,7 +188,7 @@ export class EngineBank {
     if (state.voices.slots === 0) return;
     const slot = state.voices.noteOn(event.target, event.value, event.time, state.sounding);
     if (state.voices.cut >= 0) this.engine.eng_note_cut(event.track, state.voices.cut, offset);
-    this.engine.eng_note_on(event.track, slot, offset, frequencyOf(event.target), event.value);
+    this.engine.eng_note_on(event.track, slot, offset, frequencyOf(event.target), event.value, event.target);
   }
 
   private playNoteOff(event: TimedEvent, offset: number): void {

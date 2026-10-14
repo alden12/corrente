@@ -11,7 +11,7 @@
 use super::render::{Render, Unit};
 use super::sources::{Context, Sources};
 use super::{BLOCK, NO_SIGNALS, NO_VOICE_SUM, SILENCE, SILENT_SLOT, SLOT, Slot};
-use crate::plan::{CHANNELS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
+use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SEED, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
 
 /// One section's state, in a track or in one voice: a unit per node and a buffer per node output.
 struct SectionState {
@@ -81,6 +81,9 @@ pub(super) struct Track {
     output: Output,
     /// The outgoing graph's block, while it fades.
     faded: Output,
+    /// Where the seeds come from: a small random number generator, the same sequence every time the
+    /// bank starts, so an offline render comes out the same twice.
+    seeds: u32,
     /// The loudest sample in each output channel last block, for level meters.
     peaks: [f32; CHANNELS],
     /// Whether last block was silent: no voice sounding and nothing above SILENCE out. A silent
@@ -160,7 +163,7 @@ impl Graph {
 
     /// Render one block into `output`: pre, then every sounding voice into `voice_sum`, then post.
     // Taking the track's `inputs` and `voice_sum` as arguments lets two graphs share them in turn.
-    fn render(&mut self, inputs: &[Slot; MAX_INPUTS], voice_sum: &mut [Slot; CHANNELS], output: &mut Output) {
+    fn render(&mut self, inputs: &[Slot; MAX_INPUTS], host: &[Slot; HOST_SIGNALS], voice_sum: &mut [Slot; CHANNELS], output: &mut Output) {
         // TS: each param's buffer ramps from current to target across the block.
         // `let (a, b) = (x, y)` sets two variables at once, like TS array destructuring.
         // `*sample = ...` writes through the writable loan `iter_mut` handed out.
@@ -183,6 +186,7 @@ impl Graph {
             signals: &NO_SIGNALS,
             voice_sum: &NO_VOICE_SUM,
             inputs,
+            host,
             params: &self.params,
             constants: &self.constants,
         };
@@ -259,6 +263,7 @@ impl Track {
             inputs: [SILENT_SLOT; MAX_INPUTS],
             output: [[0.0; BLOCK]; CHANNELS],
             faded: [[0.0; BLOCK]; CHANNELS],
+            seeds: 0x9E37_79B9,
             peaks: [0.0; CHANNELS],
             silent: true,
         }
@@ -276,20 +281,20 @@ impl Track {
     }
 
     /// Render one block into `output`, crossfading from the outgoing graph in the block after a load.
-    pub(super) fn process(&mut self) {
-        // TS: if (this.graph) this.graph.render(this.inputs, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
+    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS]) {
+        // TS: if (this.graph) this.graph.render(this.inputs, host, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
         match &mut self.graph {
-            Some(graph) => graph.render(&self.inputs, &mut self.voice_sum, &mut self.output),
+            Some(graph) => graph.render(&self.inputs, host, &mut self.voice_sum, &mut self.output),
             None => self.output.iter_mut().for_each(|channel| channel.fill(0.0)),
         }
         // TS:
         //   if (this.fading && this.outgoing) {
-        //     this.outgoing.render(this.inputs, this.voiceSum, this.faded);
+        //     this.outgoing.render(this.inputs, host, this.voiceSum, this.faded);
         //     each sample: output = output * fadeIn + faded * (1 - fadeIn), fadeIn rising to 1 over the block
         //   }
         //   this.fading = false;
         if let (true, Some(outgoing)) = (self.fading, &mut self.outgoing) {
-            outgoing.render(&self.inputs, &mut self.voice_sum, &mut self.faded);
+            outgoing.render(&self.inputs, host, &mut self.voice_sum, &mut self.faded);
             self.output.iter_mut().zip(&self.faded).for_each(|(channel, faded)| {
                 channel.iter_mut().zip(faded).enumerate().for_each(|(index, (sample, &old))| {
                     let fade_in = (index + 1) as f32 / BLOCK as f32;
@@ -325,7 +330,8 @@ impl Track {
     /// every slot is busy.
     // TS: const voice = this.voiceMut(slot); if (!voice) return; ...
     // `let Some(voice) = ... else { return };` is that, in one line.
-    pub(super) fn note_on(&mut self, slot: usize, offset: i32, frequency: f32, velocity: f32) {
+    pub(super) fn note_on(&mut self, slot: usize, offset: i32, frequency: f32, velocity: f32, note: f32) {
+        let seed = self.next_seed();
         let Some(voice) = self.voice_mut(slot) else { return };
         if !voice.active {
             (0..VOICE_SIGNALS).for_each(|signal| voice.fill_signal(signal, -1, 0.0));
@@ -337,7 +343,25 @@ impl Track {
         voice.cut_gain = 1.0;
         voice.fill_signal(SIGNAL_FREQ, offset, frequency);
         voice.fill_signal(SIGNAL_VELOCITY, offset, velocity);
+        voice.fill_signal(SIGNAL_NOTE, offset, note);
+        voice.fill_signal(SIGNAL_SEED, offset, seed);
         voice.fill_signal(SIGNAL_GATE, offset, 1.0);
+    }
+
+    /// The next seed, from 0 to 1 (xorshift: three shifts and exclusive-ors, fast and plenty random
+    /// for drift and variation).
+    // TS:
+    //   let x = this.seeds; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.seeds = x >>> 0;
+    //   return this.seeds / 2 ** 32;
+    // Rust's `<<` on a u32 drops the bits shifted out, as JS's does on a 32-bit int; `>>` on an
+    // unsigned number is JS's `>>>`.
+    fn next_seed(&mut self) -> f32 {
+        let mut x = self.seeds;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.seeds = x;
+        (x as f64 / 4_294_967_296.0) as f32
     }
 
     // TS: const voice = this.voiceMut(slot); if (!voice?.active) return; voice.released = true; ...

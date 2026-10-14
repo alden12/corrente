@@ -1,7 +1,7 @@
 //! Reading a plan's words into sections, checking each source against the section it is read in.
 
 use super::order::runs_in_order;
-use super::{CHANNELS, KIND_DELAY, MAX_INPUTS, MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Place, REJECTED, Section, Source, Step, StepMode, VOICE_SIGNALS};
+use super::{CHANNELS, HOST_SIGNALS, KIND_DELAY, MAX_INPUTS, MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Place, REJECTED, Section, Source, Step, StepMode, VOICE_SIGNALS};
 use crate::faust;
 
 /// Reads words in order, collecting the plan's constants as it goes. Past the end it reads 0 and
@@ -60,6 +60,7 @@ impl Reader<'_> {
             5 => Source::Shared(index, port()?),
             6 => Source::VoiceSum(index),
             7 => Source::Input(index),
+            8 => Source::Host(index),
             _ => return Err(REJECTED),
         })
     }
@@ -169,5 +170,6 @@ fn may_read(source: Source, place: Place, own: &[Node], pre: &[Node], param_coun
         Source::Voice(signal) => place == Place::Voice && signal < VOICE_SIGNALS,
         Source::VoiceSum(channel) => place == Place::Post && channel < CHANNELS,
         Source::Input(channel) => channel < MAX_INPUTS,
+        Source::Host(signal) => signal < HOST_SIGNALS,
     }
 }

@@ -156,12 +156,13 @@ pub extern "C" fn eng_init_param(track: i32, source: i32, value: f32) {
     }
 }
 
-/// Start a note in a track's voice slot, `offset` samples into the coming block.
-// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOn(track, slot, offset, frequency, velocity));
+/// Start a note in a track's voice slot, `offset` samples into the coming block. `note` is its MIDI
+/// note number (60 is middle C), for definitions that key-track.
+// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOn(track, slot, offset, frequency, velocity, note));
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_note_on(track: i32, slot: i32, offset: i32, frequency: f32, velocity: f32) {
+pub extern "C" fn eng_note_on(track: i32, slot: i32, offset: i32, frequency: f32, velocity: f32, note: f32) {
     if let (Some(track), Some(slot)) = (index(track), index(slot)) {
-        with_engine(|engine| engine.note_on(track, slot, offset, frequency, velocity));
+        with_engine(|engine| engine.note_on(track, slot, offset, frequency, velocity, note));
     }
 }
 
@@ -221,6 +222,14 @@ pub extern "C" fn eng_input(track: i32, channel: i32) -> *mut f32 {
 pub extern "C" fn eng_output(track: i32, channel: i32) -> *const f32 {
     let (Some(track), Some(channel)) = (index(track), index(channel)) else { return std::ptr::null() };
     with_engine(|engine| engine.output(track, channel).map_or(std::ptr::null(), |output| output.as_ptr()))
+}
+
+/// Where the transport is at the start of the coming block: `beat` (counted from where it started),
+/// `tempo` in beats a minute, and `playing` (0 or 1). Feeds the host signals every plan can read.
+// TS: withEngine((engine) => engine.setTransport(beat, tempo, playing !== 0))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_transport(beat: f64, tempo: f32, playing: i32) {
+    with_engine(|engine| engine.set_transport(beat, tempo, playing != 0));
 }
 
 /// Render one block of every track. Their outputs are then at the addresses eng_output gave.

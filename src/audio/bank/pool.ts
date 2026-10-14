@@ -8,7 +8,14 @@
  */
 import engineUrl from "../../../engine/engine.wasm?url";
 import workletUrl from "./engine.worklet.ts?worker&url";
-import { BANK_PROCESSOR, TRACKS_PER_BANK, type BankOptions, type FromBank, type ToBank } from "./messages";
+import {
+  BANK_PROCESSOR,
+  TRACKS_PER_BANK,
+  type BankOptions,
+  type FromBank,
+  type ToBank,
+  type Transport,
+} from "./messages";
 
 /** One device's place in a bank. */
 export interface BankSlot {
@@ -39,6 +46,19 @@ interface Pool {
   banks: Bank[];
 }
 
+/** Each context's transport as last told, for its banks now and any made later. */
+const transports = new WeakMap<BaseAudioContext, Transport>();
+
+/** Tell every engine bank on a context where the transport is (the scheduler, an offline render). */
+export const setTransport = (context: BaseAudioContext, transport: Transport): void => {
+  transports.set(context, transport);
+  void pools
+    .get(context)
+    ?.then(({ banks }) =>
+      banks.forEach((bank) => bank.node.port.postMessage({ type: "transport", ...transport } satisfies ToBank)),
+    );
+};
+
 const pools = new WeakMap<BaseAudioContext, Promise<Pool>>();
 const poolFor = (context: BaseAudioContext) => {
   let pool = pools.get(context);
@@ -64,6 +84,8 @@ const newBank = (context: BaseAudioContext, bytes: ArrayBuffer): Bank => {
   });
   const bank: Bank = { node, taken: Array.from({ length: TRACKS_PER_BANK }, () => false), listeners: [] };
   node.port.onmessage = ({ data }: MessageEvent<FromBank>) => bank.listeners[data.track]?.(data);
+  const transport = transports.get(context);
+  if (transport) node.port.postMessage({ type: "transport", ...transport } satisfies ToBank);
   return bank;
 };
 

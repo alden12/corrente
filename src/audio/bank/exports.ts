@@ -15,7 +15,8 @@ export interface EngineExports {
   eng_load(track: number, plan: number, length: number): number;
   eng_set_param(track: number, source: number, value: number): void;
   eng_init_param(track: number, source: number, value: number): void;
-  eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number): void;
+  /** `note` is the MIDI note number. */
+  eng_note_on(track: number, slot: number, offset: number, frequency: number, velocity: number, note: number): void;
   eng_note_off(track: number, slot: number, offset: number): void;
   /** Fades a slot's voice out over a block from `offset`, then frees it. */
   eng_note_cut(track: number, slot: number, offset: number): void;
@@ -24,6 +25,8 @@ export interface EngineExports {
   eng_voice_slots(track: number): number;
   eng_input(track: number, channel: number): number;
   eng_output(track: number, channel: number): number;
+  /** Where the transport is at the start of the coming block. */
+  eng_transport(beat: number, tempo: number, playing: number): void;
   eng_process(): void;
   eng_track_peak(track: number, channel: number): number;
   eng_track_silent(track: number): number;

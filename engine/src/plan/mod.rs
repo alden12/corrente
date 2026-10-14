@@ -26,10 +26,11 @@
 //!   1 Previous (node, port)  the same, a sample late: a feedback edge in a one-sample loop
 //!   2 Param (param, 0)       a param of the track, ramped over each block
 //!   3 Const (0, bits)        a literal
-//!   4 Voice (signal, 0)      the voice's frequency, gate or velocity (voice section only)
+//!   4 Voice (signal, 0)      the voice's frequency, gate, velocity, note or seed (voice section only)
 //!   5 Shared (node, port)    a pre section node's output (voice and post sections)
 //!   6 VoiceSum (channel, 0)  the voices summed (post section and track output)
 //!   7 Input (channel, 0)     the track's audio input: 0 and 1 main, 2 and 3 sidechain
+//!   8 Host (signal, 0)       the transport: tempo, beat, playing, beat length in seconds and samples
 //!
 //! Node i of a section writes its outputs into that section's buffers, from `base[i]` on. Every node
 //! runs exactly once, and everything is checked here, so the router can index without failing.
@@ -63,11 +64,23 @@ pub const MAX_VOICES: usize = 64;
 pub const CHANNELS: usize = 2;
 /// A track's audio inputs: a stereo main input and a stereo sidechain.
 pub const MAX_INPUTS: usize = 4;
-/// Per-voice signals: the note's frequency, its gate and its velocity.
-pub const VOICE_SIGNALS: usize = 3;
+/// Per-voice signals: the note's frequency, its gate, its velocity, its note number (MIDI, 60 is
+/// middle C) and a seed (a random number from 0 to 1 drawn at each note on, for drift and variation).
+pub const VOICE_SIGNALS: usize = 5;
 pub const SIGNAL_FREQ: usize = 0;
 pub const SIGNAL_GATE: usize = 1;
 pub const SIGNAL_VELOCITY: usize = 2;
+pub const SIGNAL_NOTE: usize = 3;
+pub const SIGNAL_SEED: usize = 4;
+/// Host signals, the same for every track: the tempo (beats a minute), the beat (counted from where
+/// the transport started, running on while it's stopped), whether it's playing (0 or 1), and how
+/// long a beat is in seconds and in samples (so a delay syncs to the tempo without dividing).
+pub const HOST_SIGNALS: usize = 5;
+pub const HOST_TEMPO: usize = 0;
+pub const HOST_BEAT: usize = 1;
+pub const HOST_PLAYING: usize = 2;
+pub const HOST_BEAT_SECONDS: usize = 3;
+pub const HOST_BEAT_SAMPLES: usize = 4;
 
 /// Where one input reads from. (node, port) pairs name a node's output.
 // TS:
@@ -79,7 +92,8 @@ pub const SIGNAL_VELOCITY: usize = 2;
 //     | { type: "const"; index: number }
 //     | { type: "voice"; signal: number }
 //     | { type: "voiceSum"; channel: number }
-//     | { type: "input"; channel: number };
+//     | { type: "input"; channel: number }
+//     | { type: "host"; signal: number };
 // A Rust enum is a discriminated union built in: each variant can carry its own data.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Source {
@@ -99,6 +113,8 @@ pub enum Source {
     VoiceSum(usize),
     /// A channel of the track's audio input.
     Input(usize),
+    /// One of the host's signals.
+    Host(usize),
 }
 
 // TS: methods on Source. `impl Source { ... }` adds methods to a type after declaring it.

@@ -7,7 +7,7 @@
 
 use super::Slot;
 use super::track::ParamSource;
-use crate::plan::{CHANNELS, MAX_INPUTS, MAX_OUTPUTS, Source, VOICE_SIGNALS};
+use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, MAX_OUTPUTS, Source, VOICE_SIGNALS};
 
 /// What a section reads besides its own buffers. The same for every node in it, so it is built once
 /// per section and copied (it is only loans, so copying is cheap).
@@ -20,6 +20,7 @@ pub(super) struct Context<'a> {
     pub(super) signals: &'a [Slot; VOICE_SIGNALS],
     pub(super) voice_sum: &'a [Slot; CHANNELS],
     pub(super) inputs: &'a [Slot; MAX_INPUTS],
+    pub(super) host: &'a [Slot; HOST_SIGNALS],
     pub(super) params: &'a [ParamSource],
     pub(super) constants: &'a [Slot],
 }
@@ -82,6 +83,7 @@ impl<'a> Sources<'a> {
             Source::Voice(signal) => span(&context.signals[signal], start + 1, length),
             Source::VoiceSum(channel) => span(&context.voice_sum[channel], start + 1, length),
             Source::Input(channel) => span(&context.inputs[channel], start + 1, length),
+            Source::Host(signal) => span(&context.host[signal], start + 1, length),
         }
     }
 }

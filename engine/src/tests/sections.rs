@@ -14,7 +14,7 @@ fn the_shared_section_runs_once_a_block_for_every_voice() {
         .step(NODE, vec![0])
         .out(buffer(0));
     let mut engine = plan.playing(0);
-    engine.note_on(0, 1, 0, 220.0, 1.0);
+    engine.note_on(0, 1, 0, 220.0, 1.0, 69.0);
     let output = render(&mut engine, 2);
     assert_eq!(&output[..3], &[2.0, 4.0, 6.0]);
     assert_eq!(output[BLOCK], 2.0 * (BLOCK + 1) as f32);
@@ -45,7 +45,7 @@ fn the_post_section_runs_on_the_voices_summed() {
         .step_in(POST, NODE, vec![0])
         .track_out(vec![buffer(0)]);
     let mut engine = plan.playing(0);
-    engine.note_on(0, 1, 0, 220.0, 1.0);
+    engine.note_on(0, 1, 0, 220.0, 1.0, 69.0);
     assert!(render(&mut engine, 1).iter().all(|&sample| sample == 1.0));
 }
 
@@ -73,7 +73,7 @@ fn tracks_in_a_bank_play_independently() {
     engine.init(RATE, 2);
     assert!(engine.load(0, gate.plan()));
     assert!(engine.load(1, half.plan()));
-    engine.note_on(1, 0, 0, 440.0, 1.0);
+    engine.note_on(1, 0, 0, 440.0, 1.0, 69.0);
     engine.process();
     assert!(engine.output(0, 0).unwrap().iter().all(|&sample| sample == 0.0));
     assert!(engine.output(1, 0).unwrap().iter().all(|&sample| sample == 0.5));

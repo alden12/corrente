@@ -192,11 +192,33 @@ export class Scheduler implements TransportClock {
   private readonly engine: AudioEngine;
   private readonly project: ProjectStore;
   private readonly onStateChange?: (playing: boolean) => void;
+  /** Hears tempo changes while stopped, so the new engine's synced devices keep up. */
+  private readonly unsubscribeTempo: () => void;
+  private toldTempo: number;
 
   constructor(engine: AudioEngine, project: ProjectStore, onStateChange?: (playing: boolean) => void) {
     this.engine = engine;
     this.project = project;
     this.onStateChange = onStateChange;
+    this.toldTempo = project.tempo;
+    this.unsubscribeTempo = project.subscribe(() => {
+      if (this.timer === null && this.project.tempo !== this.toldTempo) this.tellTransport();
+    });
+  }
+
+  /**
+   * Tell the new engine where the transport is (INST-36.4's host signals): the beat now, counted from
+   * where play started, and the tempo. While stopped the beat runs on from where it stopped.
+   */
+  private tellTransport(): void {
+    const time = this.engine.currentTime;
+    this.toldTempo = this.project.tempo;
+    this.engine.setTransport({
+      time,
+      beat: this.continuousBeatAtTime(time),
+      tempo: this.project.tempo,
+      playing: this.timer !== null,
+    });
   }
 
   get isPlaying(): boolean {
@@ -237,6 +259,8 @@ export class Scheduler implements TransportClock {
     this.unsubscribe = this.project.subscribe(() => this.reanchor());
     this.tick();
     this.timer = setInterval(() => this.tick(), LOOKAHEAD_MS);
+    this.toldTempo = this.project.tempo;
+    this.engine.setTransport({ time: this.anchorTime, beat: 0, tempo: this.project.tempo, playing: true });
     this.onStateChange?.(true);
   }
 
@@ -248,6 +272,7 @@ export class Scheduler implements TransportClock {
     this.unsubscribe = null;
     for (const track of this.project.getTracks()) this.engine.getNoteTarget(track.id)?.allNotesOff();
     this.engine.stopAllAudio();
+    this.tellTransport();
     this.onStateChange?.(false);
   }
 
@@ -296,6 +321,7 @@ export class Scheduler implements TransportClock {
     this.anchorBeat += (now - this.anchorTime) * this.lastBps;
     this.anchorTime = now;
     this.lastBps = this.project.tempo / 60;
+    if (this.project.tempo !== this.toldTempo) this.tellTransport();
   }
 
   private tick(): void {
@@ -405,5 +431,6 @@ export class Scheduler implements TransportClock {
 
   dispose(): void {
     this.stop();
+    this.unsubscribeTempo();
   }
 }

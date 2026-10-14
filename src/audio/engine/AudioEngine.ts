@@ -24,6 +24,8 @@ import type { Effect } from "../effects/types";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
+import { setTransport as setEngineTransport } from "../bank/pool";
+import type { Transport } from "../bank/messages";
 import { GraphInstrument } from "../graph/GraphInstrument";
 import { GraphEffect } from "../graph/GraphEffect";
 import { getAudioBuffer } from "../audioStore";
@@ -97,6 +99,18 @@ export class AudioEngine {
   /** The transport clock MIDI devices read (set by AppShell once the scheduler exists). */
   private transport: TransportClock | null = null;
   private cachedDeviceClock: TransportClock | null = null;
+
+  /** The transport as the scheduler last said, for the new engine's host signals (INST-36.4). */
+  private engineTransport: Transport | null = null;
+
+  /**
+   * Tell the new engine's banks where the transport is: the scheduler calls this when it plays, stops
+   * or the tempo changes, so synced LFOs and delays follow. Nothing is sent until audio starts.
+   */
+  setTransport(transport: Transport): void {
+    this.engineTransport = transport;
+    if (this.ctx) setEngineTransport(this.ctx, transport);
+  }
 
   /** Point MIDI devices at the transport clock (the scheduler implements it). */
   setTransportClock(clock: TransportClock): void {
@@ -181,6 +195,7 @@ export class AudioEngine {
     }
     const ctx = new AudioContext();
     this.ctx = ctx;
+    setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
     this.master = ctx.createGain();
     // A gentle brick-wall limiter guards the bus as stacked tracks/effects sum.
     this.limiter = ctx.createDynamicsCompressor();

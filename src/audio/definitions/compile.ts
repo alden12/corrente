@@ -36,6 +36,8 @@ const INPUT_TYPE = {
   voiceSum: 6,
   /** The track's audio input: (channel). */
   input: 7,
+  /** A host signal: (signal). */
+  host: 8,
 } as const;
 const STEP_MODE: Record<StepMode, number> = { node: 0, "sample-loop": 1, "chunk-loop": 2 };
 
@@ -137,7 +139,10 @@ export const compileDefinition = (input: unknown, options: CompileOptions = {}):
     named.map((name) => {
       const given = nodes[name].inputs ?? {};
       const ports = [...blocks[name].inputs, ...blocks[name].controls];
-      return [name, ports.map((port) => sourcesOf(given[port.name] ?? ("init" in port ? port.init : 0), nodes))];
+      return [
+        name,
+        ports.map((port) => sourcesOf(given[port.name] ?? ("init" in port ? port.init : 0), nodes, options.params)),
+      ];
     }),
   );
 
@@ -194,16 +199,20 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
             return { type: "node", name, port: 0 };
           }, sources[0]),
         ];
-  /** A scaled reference as the nodes that scale it: a `mul` (unless by 1), then an `add` (unless 0). */
+  /**
+   * A scaled reference as the nodes that scale it: a `mul` (unless by a fixed 1), then an `add`
+   * (unless a fixed 0). A scale or offset can be a param, read like any other.
+   */
   const placed = (section: Section, label: string, source: InputSource): Source => {
     if (source.type !== "scaled") return source;
+    const { scale, offset } = source;
     const scaled: Source =
-      source.scale === 1
+      scale.type === "const" && scale.value === 1
         ? source.source
-        : node(section, `${label}*`, mul, [[source.source], [{ type: "const", value: source.scale }]]);
-    return source.offset === 0
+        : node(section, `${label}*`, mul, [[source.source], [scale]]);
+    return offset.type === "const" && offset.value === 0
       ? scaled
-      : node(section, `${label}~`, add, [[scaled], [{ type: "const", value: source.offset }]]);
+      : node(section, `${label}~`, add, [[scaled], [offset]]);
   };
   const node = (section: Section, name: string, block: BlockSpec, inputs: Source[][]): Source => {
     planned[section].push({ name, block, section, inputs });
@@ -283,6 +292,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     voice: (source) => [INPUT_TYPE.voice, source.signal, 0],
     voiceSum: (source) => [INPUT_TYPE.voiceSum, source.channel, 0],
     input: (source) => [INPUT_TYPE.input, source.channel, 0],
+    host: (source) => [INPUT_TYPE.host, source.signal, 0],
   };
   const encode = (source: Source, section: Section, reader: number) =>
     (encoders[source.type] as (source: Source, section: Section, reader: number) => number[])(source, section, reader);
