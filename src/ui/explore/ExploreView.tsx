@@ -211,8 +211,8 @@ export function ExploreView({
 
   return (
     <div className="pb-2">
-      {/* A container, so the tiles fit the panel they are in rather than the window. */}
-      <div className="@container p-3 flex flex-col gap-2.5">
+      {/* The search stays at the top while the rest scrolls under it, on the library's own ground. */}
+      <div className="sticky top-0 z-10 bg-rail px-3 pt-3 pb-2.5">
         <label className="flex items-center gap-2 h-8 pointer-coarse:h-11 px-2.5 rounded-md border border-line bg-ground text-faint focus-within:border-you">
           <svg
             viewBox="0 0 16 16"
@@ -235,6 +235,9 @@ export function ExploreView({
             className="flex-1 min-w-0 bg-transparent text-ink text-[12.5px] pointer-coarse:text-[15px] placeholder:text-faint outline-none"
           />
         </label>
+      </div>
+      {/* A container, so the tiles fit the panel they are in rather than the window. */}
+      <div className="@container px-3 pb-3 flex flex-col gap-2.5">
         {chips(searched, results)}
         {!filtering && (
           <div className="grid grid-cols-1 @[17rem]:grid-cols-2 gap-1.5 mt-0.5">
