@@ -17,6 +17,10 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 - `envelopes.lib/adsr`, by Yann Orlarey and Andrey Bundin
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
+### beatlfo
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
 ### chorus
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception

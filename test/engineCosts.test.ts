@@ -18,7 +18,8 @@ const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.
 const RATE = 48000;
 
 describe("engine/costs.json", () => {
-  it("has a cost for every block (run `yarn engine:costs` after adding one)", () => {
+  // Not while measuring, which is about to write the file this reads.
+  it.skipIf(process.env.MEASURE_COSTS)("has a cost for every block (run `yarn engine:costs` after adding one)", () => {
     const costs = JSON.parse(readFileSync(costsFile, "utf8")) as { blocks: Record<string, number> };
     const missing = CATALOGUE.blocks.map((block) => block.name).filter((name) => !(name in costs.blocks));
     expect(missing).toEqual([]);

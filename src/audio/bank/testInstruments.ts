@@ -75,7 +75,7 @@ const pluck: TestInstrument = {
 
 /**
  * A saw, square or sine (a choice, through `select`) through a filter every voice shares one LFO on,
- * its rate free in Hz or (Sync on) a note division in time with the tempo, into a reverb on the voices
+ * free in Hz or (Sync on) locked to the beat, a cycle per note division, into a reverb on the voices
  * summed.
  */
 const wobble: TestInstrument = {
@@ -120,18 +120,17 @@ const wobble: TestInstrument = {
   definition: {
     format: 1,
     nodes: {
-      // Free in Hz, or with Sync on, one cycle per note division at the project's tempo.
-      rate: {
-        block: "select",
-        inputs: {
-          index: { param: "sync" },
-          a: { param: "hz" },
-          b: { beats: { param: "division" }, as: "hz" },
-          c: 0,
-          d: 0,
-        },
+      // Free in Hz, or with Sync on, locked to the beat: one cycle per note division, in the same
+      // place every time play starts.
+      free: { block: "lfo", inputs: { rate: { param: "hz" } } },
+      locked: {
+        block: "beatlfo",
+        inputs: { beat: "host.beat", length: { beats: { param: "division" }, as: "beats" } },
       },
-      lfo: { block: "lfo", inputs: { rate: "rate" } },
+      lfo: {
+        block: "select",
+        inputs: { index: { param: "sync" }, a: "free.sine", b: "locked.sine", c: 0, d: 0 },
+      },
       saw: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
       // A pulse at half width is a square, between -1 and 1.
       square: { block: "pulse", voice: true, inputs: { frequency: "voice.frequency", width: 0.5 } },
@@ -154,7 +153,7 @@ const wobble: TestInstrument = {
       cutoff: {
         block: "pitch",
         voice: true,
-        inputs: { frequency: { param: "cutoff" }, semitones: { from: "lfo.sine", scale: { param: "wobble" } } },
+        inputs: { frequency: { param: "cutoff" }, semitones: { from: "lfo", scale: { param: "wobble" } } },
       },
       filter: { block: "svf", voice: true, inputs: { signal: "osc", cutoff: "cutoff", q: { param: "resonance" } } },
       amp: { block: "mul", voice: true, inputs: { a: "filter.lowpass", b: "envelope" } },

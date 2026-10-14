@@ -346,6 +346,25 @@ describe("signals, and lengths kept in time with the tempo", () => {
     expect(render(1)[64]).toBeCloseTo(30, 4);
   });
 
+  it("locks a beatlfo's phase to the beat", () => {
+    // A cycle a beat long: a quarter of the way through, the sine is at its top; half way, back at 0.
+    const compiled = compileDefinition({
+      format: 1,
+      nodes: {
+        locked: { block: "beatlfo", inputs: { beat: "host.beat", length: { beats: "1/4", as: "beats" } } },
+      },
+      output: "locked.sine",
+    });
+    const at = (beat: number) => {
+      const { engine, render } = playing(compiled);
+      engine.eng_transport(beat, 120, 1);
+      return render(1)[0];
+    };
+    expect(at(0.25)).toBeCloseTo(1, 3);
+    expect(at(8.25)).toBeCloseTo(1, 3);
+    expect(at(0.5)).toBeCloseTo(0, 3);
+  });
+
   it("refuses what can't be kept in time", () => {
     const beats = { id: "beats", label: "Beats", kind: "number", min: 0, max: 8, default: 1 } as const;
     const odd = { ...rate, options: ["1/4", "fast"] };

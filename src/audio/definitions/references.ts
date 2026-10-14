@@ -55,11 +55,15 @@ export const beatsOf = (division: string): number | undefined => {
   return ((4 * Number(match[1])) / Number(match[2])) * feel;
 };
 
-/** The host signal each unit reads, and how a length in beats turns into its scale. */
-const SYNC: Record<Synced["as"], { signal: keyof typeof HOST_SIGNALS; scaleFor: (beats: number) => number }> = {
+/**
+ * What each unit scales, and how a length in beats turns into its scale: a host signal, or (for the
+ * beats themselves) a plain 1.
+ */
+const SYNC: Record<Synced["as"], { signal?: keyof typeof HOST_SIGNALS; scaleFor: (beats: number) => number }> = {
   hz: { signal: "host.tempo", scaleFor: (beats) => 1 / (60 * beats) },
   seconds: { signal: "host.beatSeconds", scaleFor: (beats) => beats },
   samples: { signal: "host.beatSamples", scaleFor: (beats) => beats },
+  beats: { scaleFor: (beats) => beats },
 };
 
 const signalSources: Record<string, Source> = {
@@ -105,8 +109,9 @@ const amountOf = (amount: number | ParamBinding | undefined, otherwise: number):
  */
 const syncedSource = (item: Synced, params: ParamSchema | undefined): InputSource => {
   const { signal, scaleFor } = SYNC[item.as];
-  const source: Source = { type: "host", signal: HOST_SIGNALS[signal] };
   const fixed = typeof item.beats === "string" ? beatsOf(item.beats) : item.beats;
+  if (typeof fixed === "number" && !signal) return { type: "const", value: scaleFor(fixed) };
+  const source: Source = signal ? { type: "host", signal: HOST_SIGNALS[signal] } : { type: "const", value: 1 };
   if (typeof fixed === "number") {
     return { type: "scaled", source, scale: { type: "const", value: scaleFor(fixed) }, offset: amountOf(undefined, 0) };
   }

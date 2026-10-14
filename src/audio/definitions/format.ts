@@ -32,7 +32,8 @@
  *     times `scale` plus `offset`, each a number or a param: an LFO's -1..1 sweeps a knob's worth of
  *     semitones with no `mul` node.
  *   - A **tempo-synced length**, `{ "beats": "1/8", "as": "hz" }`, follows the tempo: a note
- *     division, a number of beats, or a param, as a rate in Hz or a length in seconds or samples.
+ *     division, a number of beats, or a param, as a rate in Hz, a length in seconds or samples, or
+ *     the beats themselves.
  * - **Every audio input must be wired**; a control (a block's slider) left out keeps its starting
  *   value. Feedback is allowed: loops are found and run a sample at a time, or in chunks when every
  *   path round them passes through a `delay`.
@@ -110,14 +111,17 @@ export const scaledReferenceSchema = z
   })
   .strict();
 
-/** What a tempo-synced input is wanted in: a rate (an LFO's), or a length (a delay's). */
-export const SYNC_UNITS = ["hz", "seconds", "samples"] as const;
+/**
+ * What a tempo-synced input is wanted in: a rate (an LFO's), a length (a delay's), or the number of
+ * beats itself (a beatlfo's cycle length).
+ */
+export const SYNC_UNITS = ["hz", "seconds", "samples", "beats"] as const;
 
 /**
  * A length in beats, kept in time with the tempo: a note division (`"1/8"`, `"1/8T"` a triplet,
  * `"1/8."` dotted, `"2/1"` two bars of 4/4), a number of beats, or a param (a number of beats, or a
  * choice of divisions), given `as` a rate in Hz (one cycle per that length) or a length in seconds or
- * samples.
+ * samples, or as the number of beats itself.
  */
 export const syncedSchema = z
   .object({

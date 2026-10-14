@@ -100,8 +100,69 @@
       ]
     },
     {
-      "name": "chorus",
+      "name": "beatlfo",
       "kind": 2,
+      "description": "A low-frequency oscillator locked to the beat: wire `beat` to host.beat and give `length` a cycle's length in beats (a synced input with as beats, or a number). Its phase is worked out from the beat alone, so it starts in the same place every time play starts and stays in step through tempo changes. Sine, triangle, saw and square outputs from -1 to 1, shaped like lfo's; `phase` shifts it (0.25 is a quarter cycle late).",
+      "inputs": [
+        {
+          "name": "beat",
+          "min": 0,
+          "max": 100000,
+          "unit": "beats"
+        },
+        {
+          "name": "length",
+          "min": 0.0625,
+          "max": 64,
+          "unit": "beats"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "sine",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "triangle",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "saw",
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "square",
+          "min": -1,
+          "max": 1
+        }
+      ],
+      "controls": [
+        {
+          "name": "phase",
+          "min": 0,
+          "max": 1,
+          "init": 0
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
+    },
+    {
+      "name": "chorus",
+      "kind": 3,
       "description": "A stereo chorus: each channel mixed with a copy of itself, delayed by a few milliseconds that drift with a slow LFO, the two channels a quarter cycle apart.",
       "inputs": [
         {
@@ -176,7 +237,7 @@
     },
     {
       "name": "compressor",
-      "kind": 3,
+      "kind": 4,
       "description": "A stereo compressor: both channels turned down together when the louder passes the threshold, then made up by the gain. Its meter shows the reduction in dB.",
       "inputs": [
         {
@@ -276,7 +337,7 @@
     },
     {
       "name": "hold",
-      "kind": 4,
+      "kind": 5,
       "description": "Sample and hold: takes its signal's value each time the trigger rises above 0.5, and holds it until the next. With noise in, it makes random steps.",
       "inputs": [
         {
@@ -309,7 +370,7 @@
     },
     {
       "name": "ladder",
-      "kind": 5,
+      "kind": 6,
       "description": "A zero-delay-feedback Moog ladder low-pass, which self-oscillates as resonance nears 1.",
       "inputs": [
         {
@@ -361,7 +422,7 @@
     },
     {
       "name": "lfo",
-      "kind": 6,
+      "kind": 7,
       "description": "A low-frequency oscillator with sine, triangle, saw and square outputs from -1 to 1, all starting their cycle together: sine and triangle rise from 0, the square is high for the first half, the saw climbs from -1. Its rate can move every sample.",
       "inputs": [
         {
@@ -415,22 +476,9 @@
     },
     {
       "name": "loopgain",
-      "kind": 7,
-      "description": "The gain for a feedback loop: what a signal going round a loop of `period` samples is multiplied by each time round, so that it dies away by 60 dB in `time` seconds whatever the period. Keeps a plucked string's decay even from low notes to high ones.",
-      "inputs": [
-        {
-          "name": "period",
-          "min": 0,
-          "max": 96000,
-          "unit": "samples"
-        },
-        {
-          "name": "time",
-          "min": 0.01,
-          "max": 60,
-          "unit": "s"
-        }
-      ],
+      "kind": 8,
+      "description": "The gain for a feedback loop: what a signal going round a loop of `period` samples is multiplied by each time round, so that it dies away by 60 dB in `time` seconds whatever the period. Keeps a plucked string's decay even from low notes to high ones. Both are controls, read every 32 samples, since they barely move within a note.",
+      "inputs": [],
       "outputs": [
         {
           "name": "gain",
@@ -438,7 +486,22 @@
           "max": 1
         }
       ],
-      "controls": [],
+      "controls": [
+        {
+          "name": "period",
+          "min": 0,
+          "max": 96000,
+          "unit": "samples",
+          "init": 100
+        },
+        {
+          "name": "time",
+          "min": 0.01,
+          "max": 60,
+          "unit": "s",
+          "init": 3
+        }
+      ],
       "meters": [],
       "credits": [
         {
@@ -454,7 +517,7 @@
     },
     {
       "name": "lowpass",
-      "kind": 8,
+      "kind": 9,
       "description": "A resonant two-pole low-pass, the counterpart of Web Audio's biquad, whose peak at the cutoff rises with q. A state-variable filter, so it stays stable however fast the cutoff moves.",
       "inputs": [
         {
@@ -507,7 +570,7 @@
     },
     {
       "name": "meter",
-      "kind": 9,
+      "kind": 10,
       "description": "Passes its signal through unchanged and shows its level on a meter, as a channel meter does: it rises at once and falls back over about 300 ms.",
       "inputs": [
         {
@@ -545,7 +608,7 @@
     },
     {
       "name": "mul",
-      "kind": 10,
+      "kind": 11,
       "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
       "inputs": [
         {
@@ -573,7 +636,7 @@
     },
     {
       "name": "noise",
-      "kind": 11,
+      "kind": 12,
       "description": "White noise.",
       "inputs": [],
       "outputs": [
@@ -590,7 +653,7 @@
     },
     {
       "name": "onepole",
-      "kind": 12,
+      "kind": 13,
       "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
       "inputs": [
         {
@@ -655,7 +718,7 @@
     },
     {
       "name": "pan",
-      "kind": 13,
+      "kind": 14,
       "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
       "inputs": [
         {
@@ -699,7 +762,7 @@
     },
     {
       "name": "period",
-      "kind": 14,
+      "kind": 15,
       "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
       "inputs": [
         {
@@ -739,7 +802,7 @@
     },
     {
       "name": "pitch",
-      "kind": 15,
+      "kind": 16,
       "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
       "inputs": [
         {
@@ -771,7 +834,7 @@
     },
     {
       "name": "pulse",
-      "kind": 16,
+      "kind": 17,
       "description": "A band-limited pulse wave whose width can move every sample (pulse-width modulation): width 0.5 is a square from -1 to 1. It has no DC offset, as an analog synth's output has none, so a narrow pulse reaches towards 2 on its short side. An octave down, it is a sub-oscillator.",
       "inputs": [
         {
@@ -820,7 +883,7 @@
     },
     {
       "name": "reverb",
-      "kind": 17,
+      "kind": 18,
       "description": "A stereo algorithmic reverb (Zita-Rev1): a short pre-delay, then a dense tail that decays over the time set, faster in the highs above the damping frequency.",
       "inputs": [
         {
@@ -925,7 +988,7 @@
     },
     {
       "name": "saw",
-      "kind": 18,
+      "kind": 19,
       "description": "A band-limited sawtooth.",
       "inputs": [
         {
@@ -964,7 +1027,7 @@
     },
     {
       "name": "select",
-      "kind": 19,
+      "kind": 20,
       "description": "Picks one of four signals by index (0 to 3, rounded to the nearest): a waveform or mode switch, fed by a choice param, which reads as its option's index. Wire any unused choice to 0. The switch is instant, so changing it mid-note can click.",
       "inputs": [
         {
@@ -1007,7 +1070,7 @@
     },
     {
       "name": "shaper",
-      "kind": 20,
+      "kind": 21,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -1046,7 +1109,7 @@
     },
     {
       "name": "sine",
-      "kind": 21,
+      "kind": 22,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -1079,7 +1142,7 @@
     },
     {
       "name": "svf",
-      "kind": 22,
+      "kind": 23,
       "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
       "inputs": [
         {
