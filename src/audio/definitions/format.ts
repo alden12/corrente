@@ -19,9 +19,12 @@
  * - **Nodes** are blocks by name. A node marked `voice` runs once per sounding voice; the rest run
  *   once for the track, before the voices (an LFO they share) or after them (effects on the voices
  *   summed): which, the compiler works out from what each reads.
- * - **Each input** is a number, a param binding, a reference, or a list of those, which are summed.
- *   A reference is a node (`"osc"`, its first output) or one of its outputs (`"svf.highpass"`), or a
- *   signal: `voice.frequency`, `voice.gate`, `voice.velocity` (in voice nodes), `voices.left` and
+ * - **Each input** is a number, a param binding, a reference, a scaled reference, or a list of those,
+ *   which are summed. A param binding reads a number param as it is, a switch as 0 or 1, and a
+ *   choice (an enum) as its option's index, 0 first. A scaled reference is
+ *   `{ "from": "lfo.sine", "scale": 12, "offset": 0 }`: a reference times `scale` plus `offset`, so
+ *   an LFO's -1..1 needs no `mul` node to sweep 12 semitones. A reference is a node (`"osc"`, its
+ *   first output) or one of its outputs (`"svf.highpass"`), or a signal: `voice.frequency`, `voice.gate`, `voice.velocity` (in voice nodes), `voices.left` and
  *   `voices.right` (the voices summed, after them), `input.left`, `input.right`,
  *   `input.sidechainLeft`, `input.sidechainRight` (the track's audio in).
  * - **Every audio input must be wired**; a control (a block's slider) left out keeps its starting
@@ -67,8 +70,22 @@ export const paramBindingSchema = z
   })
   .strict();
 
-export const singleInputSchema = z.union([z.number().finite(), z.string().min(1), paramBindingSchema]);
-/** One input: a number, a param binding, a reference, or several of those summed. */
+/** A reference times `scale` plus `offset` (defaults 1 and 0). */
+export const scaledReferenceSchema = z
+  .object({
+    from: z.string().min(1),
+    scale: z.number().finite().optional(),
+    offset: z.number().finite().optional(),
+  })
+  .strict();
+
+export const singleInputSchema = z.union([
+  z.number().finite(),
+  z.string().min(1),
+  paramBindingSchema,
+  scaledReferenceSchema,
+]);
+/** One input: a number, a param binding, a reference, a scaled reference, or several of those summed. */
 export const inputSchema = z.union([singleInputSchema, z.array(singleInputSchema).min(1)]);
 
 /** Node names are plain words: they're written into references (`node.port`), so no dots. */
@@ -104,6 +121,7 @@ export const definitionSchema = z
   .strict();
 
 export type ParamBinding = z.infer<typeof paramBindingSchema>;
+export type ScaledReference = z.infer<typeof scaledReferenceSchema>;
 export type InputValue = z.infer<typeof inputSchema>;
 export type DefinitionNode = z.infer<typeof nodeSchema>;
 export type DeviceDefinition = z.infer<typeof definitionSchema>;

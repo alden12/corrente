@@ -21,7 +21,8 @@ import {
   type DeviceDefinition,
   type InputValue,
 } from "./format";
-import { channelsOf, listOf, referenceTo } from "./references";
+import type { ParamSchema } from "../params/types";
+import { channelsOf, isScaled, listOf, referenceTo } from "./references";
 
 const NOT_WIRED = "not wired (every audio input needs a value, a param or a connection)";
 
@@ -90,7 +91,7 @@ const nodeName = z
   .refine((name) => !RESERVED_NAMES.includes(name), `the name is kept for signals (${RESERVED_NAMES.join(", ")})`);
 
 /** References and params across the definition, each reported against where it's written. */
-const checkAcross = (definition: DeviceDefinition, params: string[] | undefined, context: z.RefinementCtx) => {
+const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefined, context: z.RefinementCtx) => {
   const problem = (path: (string | number)[], message: string) => context.addIssue({ code: "custom", path, message });
   const { nodes } = definition;
 
@@ -98,11 +99,19 @@ const checkAcross = (definition: DeviceDefinition, params: string[] | undefined,
     Object.entries(node.inputs ?? {}).forEach(([port, value]: [string, InputValue]) =>
       listOf(value).forEach((item, index) => {
         const path = ["nodes", name, "inputs", port, ...(Array.isArray(value) ? [index] : [])];
-        if (typeof item === "string") {
-          const source = referenceTo(item, nodes);
+        if (typeof item === "number") return;
+        if (typeof item === "string" || isScaled(item)) {
+          const source = referenceTo(typeof item === "string" ? item : item.from, nodes);
           if (typeof source === "string") problem(path, source);
-        } else if (typeof item === "object" && params && !params.includes(item.param)) {
-          problem(path, `there is no param "${item.param}" (the device has ${params.join(", ") || "none"})`);
+          return;
+        }
+        if (!params) return;
+        const spec = params.find((candidate) => candidate.id === item.param);
+        if (!spec) {
+          const names = params.map((candidate) => candidate.id).join(", ") || "none";
+          problem(path, `there is no param "${item.param}" (the device has ${names})`);
+        } else if (spec.kind === "sample") {
+          problem(path, `${item.param} is a sample param, which can't feed an input (samples come with INST-36.6)`);
         }
       }),
     ),
@@ -129,10 +138,10 @@ const checkAcross = (definition: DeviceDefinition, params: string[] | undefined,
 };
 
 /**
- * The schema a definition must pass to compile. With `params` (the device's), a binding to any other
- * param is a problem.
+ * The schema a definition must pass to compile. With `params` (the device's param schema), a binding
+ * to any other param, or to one that can't be a number (a sample), is a problem.
  */
-export const definitionSchemaFor = (params?: string[]) =>
+export const definitionSchemaFor = (params?: ParamSchema) =>
   z
     .strictObject({
       format: z.literal(DEFINITION_FORMAT),

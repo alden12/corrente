@@ -131,7 +131,9 @@ describe("EngineBank", () => {
     voice: "vca",
     output: "level",
   };
-  const plan = compileDefinition(gated, { params: ["level"] });
+  const plan = compileDefinition(gated, {
+    params: [{ id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.5 }],
+  });
 
   /** Render `blocks` blocks from time 0, returning a track's left channel. */
   const render = (bank: EngineBank, blocks: number, track = 0, from = 0) =>
@@ -263,7 +265,7 @@ describe("the new engine's test instruments", () => {
   it.each(TEST_INSTRUMENTS.map((instrument) => [instrument.type, instrument] as const))(
     "%s compiles against its params and sounds",
     (_type, { schema, definition }) => {
-      const compiled = compileDefinition(definition, { params: schema.map((spec) => spec.id) });
+      const compiled = compileDefinition(definition, { params: schema });
       const defaults = Object.fromEntries(
         schema.map((spec) => [spec.id, spec.kind === "number" ? spec.default : 0] as const),
       );

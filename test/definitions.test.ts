@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DefinitionError, compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
 import type { DeviceDefinition } from "../src/audio/definitions/format";
+import type { ParamSchema } from "../src/audio/params/types";
 import { startEngine } from "../src/audio/bank/exports";
+import { engineValueOf } from "../src/audio/definitions/values";
 
 /**
  * The plan compiler (INST-36.4): definitions compiled and played in the committed engine.wasm, so a
@@ -61,9 +63,17 @@ const pitchOf = (samples: number[]) => {
   return RATE / (lags[at] + shift);
 };
 
-const problemsOf = (definition: unknown, params?: string[]) => {
+/** Number params by name, for the compiler to check bindings against. */
+const numberParams = (names: string[]): ParamSchema =>
+  names.map((id) => ({ id, label: id, kind: "number", min: 0, max: 1, default: 0 }));
+
+const problemsOf = (definition: unknown, params?: string[] | ParamSchema) => {
   try {
-    compileDefinition(definition, { params });
+    compileDefinition(definition, {
+      params: params?.every((param) => typeof param === "string")
+        ? numberParams(params as string[])
+        : (params as ParamSchema),
+    });
     return [];
   } catch (error) {
     if (error instanceof DefinitionError) return error.problems;
@@ -211,6 +221,60 @@ describe("compiling and playing a definition", () => {
   });
 });
 
+describe("scaled references and choices", () => {
+  /** A voice playing one input while its key is down. */
+  const voicePlaying = (input: DeviceDefinition["nodes"][string]["inputs"]) => ({
+    format: 1 as const,
+    nodes: { vca: { block: "mul", voice: true, inputs: { a: "voice.gate", ...input } } },
+    voice: "vca",
+  });
+  const voiceNodes = (compiled: CompiledPlan) => compiled.steps.voice.flatMap((step) => step.nodes);
+  /** The level a held note plays at once its first block is in. */
+  const levelOf = (compiled: CompiledPlan, values: Record<string, number> = {}) => {
+    const { engine, render } = playing(compiled, values);
+    engine.eng_note_on(0, 0, 0, 220, 1);
+    return render(1)[64];
+  };
+
+  it("scales a reference with a multiply and an offset with an add, and adds nothing for 1 and 0", () => {
+    const scaled = compileDefinition(voicePlaying({ b: { from: "voice.gate", scale: 0.5, offset: 0.25 } }));
+    expect(voiceNodes(scaled)).toEqual(["vca.b*", "vca.b~", "vca"]);
+    expect(levelOf(scaled)).toBeCloseTo(0.75, 6);
+    const plain = compileDefinition(voicePlaying({ b: { from: "voice.gate" } }));
+    expect(voiceNodes(plain)).toEqual(["vca"]);
+  });
+
+  it("scales each reference in a sum on its own", () => {
+    const compiled = compileDefinition(voicePlaying({ b: [{ from: "voice.gate", scale: 0.5 }, 0.1] }));
+    expect(voiceNodes(compiled)).toEqual(["vca.b0*", "vca.b+1", "vca"]);
+    expect(levelOf(compiled)).toBeCloseTo(0.6, 6);
+  });
+
+  it("reads a choice as its option's index, so a select block picks by it", () => {
+    const wave = {
+      id: "wave",
+      label: "Wave",
+      kind: "enum",
+      options: ["low", "middle", "high"],
+      default: "low",
+    } as const;
+    const definition: DeviceDefinition = {
+      format: 1,
+      nodes: {
+        pick: { block: "select", voice: true, inputs: { index: { param: "wave" }, a: 0.1, b: 0.2, c: 0.3, d: 0 } },
+        vca: { block: "mul", voice: true, inputs: { a: "voice.gate", b: "pick" } },
+      },
+      voice: "vca",
+    };
+    const withChoice = compileDefinition(definition, { params: [wave] });
+    expect(levelOf(withChoice, { wave: engineValueOf(wave, "high") })).toBeCloseTo(0.3, 6);
+    expect(levelOf(withChoice, { wave: engineValueOf(wave, "middle") })).toBeCloseTo(0.2, 6);
+    expect([engineValueOf(wave, "low"), engineValueOf(undefined, true), engineValueOf(undefined, 0.4)]).toEqual([
+      0, 1, 0.4,
+    ]);
+  });
+});
+
 describe("definitions the compiler refuses", () => {
   const voiceWith = (nodes: DeviceDefinition["nodes"], voice = "x") => ({ format: 1, nodes, voice });
 
@@ -297,6 +361,13 @@ describe("definitions the compiler refuses", () => {
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "volume" }, b: 1 } } }), ["level"]),
     ).toEqual(['x.a: there is no param "volume" (the device has level)']);
+    const kit = { id: "kit", label: "Kit", kind: "sample", default: "" } as const;
+    expect(
+      problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "kit" }, b: 1 } } }), [kit]),
+    ).toEqual(["x.a: kit is a sample param, which can't feed an input (samples come with INST-36.6)"]);
+    expect(
+      problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { from: "lfo", scale: 2 }, b: 1 } } })),
+    ).toEqual(['x.a: "lfo" is not a node or a signal']);
     expect(problemsOf(voiceWith({ voice: { block: "noise", voice: true } }, "voice"))).toContain(
       "voice: the name is kept for signals (voice, voices, input)",
     );

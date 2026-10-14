@@ -133,7 +133,7 @@ export const TEST_INSTRUMENTS = [pluck, wobble];
 /** Put the test instruments in the library. */
 export const registerTestInstruments = (): void =>
   TEST_INSTRUMENTS.forEach(({ type, label, schema, definition }) => {
-    const plan = compileDefinition(definition, { params: schema.map((spec) => spec.id) });
+    const plan = compileDefinition(definition, { params: schema });
     registerInstrument({ type, label, schema, family: "Synths", custom: true });
     registerInstrumentFactory(type, (context, store) => new EngineInstrument(context, store, plan));
   });

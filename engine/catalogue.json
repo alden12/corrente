@@ -963,8 +963,51 @@
       ]
     },
     {
-      "name": "shaper",
+      "name": "select",
       "kind": 19,
+      "description": "Picks one of four signals by index (0 to 3, rounded to the nearest): a waveform or mode switch, fed by a choice param, which reads as its option's index. Wire any unused choice to 0. The switch is instant, so changing it mid-note can click.",
+      "inputs": [
+        {
+          "name": "index",
+          "min": 0,
+          "max": 3
+        },
+        {
+          "name": "a",
+          "min": -24000,
+          "max": 24000
+        },
+        {
+          "name": "b",
+          "min": -24000,
+          "max": 24000
+        },
+        {
+          "name": "c",
+          "min": -24000,
+          "max": 24000
+        },
+        {
+          "name": "d",
+          "min": -24000,
+          "max": 24000
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -24000,
+          "max": 24000
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    },
+    {
+      "name": "shaper",
+      "kind": 20,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -1003,7 +1046,7 @@
     },
     {
       "name": "sine",
-      "kind": 20,
+      "kind": 21,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -1036,7 +1079,7 @@
     },
     {
       "name": "svf",
-      "kind": 21,
+      "kind": 22,
       "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
       "inputs": [
         {

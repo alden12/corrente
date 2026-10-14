@@ -8,14 +8,12 @@
  * worklet to say the plan is in, since an offline render outruns the messages that carry it.
  */
 import type { CompiledPlan } from "../definitions/compile";
+import { engineValueOf } from "../definitions/values";
 import { bindParams, type ParamBinding } from "../params/binding";
 import type { ParamStore } from "../params/store";
 import type { Instrument } from "../instruments/types";
 import type { FromBank, ToBank } from "./messages";
 import { takeSlot, type BankSlot } from "./pool";
-
-/** A param's value as the engine reads it: numbers as they are, switches as 0 or 1. */
-const numberOf = (value: unknown) => (typeof value === "number" ? value : value === true ? 1 : 0);
 
 export class EngineInstrument implements Instrument {
   readonly output: GainNode;
@@ -43,7 +41,7 @@ export class EngineInstrument implements Instrument {
       this.slot = slot;
       slot.node.connect(this.output, slot.track);
       const params = [...new Set(plan.params.map((source) => source.param))].filter((id) => store.has(id));
-      const values = Object.fromEntries(params.map((id) => [id, numberOf(store.get(id))]));
+      const values = Object.fromEntries(params.map((id) => [id, engineValueOf(store.spec(id), store.get(id))]));
       slot.post({ type: "load", track: slot.track, plan, values });
       this.waiting.forEach((message) => slot.post({ ...message, track: slot.track } as ToBank));
       this.waiting = [];
@@ -52,7 +50,12 @@ export class EngineInstrument implements Instrument {
           param,
           {
             apply: (value) =>
-              this.send({ type: "param", param, value: numberOf(value), time: this.context.currentTime }),
+              this.send({
+                type: "param",
+                param,
+                value: engineValueOf(store.spec(param), value),
+                time: this.context.currentTime,
+              }),
           },
         ]),
       );

@@ -11,7 +11,8 @@
 import { blockNamed, type BlockSpec } from "./catalogue";
 import { DEFAULT_VOICES, type DeviceDefinition, type ParamBinding } from "./format";
 import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
-import { channelsOf, referenceTo, sourcesOf, type Source } from "./references";
+import type { ParamSchema } from "../params/types";
+import { channelsOf, referenceTo, sourcesOf, underlying, type InputSource, type Source } from "./references";
 import { definitionSchemaFor, problemsIn } from "./schema";
 
 /**
@@ -117,8 +118,8 @@ const sectionProblems = (name: string, section: Section, sources: Source[], sect
   });
 
 export interface CompileOptions {
-  /** The device's params: when given, a binding to any other param is a problem. */
-  params?: string[];
+  /** The device's param schema: when given, a binding to any other param, or a sample, is a problem. */
+  params?: ParamSchema;
 }
 
 export const compileDefinition = (input: unknown, options: CompileOptions = {}): CompiledPlan => {
@@ -141,7 +142,7 @@ export const compileDefinition = (input: unknown, options: CompileOptions = {}):
   );
 
   // Sections, and what each may read: the one check that needs the graph worked out.
-  const flatSources = Object.fromEntries(named.map((name) => [name, inputs[name].flat()]));
+  const flatSources = Object.fromEntries(named.map((name) => [name, inputs[name].flat().map(underlying)]));
   const sectionOf = sectionsOf(nodes, flatSources);
   const voices = definition.voices ?? (named.some((name) => sectionOf[name] === "voice") ? DEFAULT_VOICES : 0);
   const voiceOut = channelsOf(definition.voice).map((reference) => referenceTo(reference, nodes) as Source);
@@ -161,7 +162,7 @@ export const compileDefinition = (input: unknown, options: CompileOptions = {}):
 
 interface Resolved {
   blocks: Record<string, BlockSpec>;
-  inputs: Record<string, Source[][]>;
+  inputs: Record<string, InputSource[][]>;
   sectionOf: Record<string, Section>;
   voices: number;
   voiceOut: Source[];
@@ -171,7 +172,9 @@ interface Resolved {
 /** The plan for a definition already checked: sections, sums, order, then words. */
 const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan => {
   const add = blockNamed("add")!;
-  // Each section's nodes in definition order, then the adds that sum their inputs.
+  const mul = blockNamed("mul")!;
+  // Each section's nodes in definition order, then the adds that sum their inputs and the nodes that
+  // scale them.
   const planned: Record<Section, Planned[]> = { pre: [], voice: [], post: [] };
   Object.keys(resolved.blocks).forEach((name) => {
     planned[resolved.sectionOf[name]].push({
@@ -191,12 +194,34 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
             return { type: "node", name, port: 0 };
           }, sources[0]),
         ];
+  /** A scaled reference as the nodes that scale it: a `mul` (unless by 1), then an `add` (unless 0). */
+  const placed = (section: Section, label: string, source: InputSource): Source => {
+    if (source.type !== "scaled") return source;
+    const scaled: Source =
+      source.scale === 1
+        ? source.source
+        : node(section, `${label}*`, mul, [[source.source], [{ type: "const", value: source.scale }]]);
+    return source.offset === 0
+      ? scaled
+      : node(section, `${label}~`, add, [[scaled], [{ type: "const", value: source.offset }]]);
+  };
+  const node = (section: Section, name: string, block: BlockSpec, inputs: Source[][]): Source => {
+    planned[section].push({ name, block, section, inputs });
+    return { type: "node", name, port: 0 };
+  };
   SECTIONS.forEach((section) =>
-    [...planned[section]].forEach((node) => {
-      const ports = [...node.block.inputs, ...node.block.controls];
-      node.inputs = resolved.inputs[node.name].map((sources, index) =>
-        sumOf(section, `${node.name}.${ports[index].name}`, sources),
-      );
+    [...planned[section]].forEach((planNode) => {
+      const ports = [...planNode.block.inputs, ...planNode.block.controls];
+      planNode.inputs = resolved.inputs[planNode.name].map((sources, index) => {
+        const label = `${planNode.name}.${ports[index].name}`;
+        return sumOf(
+          section,
+          label,
+          sources.map((source, position) =>
+            placed(section, sources.length > 1 ? `${label}${position}` : label, source),
+          ),
+        );
+      });
     }),
   );
 

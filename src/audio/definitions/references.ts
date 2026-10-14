@@ -11,6 +11,7 @@ import {
   type DeviceDefinition,
   type InputValue,
   type ParamBinding,
+  type ScaledReference,
 } from "./format";
 
 export type Source =
@@ -20,6 +21,15 @@ export type Source =
   | { type: "voice"; signal: number }
   | { type: "voiceSum"; channel: number }
   | { type: "input"; channel: number };
+
+/** What an input names before the compiler places it: a source, or one scaled (nodes to add). */
+export type InputSource = Source | { type: "scaled"; source: Source; scale: number; offset: number };
+
+/** What an input reads underneath any scaling: what the section rules look at. */
+export const underlying = (source: InputSource): Source => (source.type === "scaled" ? source.source : source);
+
+/** Whether an item is a scaled reference (rather than a param binding). */
+export const isScaled = (item: ParamBinding | ScaledReference): item is ScaledReference => "from" in item;
 
 const signalSources: Record<string, Source> = {
   ...Object.fromEntries(Object.entries(VOICE_SIGNALS).map(([name, signal]) => [name, { type: "voice", signal }])),
@@ -50,9 +60,13 @@ export const referenceTo = (reference: string, nodes: DeviceDefinition["nodes"])
 };
 
 /** One input's sources, for a definition the schema has passed. */
-export const sourcesOf = (value: InputValue, nodes: DeviceDefinition["nodes"]): Source[] =>
-  listOf(value).map((item) => {
+export const sourcesOf = (value: InputValue, nodes: DeviceDefinition["nodes"]): InputSource[] =>
+  listOf(value).map((item): InputSource => {
     if (typeof item === "number") return { type: "const", value: item };
     if (typeof item === "string") return referenceTo(item, nodes) as Source;
+    if (isScaled(item)) {
+      const source = referenceTo(item.from, nodes) as Source;
+      return { type: "scaled", source, scale: item.scale ?? 1, offset: item.offset ?? 0 };
+    }
     return { type: "param", binding: item };
   });
