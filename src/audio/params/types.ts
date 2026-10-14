@@ -54,6 +54,8 @@ export interface BooleanSpec extends BaseSpec {
 export interface SampleSpec extends BaseSpec {
   kind: "sample";
   default: string;
+  /** Holds a wavetable (INST-36.6): the picker offers the built-in wavetables first. */
+  wavetable?: boolean;
 }
 
 export type ParamSpec = NumberSpec | EnumSpec | BooleanSpec | SampleSpec;

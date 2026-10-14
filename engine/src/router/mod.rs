@@ -10,7 +10,8 @@
 //!   through a delay runs in chunks as long as the shortest delay (delays read first, write last).
 //!   Any other loop runs one sample at a time, its feedback edges reading the sample before.
 //! - **The delay is native**, not Faust: it has to split into a read and a write around the rest of
-//!   the loop. **So is the sampler**: it reads samples the bank holds, which Faust's Rust backend can't.
+//!   the loop. **So are the sampler and the wavetable**: they read samples the bank holds, which Faust's
+//!   Rust backend can't.
 //!
 //! Every buffer is a `Slot` of 129 floats: slot 0 holds the last sample of the previous block,
 //! 1..=128 the current one, so a feedback edge reads "the sample before" by offset, even at sample 0.
@@ -26,6 +27,7 @@
 //! - sources.rs: what a node reads while it runs.
 //! - delay.rs: the native delay line, and its steps.
 //! - sampler.rs: the native sample player, and the samples a bank holds.
+//! - wavetable.rs: the native wavetable oscillator, reading tables from the same slots.
 //!
 //! Rust notes, for reading this folder:
 //! - A folder of modules: `router/mod.rs` is the module `router`, and each `mod track;` below makes
@@ -42,10 +44,12 @@ mod engine;
 mod render;
 mod sampler;
 mod sources;
+mod wavetable;
 mod track;
 
 // TS: export { Engine } from "./engine". `pub use` re-exports, so lib.rs writes `router::Engine`.
 pub use engine::Engine;
+pub use wavetable::{CYCLE, LEVELS};
 
 use crate::plan::{CHANNELS, VOICE_SIGNALS};
 

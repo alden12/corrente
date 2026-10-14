@@ -561,6 +561,41 @@ describe("definitions the compiler refuses", () => {
       });
     });
 
+    it("binds a sample param to a wavetable's table, marked to be made a table", () => {
+      const table = { id: "table", label: "Table", kind: "sample", default: "", wavetable: true } as const;
+      const osc = (input?: unknown) =>
+        voiceWith({
+          x: {
+            block: "wavetable",
+            voice: true,
+            inputs: { frequency: "voice.frequency", position: 0, ...(input === undefined ? {} : { table: input }) },
+          },
+        });
+      const plan = compileDefinition(osc({ param: "table" }), { params: [table] });
+      expect(plan.params).toEqual([{ param: "table", scale: 1, offset: 0, sample: true, wavetable: true }]);
+      expect(problemsOf(osc())).toEqual(["x.table: needs a sample param (which wavetable it plays)"]);
+      expect(problemsOf(osc("voice.sample"))).toEqual([
+        "x.table: takes a sample param as { param }, with no scale, offset or table",
+      ]);
+      // One param can't be both a sample and a table.
+      const both = {
+        format: 1,
+        nodes: {
+          ...osc({ param: "kit" }).nodes,
+          y: {
+            block: "sampler",
+            voice: true,
+            inputs: { frequency: "voice.frequency", gate: "voice.gate", sample: { param: "kit" } },
+          },
+          sum: { block: "add", voice: true, inputs: { a: "x", b: "y.left" } },
+        },
+        voice: "sum",
+      };
+      expect(problemsOf(both, [kit])).toEqual([
+        "nodes: kit feeds both a sample and a wavetable; give each its own param",
+      ]);
+    });
+
     it("wants a sampler's sample to be a sample param, as it is", () => {
       expect(problemsOf(playing())).toEqual(["x.sample: needs a sample param (which sample it plays)"]);
       expect(problemsOf(playing(3))).toEqual([
@@ -585,7 +620,7 @@ describe("definitions the compiler refuses", () => {
     const kit = { id: "kit", label: "Kit", kind: "sample", default: "" } as const;
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "kit" }, b: 1 } } }), [kit]),
-    ).toEqual(["x.a: kit is a sample param, which only feeds a sampler's sample"]);
+    ).toEqual(["x.a: kit is a sample param, which only feeds a sampler's sample or a wavetable's table"]);
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { from: "lfo", scale: 2 }, b: 1 } } })),
     ).toEqual(['x.a: "lfo" is not a node or a signal']);

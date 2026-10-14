@@ -9,7 +9,7 @@
  * its schema (schema.ts); the compiler adds what each section may read.
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
-import { DEFAULT_VOICES, SAMPLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
+import { DEFAULT_VOICES, SAMPLE_INPUTS, TABLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
 
 /** A sample zone as the bank uses it (INST-36.6): every range filled in. */
 export interface PlanZone {
@@ -65,6 +65,8 @@ export interface ParamSource {
   table?: [number, number][];
   /** A sample param: the bank sets it to the slot its sample is in, never ramping (INST-36.6). */
   sample?: true;
+  /** A sample param a wavetable plays: the instrument prepares it as a table (samples/tables.ts). */
+  wavetable?: true;
 }
 
 export interface CompiledPlan {
@@ -254,12 +256,16 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
 
   // Params, each binding once.
   const zones = definition.zones;
-  const sampleParams = new Set([
-    ...Object.values(definition.nodes).flatMap((node) =>
-      (SAMPLE_INPUTS[node.block] ?? [])
+  const paramsOn = (inputs: Record<string, readonly string[]>) =>
+    Object.values(definition.nodes).flatMap((node) =>
+      (inputs[node.block] ?? [])
         .map((port) => node.inputs?.[port])
         .flatMap((input) => (typeof input === "object" && "param" in input ? [input.param] : [])),
-    ),
+    );
+  const tableParams = new Set(paramsOn(TABLE_INPUTS));
+  const sampleParams = new Set([
+    ...paramsOn(SAMPLE_INPUTS),
+    ...tableParams,
     ...(zones ?? []).map((zone) => zone.sample.param),
   ]);
   const params: ParamSource[] = [];
@@ -270,6 +276,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       offset: binding.offset ?? 0,
       ...(binding.table ? { table: binding.table } : {}),
       ...(sampleParams.has(binding.param) ? { sample: true as const } : {}),
+      ...(tableParams.has(binding.param) ? { wavetable: true as const } : {}),
     };
     const key = JSON.stringify(source);
     const found = params.findIndex((existing) => JSON.stringify(existing) === key);

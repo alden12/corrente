@@ -178,7 +178,7 @@ const paramSpec = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ ...baseSpec, kind: z.literal("enum"), options: z.array(z.string()), default: z.string() }).strict(),
   z.object({ ...baseSpec, kind: z.literal("boolean"), default: z.boolean() }).strict(),
-  z.object({ ...baseSpec, kind: z.literal("sample"), default: z.string() }).strict(),
+  z.object({ ...baseSpec, kind: z.literal("sample"), default: z.string(), wavetable: z.boolean().optional() }).strict(),
 ]);
 const paramSchema = z.array(paramSpec);
 

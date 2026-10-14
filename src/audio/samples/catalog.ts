@@ -50,10 +50,27 @@ export const BUILTIN_SAMPLES: BuiltinSample[] = [
   { id: "tom", name: "Tom", gmNote: 45 }, // Low Tom
 ];
 
-export type SampleRef = { kind: "none" } | { kind: "builtin"; id: string } | { kind: "asset"; id: string };
+/**
+ * The built-in wavetables (INST-36.6): sets of single cycles a `wavetable` block morphs through, dark
+ * to bright, made in dsp/wavetable.ts in this order. The ref is `wavetable:${id}`.
+ */
+export const BUILTIN_WAVETABLES: { id: string; name: string }[] = [
+  { id: "classic", name: "Classic (sine to saw)" },
+  { id: "harmonics", name: "Harmonics" },
+  { id: "pulse", name: "Pulse" },
+];
+
+export type SampleRef =
+  | { kind: "none" }
+  | { kind: "builtin"; id: string }
+  | { kind: "asset"; id: string }
+  | { kind: "wavetable"; id: string };
 
 /** Build the ref string for a built-in sample. */
 export const builtinRef = (id: string): string => `builtin:${id}`;
+
+/** Build the ref string for a built-in wavetable. */
+export const wavetableRef = (id: string): string => `wavetable:${id}`;
 
 /** Build the ref string for a project-library (imported) sample. */
 export const assetRef = (id: string): string => `asset:${id}`;
@@ -62,6 +79,7 @@ export const assetRef = (id: string): string => `asset:${id}`;
 export function parseRef(ref: string): SampleRef {
   if (ref.startsWith("builtin:")) return { kind: "builtin", id: ref.slice("builtin:".length) };
   if (ref.startsWith("asset:")) return { kind: "asset", id: ref.slice("asset:".length) };
+  if (ref.startsWith("wavetable:")) return { kind: "wavetable", id: ref.slice("wavetable:".length) };
   return { kind: "none" };
 }
 
@@ -77,6 +95,9 @@ export function refLabel(ref: string, assets: SampleAsset[] = []): string {
   }
   if (parsed.kind === "asset") {
     return assets.find((asset) => asset.id === parsed.id)?.name ?? parsed.id;
+  }
+  if (parsed.kind === "wavetable") {
+    return BUILTIN_WAVETABLES.find((table) => table.id === parsed.id)?.name ?? parsed.id;
   }
   return "None";
 }

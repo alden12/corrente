@@ -9,7 +9,7 @@ import type { DeviceDefinition } from "../definitions/format";
 import { registerInstrument } from "../instruments/catalog";
 import { registerInstrumentFactory } from "../instruments/registry";
 import type { ParamSchema, ParamSpec } from "../params/types";
-import { BUILTIN_SAMPLES, builtinRef } from "../samples/catalog";
+import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../samples/catalog";
 import { EngineInstrument } from "./EngineInstrument";
 
 interface TestInstrument {
@@ -276,7 +276,70 @@ const drums: TestInstrument = {
   },
 };
 
-export const TEST_INSTRUMENTS = [pluck, wobble, sampler, drums];
+/**
+ * A wavetable through an envelope (INST-36.6): a built-in table or any sample cut into cycles, its
+ * position set by a knob and swept by an LFO every voice shares.
+ */
+const wavetable: TestInstrument = {
+  type: "engine-wavetable",
+  label: "Wavetable (new engine)",
+  schema: [
+    { id: "table", label: "Table", kind: "sample", default: wavetableRef("classic"), wavetable: true },
+    { id: "position", label: "Position", kind: "number", min: 0, max: 1, default: 0.3 },
+    { id: "sweep", label: "Sweep", kind: "number", min: 0, max: 0.5, default: 0.2 },
+    {
+      id: "rate",
+      label: "Sweep rate",
+      kind: "number",
+      min: 0.05,
+      max: 10,
+      default: 0.5,
+      unit: "Hz",
+      taper: "exponential",
+    },
+    { id: "attack", label: "Attack", kind: "number", min: 0, max: 2000, default: 5, unit: "ms", taper: "exponential" },
+    {
+      id: "release",
+      label: "Release",
+      kind: "number",
+      min: 5,
+      max: 5000,
+      default: 400,
+      unit: "ms",
+      taper: "exponential",
+    },
+  ],
+  definition: {
+    format: 1,
+    nodes: {
+      sweep: { block: "lfo", inputs: { rate: { param: "rate" } } },
+      osc: {
+        block: "wavetable",
+        voice: true,
+        inputs: {
+          frequency: "voice.frequency",
+          position: [{ param: "position" }, { from: "sweep.sine", scale: { param: "sweep" } }],
+          table: { param: "table" },
+        },
+      },
+      envelope: {
+        block: "adsr",
+        voice: true,
+        inputs: {
+          gate: "voice.gate",
+          attack: { param: "attack", scale: 0.001 },
+          sustain: 1,
+          release: { param: "release", scale: 0.001 },
+        },
+      },
+      amp: { block: "mul", voice: true, inputs: { a: "osc", b: "envelope" } },
+      level: { block: "mul", voice: true, inputs: { a: "amp", b: 0.3 } },
+    },
+    voice: "level",
+  },
+};
+
+export const TEST_INSTRUMENTS = [pluck, wobble, sampler, drums, wavetable];
 
 /** Put the test instruments in the library. */
 export const registerTestInstruments = (): void =>

@@ -6,6 +6,8 @@ import { BLOCK } from "../src/audio/bank/exports";
 import { CATALOGUE } from "../src/audio/definitions/catalogue";
 import { compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
 import type { DeviceDefinition, InputValue } from "../src/audio/definitions/format";
+import { buildBanks } from "../src/audio/dsp/wavetable";
+import { tableOf } from "../src/audio/samples/tables";
 
 /**
  * What each block costs to run (INST-36.4's cost cap), in engine/costs.json. Timings depend on the
@@ -57,6 +59,10 @@ const SETUP: Record<string, { inputs: Record<string, InputValue>; start: (bank: 
         channels: [new Float32Array(RATE * 10).fill(0.5), new Float32Array(RATE * 10)],
         rate: RATE,
       }),
+  },
+  wavetable: {
+    inputs: { table: { param: "table" } },
+    start: (bank) => bank.setSample(0, "table", "classic", { channels: [tableOf(buildBanks()[0])], rate: RATE }),
   },
 };
 

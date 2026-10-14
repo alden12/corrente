@@ -56,6 +56,7 @@ use reader::Reader;
 /// Native kinds sit above the Faust ones.
 pub const KIND_DELAY: i32 = 1000;
 pub const KIND_SAMPLER: i32 = 1001;
+pub const KIND_WAVETABLE: i32 = 1002;
 /// The sampler's controls: sample slot, root note, start, end, loop.
 pub const SAMPLER_CONTROLS: usize = 5;
 /// The most audio inputs a node may have.
@@ -140,11 +141,12 @@ impl Source {
     }
 }
 
-// TS: type NodeKind = { type: "faust"; kind: number } | { type: "delay" } | { type: "sampler" }
+// TS: type NodeKind = { type: "faust"; kind: number } | { type: "delay" } | { type: "sampler" } | { type: "wavetable" }
 pub enum NodeKind {
     Faust(usize),
     Delay,
     Sampler,
+    Wavetable,
 }
 
 // A `struct` is a plain object type with named fields; `pub` makes a field readable outside this file.

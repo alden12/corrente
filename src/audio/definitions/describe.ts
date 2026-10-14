@@ -109,8 +109,11 @@ export const definitionFormatDoc = () => ({
       'cycle per length) or a length. `beats` is a note division ("1/4", "1/8T" triplet, "1/8." dotted, "2/1" ' +
       "two bars of 4/4), a number of beats, or a param: a choice whose options are divisions, or (not as hz) a number.",
     sample:
-      "A sampler's `sample` takes a sample param, as { param } alone: whichever sample the param names, built in " +
-      "or imported, is loaded for it. A sample param feeds nothing else.",
+      "A sampler's `sample` and a wavetable's `table` take a sample param, as { param } alone: whichever sample " +
+      "the param names, built in or imported, is loaded for it (for a wavetable, cut into 2048-sample cycles, or " +
+      'a built-in wavetable: "wavetable:classic", "wavetable:harmonics", "wavetable:pulse"). Give the param ' +
+      '`"wavetable": true` to offer the built-in wavetables in its picker. A sample param feeds nothing else, ' +
+      "and not both kinds.",
     list: "Several of the above in a list are summed.",
     unwired: "Every audio input must be wired. A control left out keeps its default.",
   },

@@ -14,18 +14,21 @@
 
 use super::delay::DelayLine;
 use super::sampler::SamplerState;
+use super::wavetable::WavetableState;
 use super::sources::{Context, Sources};
 use super::{BLOCK, CONTROL, Slot};
 use crate::faust::{self, Block, ParamIndex};
 use crate::plan::{MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Section, StepMode};
 
-/// What a node is when it runs: a Faust block with its sliders, a delay line, or a sample player.
-// TS: type Unit = { type: "faust"; block: Block; controls: ParamIndex[]; meters: ParamIndex[] } | { type: "delay"; line: DelayLine } | { type: "sampler"; state: SamplerState }
+/// What a node is when it runs: a Faust block with its sliders, a delay line, a sample player or a
+/// wavetable oscillator.
+// TS: type Unit = { type: "faust"; block: Block; controls: ParamIndex[]; meters: ParamIndex[] } | { type: "delay"; line: DelayLine } | { type: "sampler"; state: SamplerState } | { type: "wavetable"; state: WavetableState }
 // A variant can have named fields (`Faust { ... }`) or unnamed ones (`Delay(...)`).
 pub(super) enum Unit {
     Faust { block: Box<Block>, controls: Vec<ParamIndex>, meters: Vec<ParamIndex> },
     Delay(DelayLine),
     Sampler(SamplerState),
+    Wavetable(WavetableState),
 }
 
 impl Unit {
@@ -33,6 +36,7 @@ impl Unit {
         match node.kind {
             NodeKind::Delay => Unit::Delay(DelayLine::new()),
             NodeKind::Sampler => Unit::Sampler(SamplerState::new(sample_rate)),
+            NodeKind::Wavetable => Unit::Wavetable(WavetableState::new(sample_rate)),
             NodeKind::Faust(kind) => {
                 let mut block = faust::create(kind);
                 block.init(sample_rate);
@@ -50,6 +54,7 @@ impl Unit {
             Unit::Faust { block, .. } => block.instance_clear(),
             Unit::Delay(line) => line.clear(),
             Unit::Sampler(state) => state.clear(),
+            Unit::Wavetable(state) => state.clear(),
         }
     }
 
@@ -144,11 +149,13 @@ impl Render<'_> {
         self.section.nodes[index].is_delay()
     }
 
-    /// Run a node that isn't a delay over [start, start + length): a Faust block or a sampler.
-    // TS: this.section.nodes[index].kind.type === "sampler" ? this.runSampler(...) : this.runFaust(...)
+    /// Run a node that isn't a delay over [start, start + length): a Faust block, a sampler or a
+    /// wavetable.
+    // TS: ({ sampler: runSampler, wavetable: runWavetable })[kind.type]?.(...) ?? this.runFaust(...)
     fn run_unit(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
         match self.section.nodes[index].kind {
             NodeKind::Sampler => self.run_sampler(index, start, length, set_controls),
+            NodeKind::Wavetable => self.run_wavetable(index, start, length, set_controls),
             _ => self.run_faust(index, start, length, set_controls),
         }
     }

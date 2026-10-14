@@ -8,6 +8,8 @@ import { TEST_INSTRUMENTS } from "../src/audio/bank/testInstruments";
 import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import type { DeviceDefinition } from "../src/audio/definitions/format";
+import { buildBanks } from "../src/audio/dsp/wavetable";
+import { tableOf } from "../src/audio/samples/tables";
 
 /**
  * The engine bank (INST-36.5): the audio thread's JavaScript beside engine.wasm. Its event queue and
@@ -393,6 +395,31 @@ describe("EngineBank", () => {
       });
     });
 
+    it("plays a wavetable at the note's pitch, morphing by position", () => {
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(
+        0,
+        compileDefinition({
+          format: 1,
+          nodes: {
+            osc: {
+              block: "wavetable",
+              voice: true,
+              inputs: { frequency: "voice.frequency", position: 0, table: { param: "table" } },
+            },
+          },
+          voice: "osc",
+        }),
+      );
+      // The classic set's first cycle is a sine: at A4, 440 cycles a second from phase 0.
+      bank.setSample(0, "table", "classic", { channels: [tableOf(buildBanks()[0])], rate: RATE });
+      bank.noteOn(0, 69, 1, 0);
+      bank.process(0);
+      const out = Array.from(bank.output(0, 0));
+      const sine = out.map((_, index) => Math.sin((2 * Math.PI * 440 * index) / RATE));
+      expect(Math.max(...out.map((sample, index) => Math.abs(sample - sine[index])))).toBeLessThan(1e-3);
+    });
+
     it("refuses a sample that won't fit, leaving the param as it was", () => {
       const bank = new EngineBank(wasm, RATE, 1);
       bank.load(0, sampler);
@@ -434,9 +461,12 @@ describe("the new engine's test instruments", () => {
         { length: RATE },
         (_, frame) => 0.5 * Math.sin((2 * Math.PI * 220 * frame) / RATE),
       );
-      schema
-        .filter((spec) => spec.kind === "sample")
-        .forEach((spec) => bank.setSample(0, spec.id, "sine", { channels: [sine], rate: RATE }));
+      // And wavetables get the built-in classic set.
+      const classic = { channels: [tableOf(buildBanks()[0])], rate: RATE };
+      schema.forEach((spec) => {
+        if (spec.kind === "sample")
+          bank.setSample(0, spec.id, spec.id, spec.wavetable ? classic : { channels: [sine], rate: RATE });
+      });
       // A kit's first pad, or A3.
       bank.noteOn(0, definition.zones?.[0].root ?? 57, 1, 0);
       const sound = Array.from({ length: 100 }, (_, block) => {

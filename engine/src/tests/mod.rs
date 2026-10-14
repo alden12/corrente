@@ -1,7 +1,7 @@
 //! The router's behaviour, checked against answers worked out by hand: sample-accurate note starts,
 //! one-sample feedback, a delay loop run in chunks, voices freeing after their release, the shared
 //! section, stereo and multi-output blocks, effects after the voices, audio inputs, independent
-//! tracks, plans the engine must refuse, edits that crossfade, and the sample player. `yarn engine:test` runs them.
+//! tracks, plans the engine must refuse, edits that crossfade, the sample player and the wavetable. `yarn engine:test` runs them.
 //!
 //! This file holds `PlanBuilder` and the helpers; the tests are in the files beside it, by topic.
 //!
@@ -21,9 +21,10 @@ mod reports;
 mod samples;
 mod signals;
 mod sections;
+mod wavetables;
 
 use crate::faust;
-use crate::plan::{self, HOST_BEAT, HOST_BEAT_SAMPLES, HOST_PLAYING, KIND_DELAY, KIND_SAMPLER, SIGNAL_END, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_ROOT, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_START};
+use crate::plan::{self, HOST_BEAT, HOST_BEAT_SAMPLES, HOST_PLAYING, KIND_DELAY, KIND_SAMPLER, KIND_WAVETABLE, SIGNAL_END, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_ROOT, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_START};
 use crate::router::{BLOCK, Engine};
 
 const RATE: i32 = 48000;

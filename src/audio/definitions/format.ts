@@ -165,6 +165,13 @@ export const RESERVED_NAMES = ["voice", "voices", "input", "host"];
  */
 export const SAMPLE_INPUTS: Record<string, readonly string[]> = { sampler: ["sample"] };
 
+/**
+ * Inputs that name a wavetable, by block: like sample inputs, a sample param as it is, which the
+ * instrument cuts into 2048-sample cycles and band-limits before the bank has it (samples/tables.ts).
+ * A param feeds sample inputs or table inputs, not both.
+ */
+export const TABLE_INPUTS: Record<string, readonly string[]> = { wavetable: ["table"] };
+
 /** A sample param named as it is: what a sample input or a zone takes. */
 export const sampleBindingSchema = z.strictObject({ param: z.string().min(1) });
 

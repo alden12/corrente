@@ -58,6 +58,11 @@ impl Sample {
         &mut self.data
     }
 
+    /// Channel 0's frames, as a wavetable reads them (a table is one channel).
+    pub(super) fn first_channel(&self) -> &[f32] {
+        &self.data[..self.frames]
+    }
+
     /// Channel `channel` at `position` frames in, interpolated (a mono sample's one channel for either).
     // TS: const at = (frame) => data[channelStart + clamp(frame, 0, frames - 1)]; then the cubic.
     fn read(&self, channel: usize, position: f64) -> f32 {

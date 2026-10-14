@@ -19,6 +19,7 @@ import {
   RESERVED_NAMES,
   SAMPLE_INPUTS,
   singleInputSchema,
+  TABLE_INPUTS,
   ZONE_SIGNALS,
   zonesSchema,
   type DeviceDefinition,
@@ -108,7 +109,7 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       const names = params.map((candidate) => candidate.id).join(", ") || "none";
       problem(path, `there is no param "${binding.param}" (the device has ${names})`);
     } else if (spec.kind === "sample") {
-      problem(path, `${binding.param} is a sample param, which only feeds a sampler's sample`);
+      problem(path, `${binding.param} is a sample param, which only feeds a sampler's sample or a wavetable's table`);
     }
     return spec;
   };
@@ -121,17 +122,17 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
   };
 
   /**
-   * An input that names a sample: a sample param, as it is (the bank turns it into a slot), or with
-   * zones, `voice.sample`, the sample of the zone each note took.
+   * An input that names a sample or a wavetable: a sample param, as it is (the bank turns it into a
+   * slot), or for a sample with zones, `voice.sample`, the sample of the zone each note took.
    */
-  const checkSampleInput = (value: InputValue, path: (string | number)[]) => {
-    if (value === "voice.sample" && definition.zones) return;
+  const checkSampleInput = (value: InputValue, path: (string | number)[], zoned: boolean) => {
+    if (value === "voice.sample" && zoned) return;
     const plain =
       typeof value === "object" && !Array.isArray(value) && "param" in value && Object.keys(value).length === 1;
     if (!plain)
       return problem(
         path,
-        `takes a sample param as { param }, with no scale, offset or table${definition.zones ? ', or "voice.sample"' : ""}`,
+        `takes a sample param as { param }, with no scale, offset or table${zoned ? ', or "voice.sample"' : ""}`,
       );
     checkSampleParam(value, path);
   };
@@ -163,7 +164,9 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
 
   Object.entries(nodes).forEach(([name, node]) =>
     Object.entries(node.inputs ?? {}).forEach(([port, value]: [string, InputValue]) => {
-      if (SAMPLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, ["nodes", name, "inputs", port]);
+      const inputPath = ["nodes", name, "inputs", port];
+      if (SAMPLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, inputPath, !!definition.zones);
+      if (TABLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, inputPath, false);
       listOf(value).forEach((item, index) => {
         const path = ["nodes", name, "inputs", port, ...(Array.isArray(value) ? [index] : [])];
         if (typeof item === "number") return;
@@ -184,11 +187,26 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       });
     }),
   );
-  Object.entries(nodes).forEach(([name, node]) =>
+  Object.entries(nodes).forEach(([name, node]) => {
     (SAMPLE_INPUTS[node.block] ?? [])
       .filter((port) => node.inputs?.[port] === undefined)
-      .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which sample it plays)")),
-  );
+      .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which sample it plays)"));
+    (TABLE_INPUTS[node.block] ?? [])
+      .filter((port) => node.inputs?.[port] === undefined)
+      .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which wavetable it plays)"));
+  });
+  // A param is cut into wavetable cycles or played as a sample, so it can't feed both.
+  const named = (inputs: Record<string, readonly string[]>) =>
+    Object.values(nodes).flatMap((node) =>
+      (inputs[node.block] ?? []).flatMap((port) => {
+        const input = node.inputs?.[port];
+        return typeof input === "object" && !Array.isArray(input) && "param" in input ? [input.param] : [];
+      }),
+    );
+  const asTables = new Set(named(TABLE_INPUTS));
+  [...named(SAMPLE_INPUTS), ...(definition.zones ?? []).map((zone) => zone.sample.param)]
+    .filter((param, index, all) => asTables.has(param) && all.indexOf(param) === index)
+    .forEach((param) => problem(["nodes"], `${param} feeds both a sample and a wavetable; give each its own param`));
 
   definition.zones?.forEach((zone, index) => {
     checkSampleParam(zone.sample, ["zones", index, "sample"]);

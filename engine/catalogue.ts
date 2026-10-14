@@ -90,8 +90,8 @@ export const ALLOWED_LICENCES: Record<string, string> = {
 };
 
 /**
- * Blocks the engine implements itself, in Rust, rather than from Faust (engine/src/router/delay.rs
- * and sampler.rs).
+ * Blocks the engine implements itself, in Rust, rather than from Faust (engine/src/router/delay.rs,
+ * sampler.rs and wavetable.rs).
  */
 export const NATIVE_BLOCKS: BlockSpec[] = [
   {
@@ -129,6 +129,22 @@ export const NATIVE_BLOCKS: BlockSpec[] = [
       { name: "end", min: 0, max: 1, init: 1 },
       { name: "loop", min: 0, max: 1, init: 0 },
     ],
+    meters: [],
+    credits: [],
+    licences: [],
+  },
+  {
+    name: "wavetable",
+    kind: 1002,
+    description:
+      "A wavetable oscillator: one cycle of a waveform read round at `frequency`, morphing through the table's cycles (dark to bright) by `position`, 0 to 1. The table is a sample param on `table`: a built-in wavetable, or any sample cut into 2048-sample cycles. Band-limited, so high notes stay clean.",
+    inputs: [
+      { name: "frequency", min: 0, max: 24000, unit: "Hz" },
+      { name: "position", min: 0, max: 1 },
+    ],
+    // Band-limiting a table whose cycles peak at 1 can overshoot a little (a square's ringing).
+    outputs: [{ name: "signal", min: -1.2, max: 1.2 }],
+    controls: [{ name: "table", min: 0, max: 255, init: 0 }],
     meters: [],
     credits: [],
     licences: [],

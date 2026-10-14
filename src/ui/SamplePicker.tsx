@@ -6,7 +6,13 @@
  */
 import { useRef } from "react";
 import type { ParamSpec } from "../audio/params/types";
-import { BUILTIN_SAMPLES, builtinRef, type SampleAsset } from "../audio/samples/catalog";
+import {
+  BUILTIN_SAMPLES,
+  BUILTIN_WAVETABLES,
+  builtinRef,
+  wavetableRef,
+  type SampleAsset,
+} from "../audio/samples/catalog";
 import { Select } from "./controls/Select";
 
 export function SamplePicker({
@@ -47,6 +53,15 @@ export function SamplePicker({
           className="flex-1 min-w-0 font-mono"
         >
           <option value="">None</option>
+          {spec.kind === "sample" && spec.wavetable && (
+            <optgroup label="Wavetables">
+              {BUILTIN_WAVETABLES.map((table) => (
+                <option key={table.id} value={wavetableRef(table.id)}>
+                  {table.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
           <optgroup label="Built-in">
             {BUILTIN_SAMPLES.map((sample) => (
               <option key={sample.id} value={builtinRef(sample.id)}>

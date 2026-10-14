@@ -8,12 +8,16 @@
  * worklet to say the plan is in, since an offline render outruns the messages that carry it.
  *
  * A sample param (INST-36.6) names a sample: each time it changes, the sample is decoded here (the
- * worklet can't decode) and sent to the bank, which keeps it in a slot by name. `ready` waits for
+ * worklet can't decode) and sent to the bank, which keeps it in a slot by name. One a wavetable plays
+ * is sent as a table, band-limited (samples/tables.ts), under its own name. `ready` waits for
  * those too, so an offline render doesn't start before its samples are in.
  */
 import type { CompiledPlan } from "../definitions/compile";
 import { engineValueOf } from "../definitions/values";
+import { buildBanks } from "../dsp/wavetable";
 import { loadSampleBuffer } from "../samples/builtinUrls";
+import { BUILTIN_WAVETABLES, parseRef } from "../samples/catalog";
+import { cyclesOf, tableOf } from "../samples/tables";
 import { bindParams, type ParamBinding } from "../params/binding";
 import type { ParamStore } from "../params/store";
 import type { Instrument } from "../instruments/types";
@@ -60,6 +64,7 @@ export class EngineInstrument implements Instrument {
           (id) => store.has(id),
         );
       const params = used(false);
+      const tables = new Set(plan.params.filter((source) => source.wavetable).map((source) => source.param));
       const values = Object.fromEntries(params.map((id) => [id, engineValueOf(store.spec(id), store.get(id))]));
       slot.post({ type: "load", track: slot.track, plan, values });
       this.waiting.forEach((message) => slot.post({ ...message, track: slot.track } as ToBank));
@@ -79,7 +84,7 @@ export class EngineInstrument implements Instrument {
         ]),
         ...used(true).map((param): [string, ParamBinding] => [
           param,
-          { apply: (value) => this.sendSample(param, String(value)) },
+          { apply: (value) => this.sendSample(param, String(value), tables.has(param)) },
         ]),
       ]);
       this.unsubscribe = bindParams(store, bindings);
@@ -125,25 +130,21 @@ export class EngineInstrument implements Instrument {
    * Decode the sample `ref` names and send it to the bank for `param`, unless the param has moved on
    * by the time it's decoded. A sample that won't decode is sent as none.
    */
-  private sendSample(param: string, ref: string): void {
+  private sendSample(param: string, sampleRef: string, asTable: boolean): void {
+    // A table is the bank's own thing, apart from the same sample played as one.
+    const ref = sampleRef && asTable ? `table:${sampleRef}` : sampleRef;
     if (this.samples.get(param)?.ref === ref) return;
     const request = { ref, done: Promise.resolve() };
     this.samples.set(param, request);
     const key = sampleKey(param, ref);
     let heard: (() => void) | undefined;
-    request.done = loadSampleBuffer(this.context, ref)
+    request.done = (asTable ? tableAudio(this.context, sampleRef) : sampleAudio(this.context, sampleRef))
       .catch((error: unknown) => {
-        console.error(`${param}: couldn't decode ${ref}`, error);
+        console.error(`${param}: couldn't load ${sampleRef}`, error);
         return null;
       })
-      .then((buffer) => {
+      .then((audio) => {
         if (this.disposed || this.samples.get(param) !== request) return;
-        const audio: SampleAudio | null = buffer && {
-          channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
-            buffer.getChannelData(channel).slice(),
-          ),
-          rate: buffer.sampleRate,
-        };
         const answered = new Promise<void>((resolve) => this.sampled.set(key, (heard = resolve)));
         this.send({ type: "sample", param, ref, audio });
         return answered;
@@ -163,5 +164,39 @@ export class EngineInstrument implements Instrument {
 }
 
 const sampleKey = (param: string, ref: string) => `${param}\n${ref}`;
+
+/** A sample decoded: up to two channels at its own rate, or null for none. */
+const sampleAudio = async (context: BaseAudioContext, ref: string): Promise<SampleAudio | null> => {
+  const buffer = await loadSampleBuffer(context, ref);
+  return (
+    buffer && {
+      channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
+        buffer.getChannelData(channel).slice(),
+      ),
+      rate: buffer.sampleRate,
+    }
+  );
+};
+
+/** Built-in wavetables, made once each: their levels take a moment to work out. */
+const builtinTables = new Map<string, Float32Array>();
+
+/**
+ * A wavetable, band-limited at every level the engine reads: a built-in, or a sample's first channel
+ * cut into 2048-sample cycles. Null for none, or a sample shorter than a cycle.
+ */
+const tableAudio = async (context: BaseAudioContext, ref: string): Promise<SampleAudio | null> => {
+  const parsed = parseRef(ref);
+  if (parsed.kind === "wavetable") {
+    const index = BUILTIN_WAVETABLES.findIndex((table) => table.id === parsed.id);
+    if (index < 0) return null;
+    const table = builtinTables.get(parsed.id) ?? tableOf(buildBanks()[index]);
+    builtinTables.set(parsed.id, table);
+    return { channels: [table], rate: context.sampleRate };
+  }
+  const buffer = await loadSampleBuffer(context, ref);
+  const cycles = buffer ? cyclesOf(buffer.getChannelData(0)) : [];
+  return cycles.length > 0 ? { channels: [tableOf(cycles)], rate: context.sampleRate } : null;
+};
 
 type DistributiveOmit<Type, Key extends PropertyKey> = Type extends unknown ? Omit<Type, Key> : never;
