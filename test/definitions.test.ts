@@ -501,6 +501,40 @@ describe("definitions the compiler refuses", () => {
     ]);
   });
 
+  describe("samples (INST-36.6)", () => {
+    const kit = { id: "kit", label: "Kit", kind: "sample", default: "" } as const;
+    const level = { id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 1 } as const;
+    const playing = (sample?: unknown) =>
+      voiceWith({
+        x: {
+          block: "sampler",
+          voice: true,
+          inputs: { frequency: "voice.frequency", gate: "voice.gate", ...(sample === undefined ? {} : { sample }) },
+        },
+      });
+
+    it("binds a sample param to a sampler's sample, marked for the bank", () => {
+      const plan = compileDefinition(playing({ param: "kit" }), { params: [kit] });
+      expect(plan.params).toEqual([{ param: "kit", scale: 1, offset: 0, sample: true }]);
+    });
+
+    it("wants a sampler's sample to be a sample param, as it is", () => {
+      expect(problemsOf(playing())).toEqual(["x.sample: needs a sample param (which sample it plays)"]);
+      expect(problemsOf(playing(3))).toEqual([
+        "x.sample: takes a sample param as { param }, with no scale, offset or table",
+      ]);
+      expect(problemsOf(playing({ param: "kit", scale: 2 }), [kit])).toEqual([
+        "x.sample: takes a sample param as { param }, with no scale, offset or table",
+      ]);
+      expect(problemsOf(playing({ param: "level" }), [kit, level])).toEqual([
+        "x.sample: level is a number param, not a sample",
+      ]);
+      expect(problemsOf(playing({ param: "drums" }), [kit])).toEqual([
+        'x.sample: there is no param "drums" (the device has kit)',
+      ]);
+    });
+  });
+
   it("checks params against the device's, and keeps signal names for signals", () => {
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "volume" }, b: 1 } } }), ["level"]),
@@ -508,7 +542,7 @@ describe("definitions the compiler refuses", () => {
     const kit = { id: "kit", label: "Kit", kind: "sample", default: "" } as const;
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { param: "kit" }, b: 1 } } }), [kit]),
-    ).toEqual(["x.a: kit is a sample param, which can't feed an input (samples come with INST-36.6)"]);
+    ).toEqual(["x.a: kit is a sample param, which only feeds a sampler's sample"]);
     expect(
       problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: { from: "lfo", scale: 2 }, b: 1 } } })),
     ).toEqual(['x.a: "lfo" is not a node or a signal']);

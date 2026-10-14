@@ -9,7 +9,7 @@
  * its schema (schema.ts); the compiler adds what each section may read.
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
-import { DEFAULT_VOICES, type DeviceDefinition, type ParamBinding } from "./format";
+import { DEFAULT_VOICES, SAMPLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
 import { costOf, overCap, type Cost, type CostedNode } from "./cost";
 import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
 import type { ParamSchema } from "../params/types";
@@ -52,6 +52,8 @@ export interface ParamSource {
   scale: number;
   offset: number;
   table?: [number, number][];
+  /** A sample param: the bank sets it to the slot its sample is in, never ramping (INST-36.6). */
+  sample?: true;
 }
 
 export interface CompiledPlan {
@@ -238,6 +240,11 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
   );
 
   // Params, each binding once.
+  const sampleParams = new Set(
+    Object.values(definition.nodes).flatMap((node) =>
+      (SAMPLE_INPUTS[node.block] ?? []).map((port) => (node.inputs?.[port] as ParamBinding).param),
+    ),
+  );
   const params: ParamSource[] = [];
   const paramIndex = (binding: ParamBinding) => {
     const source: ParamSource = {
@@ -245,6 +252,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       scale: binding.scale ?? 1,
       offset: binding.offset ?? 0,
       ...(binding.table ? { table: binding.table } : {}),
+      ...(sampleParams.has(binding.param) ? { sample: true as const } : {}),
     };
     const key = JSON.stringify(source);
     const found = params.findIndex((existing) => JSON.stringify(existing) === key);

@@ -39,6 +39,15 @@ class EngineBankProcessor extends AudioWorkletProcessor {
       noteOff: ({ track, note, time }) => this.bank.noteOff(track, note, time),
       allOff: ({ track, time }) => this.bank.allNotesOff(track, time),
       param: ({ track, param, value, time }) => this.bank.setParam(track, param, value, time),
+      sample: ({ track, param, ref, audio }) => {
+        try {
+          this.bank.setSample(track, param, ref, audio);
+          this.port.postMessage({ type: "sampled", track, param, ref } satisfies FromBank);
+        } catch (error) {
+          if (!(error instanceof RangeError)) throw error;
+          this.port.postMessage({ type: "sampled", track, param, ref, message: error.message } satisfies FromBank);
+        }
+      },
       transport: ({ time, beat, tempo, playing }) => this.bank.setTransport({ time, beat, tempo, playing }),
       stop: () => (this.stopped = true),
     };

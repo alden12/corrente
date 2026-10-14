@@ -11,13 +11,16 @@
  *   than while rendering.
  * - **Edits don't click.** A new plan crossfades in over a block in the engine, and the notes held
  *   start again in it; a voice stolen for a new note fades out while the note starts in a spare slot.
+ * - **Samples are shared by name** (INST-36.6): a sample param's value is a ref, and the bank keeps
+ *   each ref it's given in one engine slot however many tracks play it, freeing it when the last
+ *   stops. The param's engine value is the slot, set at once rather than ramped.
  * - **`process` creates nothing**: events, voices and the views of the engine's memory are all made
  *   ahead (decision 4 of INST-36). The memory only grows on init, load and loading a sample, so
  *   views are re-made then (the addresses the engine gave stay put).
  */
 import type { CompiledPlan } from "../definitions/compile";
 import { resolveNumber } from "../graph/table";
-import { BLOCK, INPUT_CHANNELS, OUTPUT_CHANNELS, startEngine, type EngineExports } from "./exports";
+import { BLOCK, EMPTY_SAMPLE, INPUT_CHANNELS, OUTPUT_CHANNELS, startEngine, type EngineExports } from "./exports";
 import { EVENT, EventQueue, type TimedEvent } from "./events";
 import type { Transport } from "./messages";
 import { VoiceAllocator } from "./voices";
@@ -43,6 +46,14 @@ interface Track {
   sounding: (slot: number) => boolean;
   /** The raw value of each param, kept so a new plan starts where the knobs are. */
   values: Record<string, number>;
+  /** The sample each sample param names, by param. */
+  samples: Record<string, string>;
+}
+
+/** Audio for a sample: one or two channels of the same length, at its own rate. */
+export interface SampleAudio {
+  channels: Float32Array[];
+  rate: number;
 }
 
 export class EngineBank {
@@ -53,6 +64,8 @@ export class EngineBank {
   /** The transport to count the beat from: stopped at 120 until told otherwise. */
   private transport: Transport = { time: 0, beat: 0, tempo: 120, playing: false };
   private readonly tracks: Track[];
+  /** Each sample loaded, by ref: its slot, and how many sample params name it. */
+  private readonly sampleSlots = new Map<string, { slot: number; users: number }>();
   private outputs: Float32Array[][] = [];
   private inputs: Float32Array[][] = [];
   /** What each event kind does, by kind; bound once. */
@@ -68,6 +81,7 @@ export class EngineBank {
       voices: new VoiceAllocator(0, 0),
       sounding: (slot: number) => this.engine.eng_voice_active(index, slot) === 1,
       values: {},
+      samples: {},
     }));
     this.play = [];
     this.play[EVENT.noteOn] = (event, offset) => this.playNoteOn(event, offset);
@@ -95,7 +109,13 @@ export class EngineBank {
     state.voices = new VoiceAllocator(this.engine.eng_voice_slots(track), plan.voices);
     state.values = { ...state.values, ...values };
     plan.params.forEach((source, index) =>
-      this.engine.eng_init_param(track, index, resolveNumber(state.values[source.param] ?? 0, source)),
+      this.engine.eng_init_param(
+        track,
+        index,
+        source.sample
+          ? (state.values[source.param] ?? EMPTY_SAMPLE)
+          : resolveNumber(state.values[source.param] ?? 0, source),
+      ),
     );
     held.forEach(({ note, velocity }) => {
       const slot = state.voices.noteOn(note, velocity, 0, state.sounding);
@@ -114,19 +134,73 @@ export class EngineBank {
     state.plan = null;
     state.voices = new VoiceAllocator(0, 0);
     state.values = {};
+    Object.values(state.samples).forEach((ref) => this.releaseSample(ref));
+    state.samples = {};
     this.queue.clear(track);
+  }
+
+  /**
+   * Point a track's sample param at a sample: `ref` names it, and `audio` is what to load if the bank
+   * doesn't have it yet (null, or an empty ref, for none). Takes effect at once. Throws a RangeError,
+   * leaving the param as it was, if the sample is too big or every slot is taken.
+   */
+  setSample(track: number, param: string, ref: string, audio: SampleAudio | null): void {
+    const state = this.trackAt(track);
+    const previous = state.samples[param];
+    const slot = ref ? this.holdSample(ref, audio) : EMPTY_SAMPLE;
+    if (previous !== undefined) this.releaseSample(previous);
+    if (slot === EMPTY_SAMPLE) delete state.samples[param];
+    else state.samples[param] = ref;
+    state.values[param] = slot;
+    state.plan?.params.forEach((source, index) => {
+      if (source.param === param) this.engine.eng_init_param(track, index, slot);
+    });
+  }
+
+  /**
+   * The slot `ref` is in, loading `audio` into a free one first if it isn't loaded, counting one more
+   * user. The empty slot if it isn't loaded and there's no audio.
+   */
+  private holdSample(ref: string, audio: SampleAudio | null): number {
+    const held = this.sampleSlots.get(ref);
+    if (held) {
+      held.users++;
+      return held.slot;
+    }
+    if (!audio) return EMPTY_SAMPLE;
+    const taken = new Set([...this.sampleSlots.values()].map((entry) => entry.slot));
+    const slot = Array.from({ length: EMPTY_SAMPLE }, (_, index) => index).find((index) => !taken.has(index));
+    if (slot === undefined) throw new RangeError(`every sample slot is taken (${EMPTY_SAMPLE})`);
+    this.loadSample(slot, audio.channels, audio.rate);
+    this.sampleSlots.set(ref, { slot, users: 1 });
+    return slot;
+  }
+
+  /** One fewer user of `ref`; the last frees its slot. */
+  private releaseSample(ref: string): void {
+    const held = this.sampleSlots.get(ref);
+    if (!held) return;
+    held.users--;
+    if (held.users > 0) return;
+    this.freeSample(held.slot);
+    this.sampleSlots.delete(ref);
+  }
+
+  /** How many samples the bank holds, for tests. */
+  get samplesHeld(): number {
+    return this.sampleSlots.size;
   }
 
   /**
    * Put a sample in one of the engine's sample slots (0 to 255), replacing any there: one or two
    * channels of the same length, at the sample's own rate. A sampler names its slot, and plays it at
-   * any track's notes (INST-36.6).
+   * any track's notes (INST-36.6). `setSample` is the way in by name; this is the slot itself.
    */
   loadSample(slot: number, channels: Float32Array[], rate: number): void {
     const frames = channels[0]?.length ?? 0;
-    const pointer = this.engine.eng_sample_reserve(slot, frames, channels.length, rate);
-    if (pointer === 0 || channels.some((channel) => channel.length !== frames)) {
-      this.engine.eng_sample_free(slot);
+    const even = channels.every((channel) => channel.length === frames);
+    const pointer = even ? this.engine.eng_sample_reserve(slot, frames, channels.length, rate) : 0;
+    if (pointer === 0) {
       throw new RangeError(
         `sample slot ${slot}: ${channels.length} channels of ${frames} frames at ${rate} Hz don't fit (0 to 255, one or two channels of the same length, up to 2^24 floats)`,
       );
@@ -154,12 +228,16 @@ export class EngineBank {
     this.queue.add(EVENT.allOff, track, 0, 0, time);
   }
 
-  /** Move a param (its raw value, by name) at `time`. A param the plan doesn't read is kept for the next. */
+  /**
+   * Move a param (its raw value, by name) at `time`. A param the plan doesn't read is kept for the
+   * next. Sample params go through `setSample`.
+   */
   setParam(track: number, param: string, value: number, time: number): void {
     const state = this.trackAt(track);
     state.values[param] = value;
     state.plan?.params.forEach((source, index) => {
-      if (source.param === param) this.queue.add(EVENT.param, track, index, resolveNumber(value, source), time);
+      if (source.param === param && !source.sample)
+        this.queue.add(EVENT.param, track, index, resolveNumber(value, source), time);
     });
   }
 

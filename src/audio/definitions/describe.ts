@@ -97,6 +97,9 @@ export const definitionFormatDoc = () => ({
       `{ beats, as: ${SYNC_UNITS.join(" | ")} }: a length in beats kept in time with the tempo, as a rate (one ` +
       'cycle per length) or a length. `beats` is a note division ("1/4", "1/8T" triplet, "1/8." dotted, "2/1" ' +
       "two bars of 4/4), a number of beats, or a param: a choice whose options are divisions, or (not as hz) a number.",
+    sample:
+      "A sampler's `sample` takes a sample param, as { param } alone: whichever sample the param names, built in " +
+      "or imported, is loaded for it. A sample param feeds nothing else.",
     list: "Several of the above in a list are summed.",
     unwired: "Every audio input must be wired. A control left out keeps its default.",
   },

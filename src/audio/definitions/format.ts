@@ -148,6 +148,12 @@ export const NODE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 /** Words a node can't be named, since references starting with them are signals. */
 export const RESERVED_NAMES = ["voice", "voices", "input", "host"];
 
+/**
+ * Inputs that name a sample (INST-36.6), by block: each takes a sample param, plainly, and a sample
+ * param feeds nothing else. The engine reads a slot; the bank puts the sample the param names in one.
+ */
+export const SAMPLE_INPUTS: Record<string, readonly string[]> = { sampler: ["sample"] };
+
 export const nodeSchema = z
   .object({
     block: z.string().min(1),

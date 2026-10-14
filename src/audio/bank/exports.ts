@@ -45,6 +45,9 @@ export interface EngineExports {
   eng_block_meters(kind: number): number;
 }
 
+/** Sample slots in an engine. The last is kept empty: a sample param with no sample points at it. */
+export const SAMPLE_SLOTS = 256;
+export const EMPTY_SAMPLE = SAMPLE_SLOTS - 1;
 /** Samples in a block: every eng_process renders this many. */
 export const BLOCK = 128;
 /** Output channels per track (left, right). */

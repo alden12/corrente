@@ -3,6 +3,7 @@
  * AudioContext seconds; a track is the bank's track slot, which is also the node's output index.
  */
 import type { CompiledPlan } from "../definitions/compile";
+import type { SampleAudio } from "./bank";
 
 export type ToBank =
   | { type: "load"; track: number; plan: CompiledPlan; values: Record<string, number> }
@@ -11,6 +12,8 @@ export type ToBank =
   | { type: "noteOff"; track: number; note: number; time: number }
   | { type: "allOff"; track: number; time: number }
   | { type: "param"; track: number; param: string; value: number; time: number }
+  /** A sample param now names `ref`, with its audio (none for an empty ref, or one that didn't load). */
+  | { type: "sample"; track: number; param: string; ref: string; audio: SampleAudio | null }
   /** Where the transport is: `beat` at context time `time`, at `tempo`. Applies to every track. */
   | ({ type: "transport" } & Transport)
   /** The bank is going: disconnecting a worklet node doesn't stop it, so it stops itself. */
@@ -29,7 +32,11 @@ export interface Transport {
   playing: boolean;
 }
 
-export type FromBank = { type: "loaded"; track: number } | { type: "refused"; track: number; message: string };
+export type FromBank =
+  | { type: "loaded"; track: number }
+  | { type: "refused"; track: number; message: string }
+  /** A sample message has been dealt with (`message` if the sample didn't fit). */
+  | { type: "sampled"; track: number; param: string; ref: string; message?: string };
 
 /** What a bank's worklet is built with. */
 export interface BankOptions {

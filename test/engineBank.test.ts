@@ -260,34 +260,82 @@ describe("EngineBank", () => {
     expect(bank.output(0, 0)[0]).toBeCloseTo(5, 4);
   });
 
-  it("plays a sample it was given, pitched by the note, through a definition's sampler", () => {
-    const bank = new EngineBank(wasm, RATE, 1);
+  describe("samples", () => {
     const sampler = compileDefinition({
       format: 1,
       nodes: {
         player: {
           block: "sampler",
           voice: true,
-          inputs: { frequency: "voice.frequency", gate: "voice.gate", sample: 7, root: 60 },
+          inputs: { frequency: "voice.frequency", gate: "voice.gate", sample: { param: "sound" }, root: 60 },
         },
       },
       voice: ["player.left", "player.right"],
     });
-    bank.load(0, sampler);
-    const before = bank.engine.memory.buffer.byteLength;
     // A second of stereo, big enough to grow the memory: a ramp on the left, its negative on the right.
     const ramp = Float32Array.from({ length: RATE }, (_, frame) => frame / RATE);
-    bank.loadSample(7, [ramp, ramp.map((value) => -value)], RATE);
-    expect(bank.engine.memory.buffer.byteLength).toBeGreaterThan(before);
-    // An octave above the root reads two frames a sample.
-    bank.noteOn(0, 72, 1, 0);
-    bank.process(0);
-    expect(bank.output(0, 0)[10]).toBeCloseTo(20 / RATE, 6);
-    expect(bank.output(0, 1)[10]).toBeCloseTo(-20 / RATE, 6);
-    bank.freeSample(7);
-    bank.process(BLOCK / RATE);
-    expect(bank.output(0, 0).every((sample) => sample === 0)).toBe(true);
-    expect(() => bank.loadSample(256, [ramp], RATE)).toThrow(RangeError);
+    const stereo = { channels: [ramp, ramp.map((value) => -value)], rate: RATE };
+
+    it("plays the sample a param names, pitched by the note", () => {
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, sampler);
+      const before = bank.engine.memory.buffer.byteLength;
+      bank.setSample(0, "sound", "ramp", stereo);
+      expect(bank.engine.memory.buffer.byteLength).toBeGreaterThan(before);
+      // An octave above the root reads two frames a sample.
+      bank.noteOn(0, 72, 1, 0);
+      bank.process(0);
+      expect(bank.output(0, 0)[10]).toBeCloseTo(20 / RATE, 6);
+      expect(bank.output(0, 1)[10]).toBeCloseTo(-20 / RATE, 6);
+    });
+
+    it("keeps one copy of a sample however many tracks play it, freeing it after the last", () => {
+      const bank = new EngineBank(wasm, RATE, 2);
+      [0, 1].forEach((track) => bank.load(track, sampler));
+      bank.setSample(0, "sound", "ramp", stereo);
+      bank.setSample(1, "sound", "ramp", null);
+      expect(bank.samplesHeld).toBe(1);
+      bank.noteOn(1, 60, 1, 0);
+      bank.process(0);
+      expect(bank.output(1, 0)[10]).toBeCloseTo(10 / RATE, 6);
+      bank.setSample(0, "sound", "", null);
+      expect(bank.samplesHeld).toBe(1);
+      bank.unload(1);
+      expect(bank.samplesHeld).toBe(0);
+    });
+
+    it("plays nothing until a sample param names one", () => {
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, sampler);
+      bank.noteOn(0, 60, 1, 0);
+      bank.process(0);
+      expect(bank.output(0, 0).every((sample) => sample === 0)).toBe(true);
+    });
+
+    it("keeps a track's sample through a new plan", () => {
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, sampler);
+      bank.setSample(0, "sound", "ramp", stereo);
+      bank.load(0, sampler);
+      // After the block the new plan fades in over.
+      bank.noteOn(0, 60, 1, BLOCK * SAMPLE);
+      bank.process(0);
+      bank.process(BLOCK * SAMPLE);
+      expect(bank.output(0, 0)[10]).toBeCloseTo(10 / RATE, 6);
+    });
+
+    it("refuses a sample that won't fit, leaving the param as it was", () => {
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, sampler);
+      bank.setSample(0, "sound", "ramp", stereo);
+      expect(() => bank.setSample(0, "sound", "odd", { channels: [ramp, ramp.slice(1)], rate: RATE })).toThrow(
+        RangeError,
+      );
+      expect(bank.samplesHeld).toBe(1);
+      bank.noteOn(0, 60, 1, 0);
+      bank.process(0);
+      expect(bank.output(0, 0)[10]).toBeCloseTo(10 / RATE, 6);
+    });
   });
 
   it("starts a new plan where the knobs are", () => {
@@ -306,10 +354,20 @@ describe("the new engine's test instruments", () => {
     (_type, { schema, definition }) => {
       const compiled = compileDefinition(definition, { params: schema });
       const defaults = Object.fromEntries(
-        schema.map((spec) => [spec.id, spec.kind === "number" ? spec.default : 0] as const),
+        schema
+          .filter((spec) => spec.kind !== "sample")
+          .map((spec) => [spec.id, spec.kind === "number" ? spec.default : 0] as const),
       );
       const bank = new EngineBank(wasm, RATE, 1);
       bank.load(0, compiled, defaults);
+      // Sample params get a second of a 220 Hz sine in place of the built-in (no decoder here).
+      const sine = Float32Array.from(
+        { length: RATE },
+        (_, frame) => 0.5 * Math.sin((2 * Math.PI * 220 * frame) / RATE),
+      );
+      schema
+        .filter((spec) => spec.kind === "sample")
+        .forEach((spec) => bank.setSample(0, spec.id, "sine", { channels: [sine], rate: RATE }));
       bank.noteOn(0, 57, 1, 0);
       const sound = Array.from({ length: 100 }, (_, block) => {
         bank.process((block * BLOCK) / RATE);

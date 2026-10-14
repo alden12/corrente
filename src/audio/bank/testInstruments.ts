@@ -166,7 +166,65 @@ const wobble: TestInstrument = {
   },
 };
 
-export const TEST_INSTRUMENTS = [pluck, wobble];
+/**
+ * A sample played up and down the keyboard (INST-36.6): any built-in or imported sample, pitched
+ * against its root note, trimmed, looped if wanted, through an attack and release.
+ */
+const sampler: TestInstrument = {
+  type: "engine-sampler",
+  label: "Sampler (new engine)",
+  schema: [
+    { id: "sound", label: "Sample", kind: "sample", default: "builtin:tom" },
+    { id: "root", label: "Root", kind: "number", min: 0, max: 127, default: 45, step: 1, format: "note" },
+    { id: "start", label: "Start", kind: "number", min: 0, max: 1, default: 0 },
+    { id: "end", label: "End", kind: "number", min: 0, max: 1, default: 1 },
+    { id: "loop", label: "Loop", kind: "boolean", default: false },
+    { id: "attack", label: "Attack", kind: "number", min: 0, max: 2000, default: 2, unit: "ms", taper: "exponential" },
+    {
+      id: "release",
+      label: "Release",
+      kind: "number",
+      min: 5,
+      max: 5000,
+      default: 300,
+      unit: "ms",
+      taper: "exponential",
+    },
+  ],
+  definition: {
+    format: 1,
+    nodes: {
+      player: {
+        block: "sampler",
+        voice: true,
+        inputs: {
+          frequency: "voice.frequency",
+          gate: "voice.gate",
+          sample: { param: "sound" },
+          root: { param: "root" },
+          start: { param: "start" },
+          end: { param: "end" },
+          loop: { param: "loop" },
+        },
+      },
+      envelope: {
+        block: "adsr",
+        voice: true,
+        inputs: {
+          gate: "voice.gate",
+          attack: { param: "attack", scale: 0.001 },
+          sustain: 1,
+          release: { param: "release", scale: 0.001 },
+        },
+      },
+      left: { block: "mul", voice: true, inputs: { a: "player.left", b: "envelope" } },
+      right: { block: "mul", voice: true, inputs: { a: "player.right", b: "envelope" } },
+    },
+    voice: ["left", "right"],
+  },
+};
+
+export const TEST_INSTRUMENTS = [pluck, wobble, sampler];
 
 /** Put the test instruments in the library. */
 export const registerTestInstruments = (): void =>

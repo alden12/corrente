@@ -17,6 +17,7 @@ import {
   MAX_VOICES,
   NODE_NAME,
   RESERVED_NAMES,
+  SAMPLE_INPUTS,
   singleInputSchema,
   type DeviceDefinition,
   type InputValue,
@@ -105,9 +106,19 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       const names = params.map((candidate) => candidate.id).join(", ") || "none";
       problem(path, `there is no param "${binding.param}" (the device has ${names})`);
     } else if (spec.kind === "sample") {
-      problem(path, `${binding.param} is a sample param, which can't feed an input (samples come with INST-36.6)`);
+      problem(path, `${binding.param} is a sample param, which only feeds a sampler's sample`);
     }
     return spec;
+  };
+
+  /** An input that names a sample: a sample param, as it is (the bank turns it into a slot). */
+  const checkSampleInput = (value: InputValue, path: (string | number)[]) => {
+    const plain =
+      typeof value === "object" && !Array.isArray(value) && "param" in value && Object.keys(value).length === 1;
+    if (!plain) return problem(path, "takes a sample param as { param }, with no scale, offset or table");
+    const spec = params?.find((candidate) => candidate.id === value.param);
+    if (params && !spec) checkParam(value, path);
+    else if (spec && spec.kind !== "sample") problem(path, `${value.param} is a ${spec.kind} param, not a sample`);
   };
 
   /** A tempo-synced length's beats: a note division, or a param that can be read as one. */
@@ -130,7 +141,8 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
   };
 
   Object.entries(nodes).forEach(([name, node]) =>
-    Object.entries(node.inputs ?? {}).forEach(([port, value]: [string, InputValue]) =>
+    Object.entries(node.inputs ?? {}).forEach(([port, value]: [string, InputValue]) => {
+      if (SAMPLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, ["nodes", name, "inputs", port]);
       listOf(value).forEach((item, index) => {
         const path = ["nodes", name, "inputs", port, ...(Array.isArray(value) ? [index] : [])];
         if (typeof item === "number") return;
@@ -146,8 +158,13 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
         }
         if (isSynced(item)) checkSynced(item, path);
         else checkParam(item, path);
-      }),
-    ),
+      });
+    }),
+  );
+  Object.entries(nodes).forEach(([name, node]) =>
+    (SAMPLE_INPUTS[node.block] ?? [])
+      .filter((port) => node.inputs?.[port] === undefined)
+      .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which sample it plays)")),
   );
 
   const voiceNodes = Object.keys(nodes).filter((name) => nodes[name].voice);
