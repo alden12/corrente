@@ -28,12 +28,6 @@ export const trackEffectStage = (index: number, level = 0): number =>
 export const groupEffectStage = (depth: number, index: number): number =>
   TRACK_STAGES + CHAIN * (DEPTH - Math.min(depth, DEPTH)) + Math.min(index, CHAIN - 1);
 
-/** Where a new effect goes: its stage, and for an effect keyed by another track, the key. */
-export interface EffectPlace {
-  stage: number;
-  sidechain?: AudioNode;
-}
-
 /** How many groups down a group is (1 for a top group), from each group's parent. */
 export const groupDepth = (groups: readonly { id: string; parentId: string | null }[], id: string): number => {
   const parentOf = new Map(groups.map((group) => [group.id, group.parentId]));

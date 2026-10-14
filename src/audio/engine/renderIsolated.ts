@@ -3,18 +3,19 @@
  * held note, a single-sample click or a steady sine, under an `OfflineAudioContext`. No project,
  * no tracks, no transport - just the device and what it does to one input.
  *
- * The same factories and worklets the live engine uses, so what Explore draws and what the agent
- * smoke-tests is what you would hear. Browser only (jsdom has no AudioWorklet), like the rest of
+ * Built as a track is (trackInstrument and ChainEffects, as AudioEngine builds one), so what Explore
+ * draws and what the agent smoke-tests is what you would hear: an engine instrument takes the engine
+ * effects after it into its own plan, and runs of engine effects play as one. Browser only (jsdom has no AudioWorklet), like the rest of
  * the offline renderer.
  */
-import { createInstrument } from "../instruments/registry";
-import { createEffect } from "../effects/registry";
-import { trackEffectStage } from "../bank/stages";
 import { instrumentSchema } from "../instruments/catalog";
 import { effectSchema } from "../effects/catalog";
 import { ParamStore } from "../params/store";
 import type { ParamSchema, ParamValue } from "../params/types";
 import { loadWorklets } from "../worklets";
+import type { EffectInstance } from "../project/projectStore";
+import { ChainEffects } from "./chainEffects";
+import { trackInstrument } from "./trackInstrument";
 
 export interface IsolatedDevice {
   type: string;
@@ -87,22 +88,26 @@ export async function renderIsolated(
   // complete BEFORE constructing any AudioWorkletNode.
   await loadWorklets(ctx);
 
-  // Each in its own stage, as on a track, so engine effects never loop through one bank (INST-36.7).
-  const effects = (chain.effects ?? []).map((device, index) =>
-    createEffect(device.type, ctx, storeFor(effectSchema(device.type), device.params), {
-      stage: trackEffectStage(index),
+  const instances = (chain.effects ?? []).map(
+    (device, index): EffectInstance => ({
+      id: `effect${index}`,
+      type: device.type,
+      bypassed: false,
+      params: storeFor(effectSchema(device.type), device.params),
     }),
   );
-  // Chain the effects in order, ending at the destination; the head is where the input goes.
-  const head = effects.reduceRight<AudioNode>((next, effect) => {
-    effect.output.connect(next);
-    return effect.input;
-  }, ctx.destination);
+  const effects = new ChainEffects();
 
   if (input.kind === "note") {
     const type = chain.instrument?.type ?? "subtractive";
-    const instrument = createInstrument(type, ctx, storeFor(instrumentSchema(type), chain.instrument?.params));
-    instrument.output.connect(head);
+    const { instrument, absorbed } = trackInstrument(
+      ctx,
+      type,
+      storeFor(instrumentSchema(type), chain.instrument?.params),
+      instances,
+    );
+    effects.reconcile(ctx, instances.slice(absorbed.length), new Set());
+    effects.wire(instrument.output, ctx.destination);
     // Samples decode asynchronously; a render that starts first is silent.
     await instrument.ready?.();
     // Worklet note commands are port messages. One posted before startRendering() races the render
@@ -116,11 +121,14 @@ export async function renderIsolated(
     const source = (
       SOURCES[input.kind] as (ctx: OfflineAudioContext, input: IsolatedInput) => AudioScheduledSourceNode
     )(ctx, input);
-    source.connect(head);
+    effects.reconcile(ctx, instances, new Set());
+    effects.wire(source, ctx.destination);
     source.start(0);
   }
 
   // An engine effect's plan has to be in before the render runs past it (INST-36.7).
-  await Promise.all(effects.map((effect) => effect.ready?.()));
-  return ctx.startRendering();
+  await Promise.all(effects.effects().map((effect) => effect.ready?.()));
+  const rendered = await ctx.startRendering();
+  effects.dispose();
+  return rendered;
 }

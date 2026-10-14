@@ -5,8 +5,8 @@
  *
  * Compensation is per bus: the children of a group (or of master) are delayed so they all arrive as
  * late as the latest of them. A group then plays that late, plus its own effects', to its parent.
- * Pure: AudioEngine and offline renders read each track's and group's latency and apply the delays
- * this gives with a DelayNode on the way to the parent.
+ * Pure: the mixer (mixer.ts) reads each track's and group's latency and applies the delays this
+ * gives with a DelayNode on the way to the parent.
  */
 
 /** A track or group in the mix: where it goes, and how late its own chain makes it. */
@@ -43,41 +43,4 @@ export const compensate = (tracks: MixNode[], groups: MixNode[]): Compensation =
   };
   const total = busLatency(null, new Set());
   return { delays, total };
-};
-
-/** The longest delay a compensating DelayNode is made to hold: a second at 48 kHz is plenty. */
-export const MAX_COMPENSATION_SECONDS = 1;
-
-/** Each compensating delay's last setting, so an unchanged one isn't scheduled again on every reconcile. */
-const settings = new WeakMap<DelayNode, number>();
-
-/** A DelayNode for compensating, at no delay until `setCompensation`. */
-export const compensator = (context: BaseAudioContext): DelayNode => {
-  const delay = new DelayNode(context, { maxDelayTime: MAX_COMPENSATION_SECONDS, delayTime: 0 });
-  settings.set(delay, 0);
-  return delay;
-};
-
-/**
- * How long a live change of compensation glides for. A delay that jumps skips or repeats a stretch of
- * sound, which clicks; one that glides bends its pitch for a moment instead. Long enough, too, to
- * cover a device's plan loading a little after its latency changes (EngineDevice waits 40 ms for
- * removed effects to fade out).
- */
-export const COMPENSATION_GLIDE_SECONDS = 0.05;
-
-/** Set a compensating delay to `samples` from `when` (the context's time now, live), gliding over `glide` seconds. */
-export const setCompensation = (delay: DelayNode, samples: number, when: number, glide = 0): void => {
-  const seconds = Math.min(samples / delay.context.sampleRate, MAX_COMPENSATION_SECONDS);
-  const last = settings.get(delay);
-  if (last === seconds) return;
-  settings.set(delay, seconds);
-  delay.delayTime.cancelScheduledValues(when);
-  if (glide === 0) {
-    delay.delayTime.setValueAtTime(seconds, when);
-    return;
-  }
-  // From where it is now, which may be partway through the last glide.
-  delay.delayTime.setValueAtTime(delay.delayTime.value, when);
-  delay.delayTime.linearRampToValueAtTime(seconds, when + glide);
 };

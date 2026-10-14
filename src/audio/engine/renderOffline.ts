@@ -11,10 +11,10 @@
  * offline - and doubles as the minimal regression guard. Both can only be exercised in a real
  * browser (jsdom has no AudioWorklet), so their coverage is the offline-render e2e.
  */
-import { createEffect } from "../effects/registry";
 import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
-import { compensate, compensator, setCompensation, type MixNode } from "./latency";
-import { piecesOf, runEffects } from "../bank/chainPlan";
+import type { MixNode } from "./latency";
+import { MixRouter, masterBus } from "./mixer";
+import { ChainEffects } from "./chainEffects";
 import { trackInstrument } from "./trackInstrument";
 import { loadWorklets } from "../worklets";
 import { setTransport as setEngineTransport } from "../bank/pool";
@@ -33,7 +33,6 @@ import { GRID } from "../sequencer/types";
 import type { ProjectStore, EffectInstance, InstrumentTrack, AudioTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
 import type { Instrument } from "../instruments/types";
-import type { Effect } from "../effects/types";
 import type { NoteEvent } from "../sequencer/types";
 import type { TransportClock } from "../midi/device/clock";
 import type { NoteTarget } from "../midi/device/GraphMidiDevice";
@@ -87,15 +86,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   setEngineTransport(ctx, { time: 0, beat: loopStart, tempo: bpm, playing: true });
   setSampleAssets(project.getSamples()); // so a Sampler's "asset:<id>" ref resolves
 
-  // Master bus + limiter, mirroring the live engine (AudioEngine.start).
-  const master = ctx.createGain();
-  const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -3;
-  limiter.knee.value = 0;
-  limiter.ratio.value = 20;
-  limiter.attack.value = 0.003;
-  limiter.release.value = 0.25;
-  master.connect(limiter).connect(ctx.destination);
+  // Master bus + limiter, as the live engine has (mixer.ts).
+  const { master } = masterBus(ctx);
 
   const groups = project.getGroups();
   const tracks = project.getTracks();
@@ -109,26 +101,33 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
     groupInputs.set(group.id, input);
     return { group, input, output: ctx.createGain() };
   });
-  const parentInput = (parentId: string | null): AudioNode =>
-    (parentId ? groupInputs.get(parentId) : undefined) ?? master;
   // Each track and group goes to its parent through a delay making up for what's later beside it
-  // (INST-36.7, latency.ts), as in AudioEngine; set once every chain is built.
-  const delays = new Map<string, DelayNode>();
+  // (INST-36.7), as in AudioEngine; set once every chain is built.
+  const router = new MixRouter(ctx, (parentId) => (parentId ? groupInputs.get(parentId) : undefined) ?? master);
   const mixTracks: MixNode[] = [];
   const mixGroups: MixNode[] = [];
   const route = (into: MixNode[], from: AudioNode, node: MixNode) => {
-    const delay = compensator(ctx);
-    delays.set(node.id, delay);
-    from.connect(delay).connect(parentInput(node.parentId));
+    router.route(node.id, from, node.parentId);
     into.push(node);
   };
-  const latencyOf = (chain: Effect[]) => chain.reduce((total, effect) => total + (effect.latency ?? 0), 0);
-  const effects: Effect[] = [];
+  // Effect chains built as AudioEngine builds them (ChainEffects, INST-36.7).
+  const chains: ChainEffects[] = [];
+  const chainOf = (
+    input: AudioNode,
+    effects: EffectInstance[],
+    output: AudioNode,
+    stageAt: (index: number) => number = trackEffectStage,
+  ) => {
+    const chain = new ChainEffects();
+    chain.reconcile(ctx, effects, new Set(), stageAt);
+    chain.wire(input, output);
+    chains.push(chain);
+    return chain;
+  };
   for (const { group, input, output } of groupOutputs) {
     const depth = groupDepth(groups, group.id);
-    const chain = connectChain(ctx, input, group.effects, output, (index) => groupEffectStage(depth, index));
-    effects.push(...chain);
-    route(mixGroups, output, { id: group.id, parentId: group.parentId, latency: latencyOf(chain) });
+    const chain = chainOf(input, group.effects, output, (index) => groupEffectStage(depth, index));
+    route(mixGroups, output, { id: group.id, parentId: group.parentId, latency: chain.latency() });
     output.gain.value = group.muted ? 0 : group.volume;
   }
 
@@ -143,12 +142,11 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       const { instrument, absorbed } = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
       instruments.push(instrument);
       disposables.push(instrument);
-      const chain = connectChain(ctx, instrument.output, track.effects.slice(absorbed.length), gain);
-      effects.push(...chain);
+      const chain = chainOf(instrument.output, track.effects.slice(absorbed.length), gain);
       route(mixTracks, gain, {
         id: track.id,
         parentId: track.parentId,
-        latency: (instrument.latency ?? 0) + latencyOf(chain),
+        latency: (instrument.latency ?? 0) + chain.latency(),
       });
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
 
@@ -172,19 +170,19 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       // Audio track: input -> effects -> gain -> group tree; its clips are scheduled below.
       const input = ctx.createGain();
       const gain = ctx.createGain();
-      const chain = connectChain(ctx, input, track.effects, gain);
-      effects.push(...chain);
-      route(mixTracks, gain, { id: track.id, parentId: track.parentId, latency: latencyOf(chain) });
+      const chain = chainOf(input, track.effects, gain);
+      route(mixTracks, gain, { id: track.id, parentId: track.parentId, latency: chain.latency() });
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
       scheduleFns.push(() => scheduleAudioTrack(ctx, track, input, audioBuffers, loopStart, project.length, bpm));
     }
   }
 
-  compensate(mixTracks, mixGroups).delays.forEach((samples, id) => setCompensation(delays.get(id)!, samples, 0));
+  router.compensate(mixTracks, mixGroups);
 
   // Decode audio-clip buffers + wait for instrument assets (sampler/drumkit buffers) before
   // rendering - offline render runs to completion immediately, so anything undecoded renders silent.
-  disposables.push(...effects);
+  disposables.push(...chains);
+  const effects = chains.flatMap((chain) => chain.effects());
   await Promise.all([...instruments, ...effects].map((device) => device.ready?.()));
   await decodeAudioClips(ctx, tracks, audioBuffers);
 
@@ -230,32 +228,6 @@ function buildMidiChain(
   });
   disposables.push(...devices);
   return devices[0] ?? instrument;
-}
-
-/** Create + connect an effect chain: input -> fx1 -> ... -> output, as AudioEngine builds one
- *  (ChainEffects, INST-36.7): runs of engine effects as one plan with their bypass inside, other
- *  effects on their own and left out when bypassed, each placed at `stageAt` its index. */
-function connectChain(
-  ctx: BaseAudioContext,
-  input: AudioNode,
-  chain: EffectInstance[],
-  output: AudioNode,
-  stageAt: (index: number) => number = trackEffectStage,
-): Effect[] {
-  const stageOf = (instance: EffectInstance) => stageAt(chain.indexOf(instance));
-  const created = piecesOf(chain).flatMap((piece): Effect[] =>
-    piece.kind === "run"
-      ? runEffects(ctx, piece.effects, stageOf)
-      : piece.effect.bypassed
-        ? []
-        : [createEffect(piece.effect.type, ctx, piece.effect.params, { stage: stageOf(piece.effect) })],
-  );
-  const last = created.reduce<AudioNode>((cursor, effect) => {
-    cursor.connect(effect.input);
-    return effect.output;
-  }, input);
-  last.connect(output);
-  return created;
 }
 
 /** Flatten a track's arrangement into absolute-beat note onsets within [loopStart, length). */

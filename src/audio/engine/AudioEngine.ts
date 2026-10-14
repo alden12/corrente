@@ -24,7 +24,7 @@ import { groupDepth, groupEffectStage } from "../bank/stages";
 import { EngineInstrument } from "../bank/EngineInstrument";
 import { ChainEffects } from "./chainEffects";
 import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
-import { COMPENSATION_GLIDE_SECONDS, compensate, compensator, setCompensation } from "./latency";
+import { COMPENSATION_GLIDE_SECONDS, MixRouter, masterBus } from "./mixer";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
@@ -62,6 +62,9 @@ const disposeTrackNode = (node: TrackNode): void => {
   node.gain.disconnect();
 };
 
+/** The metronome's id in the mix router: not a track, but delayed like one. */
+const METRONOME = "metronome";
+
 interface AudioTrackNode {
   /** Where this track's scheduled buffer sources feed in. */
   input: GainNode;
@@ -84,15 +87,13 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   /**
    * Each track's and group's way to its parent: a delay making up for what's later beside it
-   * (INST-36.7, latency.ts), at none when nothing in the project is late.
+   * (INST-36.7, mixer.ts), at none when nothing in the project is late.
    */
-  private readonly compensators = new Map<string, DelayNode>();
+  private router: MixRouter | null = null;
   private master: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   /** A master-level bus for the metronome click (independent of any track). */
   private metronomeGain: GainNode | null = null;
-  /** The metronome is as late as the whole mix (INST-36.7), so it clicks in time with what's heard. */
-  private metronomeDelay: DelayNode | null = null;
   private metronomeVolume = 0.6;
   // --- live input capture (recording) ---
   private inputStream: MediaStream | null = null;
@@ -217,22 +218,14 @@ export class AudioEngine {
     const ctx = new AudioContext();
     this.ctx = ctx;
     setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
-    this.master = ctx.createGain();
-    // A gentle brick-wall limiter guards the bus as stacked tracks/effects sum.
-    this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -3;
-    this.limiter.knee.value = 0;
-    this.limiter.ratio.value = 20;
-    this.limiter.attack.value = 0.003;
-    this.limiter.release.value = 0.25;
-    this.master.connect(this.limiter);
-    this.limiter.connect(ctx.destination);
-    // The metronome feeds the master bus (so it is limited with everything else)
-    // but is not a track, so it ignores mute/solo and the arrangement.
+    ({ master: this.master, limiter: this.limiter } = masterBus(ctx));
+    this.router = new MixRouter(ctx, (parentId) => this.parentInput(parentId), COMPENSATION_GLIDE_SECONDS);
+    // The metronome feeds the master bus (so it is limited with everything else) but is not a
+    // track, so it ignores mute/solo and the arrangement. It is as late as the whole mix (INST-36.7),
+    // so it clicks in time with what's heard.
     this.metronomeGain = ctx.createGain();
     this.metronomeGain.gain.value = this.metronomeVolume;
-    this.metronomeDelay = compensator(ctx);
-    this.metronomeGain.connect(this.metronomeDelay).connect(this.master);
+    this.router.route(METRONOME, this.metronomeGain, null);
     // Load the worklet processor modules before building the graph, so effect
     // factories can construct AudioWorkletNodes synchronously in reconcile().
     await loadWorklets(ctx);
@@ -397,24 +390,16 @@ export class AudioEngine {
         for (const clip of track.clips) this.ensureDecoded(clip.fileId);
       }
     }
-    this.compensateLatency(ctx);
+    this.compensateLatency();
   }
 
   /** Route a track or group into its parent through its compensating delay. */
   private route(id: string, from: AudioNode, parentId: string | null): void {
-    let delay = this.compensators.get(id);
-    if (!delay) {
-      delay = compensator(this.ctx!);
-      this.compensators.set(id, delay);
-    }
-    from.disconnect();
-    from.connect(delay);
-    delay.disconnect();
-    delay.connect(this.parentInput(parentId));
+    this.router?.route(id, from, parentId);
   }
 
   /** Set every compensating delay from how late each track's and group's own chain is. */
-  private compensateLatency(ctx: AudioContext): void {
+  private compensateLatency(): void {
     const project = this.project!;
     const mixNode = (id: string, parentId: string | null, latency: number) => ({ id, parentId, latency });
     const tracks = project.getTracks().map((track) => {
@@ -425,18 +410,13 @@ export class AudioEngine {
     const groups = project
       .getGroups()
       .map((group) => mixNode(group.id, group.parentId, this.groupNodes.get(group.id)?.effects.latency() ?? 0));
-    const { delays, total } = compensate(tracks, groups);
-    if (this.metronomeDelay) setCompensation(this.metronomeDelay, total, ctx.currentTime, COMPENSATION_GLIDE_SECONDS);
-    delays.forEach((samples, id) => {
-      const delay = this.compensators.get(id);
-      if (delay) setCompensation(delay, samples, ctx.currentTime, COMPENSATION_GLIDE_SECONDS);
-    });
+    const total = this.router?.compensate(tracks, groups) ?? 0;
+    this.router?.set(METRONOME, total);
   }
 
   /** Drop a track's or group's compensating delay, as it goes. */
   private dropCompensator(id: string): void {
-    this.compensators.get(id)?.disconnect();
-    this.compensators.delete(id);
+    this.router?.drop(id);
   }
 
   /** The bus a child routes into: its parent group's input, or master at top level. */
@@ -842,12 +822,11 @@ export class AudioEngine {
       node.output.disconnect();
     }
     this.groupNodes.clear();
-    [...this.compensators.keys()].forEach((id) => this.dropCompensator(id));
+    this.router?.dispose();
+    this.router = null;
     this.audioBuffers.clear();
     this.decoding.clear();
     this.metronomeGain?.disconnect();
-    this.metronomeDelay?.disconnect();
-    this.metronomeDelay = null;
     this.limiter?.disconnect();
     void this.ctx?.close();
     this.ctx = null;

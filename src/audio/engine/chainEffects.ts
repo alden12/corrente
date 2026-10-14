@@ -79,7 +79,7 @@ export class ChainEffects {
       const effects =
         piece.kind === "run"
           ? runEffects(context, piece.effects, stageOf, keys)
-          : [createEffect(piece.effect.type, context, piece.effect.params, { stage: stageOf(piece.effect) })];
+          : [createEffect(piece.effect.type, context, piece.effect.params)];
       this.live.set(id, { piece, effects, ...(key ? { key } : {}) });
     }
     gone.forEach(({ effects }) => effects.forEach((effect) => effect.dispose()));

@@ -11,9 +11,7 @@ import { registerInstrumentFactory } from "../instruments/registry";
 import type { ParamSchema, ParamSpec } from "../params/types";
 import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../samples/catalog";
 import { registerEffect } from "../effects/catalog";
-import { registerEffectFactory } from "../effects/registry";
 import { registerEngineDevice } from "../definitions/engineDevices";
-import { runEffects } from "./chainPlan";
 import { storeParams } from "./EngineDevice";
 import { EngineInstrument } from "./EngineInstrument";
 
@@ -509,12 +507,7 @@ export const registerTestInstruments = (): void => {
   });
   TEST_EFFECTS.forEach(({ type, label, schema, definition }) => {
     registerEngineDevice(type, { definition, schema });
+    // No effect factory: an engine effect is made by its chain's run (ChainEffects).
     registerEffect({ type, label, schema, custom: true });
-    // Made through a chain of one, so its mix and bypass are in its plan as in any run.
-    registerEffectFactory(
-      type,
-      (context, store, place) =>
-        runEffects(context, [{ id: type, type, bypassed: false, params: store }], () => place.stage)[0],
-    );
   });
 };
