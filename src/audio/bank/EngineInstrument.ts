@@ -1,21 +1,33 @@
 /**
  * An instrument played by the new engine (INST-36.5): an `EngineDevice` at the first stage, taking
  * notes. It is an `Instrument` like any other, so the track, the scheduler and live input don't know
- * which engine plays it while both exist.
+ * which engine plays it while both exist. Its plan may carry the engine effects after it too
+ * (INST-36.7, chainPlan.ts), reloaded in place when they change.
  */
 import type { CompiledPlan } from "../definitions/compile";
 import type { Instrument } from "../instruments/types";
-import type { ParamStore } from "../params/store";
-import { EngineDevice } from "./EngineDevice";
+import { EngineDevice, type ParamSources } from "./EngineDevice";
 import { INSTRUMENT_STAGE } from "./stages";
 
 export class EngineInstrument implements Instrument {
   private readonly device: EngineDevice;
   readonly output: GainNode;
+  /** The bypass param of each effect its plan carries, by effect id. */
+  bypass = new Map<string, string>();
 
-  constructor(context: BaseAudioContext, store: ParamStore, plan: CompiledPlan) {
-    this.device = new EngineDevice(context, store, plan, { stage: INSTRUMENT_STAGE });
+  constructor(context: BaseAudioContext, plan: CompiledPlan, sources: ParamSources) {
+    this.device = new EngineDevice(context, plan, sources, { stage: INSTRUMENT_STAGE });
     this.output = this.device.output;
+  }
+
+  /** Play another plan (the instrument with other effects after it), crossfading, notes kept. */
+  reload(plan: CompiledPlan, sources: ParamSources): void {
+    this.device.reload(plan, sources);
+  }
+
+  /** Set a param no store holds: an effect's bypass in the instrument's chain. */
+  setFixed(param: string, value: number): void {
+    this.device.setFixed(param, value);
   }
 
   noteOn(midi: number, velocity = 1, when?: number): void {

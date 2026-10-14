@@ -21,6 +21,7 @@ import { BUILTIN_WAVETABLES, parseRef } from "../samples/catalog";
 import { cyclesOf, tableOf } from "../samples/tables";
 import { bindParams, type ParamBinding } from "../params/binding";
 import type { ParamStore } from "../params/store";
+import type { ParamValue } from "../params/types";
 import type { SampleAudio } from "./bank";
 import type { FromBank, ToBank } from "./messages";
 import { mainInput, takeSlot, type BankSlot } from "./pool";
@@ -33,6 +34,21 @@ export interface DevicePlace {
   input?: AudioNode;
 }
 
+/**
+ * Where each of a plan's params comes from: a store and the param's id there. One device's plan reads
+ * its own store by the same ids; a chain's (INST-36.7) reads each device's store under its namespace.
+ * A plan param with no source (a chain's bypass) is set with `setFixed`.
+ */
+export type ParamSources = Record<string, { store: ParamStore; id: string }>;
+
+/** A single device's params: every param its plan reads, from `store` by the same id. */
+export const storeParams = (plan: CompiledPlan, store: ParamStore): ParamSources =>
+  Object.fromEntries(
+    plan.params
+      .filter((source) => store.has(source.param))
+      .map((source) => [source.param, { store, id: source.param }]),
+  );
+
 export class EngineDevice {
   /** The slot's output, once it arrives: silent until then. */
   readonly output: GainNode;
@@ -40,18 +56,24 @@ export class EngineDevice {
   private readonly input: AudioNode | undefined;
   private slot: BankSlot | null = null;
   private waiting: ToBank[] = [];
-  private unsubscribe: (() => void) | null = null;
+  private unsubscribe: (() => void)[] = [];
   private disposed = false;
   private readonly arrived: Promise<void>;
+  private plan: CompiledPlan;
+  private sources: ParamSources;
+  /** Values set directly rather than from a store, by plan param. */
+  private readonly fixed = new Map<string, number>();
   /** Each sample param's latest sample, done once the bank has it. */
   private readonly samples = new Map<string, { ref: string; done: Promise<void> }>();
   /** What to call when the bank says it has dealt with a param's sample, by param and ref. */
   private readonly sampled = new Map<string, () => void>();
 
-  constructor(context: BaseAudioContext, store: ParamStore, plan: CompiledPlan, place: DevicePlace) {
+  constructor(context: BaseAudioContext, plan: CompiledPlan, sources: ParamSources, place: DevicePlace) {
     this.context = context;
     this.input = place.input;
     this.output = new GainNode(context);
+    this.plan = plan;
+    this.sources = sources;
     let loaded = () => {};
     const heard = new Promise<void>((resolve) => (loaded = resolve));
     const listener = (message: FromBank) => {
@@ -71,36 +93,69 @@ export class EngineDevice {
       this.slot = slot;
       slot.node.connect(this.output, slot.track);
       this.input?.connect(slot.node, 0, mainInput(slot.track));
-      const used = (sample: boolean) =>
-        [...new Set(plan.params.filter((source) => !!source.sample === sample).map((source) => source.param))].filter(
-          (id) => store.has(id),
-        );
-      const params = used(false);
-      const tables = new Set(plan.params.filter((source) => source.wavetable).map((source) => source.param));
-      const values = Object.fromEntries(params.map((id) => [id, engineValueOf(store.spec(id), store.get(id))]));
-      slot.post({ type: "load", track: slot.track, plan, values });
+      this.loadPlan();
       this.waiting.forEach((message) => slot.post({ ...message, track: slot.track } as ToBank));
       this.waiting = [];
+      return heard;
+    });
+  }
+
+  /**
+   * Play another plan on the same slot, its params from `sources`: it crossfades in over a block,
+   * and the notes held start again in it (INST-36.5).
+   */
+  reload(plan: CompiledPlan, sources: ParamSources): void {
+    this.plan = plan;
+    this.sources = sources;
+    if (this.slot) this.loadPlan();
+  }
+
+  /** Set a plan param no store holds (a chain's bypass), now and for every later plan. */
+  setFixed(param: string, value: number): void {
+    if (this.fixed.get(param) === value) return;
+    this.fixed.set(param, value);
+    this.send({ type: "param", param, value, time: this.context.currentTime });
+  }
+
+  /** Send the plan with every param's value, and follow the stores from now on. */
+  private loadPlan(): void {
+    const { plan, sources } = this;
+    this.unsubscribe.forEach((unsubscribe) => unsubscribe());
+    const named = (sample: boolean) => [
+      ...new Set(
+        plan.params
+          .filter((source) => !!source.sample === sample && sources[source.param])
+          .map((source) => source.param),
+      ),
+    ];
+    const tables = new Set(plan.params.filter((source) => source.wavetable).map((source) => source.param));
+    const valueOf = (param: string, value: ParamValue) =>
+      engineValueOf(sources[param].store.spec(sources[param].id), value);
+    const values = {
+      ...Object.fromEntries(this.fixed),
+      ...Object.fromEntries(
+        named(false).map((param) => [param, valueOf(param, sources[param].store.get(sources[param].id))]),
+      ),
+    };
+    this.send({ type: "load", plan, values });
+    // Bind each store's params, under the names the plan reads them by.
+    const stores = new Set(Object.values(sources).map((source) => source.store));
+    this.unsubscribe = [...stores].map((store) => {
+      const mine = (sample: boolean) => named(sample).filter((param) => sources[param].store === store);
       const bindings: Record<string, ParamBinding> = Object.fromEntries([
-        ...params.map((param): [string, ParamBinding] => [
-          param,
+        ...mine(false).map((param): [string, ParamBinding] => [
+          sources[param].id,
           {
             apply: (value) =>
-              this.send({
-                type: "param",
-                param,
-                value: engineValueOf(store.spec(param), value),
-                time: this.context.currentTime,
-              }),
+              this.send({ type: "param", param, value: valueOf(param, value), time: this.context.currentTime }),
           },
         ]),
-        ...used(true).map((param): [string, ParamBinding] => [
-          param,
+        ...mine(true).map((param): [string, ParamBinding] => [
+          sources[param].id,
           { apply: (value) => this.sendSample(param, String(value), tables.has(param)) },
         ]),
       ]);
-      this.unsubscribe = bindParams(store, bindings);
-      return heard;
+      return bindParams(store, bindings);
     });
   }
 
@@ -112,8 +167,8 @@ export class EngineDevice {
 
   dispose(): void {
     this.disposed = true;
-    this.unsubscribe?.();
-    this.unsubscribe = null;
+    this.unsubscribe.forEach((unsubscribe) => unsubscribe());
+    this.unsubscribe = [];
     if (!this.slot) return;
     this.slot.node.disconnect(this.output, this.slot.track);
     this.input?.disconnect(this.slot.node, 0, mainInput(this.slot.track));

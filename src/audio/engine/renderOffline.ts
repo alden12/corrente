@@ -11,9 +11,10 @@
  * offline - and doubles as the minimal regression guard. Both can only be exercised in a real
  * browser (jsdom has no AudioWorklet), so their coverage is the offline-render e2e.
  */
-import { createInstrument } from "../instruments/registry";
 import { createEffect } from "../effects/registry";
 import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
+import { piecesOf, runEffects } from "../bank/chainPlan";
+import { trackInstrument } from "./trackInstrument";
 import { loadWorklets } from "../worklets";
 import { setTransport as setEngineTransport } from "../bank/pool";
 import { renderIsolated } from "./renderIsolated";
@@ -125,10 +126,10 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   for (const track of tracks) {
     if (track.kind === "instrument") {
       const gain = ctx.createGain();
-      const instrument = createInstrument(track.instrumentType, ctx, track.params);
+      const { instrument, absorbed } = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
       instruments.push(instrument);
       disposables.push(instrument);
-      effects.push(...connectChain(ctx, instrument.output, track.effects, gain));
+      effects.push(...connectChain(ctx, instrument.output, track.effects.slice(absorbed.length), gain));
       gain.connect(parentInput(track.parentId));
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
 
@@ -209,8 +210,9 @@ function buildMidiChain(
   return devices[0] ?? instrument;
 }
 
-/** Create + connect an effect chain: input -> fx1 -> ... -> output (skipping bypassed), each placed
- *  at `stageAt` its index, as AudioEngine places them (INST-36.7). */
+/** Create + connect an effect chain: input -> fx1 -> ... -> output, as AudioEngine builds one
+ *  (ChainEffects, INST-36.7): runs of engine effects as one plan with their bypass inside, other
+ *  effects on their own and left out when bypassed, each placed at `stageAt` its index. */
 function connectChain(
   ctx: BaseAudioContext,
   input: AudioNode,
@@ -218,16 +220,19 @@ function connectChain(
   output: AudioNode,
   stageAt: (index: number) => number = trackEffectStage,
 ): Effect[] {
-  const created: Effect[] = [];
-  let cursor: AudioNode = input;
-  for (const [index, instance] of chain.entries()) {
-    if (instance.bypassed) continue;
-    const effect = createEffect(instance.type, ctx, instance.params, { stage: stageAt(index) });
+  const stageOf = (instance: EffectInstance) => stageAt(chain.indexOf(instance));
+  const created = piecesOf(chain).flatMap((piece): Effect[] =>
+    piece.kind === "run"
+      ? runEffects(ctx, piece.effects, stageOf)
+      : piece.effect.bypassed
+        ? []
+        : [createEffect(piece.effect.type, ctx, piece.effect.params, { stage: stageOf(piece.effect) })],
+  );
+  const last = created.reduce<AudioNode>((cursor, effect) => {
     cursor.connect(effect.input);
-    cursor = effect.output;
-    created.push(effect);
-  }
-  cursor.connect(output);
+    return effect.output;
+  }, input);
+  last.connect(output);
   return created;
 }
 

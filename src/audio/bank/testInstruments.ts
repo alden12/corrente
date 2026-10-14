@@ -12,7 +12,9 @@ import type { ParamSchema, ParamSpec } from "../params/types";
 import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../samples/catalog";
 import { registerEffect } from "../effects/catalog";
 import { registerEffectFactory } from "../effects/registry";
-import { EngineEffect } from "./EngineEffect";
+import { registerEngineDevice } from "../definitions/engineDevices";
+import { runEffects } from "./chainPlan";
+import { storeParams } from "./EngineDevice";
 import { EngineInstrument } from "./EngineInstrument";
 
 interface TestInstrument {
@@ -444,16 +446,22 @@ const resonator: TestInstrument = {
 
 export const TEST_EFFECTS = [echo, resonator];
 
-/** Put the test instruments and effects in the library. */
+/** Put the test instruments and effects in the library, as engine devices. */
 export const registerTestInstruments = (): void => {
   TEST_INSTRUMENTS.forEach(({ type, label, family = "Synths", schema, definition }) => {
     const plan = compileDefinition(definition, { params: schema });
+    registerEngineDevice(type, { definition, schema });
     registerInstrument({ type, label, schema, family, custom: true });
-    registerInstrumentFactory(type, (context, store) => new EngineInstrument(context, store, plan));
+    registerInstrumentFactory(type, (context, store) => new EngineInstrument(context, plan, storeParams(plan, store)));
   });
   TEST_EFFECTS.forEach(({ type, label, schema, definition }) => {
-    const plan = compileDefinition(definition, { params: schema });
+    registerEngineDevice(type, { definition, schema });
     registerEffect({ type, label, schema, custom: true });
-    registerEffectFactory(type, (context, store, place) => new EngineEffect(context, store, plan, place.stage));
+    // Made through a chain of one, so its mix and bypass are in its plan as in any run.
+    registerEffectFactory(
+      type,
+      (context, store, place) =>
+        runEffects(context, [{ id: type, type, bypassed: false, params: store }], () => place.stage)[0],
+    );
   });
 };

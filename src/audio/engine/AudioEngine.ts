@@ -17,11 +17,13 @@
  */
 import type { ProjectStore, EffectInstance, InstrumentTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
-import { createInstrument, registerInstrumentFactory } from "../instruments/registry";
+import { registerInstrumentFactory } from "../instruments/registry";
 import type { Instrument } from "../instruments/types";
-import { createEffect, registerEffectFactory } from "../effects/registry";
-import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
-import type { Effect } from "../effects/types";
+import { registerEffectFactory } from "../effects/registry";
+import { groupDepth, groupEffectStage } from "../bank/stages";
+import { EngineInstrument } from "../bank/EngineInstrument";
+import { ChainEffects } from "./chainEffects";
+import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
@@ -41,8 +43,10 @@ interface TrackNode {
   /** The instrument type this node was built for, so a `setInstrument` swap rebuilds it. */
   instrumentType: string;
   gain: GainNode;
-  /** Effect instances by id; chain order comes from the track's effect list. */
-  effects: Map<string, Effect>;
+  /** The effects after the instrument, live (INST-36.7: in pieces, runs of engine effects as one). */
+  effects: ChainEffects;
+  /** The effects an engine instrument plays in its own plan, straight after it. */
+  absorbed: EffectInstance[];
   /** MIDI-device instances by id; chain order comes from the track's midiDevices list. */
   midiDevices: Map<string, GraphMidiDevice>;
   /** Head of the note pipeline (first device, or the instrument if the chain is empty). */
@@ -54,7 +58,7 @@ interface AudioTrackNode {
   input: GainNode;
   /** Track volume/mute; feeds the group bus. */
   gain: GainNode;
-  effects: Map<string, Effect>;
+  effects: ChainEffects;
   /** Currently-playing sources, so playback can be stopped on transport stop. */
   sources: Set<AudioBufferSourceNode>;
 }
@@ -64,7 +68,7 @@ interface GroupNode {
   input: GainNode;
   /** Group volume/mute; feeds the parent group's input (or master). */
   output: GainNode;
-  effects: Map<string, Effect>;
+  effects: ChainEffects;
 }
 
 export class AudioEngine {
@@ -272,7 +276,7 @@ export class AudioEngine {
     const liveGroupIds = new Set(groups.map((group) => group.id));
     for (const [id, node] of this.groupNodes) {
       if (!liveGroupIds.has(id)) {
-        this.disposeEffects(node.effects);
+        node.effects.dispose();
         node.input.disconnect();
         node.output.disconnect();
         this.groupNodes.delete(id);
@@ -281,7 +285,7 @@ export class AudioEngine {
     const instrumentIds = new Set(tracks.filter((track) => track.kind === "instrument").map((track) => track.id));
     for (const [id, node] of this.nodes) {
       if (!instrumentIds.has(id)) {
-        this.disposeEffects(node.effects);
+        node.effects.dispose();
         for (const device of node.midiDevices.values()) device.dispose();
         node.instrument.dispose();
         node.gain.disconnect();
@@ -292,7 +296,7 @@ export class AudioEngine {
     for (const [id, node] of this.audioNodes) {
       if (!audioIds.has(id)) {
         this.disposeAudioSources(node);
-        this.disposeEffects(node.effects);
+        node.effects.dispose();
         node.input.disconnect();
         node.gain.disconnect();
         this.audioNodes.delete(id);
@@ -303,7 +307,11 @@ export class AudioEngine {
     // a parent created in this same pass).
     for (const group of groups) {
       if (!this.groupNodes.has(group.id)) {
-        this.groupNodes.set(group.id, { input: ctx.createGain(), output: ctx.createGain(), effects: new Map() });
+        this.groupNodes.set(group.id, {
+          input: ctx.createGain(),
+          output: ctx.createGain(),
+          effects: new ChainEffects(),
+        });
       }
     }
 
@@ -311,8 +319,8 @@ export class AudioEngine {
     for (const group of groups) {
       const node = this.groupNodes.get(group.id)!;
       const depth = groupDepth(groups, group.id);
-      this.reconcileEffects(node.effects, group.effects, edited, (index) => groupEffectStage(depth, index));
-      this.rewireChain(node.input, node.effects, group.effects, node.output);
+      node.effects.reconcile(ctx, group.effects, edited, (index) => groupEffectStage(depth, index));
+      node.effects.wire(node.input, node.output);
       node.output.disconnect();
       node.output.connect(this.parentInput(group.parentId));
       node.output.gain.setTargetAtTime(group.muted ? 0 : group.volume, ctx.currentTime, 0.01);
@@ -324,12 +332,13 @@ export class AudioEngine {
         let node = this.nodes.get(track.id);
         if (!node) {
           const gain = ctx.createGain();
-          const instrument = createInstrument(track.instrumentType, ctx, track.params);
+          const { instrument, absorbed } = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
           node = {
             instrument,
             instrumentType: track.instrumentType,
             gain,
-            effects: new Map(),
+            effects: new ChainEffects(),
+            absorbed,
             midiDevices: new Map(),
             noteHead: instrument,
           };
@@ -339,11 +348,22 @@ export class AudioEngine {
           // empty track), or its custom definition was edited: dispose the old node and
           // build the new one over the same gain.
           node.instrument.dispose();
-          node.instrument = createInstrument(track.instrumentType, ctx, track.params);
+          const made = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
+          node.instrument = made.instrument;
+          node.absorbed = made.absorbed;
           node.instrumentType = track.instrumentType;
+        } else if (node.instrument instanceof EngineInstrument) {
+          node.absorbed = updateTrackInstrument(
+            node.instrument,
+            track.instrumentType,
+            track.params,
+            track.effects,
+            node.absorbed,
+          );
         }
-        this.reconcileEffects(node.effects, track.effects, edited);
-        this.rewireChain(node.instrument.output, node.effects, track.effects, node.gain);
+        // The effects the instrument doesn't play itself follow it.
+        node.effects.reconcile(ctx, track.effects.slice(node.absorbed.length), edited);
+        node.effects.wire(node.instrument.output, node.gain);
         // MIDI devices decorate the note path (no audio), terminating in the instrument.
         this.reconcileMidiDevices(node, track);
         node.gain.disconnect();
@@ -352,11 +372,11 @@ export class AudioEngine {
       } else {
         let node = this.audioNodes.get(track.id);
         if (!node) {
-          node = { input: ctx.createGain(), gain: ctx.createGain(), effects: new Map(), sources: new Set() };
+          node = { input: ctx.createGain(), gain: ctx.createGain(), effects: new ChainEffects(), sources: new Set() };
           this.audioNodes.set(track.id, node);
         }
-        this.reconcileEffects(node.effects, track.effects, edited);
-        this.rewireChain(node.input, node.effects, track.effects, node.gain);
+        node.effects.reconcile(ctx, track.effects, edited);
+        node.effects.wire(node.input, node.gain);
         node.gain.disconnect();
         node.gain.connect(this.parentInput(track.parentId));
         node.gain.gain.setTargetAtTime(mutedTracks.has(track.id) ? 0 : track.volume, ctx.currentTime, 0.01);
@@ -371,11 +391,6 @@ export class AudioEngine {
     return parent?.input ?? this.master!;
   }
 
-  private disposeEffects(effects: Map<string, Effect>): void {
-    for (const fx of effects.values()) fx.dispose();
-    effects.clear();
-  }
-
   private disposeAudioSources(node: AudioTrackNode): void {
     for (const src of node.sources) {
       try {
@@ -386,29 +401,6 @@ export class AudioEngine {
       }
     }
     node.sources.clear();
-  }
-
-  /** Create effects for new instances, dispose effects no longer in the chain, and rebuild any
-   *  whose custom definition was `edited`, or (an engine effect) that moved to another stage of the
-   *  signal flow (`stageAt` its place in the chain), which its bank can't follow (INST-36.7). */
-  private reconcileEffects(
-    live: Map<string, Effect>,
-    chain: EffectInstance[],
-    edited: Set<string>,
-    stageAt: (index: number) => number = trackEffectStage,
-  ): void {
-    const ctx = this.ctx!;
-    const stages = new Map(chain.map((fx, index) => [fx.id, stageAt(index)]));
-    const want = new Set(chain.filter((fx) => !edited.has(fx.type)).map((fx) => fx.id));
-    for (const [id, fx] of live) {
-      if (!want.has(id) || (fx.stage !== undefined && fx.stage !== stages.get(id))) {
-        fx.dispose();
-        live.delete(id);
-      }
-    }
-    for (const fx of chain) {
-      if (!live.has(fx.id)) live.set(fx.id, createEffect(fx.type, ctx, fx.params, { stage: stages.get(fx.id)! }));
-    }
   }
 
   /**
@@ -439,22 +431,6 @@ export class AudioEngine {
       device.setNext(chain[index + 1] ?? node.instrument);
     });
     node.noteHead = chain[0] ?? node.instrument;
-  }
-
-  /** Rewire source -> active effects (in order) -> dest. Leaves dest's own output. */
-  private rewireChain(source: AudioNode, live: Map<string, Effect>, chain: EffectInstance[], dest: AudioNode): void {
-    source.disconnect();
-    for (const fx of live.values()) fx.output.disconnect();
-
-    let cursor: AudioNode = source;
-    for (const fx of chain) {
-      if (fx.bypassed) continue;
-      const effect = live.get(fx.id);
-      if (!effect) continue;
-      cursor.connect(effect.input);
-      cursor = effect.output;
-    }
-    cursor.connect(dest);
   }
 
   /** Fetch + decode an audio file once, keyed by its OPFS id. */
@@ -727,7 +703,7 @@ export class AudioEngine {
   setPreview(track: InstrumentTrack | null): void {
     if (this.preview) {
       this.preview.noteHead.allNotesOff();
-      this.disposeEffects(this.preview.effects);
+      this.preview.effects.dispose();
       for (const device of this.preview.midiDevices.values()) device.dispose();
       this.preview.instrument.dispose();
       this.preview.gain.disconnect();
@@ -735,17 +711,18 @@ export class AudioEngine {
     }
     const ctx = this.ctx;
     if (!track || !ctx || !this.master) return;
-    const instrument = createInstrument(track.instrumentType, ctx, track.params);
+    const { instrument, absorbed } = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
     const node: TrackNode = {
       instrument,
       instrumentType: track.instrumentType,
       gain: ctx.createGain(),
-      effects: new Map(),
+      effects: new ChainEffects(),
+      absorbed,
       midiDevices: new Map(),
       noteHead: instrument,
     };
-    this.reconcileEffects(node.effects, track.effects, new Set());
-    this.rewireChain(node.instrument.output, node.effects, track.effects, node.gain);
+    node.effects.reconcile(ctx, track.effects.slice(absorbed.length), new Set());
+    node.effects.wire(node.instrument.output, node.gain);
     this.reconcileMidiDevices(node, track);
     node.gain.gain.value = track.volume;
     node.gain.connect(this.master);
@@ -800,20 +777,20 @@ export class AudioEngine {
     this.unsubscribe = null;
     this.disableInput();
     for (const node of this.nodes.values()) {
-      this.disposeEffects(node.effects);
+      node.effects.dispose();
       node.instrument.dispose();
       node.gain.disconnect();
     }
     this.nodes.clear();
     for (const node of this.audioNodes.values()) {
       this.disposeAudioSources(node);
-      this.disposeEffects(node.effects);
+      node.effects.dispose();
       node.input.disconnect();
       node.gain.disconnect();
     }
     this.audioNodes.clear();
     for (const node of this.groupNodes.values()) {
-      this.disposeEffects(node.effects);
+      node.effects.dispose();
       node.input.disconnect();
       node.output.disconnect();
     }
