@@ -83,6 +83,8 @@ export class AudioEngine {
   private limiter: DynamicsCompressorNode | null = null;
   /** A master-level bus for the metronome click (independent of any track). */
   private metronomeGain: GainNode | null = null;
+  /** The metronome is as late as the whole mix (INST-36.7), so it clicks in time with what's heard. */
+  private metronomeDelay: DelayNode | null = null;
   private metronomeVolume = 0.6;
   // --- live input capture (recording) ---
   private inputStream: MediaStream | null = null;
@@ -221,7 +223,8 @@ export class AudioEngine {
     // but is not a track, so it ignores mute/solo and the arrangement.
     this.metronomeGain = ctx.createGain();
     this.metronomeGain.gain.value = this.metronomeVolume;
-    this.metronomeGain.connect(this.master);
+    this.metronomeDelay = compensator(ctx);
+    this.metronomeGain.connect(this.metronomeDelay).connect(this.master);
     // Load the worklet processor modules before building the graph, so effect
     // factories can construct AudioWorkletNodes synchronously in reconcile().
     await loadWorklets(ctx);
@@ -417,7 +420,8 @@ export class AudioEngine {
     const groups = project
       .getGroups()
       .map((group) => mixNode(group.id, group.parentId, this.groupNodes.get(group.id)?.effects.latency() ?? 0));
-    const { delays } = compensate(tracks, groups);
+    const { delays, total } = compensate(tracks, groups);
+    if (this.metronomeDelay) setCompensation(this.metronomeDelay, total, ctx.currentTime);
     delays.forEach((samples, id) => {
       const delay = this.compensators.get(id);
       if (delay) setCompensation(delay, samples, ctx.currentTime);
@@ -844,6 +848,8 @@ export class AudioEngine {
     this.audioBuffers.clear();
     this.decoding.clear();
     this.metronomeGain?.disconnect();
+    this.metronomeDelay?.disconnect();
+    this.metronomeDelay = null;
     this.limiter?.disconnect();
     void this.ctx?.close();
     this.ctx = null;
