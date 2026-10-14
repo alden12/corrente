@@ -12,7 +12,6 @@ import { z } from "zod";
 import { CATALOGUE, type BlockSpec, type Port } from "./catalogue";
 import {
   channelsSchema,
-  DEFAULT_VOICES,
   DEFINITION_FORMAT,
   MAX_VOICES,
   NODE_NAME,
@@ -29,7 +28,7 @@ import {
   type Synced,
 } from "./format";
 import type { ParamSchema } from "../params/types";
-import { beatsOf, channelsOf, isScaled, isSynced, listOf, referenceTo } from "./references";
+import { beatsOf, channelsOf, isScaled, isSynced, listOf, referenceTo, voicesOf } from "./references";
 
 const NOT_WIRED = "not wired (every audio input needs a value, a param or a connection)";
 
@@ -230,7 +229,7 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
     if (typeof source === "string") problem(["output"], source);
   });
 
-  const voices = definition.voices ?? (voiceNodes.length > 0 ? DEFAULT_VOICES : 0);
+  const voices = voicesOf(definition);
   if (voiceNodes.length > 0 && definition.voice === undefined)
     problem(["voice"], "the voices play nothing (name what each voice plays)");
   if (voiceNodes.length > 0 && voices === 0) problem(["voices"], "there are voice nodes but no voices");

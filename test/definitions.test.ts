@@ -433,6 +433,32 @@ describe("definitions the compiler refuses", () => {
     ]);
   });
 
+  it("refuses a table whose inputs aren't ascending", () => {
+    const tabled = (table: [number, number][]) => ({
+      format: 1,
+      nodes: { x: { block: "mul", inputs: { a: { param: "p", table }, b: 1 } } },
+      output: "x",
+    });
+    expect(
+      problemsOf(
+        tabled([
+          [0, 0],
+          [1, 1],
+        ]),
+        ["p"],
+      ),
+    ).toEqual([]);
+    expect(
+      problemsOf(
+        tabled([
+          [1, 0],
+          [0, 1],
+        ]),
+        ["p"],
+      ),
+    ).toEqual([expect.stringContaining("a table's inputs must be in ascending order")]);
+  });
+
   it("names unknown blocks and inputs, and what there is instead", () => {
     expect(
       problemsOf(

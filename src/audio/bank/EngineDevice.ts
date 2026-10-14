@@ -15,19 +15,13 @@
  *
  * A chain's plan (INST-36.7) reloads keeping what it can: when devices are added to or removed from
  * the chain and the rest stay in order, the kept devices' nodes carry on in the new plan (carry.ts),
- * so tails ring on and held notes play on. With nothing crossfading, the change is made smooth here:
- * - **An added effect starts bypassed** and its bypass ramps to where it should be over the first
- *   block, so it fades in from the dry signal it passes through.
- * - **A removed effect is bypassed first,** and the plan without it loads a little later, once the
- *   bypass has ramped (live only; an offline render has no edits).
- * - **Effects that change order** are taken out and put back: bypassed before, started fresh in the
- *   new plan and faded in after, while the instrument and held notes play on. Carried, their state
- *   meets a different input all at once: an echo's buffer of resonator output, put back in front of
- *   the resonator, is resonated twice and comes out ten times as loud.
+ * so tails ring on and held notes play on. Added and moved effects fade in (reloadPlan.ts); a removed
+ * or moved effect is bypassed first, and the plan loads a little later, once the bypass has ramped
+ * (live only; an offline render has no edits).
  */
 import type { CompiledPlan } from "../definitions/compile";
-import { carryWords } from "./carry";
-import { chainEdit, ownerOf, type ChainEdit, type ChainLayout } from "./chainPlan";
+import { chainEdit, type ChainEdit, type ChainLayout } from "./chainPlan";
+import { reloadOptions, type Sent } from "./reloadPlan";
 import { engineValueOf } from "../definitions/values";
 import { buildBanks } from "../dsp/wavetable";
 import { loadSampleBuffer } from "../samples/builtinUrls";
@@ -71,12 +65,6 @@ export const storeParams = (plan: CompiledPlan, store: ParamStore): ParamSources
  */
 const FADE_OUT_MS = 40;
 
-/** What was last sent to the bank, to work out what a reload keeps. */
-interface Sent {
-  plan: CompiledPlan;
-  chain?: ChainLayout;
-}
-
 export class EngineDevice {
   /** The slot's output, once it arrives: silent until then. */
   readonly output: GainNode;
@@ -101,6 +89,8 @@ export class EngineDevice {
   private sent: Sent | undefined;
   /** A reload waiting for removed effects to fade out. */
   private pending: ReturnType<typeof setTimeout> | undefined;
+  /** Bypass params sent to 1 for that reload, until a plan loads. */
+  private readonly fadingOut = new Set<string>();
 
   constructor(
     context: BaseAudioContext,
@@ -163,7 +153,10 @@ export class EngineDevice {
       this.loadPlan(edit);
       return;
     }
-    fading.forEach((param) => this.send({ type: "param", param, value: 1, time: this.context.currentTime }));
+    fading.forEach((param) => {
+      this.fadingOut.add(param);
+      this.send({ type: "param", param, value: 1, time: this.context.currentTime });
+    });
     this.pending = setTimeout(() => {
       this.pending = undefined;
       this.loadPlan(edit);
@@ -206,27 +199,9 @@ export class EngineDevice {
       ),
     };
     const before = this.sent;
-    const keys = [...(before?.chain?.keys ?? []), ...(chain?.keys ?? [])];
-    // Moved effects start fresh: an echo carried in front of a resonator holds the resonator's output,
-    // and feeding it through again builds up tenfold. The instrument, among `moved` on any reorder,
-    // keeps its state.
-    const fresh = new Set((edit?.moved ?? []).filter((key) => chain?.bypass.has(key)));
-    const carry =
-      edit && before
-        ? carryWords(before.plan, plan, (name) => {
-            const owner = ownerOf(keys, name) ?? "";
-            return edit.kept.has(owner) && !fresh.has(owner);
-          })
-        : undefined;
-    // Added and moved effects start bypassed when anything carries, then ramp to their bypass as set.
-    const from = carry
-      ? Object.fromEntries(
-          [...(edit?.added ?? []), ...(edit?.moved ?? [])]
-            .flatMap((key) => chain?.bypass.get(key) ?? [])
-            .map((param) => [param, 1]),
-        )
-      : {};
-    this.send({ type: "load", plan, values, ...(carry ? { options: { carry, from } } : {}) });
+    const options = reloadOptions(before, plan, chain, edit, this.fadingOut);
+    this.fadingOut.clear();
+    this.send({ type: "load", plan, values, ...(Object.keys(options).length > 0 ? { options } : {}) });
     // Removed effects' bypass values go with them.
     (edit?.removed ?? []).forEach((key) => {
       const param = before?.chain?.bypass.get(key);

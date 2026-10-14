@@ -215,12 +215,14 @@ impl Render<'_> {
         // These return lazy iterators, so each call starts a fresh pass without building a list.
         let delays = || members.iter().copied().filter(|&index| nodes[index].is_delay());
         let rest = || members.iter().copied().filter(|&index| !nodes[index].is_delay());
-        // TS: const shortest = delays().reduce((shortest, index) => Math.min(shortest, ...lengthsOf(index)), BLOCK)
+        // A delay plays no longer than its ring holds, however long it's asked for.
+        // TS: const shortest = delays().reduce((shortest, index) => Math.min(shortest, line(index).longest, ...lengthsOf(index)), BLOCK)
         // `fold(start, f)` is `reduce(f, start)`.
         let shortest = delays().fold(BLOCK as f32, |shortest, index| {
             let lengths = nodes[index].audio[1];
-            self.with_node(index, 0, |_, _, _, sources| {
-                sources.samples(lengths, 0, BLOCK).iter().fold(shortest, |shortest, &length| shortest.min(length))
+            self.with_node(index, 0, |_, unit, _, sources| {
+                let Unit::Delay(line) = unit else { return shortest };
+                sources.samples(lengths, 0, BLOCK).iter().fold(shortest.min(line.longest()), |shortest, &length| shortest.min(length))
             })
         });
         // Control inputs are still read every CONTROL samples, so a chunk never crosses one of those.

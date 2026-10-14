@@ -21,6 +21,12 @@ fn bad_plans_are_refused() {
     let three_channels = mul(vec![constant(1.0), constant(1.0)]).voice_out(vec![buffer(0), buffer(0), buffer(0)]);
     assert!(three_channels.refused(), "more than two output channels");
 
+    // A count bigger than the words left is refused straight away, not read as that many zeros.
+    assert_eq!(plan::parse(&[0, 0, 0, i32::MAX, 0]).err(), Some(plan::REJECTED), "a huge node count");
+    let mut huge_params = mul(vec![constant(1.0), constant(1.0)]).words();
+    huge_params[0] = i32::MAX;
+    assert_eq!(plan::parse(&huge_params).err(), Some(plan::REJECTED), "a huge param count");
+
     let mut words_left_over = mul(vec![constant(1.0), constant(1.0)]).words();
     words_left_over.push(0);
     assert_eq!(plan::parse(&words_left_over).err(), Some(plan::WRONG_LENGTH));

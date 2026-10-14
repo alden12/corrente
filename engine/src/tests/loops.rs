@@ -43,6 +43,24 @@ fn a_delay_loop_runs_in_chunks_and_echoes_on_time() {
 }
 
 #[test]
+fn a_delay_loop_asked_for_more_than_its_ring_holds_runs_in_chunks_the_ring_can_fill() {
+    // As above, but the delay is asked for 40 samples with a ring that holds 2: it plays 2 late, so
+    // the chunks must be no longer than that, or it would read samples it hasn't been given yet.
+    let plan = PlanBuilder::new()
+        .node(kind("add"), vec![constant(1.0), buffer(2)], vec![])
+        .node(KIND_DELAY, vec![buffer(0), constant(40.0)], vec![constant(2.0)])
+        .node(kind("mul"), vec![buffer(1), constant(0.5)], vec![])
+        .step(CHUNK_LOOP, vec![1, 2, 0])
+        .out(buffer(0));
+    let mut engine = plan.playing(0);
+    let output = render(&mut engine, 1);
+    let expected = |n: usize| (0..=n / 2).map(|echo| 0.5f32.powi(echo as i32)).sum::<f32>();
+    output.iter().enumerate().for_each(|(n, &sample)| {
+        assert!((sample - expected(n)).abs() < 1e-6, "sample {n}: {sample}, expected {}", expected(n));
+    });
+}
+
+#[test]
 fn a_delay_holds_as_long_as_its_size_and_no_longer() {
     // An impulse into a delay `length` samples long, the ring `size` (a literal in the plan).
     let echo = |size: Option<f32>, length: f32| {

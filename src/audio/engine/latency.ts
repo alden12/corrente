@@ -48,17 +48,36 @@ export const compensate = (tracks: MixNode[], groups: MixNode[]): Compensation =
 /** The longest delay a compensating DelayNode is made to hold: a second at 48 kHz is plenty. */
 export const MAX_COMPENSATION_SECONDS = 1;
 
-/** A DelayNode for compensating, at no delay until `setCompensation`. */
-export const compensator = (context: BaseAudioContext): DelayNode =>
-  new DelayNode(context, { maxDelayTime: MAX_COMPENSATION_SECONDS, delayTime: 0 });
-
 /** Each compensating delay's last setting, so an unchanged one isn't scheduled again on every reconcile. */
 const settings = new WeakMap<DelayNode, number>();
 
-/** Set a compensating delay to `samples`, from `when` (the context's time now, live). */
-export const setCompensation = (delay: DelayNode, samples: number, when: number): void => {
+/** A DelayNode for compensating, at no delay until `setCompensation`. */
+export const compensator = (context: BaseAudioContext): DelayNode => {
+  const delay = new DelayNode(context, { maxDelayTime: MAX_COMPENSATION_SECONDS, delayTime: 0 });
+  settings.set(delay, 0);
+  return delay;
+};
+
+/**
+ * How long a live change of compensation glides for. A delay that jumps skips or repeats a stretch of
+ * sound, which clicks; one that glides bends its pitch for a moment instead. Long enough, too, to
+ * cover a device's plan loading a little after its latency changes (EngineDevice waits 40 ms for
+ * removed effects to fade out).
+ */
+export const COMPENSATION_GLIDE_SECONDS = 0.05;
+
+/** Set a compensating delay to `samples` from `when` (the context's time now, live), gliding over `glide` seconds. */
+export const setCompensation = (delay: DelayNode, samples: number, when: number, glide = 0): void => {
   const seconds = Math.min(samples / delay.context.sampleRate, MAX_COMPENSATION_SECONDS);
-  if (settings.get(delay) === seconds) return;
+  const last = settings.get(delay);
+  if (last === seconds) return;
   settings.set(delay, seconds);
-  delay.delayTime.setValueAtTime(seconds, when);
+  delay.delayTime.cancelScheduledValues(when);
+  if (glide === 0) {
+    delay.delayTime.setValueAtTime(seconds, when);
+    return;
+  }
+  // From where it is now, which may be partway through the last glide.
+  delay.delayTime.setValueAtTime(delay.delayTime.value, when);
+  delay.delayTime.linearRampToValueAtTime(seconds, when + glide);
 };

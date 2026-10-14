@@ -31,10 +31,20 @@ impl Reader<'_> {
         usize::try_from(self.next()).map_err(|_| REJECTED)
     }
 
-    // TS: n of something read one after another, as a list, stopping at the first throw.
+    /// How many words are left: every item takes at least one, so a count past this is a bad plan.
+    // TS: get left() { return Math.max(this.words.length - this.at, 0) }
+    pub(super) fn left(&self) -> usize {
+        self.words.len().saturating_sub(self.at)
+    }
+
+    // TS: n of something read one after another, as a list, stopping at the first throw (and
+    // throwing first if there aren't n words left, so a huge count can't run on reading zeros).
     // `impl FnMut(&mut Self) -> Result<T, i32>` is a function argument that may be called many times
     // and may change what it captured; here it reads from this reader.
     fn list<T>(&mut self, count: usize, mut read: impl FnMut(&mut Self) -> Result<T, i32>) -> Result<Vec<T>, i32> {
+        if count > self.left() {
+            return Err(REJECTED);
+        }
         (0..count).map(|_| read(self)).collect()
     }
 

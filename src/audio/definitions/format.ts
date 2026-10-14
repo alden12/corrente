@@ -45,6 +45,7 @@
  *   a sampler. A drum kit is a zone per pad.
  */
 import { z } from "zod";
+import { tableProblem } from "../graph/table";
 
 /** The format's version. A change that old definitions can't be read under bumps it, with an upcaster. */
 export const DEFINITION_FORMAT = 1;
@@ -105,7 +106,10 @@ export const paramBindingSchema = z
     offset: z.number().finite().optional(),
     table: z
       .array(z.tuple([z.number().finite(), z.number().finite()]))
-      .min(2)
+      .superRefine((points, context) => {
+        const problem = tableProblem(points);
+        if (problem) context.addIssue({ code: "custom", message: problem });
+      })
       .optional(),
   })
   .strict();

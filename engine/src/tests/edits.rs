@@ -23,6 +23,19 @@ fn a_new_plan_crossfades_in_over_a_block() {
 }
 
 #[test]
+fn a_second_load_before_a_block_still_fades_from_what_was_playing() {
+    let mut engine = steady(1.0).loaded();
+    render(&mut engine, 1);
+    assert!(engine.load(0, steady(0.25).plan()));
+    assert!(engine.load(0, steady(0.5).plan()));
+    // The 0.25 plan never played: the fade is from 1 to 0.5, as if it had never loaded.
+    render(&mut engine, 1).iter().enumerate().for_each(|(index, &sample)| {
+        let fade_in = (index + 1) as f32 / BLOCK as f32;
+        assert!((sample - (0.5 * fade_in + (1.0 - fade_in))).abs() < 1e-6);
+    });
+}
+
+#[test]
 fn a_cut_voice_fades_out_over_a_block_and_frees_its_slot() {
     // The gate as the output: 1 while the note is held.
     let plan = PlanBuilder::new().node(kind("mul"), vec![voice(SIGNAL_GATE), constant(1.0)], vec![]).step(NODE, vec![0]).out(buffer(0));

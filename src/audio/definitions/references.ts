@@ -6,6 +6,7 @@
 import { blockNamed } from "./catalogue";
 import type { ParamSchema } from "../params/types";
 import {
+  DEFAULT_VOICES,
   HOST_SIGNALS,
   TRACK_INPUTS,
   VOICE_SIGNALS,
@@ -79,6 +80,14 @@ export const listOf = (value: InputValue) => (Array.isArray(value) ? value : [va
 /** A `voice` or `output`: one reference (mono, or in both channels), or a left and a right. */
 export const channelsOf = (value: string | string[] | undefined) =>
   value === undefined ? [] : Array.isArray(value) ? value : [value];
+
+/** How many voices a definition plays: as it says, or DEFAULT_VOICES if it has voice nodes and doesn't. */
+export const voicesOf = (definition: DeviceDefinition): number =>
+  definition.voices ?? (Object.values(definition.nodes).some((node) => node.voice) ? DEFAULT_VOICES : 0);
+
+/** What a definition plays, by channel: its output, or the voices summed if it has voices and doesn't say. */
+export const outputOf = (definition: DeviceDefinition): string[] =>
+  channelsOf(definition.output ?? (voicesOf(definition) > 0 ? ["voices.left", "voices.right"] : undefined));
 
 /** A reference as a source, or what's wrong with it. */
 export const referenceTo = (reference: string, nodes: DeviceDefinition["nodes"]): Source | string => {

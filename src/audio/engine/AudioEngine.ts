@@ -24,7 +24,7 @@ import { groupDepth, groupEffectStage } from "../bank/stages";
 import { EngineInstrument } from "../bank/EngineInstrument";
 import { ChainEffects } from "./chainEffects";
 import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
-import { compensate, compensator, setCompensation } from "./latency";
+import { COMPENSATION_GLIDE_SECONDS, compensate, compensator, setCompensation } from "./latency";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
@@ -53,6 +53,14 @@ interface TrackNode {
   /** Head of the note pipeline (first device, or the instrument if the chain is empty). */
   noteHead: NoteTarget;
 }
+
+/** Stop and disconnect everything an instrument track plays through. */
+const disposeTrackNode = (node: TrackNode): void => {
+  node.effects.dispose();
+  node.midiDevices.forEach((device) => device.dispose());
+  node.instrument.dispose();
+  node.gain.disconnect();
+};
 
 interface AudioTrackNode {
   /** Where this track's scheduled buffer sources feed in. */
@@ -295,10 +303,7 @@ export class AudioEngine {
     const instrumentIds = new Set(tracks.filter((track) => track.kind === "instrument").map((track) => track.id));
     for (const [id, node] of this.nodes) {
       if (!instrumentIds.has(id)) {
-        node.effects.dispose();
-        for (const device of node.midiDevices.values()) device.dispose();
-        node.instrument.dispose();
-        node.gain.disconnect();
+        disposeTrackNode(node);
         this.dropCompensator(id);
         this.nodes.delete(id);
       }
@@ -421,10 +426,10 @@ export class AudioEngine {
       .getGroups()
       .map((group) => mixNode(group.id, group.parentId, this.groupNodes.get(group.id)?.effects.latency() ?? 0));
     const { delays, total } = compensate(tracks, groups);
-    if (this.metronomeDelay) setCompensation(this.metronomeDelay, total, ctx.currentTime);
+    if (this.metronomeDelay) setCompensation(this.metronomeDelay, total, ctx.currentTime, COMPENSATION_GLIDE_SECONDS);
     delays.forEach((samples, id) => {
       const delay = this.compensators.get(id);
-      if (delay) setCompensation(delay, samples, ctx.currentTime);
+      if (delay) setCompensation(delay, samples, ctx.currentTime, COMPENSATION_GLIDE_SECONDS);
     });
   }
 
@@ -752,10 +757,7 @@ export class AudioEngine {
   setPreview(track: InstrumentTrack | null): void {
     if (this.preview) {
       this.preview.noteHead.allNotesOff();
-      this.preview.effects.dispose();
-      for (const device of this.preview.midiDevices.values()) device.dispose();
-      this.preview.instrument.dispose();
-      this.preview.gain.disconnect();
+      disposeTrackNode(this.preview);
       this.preview = null;
     }
     const ctx = this.ctx;
@@ -825,11 +827,7 @@ export class AudioEngine {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.disableInput();
-    for (const node of this.nodes.values()) {
-      node.effects.dispose();
-      node.instrument.dispose();
-      node.gain.disconnect();
-    }
+    this.nodes.forEach(disposeTrackNode);
     this.nodes.clear();
     for (const node of this.audioNodes.values()) {
       this.disposeAudioSources(node);

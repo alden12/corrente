@@ -38,12 +38,18 @@ interface Bank {
   listeners: (((message: FromBank) => void) | undefined)[];
 }
 
+/** Kept once fetched; a failed fetch is forgotten, so the next device tries again. */
 let engineBytes: Promise<ArrayBuffer> | null = null;
 const fetchEngine = () =>
-  (engineBytes ??= fetch(engineUrl).then((response) => {
-    if (!response.ok) throw new Error(`couldn't load the audio engine (${response.status})`);
-    return response.arrayBuffer();
-  }));
+  (engineBytes ??= fetch(engineUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`couldn't load the audio engine (${response.status})`);
+      return response.arrayBuffer();
+    })
+    .catch((error: unknown) => {
+      engineBytes = null;
+      throw error;
+    }));
 
 interface Pool {
   bytes: ArrayBuffer;
@@ -67,10 +73,14 @@ const pools = new WeakMap<BaseAudioContext, Promise<Pool>>();
 const poolFor = (context: BaseAudioContext) => {
   let pool = pools.get(context);
   if (!pool) {
-    pool = Promise.all([fetchEngine(), context.audioWorklet.addModule(workletUrl)]).then(([bytes]) => ({
-      bytes,
-      banks: [],
-    }));
+    pool = Promise.all([fetchEngine(), context.audioWorklet.addModule(workletUrl)]).then(
+      ([bytes]) => ({ bytes, banks: [] }),
+      (error: unknown) => {
+        // Forgotten like the fetch, so a device made later tries again.
+        pools.delete(context);
+        throw error;
+      },
+    );
     pools.set(context, pool);
   }
   return pool;

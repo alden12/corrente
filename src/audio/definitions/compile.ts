@@ -9,7 +9,7 @@
  * its schema (schema.ts); the compiler adds what each section may read.
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
-import { DEFAULT_VOICES, SAMPLE_INPUTS, TABLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
+import { SAMPLE_INPUTS, TABLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
 
 /** A sample zone as the bank uses it (INST-36.6): every range filled in. */
 export interface PlanZone {
@@ -24,7 +24,16 @@ export interface PlanZone {
 import { costOf, overCap, type Cost, type CostedNode } from "./cost";
 import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
 import type { ParamSchema } from "../params/types";
-import { channelsOf, referenceTo, sourcesOf, underlying, type InputSource, type Source } from "./references";
+import {
+  channelsOf,
+  outputOf,
+  referenceTo,
+  sourcesOf,
+  underlying,
+  voicesOf,
+  type InputSource,
+  type Source,
+} from "./references";
 import { definitionSchemaFor, problemsIn } from "./schema";
 
 /**
@@ -181,11 +190,9 @@ export const compileDefinition = (input: unknown, options: CompileOptions = {}):
   // Sections, and what each may read: the one check that needs the graph worked out.
   const flatSources = Object.fromEntries(named.map((name) => [name, inputs[name].flat().map(underlying)]));
   const sectionOf = sectionsOf(nodes, flatSources);
-  const voices = definition.voices ?? (named.some((name) => sectionOf[name] === "voice") ? DEFAULT_VOICES : 0);
+  const voices = voicesOf(definition);
   const voiceOut = channelsOf(definition.voice).map((reference) => referenceTo(reference, nodes) as Source);
-  const trackOut = channelsOf(definition.output ?? (voices > 0 ? ["voices.left", "voices.right"] : undefined)).map(
-    (reference) => referenceTo(reference, nodes) as Source,
-  );
+  const trackOut = outputOf(definition).map((reference) => referenceTo(reference, nodes) as Source);
   const problems = [
     ...named.flatMap((name) => sectionProblems(name, sectionOf[name], flatSources[name], sectionOf)),
     ...sectionProblems("output", "post", trackOut, sectionOf).map((problem) =>

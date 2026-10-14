@@ -22,7 +22,6 @@
  */
 import type { ParamSchema, ParamSpec } from "../params/types";
 import {
-  DEFAULT_VOICES,
   HOST_SIGNALS,
   VOICE_SIGNALS,
   VOICE_SUM,
@@ -31,7 +30,8 @@ import {
   type InputValue,
   type ParamBinding,
 } from "./format";
-import { channelsOf, isScaled, isSynced } from "./references";
+import { blockNamed } from "./catalogue";
+import { isScaled, isSynced, outputOf, voicesOf } from "./references";
 
 /** One device in a chain: its key (unique in the chain, e.g. the effect's id), definition and params. */
 export interface ChainLink {
@@ -56,6 +56,8 @@ export interface ComposedChain {
 export const BYPASS = "_bypass";
 /** How long bypassing takes: a crossfade much shorter than this between two different sounds thumps. */
 const BYPASS_SMOOTH_MS = 20;
+/** The fewest samples a delay holds: its `size`'s minimum. */
+const MIN_DELAY_SIZE = blockNamed("delay")!.controls.find((port) => port.name === "size")!.min;
 /** The param an effect's schema carries for its wet/dry, if it has one. */
 const MIX = "mix";
 
@@ -81,11 +83,10 @@ const renameVoice = (voice: string | [string, string], prefix: string): string |
   return typeof voice === "string" ? rename(voice) : [rename(voice[0]), rename(voice[1])];
 };
 
-/** What a definition plays: its output, or the voices summed if it has voices and doesn't say. */
-const outputOf = (definition: DeviceDefinition): string[] => {
-  const voiced = Object.values(definition.nodes).some((node) => node.voice);
-  const channels = channelsOf(definition.output ?? (voiced ? ["voices.left", "voices.right"] : undefined));
-  return channels.length === 1 ? [channels[0], channels[0]] : channels;
+/** What a definition plays, in both channels (a mono output in each). */
+const stereoOutputOf = (definition: DeviceDefinition): [string, string] => {
+  const channels = outputOf(definition);
+  return channels.length === 1 ? [channels[0], channels[0]] : (channels as [string, string]);
 };
 
 /** Compose a chain's links, in order, into one definition and its params. */
@@ -98,6 +99,8 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
   let first = true;
   links.forEach((link, index) => {
     const prefix = linkPrefix(link.key);
+    // The nodes the chain adds for a link: a second _, which no node's own name (a letter first) begins with.
+    const added = (name: string) => `${prefix}_${name}`;
     const namespaced = (param: string) => chainParam(link.key, param);
     const before = previous;
     /** A reference in this link's terms, as the chain names it. */
@@ -140,7 +143,7 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
       params[namespaced(spec.id)] = { link: index, param: spec.id };
     });
 
-    const played = outputOf(link.definition).map(rename) as [string, string];
+    const played = stereoOutputOf(link.definition).map(rename) as [string, string];
     if (!link.effect) {
       previous = played;
     } else {
@@ -157,7 +160,7 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
         smoothMs: BYPASS_SMOOTH_MS,
       });
       params[namespaced(BYPASS)] = { link: index, param: BYPASS };
-      nodes[`${prefix}wet`] = {
+      nodes[added("wet")] = {
         block: "mul",
         inputs: {
           a: hasMix ? { param: namespaced(MIX) } : 1,
@@ -166,24 +169,24 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
       };
       const late = link.definition.latency ?? 0;
       previous = (["left", "right"] as const).map((side, channel) => {
-        nodes[`${prefix}wet_${side}`] = { block: "mul", inputs: { a: played[channel], b: `${prefix}wet` } };
+        nodes[added(`wet_${side}`)] = { block: "mul", inputs: { a: played[channel], b: added("wet") } };
         if (late > 0)
-          nodes[`${prefix}late_${side}`] = {
+          nodes[added(`late_${side}`)] = {
             block: "delay",
-            inputs: { signal: before[channel], length: late, size: late },
+            inputs: { signal: before[channel], length: late, size: Math.max(late, MIN_DELAY_SIZE) },
           };
-        nodes[`${prefix}dry_${side}`] = {
+        nodes[added(`dry_${side}`)] = {
           block: "mul",
           inputs: {
-            a: late > 0 ? `${prefix}late_${side}` : before[channel],
-            b: { from: `${prefix}wet`, scale: -1, offset: 1 },
+            a: late > 0 ? added(`late_${side}`) : before[channel],
+            b: { from: added("wet"), scale: -1, offset: 1 },
           },
         };
-        nodes[`${prefix}out_${side}`] = {
+        nodes[added(`out_${side}`)] = {
           block: "add",
-          inputs: { a: `${prefix}wet_${side}`, b: `${prefix}dry_${side}` },
+          inputs: { a: added(`wet_${side}`), b: added(`dry_${side}`) },
         };
-        return `${prefix}out_${side}`;
+        return added(`out_${side}`);
       }) as [string, string];
     }
     first = false;
@@ -197,7 +200,8 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
     output: previous,
     ...(instrument
       ? {
-          voices: instrument.definition.voices ?? DEFAULT_VOICES,
+          // Its own count, or as many as its voice nodes give it (none if it has none).
+          voices: voicesOf(instrument.definition),
           ...(instrument.definition.voice !== undefined
             ? { voice: renameVoice(instrument.definition.voice, linkPrefix(instrumentKey)) }
             : {}),

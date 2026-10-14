@@ -238,7 +238,9 @@ pub fn parse(words: &[i32]) -> Result<Plan, i32> {
     let param_count = reader.count()?;
     let voice_count = reader.count()?;
     let latency = reader.count()?;
-    if voice_count > MAX_VOICES {
+    // Each param is read by an input of at least one word, so there can't be more than there are
+    // words: a bigger count is a bad plan, and turned away before a track makes room for it.
+    if voice_count > MAX_VOICES || param_count > words.len() {
         return Err(REJECTED);
     }
     // The pre section reads no other section, so it is given an empty list as `pre`.

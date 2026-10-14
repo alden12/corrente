@@ -111,6 +111,27 @@ describe("building the catalogue", () => {
     ]);
   });
 
+  it("adds the licences of the libraries a block loads, and refuses one not read", () => {
+    const loading = (name: string, libraries: string[]) =>
+      block(
+        name,
+        { description: "x", input_ports: "a 0 1", output_ports: "b 0 1" },
+        {
+          library_list: libraries.map((library) => `/usr/local/share/faust/${library}`),
+        },
+      );
+    // basics.lib's functions carry no licence of their own, so its sections' come with it.
+    const [hold] = buildCatalogue([loading("hold", ["stdfaust.lib", "basics.lib"])]).blocks;
+    expect(hold.licences).toEqual(["LicenseRef-LGPL-2.1-or-later-with-Faust-exception", "LicenseRef-STK-4.3"]);
+    expect(problemsOf([loading("gizmo", ["gizmos.lib"])])).toEqual([
+      "gizmo: it loads gizmos.lib, whose licences haven't been read (catalogue.ts: LIBRARY_LICENCES)",
+    ]);
+    // reverbs.lib has contributions under their own licences: what a block uses is read for it.
+    expect(problemsOf([loading("hall", ["reverbs.lib"])])).toEqual([
+      "hall: it loads reverbs.lib, whose licence depends on what a block uses from it: read that and add it (catalogue.ts: LIBRARY_LICENCES)",
+    ]);
+  });
+
   it("reports every block's missing or wrong declarations together", () => {
     const bare = block("bare", {});
     const miscounted = block("miscounted", { description: "x", input_ports: "a 0 1, b 0 1", output_ports: "c 1 0" });

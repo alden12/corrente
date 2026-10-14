@@ -99,6 +99,12 @@ export class EngineBank {
   private readonly sampleSlots = new Map<string, { slot: number; users: number }>();
   private outputs: Float32Array[][] = [];
   private inputs: Float32Array[][] = [];
+  /**
+   * Param names by number, for queued param events: they name the param, not its place in a plan,
+   * since the plan can be reloaded before they play.
+   */
+  private readonly paramNames: string[] = [];
+  private readonly paramIds = new Map<string, number>();
   /** What each event kind does, by kind; bound once. */
   private readonly play: ((event: TimedEvent, offset: number) => void)[];
 
@@ -117,7 +123,7 @@ export class EngineBank {
     this.play = [];
     this.play[EVENT.noteOn] = (event, offset) => this.playNoteOn(event, offset);
     this.play[EVENT.noteOff] = (event, offset) => this.playNoteOff(event, offset);
-    this.play[EVENT.param] = (event) => this.engine.eng_set_param(event.track, event.target, event.value);
+    this.play[EVENT.param] = (event) => this.playParam(event);
     this.play[EVENT.allOff] = (event, offset) => this.playAllOff(event, offset);
     this.view();
   }
@@ -277,11 +283,24 @@ export class EngineBank {
    * next. Sample params go through `setSample`.
    */
   setParam(track: number, param: string, value: number, time: number): void {
-    const state = this.trackAt(track);
-    state.values[param] = value;
-    state.plan?.params.forEach((source, index) => {
+    this.trackAt(track).values[param] = value;
+    this.queue.add(EVENT.param, track, this.paramId(param), value, time);
+  }
+
+  /** A param name's number, for the queue. */
+  private paramId(param: string): number {
+    const known = this.paramIds.get(param);
+    if (known !== undefined) return known;
+    this.paramIds.set(param, this.paramNames.length);
+    return this.paramNames.push(param) - 1;
+  }
+
+  /** A queued param move: every source of the plan loaded now that reads it. */
+  private playParam(event: TimedEvent): void {
+    const param = this.paramNames[event.target];
+    this.trackAt(event.track).plan?.params.forEach((source, index) => {
       if (source.param === param && !source.sample)
-        this.queue.add(EVENT.param, track, index, resolveNumber(value, source), time);
+        this.engine.eng_set_param(event.track, index, resolveNumber(event.value, source));
     });
   }
 

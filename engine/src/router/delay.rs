@@ -37,6 +37,12 @@ impl DelayLine {
         self.ring.fill(0.0);
     }
 
+    /// The longest delay it plays: a longer one is cut to this.
+    // TS: get longest() { return this.longest }
+    pub(super) fn longest(&self) -> f32 {
+        self.longest
+    }
+
     /// How many samples its ring holds: two lines can only swap state if they match.
     // TS: get length() { return this.ring.length }
     pub(super) fn length(&self) -> usize {

@@ -366,7 +366,10 @@
           "author": "Romain Michon"
         }
       ],
-      "licences": []
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
     },
     {
       "name": "keyedcompressor",
@@ -713,7 +716,8 @@
         }
       ],
       "licences": [
-        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
       ]
     },
     {
@@ -759,7 +763,10 @@
       "controls": [],
       "meters": [],
       "credits": [],
-      "licences": []
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
     },
     {
       "name": "onepole",
@@ -1176,7 +1183,9 @@
       "controls": [],
       "meters": [],
       "credits": [],
-      "licences": []
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+      ]
     },
     {
       "name": "shaper",
@@ -1247,7 +1256,8 @@
         }
       ],
       "licences": [
-        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
       ]
     },
     {

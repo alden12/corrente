@@ -434,6 +434,29 @@ describe("EngineBank", () => {
     });
   });
 
+  it("plays a queued param move in the plan loaded when it lands, wherever that plan reads it", () => {
+    // The same, with another param first, so level is the plan's second source rather than its first.
+    const reordered = compileDefinition(
+      {
+        ...gated,
+        nodes: {
+          other: { block: "mul", voice: true, inputs: { a: "voice.gate", b: { param: "other" } } },
+          level: { block: "mul", inputs: { a: "voices.left", b: { param: "level", scale: 2 } } },
+        },
+        voice: "other",
+      },
+      { params: ["other", "level"].map((id) => ({ id, label: id, kind: "number", min: 0, max: 1, default: 1 })) },
+    );
+    expect(reordered.params.map((source) => source.param)).toEqual(["other", "level"]);
+    const bank = bankOf();
+    bank.noteOn(0, 60, 1, 0);
+    bank.setParam(0, "level", 0.25, 2 * BLOCK * SAMPLE);
+    bank.load(0, reordered, { other: 1 });
+    const sound = render(bank, 4);
+    // Level moved, not other: 1 × 0.25 × 2 once it's there.
+    expect(sound[4 * BLOCK - 1]).toBeCloseTo(0.5, 6);
+  });
+
   it("starts a new plan where the knobs are", () => {
     const bank = bankOf();
     bank.setParam(0, "level", 0.1, 0);

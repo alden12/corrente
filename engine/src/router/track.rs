@@ -292,14 +292,18 @@ impl Track {
         }
     }
 
-    /// Replace the track's graph. The one it replaces fades out over the next block.
+    /// Replace the track's graph. The one it replaces fades out over the next block. A second load
+    /// before that block replaces a graph that never played, so the one still sounding (outgoing)
+    /// stays the one that fades.
     // `plan: Plan` (no `&`) takes ownership: the caller hands the plan over, and the new graph keeps
     // it. `.take()` moves the graph out of `self.graph`, leaving None; assigning over `outgoing` frees
     // the graph that was fading before, here rather than while rendering.
-    // TS: this.outgoing = this.graph; this.fading = this.graph !== undefined; this.graph = new Graph(plan, sampleRate);
+    // TS: if (!this.fading) { this.outgoing = this.graph; this.fading = this.graph !== undefined; } this.graph = new Graph(plan, sampleRate);
     pub(super) fn load(&mut self, plan: Plan, sample_rate: i32) {
-        self.outgoing = self.graph.take();
-        self.fading = self.outgoing.is_some();
+        if !self.fading {
+            self.outgoing = self.graph.take();
+            self.fading = self.outgoing.is_some();
+        }
         self.graph = Some(Graph::new(plan, sample_rate));
     }
 

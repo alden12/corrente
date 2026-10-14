@@ -7,6 +7,7 @@ import { carryWords } from "../src/audio/bank/carry";
 import { chainEdit, chainPlan, leadingRun, ownerOf, piecesOf } from "../src/audio/bank/chainPlan";
 import { TEST_EFFECTS, TEST_INSTRUMENTS, registerTestInstruments } from "../src/audio/bank/testInstruments";
 import { instrumentChain } from "../src/audio/engine/trackInstrument";
+import { reloadOptions } from "../src/audio/bank/reloadPlan";
 import { ParamStore } from "../src/audio/params/store";
 import { BYPASS, chainParam, composeChain, type ChainLink } from "../src/audio/definitions/chain";
 import { compileDefinition } from "../src/audio/definitions/compile";
@@ -53,7 +54,7 @@ describe("composeChain", () => {
       link("engine-echo", "b"),
     ]);
     expect(Object.keys(composed.definition.nodes)).toEqual(
-      expect.arrayContaining(["xinstrument_string", "xa_left", "xb_left", "xa_out_left", "xb_out_right"]),
+      expect.arrayContaining(["xinstrument_string", "xa_left", "xb_left", "xa__out_left", "xb__out_right"]),
     );
     expect(composed.schema.map((spec) => spec.id)).toEqual(
       expect.arrayContaining([chainParam("a", "time"), chainParam("b", "time"), chainParam("a", BYPASS)]),
@@ -88,8 +89,43 @@ describe("composeChain", () => {
     // The resonator's delays read the track's input; the echo's read the resonator's mixed output.
     const reads = (name: string) => JSON.stringify(composed.definition.nodes[name].inputs);
     expect(reads("xring_left")).toContain("input.left");
-    expect(reads("xecho_left")).toContain("xring_out_left");
+    expect(reads("xecho_left")).toContain("xring__out_left");
     expect(() => compileDefinition(composed.definition, { params: composed.schema })).not.toThrow();
+  });
+
+  it("keeps the nodes it adds apart from an effect's own, whatever they're called", () => {
+    // An effect with nodes named like the chain's crossfade, 1 sample late.
+    const clash: ChainLink = {
+      key: "fx",
+      definition: {
+        format: 1,
+        latency: 1,
+        nodes: {
+          wet: { block: "delay", inputs: { signal: "input.left", length: 1, size: 2 } },
+          out_left: { block: "mul", inputs: { a: "wet", b: 1 } },
+        },
+        output: "out_left",
+      },
+      schema: [],
+      effect: true,
+    };
+    const composed = composeChain([clash]);
+    expect(composed.definition.nodes.xfx_wet.block).toBe("delay");
+    expect(composed.definition.nodes.xfx_out_left.block).toBe("mul");
+    // Its dry path is a sample late too, in a delay holding the fewest it can.
+    expect(composed.definition.nodes.xfx__late_left.inputs?.size).toBe(2);
+    expect(() => compileDefinition(composed.definition, { params: composed.schema })).not.toThrow();
+  });
+
+  it("gives an instrument with no voice nodes no voices", () => {
+    const drone: ChainLink = {
+      key: "instrument",
+      definition: { format: 1, nodes: { tone: { block: "mul", inputs: { a: 0.1, b: 1 } } }, output: "tone" },
+      schema: [],
+      effect: false,
+    };
+    const composed = composeChain([drone, link("engine-echo", "echo")]);
+    expect(compileDefinition(composed.definition, { params: composed.schema }).voices).toBe(0);
   });
 
   it("carries an instrument's zones and their sample params", () => {
@@ -278,5 +314,49 @@ describe("keeping state across a reload", () => {
     ).toBeGreaterThan(0.01);
     const crossfaded = played("crossfade");
     expect(Math.max(...crossfaded.map((sample, index) => Math.abs(sample - unchanged[index])))).toBeGreaterThan(0.01);
+  });
+});
+
+describe("reloading a chain", () => {
+  registerTestInstruments();
+  const member = (key: string, type: string) => ({ key, type, store: new ParamStore(device(type).schema) });
+  const effectsPlan = (keys: [string, string][]) =>
+    chainPlan(
+      keys.map(([key, type]) => member(key, type)),
+      false,
+    )!;
+  const echoRing = effectsPlan([
+    ["a", "engine-echo"],
+    ["b", "engine-resonator"],
+  ]);
+  const ringEcho = effectsPlan([
+    ["b", "engine-resonator"],
+    ["a", "engine-echo"],
+  ]);
+  const bypassOf = (key: string) => chainParam(key, BYPASS);
+
+  it("fades effects that swap places back in, with nothing to carry", () => {
+    const edit = chainEdit(echoRing.keys, ringEcho.keys);
+    const options = reloadOptions({ plan: echoRing.plan, chain: echoRing }, ringEcho.plan, ringEcho, edit);
+    expect(options.carry).toBeUndefined();
+    expect(options.from).toEqual({ [bypassOf("a")]: 1, [bypassOf("b")]: 1 });
+  });
+
+  it("ramps an effect back in when its removal is undone before the plan without it loads", () => {
+    // Removing b sent its bypass to 1; undone, the plan loaded is the one it was already playing.
+    const edit = chainEdit(echoRing.keys, echoRing.keys);
+    const options = reloadOptions(
+      { plan: echoRing.plan, chain: echoRing },
+      echoRing.plan,
+      echoRing,
+      edit,
+      new Set([bypassOf("b")]),
+    );
+    expect(options.carry).toBeDefined();
+    expect(options.from).toEqual({ [bypassOf("b")]: 1 });
+  });
+
+  it("carries nothing, and fades nothing, into a first plan", () => {
+    expect(reloadOptions(undefined, echoRing.plan, echoRing, undefined)).toEqual({});
   });
 });

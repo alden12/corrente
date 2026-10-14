@@ -23,6 +23,8 @@ export interface FaustJson {
   outputs: number;
   meta: Record<string, string>[];
   ui: FaustUiItem[];
+  /** Every library the block loads, as paths; left out when it loads none. */
+  library_list?: string[];
 }
 
 interface FaustUiItem {
@@ -77,16 +79,67 @@ export interface Catalogue {
   blocks: BlockSpec[];
 }
 
+const LGPL = "LicenseRef-LGPL-2.1-or-later-with-Faust-exception";
+const STK = "LicenseRef-STK-4.3";
+
 /**
  * The licences a block's library code may carry. Anything else fails the build, so adding one is a
  * decision rather than an accident: Faust's reverbs.lib, for one, has a GPL-3.0-only reverb, which
  * the engine (AGPL, sole copyright) shouldn't take on unnoticed.
  */
 export const ALLOWED_LICENCES: Record<string, string> = {
-  "LicenseRef-LGPL-2.1-or-later-with-Faust-exception":
-    "LGPL 2.1 or later, with the Faust exception: code generated from it may carry any licence",
-  "LicenseRef-STK-4.3": "STK 4.3 (MIT-style): free to use, with this credit",
+  [LGPL]: "LGPL 2.1 or later, with the Faust exception: code generated from it may carry any licence",
+  [STK]: "STK 4.3 (MIT-style): free to use, with this credit",
   MIT: "MIT",
+};
+
+/**
+ * The licences of the code in each Faust library a block loads, as read in the libraries of the
+ * pinned toolchain. Faust only notes a licence where a function declares one, so code that doesn't
+ * (`re.zita_rev1_stereo`, `an.amp_follower`) carries its library's, which only reading it tells:
+ * - **A list:** every licence the library's sections are under (GRAME's LGPL, Julius Smith's STK),
+ *   for a library whose every function is under one of them or declares its own.
+ * - **By block:** for a library with a "further contributions" section (each contribution under its
+ *   own licence, not always declared) or a licence per function, the licence of what that block uses.
+ * A block loading a library not here, or one listed by block without it, fails the build until
+ * someone reads the code it uses and adds it.
+ */
+export const LIBRARY_LICENCES: Record<string, readonly string[] | Record<string, string>> = {
+  "basics.lib": [LGPL, STK],
+  "compressors.lib": [LGPL],
+  "delays.lib": [LGPL],
+  "envelopes.lib": [LGPL],
+  "maths.lib": [LGPL],
+  "noises.lib": [LGPL, STK],
+  "oscillators.lib": [LGPL, STK],
+  "platform.lib": [LGPL],
+  "routes.lib": [LGPL],
+  "signals.lib": [LGPL, STK],
+  "stdfaust.lib": [LGPL],
+  // amp_follower and amp_follower_ar, in the jos section.
+  "analyzers.lib": { compressor: STK, keyedcompressor: STK, meter: STK },
+  // Each function declares its own: svf, lowpass, tf1 and allpass_comb are all STK.
+  "filters.lib": { lowpass: STK, onepole: STK, reverb: STK, svf: STK },
+  // zita_rev1_stereo, in the jos section.
+  "reverbs.lib": { reverb: STK },
+  // moogLadder, which declares STK.
+  "vaeffects.lib": { ladder: STK },
+};
+
+/** The licences of the library code a block loads, or the problems with a library not reviewed. */
+const libraryLicences = (json: FaustJson): string[] | { problems: string[] } => {
+  const libraries = (json.library_list ?? []).map((path) => path.split("/").pop()!);
+  const found = libraries.map((library) => {
+    const licences = LIBRARY_LICENCES[library];
+    if (!licences) return `it loads ${library}, whose licences haven't been read (catalogue.ts: LIBRARY_LICENCES)`;
+    if (Array.isArray(licences)) return licences;
+    const own = (licences as Record<string, string>)[json.name];
+    return own
+      ? [own]
+      : `it loads ${library}, whose licence depends on what a block uses from it: read that and add it (catalogue.ts: LIBRARY_LICENCES)`;
+  });
+  const problems = found.filter((each): each is string => typeof each === "string");
+  return problems.length > 0 ? { problems } : found.flatMap((each) => each as string[]);
 };
 
 /**
@@ -218,7 +271,13 @@ const blockOf = (json: FaustJson, kind: number): BlockSpec | string[] => {
   const inputs = parsePorts(meta.input_ports ?? "");
   const outputs = parsePorts(meta.output_ports ?? "");
   const credits = creditsOf(meta);
-  const licences = [...new Set(credits.flatMap((credit) => (credit.licence ? [credit.licence] : [])))].sort();
+  const libraries = libraryLicences(json);
+  const licences = [
+    ...new Set([
+      ...credits.flatMap((credit) => (credit.licence ? [credit.licence] : [])),
+      ...(Array.isArray(libraries) ? libraries : []),
+    ]),
+  ].sort();
   const items = uiItems(json.ui);
   const problems = [
     !meta.description && "it declares no description",
@@ -234,6 +293,7 @@ const blockOf = (json: FaustJson, kind: number): BlockSpec | string[] => {
       Array.isArray(outputs) &&
       outputs.length !== json.outputs &&
       `it declares ${outputs.length} output ports but has ${json.outputs} outputs`,
+    ...(Array.isArray(libraries) ? [] : libraries.problems),
     ...licences
       .filter((licence) => !(licence in ALLOWED_LICENCES))
       .map((licence) => `its library code is under ${licence}, which isn't allowed (catalogue.ts: ALLOWED_LICENCES)`),
