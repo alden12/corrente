@@ -20,8 +20,10 @@
  *   block, so it fades in from the dry signal it passes through.
  * - **A removed effect is bypassed first,** and the plan without it loads a little later, once the
  *   bypass has ramped (live only; an offline render has no edits).
- * - **Effects that change order** do both: bypassed before, faded back in after. Bypassed, the order
- *   makes no difference, so nothing jumps, and held notes play on rather than start again.
+ * - **Effects that change order** are taken out and put back: bypassed before, started fresh in the
+ *   new plan and faded in after, while the instrument and held notes play on. Carried, their state
+ *   meets a different input all at once: an echo's buffer of resonator output, put back in front of
+ *   the resonator, is resonated twice and comes out ten times as loud.
  */
 import type { CompiledPlan } from "../definitions/compile";
 import { carryWords } from "./carry";
@@ -195,8 +197,17 @@ export class EngineDevice {
     };
     const before = this.sent;
     const keys = [...(before?.chain?.keys ?? []), ...(chain?.keys ?? [])];
+    // Moved effects start fresh: an echo carried in front of a resonator holds the resonator's output,
+    // and feeding it through again builds up tenfold. The instrument, among `moved` on any reorder,
+    // keeps its state.
+    const fresh = new Set((edit?.moved ?? []).filter((key) => chain?.bypass.has(key)));
     const carry =
-      edit && before ? carryWords(before.plan, plan, (name) => edit.kept.has(ownerOf(keys, name) ?? "")) : undefined;
+      edit && before
+        ? carryWords(before.plan, plan, (name) => {
+            const owner = ownerOf(keys, name) ?? "";
+            return edit.kept.has(owner) && !fresh.has(owner);
+          })
+        : undefined;
     // Added and moved effects start bypassed when anything carries, then ramp to their bypass as set.
     const from = carry
       ? Object.fromEntries(

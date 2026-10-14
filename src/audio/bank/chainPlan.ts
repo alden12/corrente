@@ -68,8 +68,8 @@ export const chainPlan = (members: ChainMember[], instrument: boolean): ChainPla
 /**
  * A change of a chain's devices, keeping the state of those in both (part 3): which those are, and
  * which were added and removed. If the kept ones changed order, they are all `moved`: their inputs
- * change at once, so they fade out around the reload and back in (EngineDevice), and with them
- * bypassed the order makes no difference to the sound. Undefined if nothing is kept.
+ * change at once, so the effects among them fade out around the reload, start fresh and fade back in
+ * (EngineDevice). Undefined if nothing is kept.
  */
 export interface ChainEdit {
   kept: Set<string>;
