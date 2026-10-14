@@ -113,7 +113,7 @@ export const NATIVE_BLOCKS: BlockSpec[] = [
     name: "sampler",
     kind: 1001,
     description:
-      "Plays a sample the engine holds, from `start` each time `gate` rises, `frequency` over the `root` note's times its own speed (so pitch and length move together), interpolated between frames. Stops at `end`, or with `loop` on goes round from `start` to `end`. `start` and `end` are fractions of the sample. Stereo out; a mono sample plays in both.",
+      "Plays a sample the engine holds, from `start` each time `gate` rises, `frequency` over the `root` note's times its own speed (so pitch and length move together), interpolated between frames. Goes silent at `end`, waiting there (moving `end` out again plays on), or with `loop` on goes round from `start` to `end`. `start` and `end` are fractions of the sample. Stereo out; a mono sample plays in both.",
     inputs: [
       { name: "frequency", min: 0, max: 24000, unit: "Hz" },
       { name: "gate", min: 0, max: 1 },

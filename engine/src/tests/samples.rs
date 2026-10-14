@@ -143,3 +143,28 @@ fn a_sampler_needs_its_inputs_and_every_control() {
         .out(buffer(0));
     assert!(missing_gate.refused());
 }
+
+#[test]
+fn dragging_the_end_in_and_out_again_plays_on_from_where_it_was() {
+    // `end` from param 0, the rest fixed: whole sample, no loop, then the same with a loop.
+    let with_end = |looping: f32| {
+        let controls = vec![constant(0.0), constant(69.0), constant(0.0), param(0), constant(looping)];
+        PlanBuilder::new()
+            .params(1)
+            .node(KIND_SAMPLER, vec![voice(SIGNAL_FREQ), voice(SIGNAL_GATE)], controls)
+            .step(NODE, vec![0])
+            .voice_out(vec![port(0, 0), port(0, 1)])
+    };
+    for looping in [0.0, 1.0] {
+        let mut engine = with_end(looping).loaded();
+        engine.init_param(0, 0, 0.5);
+        ramp(&mut engine, 1000, RATE as f32);
+        engine.note_on(0, 0, 0, 440.0, 1.0, 69.0);
+        render(&mut engine, 1);
+        engine.init_param(0, 0, 0.0);
+        assert!(render(&mut engine, 1).iter().all(|&sample| sample == 0.0), "silent while the end is at 0");
+        engine.init_param(0, 0, 0.5);
+        let out = render(&mut engine, 1);
+        assert!(out.iter().enumerate().all(|(index, &sample)| near(sample, (128 + index) as f32 * 0.001)));
+    }
+}

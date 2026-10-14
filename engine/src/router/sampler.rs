@@ -7,8 +7,10 @@
 //!   faster than the sample's own speed (corrected for the two sample rates), so pitch and length
 //!   move together, as in any classic sampler. The read position is kept apart from that rate, so a
 //!   stretch mode (INST-7) can change one without the other later.
-//! - **It stops at `end`**, or with `loop` on, jumps back to `start`. Released notes go on playing:
-//!   one-shot or held is the definition's envelope, not the player's.
+//! - **At `end` it goes silent**, or with `loop` on, jumps back to `start`. It waits where it got to,
+//!   so moving `end` back out while the note sounds plays on from there (and a loop dragged shut
+//!   comes back when it opens). Released notes go on playing: one-shot or held is the definition's
+//!   envelope, not the player's; a released voice frees once silent.
 //! - **Between samples it interpolates** over four neighbours (a cubic through them), so a sample
 //!   played far from its root stays clean.
 //!
@@ -133,6 +135,7 @@ impl SamplerState {
         let frames = sample.frames as f64;
         let start = (self.controls[CONTROL_START].clamp(0.0, 1.0) as f64) * frames;
         let end = (self.controls[CONTROL_END].clamp(0.0, 1.0) as f64) * frames;
+        // A loop dragged shut (end at or before start) has nothing to go round.
         let looping = self.controls[CONTROL_LOOP] >= 0.5 && end > start;
         let mono = sample.channels == 1;
         // Frames of the sample per output sample at the root note: more if it was recorded faster.
@@ -142,19 +145,22 @@ impl SamplerState {
         frequencies.iter().zip(gates).zip(left.iter_mut().zip(right.iter_mut())).for_each(|((&frequency, &gate), (left, right))| {
             if gate > 0.0 && self.gate <= 0.0 {
                 self.position = start;
-                self.playing = end > start;
+                self.playing = true;
             }
             self.gate = gate;
-            if self.playing && self.position >= end {
-                // `%` on floats is the remainder, as in JS: a big step still lands inside the loop.
-                if looping { self.position = start + (self.position - start) % (end - start) } else { self.playing = false }
+            // `%` on floats is the remainder, as in JS: a big step still lands inside the loop.
+            if looping && self.position >= end {
+                self.position = start + (self.position - start) % (end - start);
             }
-            // TS: [left, right] = !playing ? [0, 0] : mono ? [read(0), read(0)] : [read(0), read(1)]
-            *left = if self.playing { sample.read(0, self.position) } else { 0.0 };
-            *right = if !self.playing { 0.0 } else if mono { *left } else { sample.read(1, self.position) };
+            // Past the end it waits there, silent, so dragging the end back out plays on from it.
+            // TS: const sounding = this.playing && this.position < end
+            let sounding = self.playing && self.position < end;
+            // TS: [left, right] = !sounding ? [0, 0] : mono ? [read(0), read(0)] : [read(0), read(1)]
+            *left = if sounding { sample.read(0, self.position) } else { 0.0 };
+            *right = if !sounding { 0.0 } else if mono { *left } else { sample.read(1, self.position) };
             // Dividing by the root rather than multiplying by its inverse keeps a note an exact
             // number of octaves away an exact speed, so a sample ends exactly at its end.
-            if self.playing {
+            if sounding {
                 self.position += frequency.max(0.0) as f64 / self.root_frequency * rates;
             }
         });
