@@ -45,22 +45,26 @@ const pluck: TestInstrument = {
     format: 1,
     nodes: {
       exciter: { block: "noise", voice: true },
-      // Two periods, in seconds (near enough at 44.1 kHz too).
-      burstTime: { block: "mul", voice: true, inputs: { a: "period", b: 2 / 48000 } },
       burst: {
         block: "adsr",
         voice: true,
-        inputs: { gate: "voice.gate", attack: 0.001, decay: "burstTime", sustain: 0, release: 0.001 },
+        inputs: {
+          gate: "voice.gate",
+          attack: 0.001,
+          // Two periods, in seconds (near enough at 44.1 kHz too).
+          decay: { from: "period", scale: 2 / 48000 },
+          sustain: 0,
+          release: 0.001,
+        },
       },
       excite: { block: "mul", voice: true, inputs: { a: "exciter", b: "burst" } },
       period: { block: "period", voice: true, inputs: { frequency: "voice.frequency", offset: 0.5 } },
       string: { block: "delay", voice: true, inputs: { signal: ["excite", "feedback"], length: "period" } },
       // Brightness, plus six times the note: high notes stay bright.
-      keyed: { block: "mul", voice: true, inputs: { a: "voice.frequency", b: 6 } },
       damping: {
         block: "onepole",
         voice: true,
-        inputs: { signal: "string", cutoff: [{ param: "brightness" }, "keyed"] },
+        inputs: { signal: "string", cutoff: [{ param: "brightness" }, { from: "voice.frequency", scale: 6 }] },
       },
       ring: { block: "loopgain", voice: true, inputs: { period: "period", time: { param: "decay" } } },
       feedback: { block: "mul", voice: true, inputs: { a: "damping", b: "ring" } },
@@ -69,11 +73,15 @@ const pluck: TestInstrument = {
   },
 };
 
-/** A saw through a filter every voice shares one LFO on, into a reverb on the voices summed. */
+/**
+ * A saw, square or sine (a choice, through `select`) through a filter every voice shares one LFO on,
+ * into a reverb on the voices summed.
+ */
 const wobble: TestInstrument = {
   type: "engine-wobble",
   label: "Wobble (new engine)",
   schema: [
+    { id: "wave", label: "Wave", kind: "enum", options: ["Saw", "Square", "Sine"], default: "Saw" },
     {
       id: "cutoff",
       label: "Cutoff",
@@ -105,7 +113,15 @@ const wobble: TestInstrument = {
     nodes: {
       lfo: { block: "lfo", inputs: { rate: { param: "rate" } } },
       sweep: { block: "mul", inputs: { a: "lfo.sine", b: { param: "wobble" } } },
-      osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+      saw: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+      // A pulse at half width is a square, between -1 and 1.
+      square: { block: "pulse", voice: true, inputs: { frequency: "voice.frequency", width: 0.5 } },
+      sine: { block: "sine", voice: true, inputs: { frequency: "voice.frequency" } },
+      osc: {
+        block: "select",
+        voice: true,
+        inputs: { index: { param: "wave" }, a: "saw", b: "square", c: "sine", d: 0 },
+      },
       envelope: {
         block: "adsr",
         voice: true,
