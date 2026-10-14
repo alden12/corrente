@@ -37,6 +37,12 @@ impl DelayLine {
         self.ring.fill(0.0);
     }
 
+    /// How many samples its ring holds: two lines can only swap state if they match.
+    // TS: get length() { return this.ring.length }
+    pub(super) fn length(&self) -> usize {
+        self.ring.len()
+    }
+
     /// The input `delay` samples before position `write + offset`, interpolated linearly.
     // TS: `delay as usize` is Math.trunc(delay); the rest is the same arithmetic.
     fn tap(&self, offset: usize, delay: f32) -> f32 {

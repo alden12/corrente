@@ -13,6 +13,11 @@ export interface EngineExports {
   eng_init(sampleRate: number, tracks: number): number;
   /** 0, or -1 for a bad plan or track, -2 for a plan of the wrong length (the track is unchanged). */
   eng_load(track: number, plan: number, length: number): number;
+  /**
+   * Straight after eng_load, hands the replaced plan's state to the new one (bank/carry.ts words).
+   * How many nodes carried, or -1 if the words don't fit both plans (nothing changes).
+   */
+  eng_carry(track: number, words: number, length: number): number;
   eng_set_param(track: number, source: number, value: number): void;
   eng_init_param(track: number, source: number, value: number): void;
   /** `note` is the MIDI note number. */

@@ -64,6 +64,18 @@ impl Unit {
         }
     }
 
+    /// Whether `other` holds state this unit could take over (INST-36.7): the same node kind is
+    /// checked by the plan, so only a delay's ring length can differ.
+    // TS: return this.type !== "delay" || (other.type === "delay" && other.line.length === this.line.length)
+    // A `match` on a pair: each arm is one combination, `_` anything.
+    pub(super) fn fits(&self, other: &Unit) -> bool {
+        match (self, other) {
+            (Unit::Delay(line), Unit::Delay(other)) => line.length() == other.length(),
+            (Unit::Delay(_), _) => false,
+            _ => true,
+        }
+    }
+
     /// The value a block's meter `index` shows, or None if it has no such meter.
     // TS: return this.type === "faust" ? (this.meters[index] !== undefined ? this.block.getParam(this.meters[index]) : undefined) : undefined
     // `let ... else` again; then `?` on Options, returning None as soon as a lookup comes up empty.

@@ -136,6 +136,25 @@ pub extern "C" fn eng_load(track: i32, pointer: *const i32, length: i32) -> i32 
     }
 }
 
+/// Straight after eng_load, hand what the replaced plan's nodes hold to the new plan's (INST-36.7),
+/// from memory eng_malloc handed out: whether the voices carry, then for the pre and the post
+/// section a count and, for each new node, the old node it takes over (-1 for none). Returns how
+/// many nodes carried, or -1 if the words don't fit both plans (nothing changes).
+// TS:
+//   const words = wordsAt(pointer, length);  // as eng_load reads them
+//   const carried = words && track >= 0 ? withEngine((engine) => engine.carry(track, words)) : undefined;
+//   return carried ?? REJECTED;
+// `.map_or(default, f)` on an Option: f(value), or the default for None.
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32 {
+    let carried = ALLOCATIONS.with_borrow(|allocations| {
+        let allocation = allocations.iter().find(|allocation| allocation.as_ptr() == pointer)?;
+        let words = allocation.get(..index(length)?)?;
+        with_engine(|engine| engine.carry(index(track)?, words))
+    });
+    carried.map_or(plan::REJECTED, |count| count as i32)
+}
+
 /// Set a track param's value; it ramps there over the next block.
 // TS: if (track >= 0 && source >= 0) withEngine((engine) => engine.setParam(track, source, value));
 // `if let (Some(a), Some(b)) = (x, y)` runs the block only if both are present, naming them: a

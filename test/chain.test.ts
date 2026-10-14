@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { EngineBank } from "../src/audio/bank/bank";
 import { BLOCK } from "../src/audio/bank/exports";
-import { chainPlan, leadingRun, piecesOf } from "../src/audio/bank/chainPlan";
+import { carryWords } from "../src/audio/bank/carry";
+import { chainEdit, chainPlan, leadingRun, ownerOf, piecesOf } from "../src/audio/bank/chainPlan";
 import { TEST_EFFECTS, TEST_INSTRUMENTS, registerTestInstruments } from "../src/audio/bank/testInstruments";
 import { instrumentChain } from "../src/audio/engine/trackInstrument";
 import { ParamStore } from "../src/audio/params/store";
@@ -126,5 +127,103 @@ describe("chain pieces", () => {
     expect(instrumentChain("engine-pluck", store, chain)?.absorbed.map(({ id }) => id)).toEqual(["a"]);
     expect(instrumentChain("subtractive", store, chain)).toBeUndefined();
     expect(chainPlan([{ key: "x", type: "delay", store }], false)).toBeUndefined();
+  });
+});
+
+describe("keeping state across a reload", () => {
+  it("keeps the devices in both chains if they stay in order", () => {
+    expect(chainEdit(["instrument", "a"], ["instrument", "b", "a"])).toEqual({
+      kept: new Set(["instrument", "a"]),
+      added: ["b"],
+      removed: [],
+    });
+    expect(chainEdit(["instrument", "a", "b"], ["instrument", "b"])?.removed).toEqual(["a"]);
+    // Kept ones swapped round change their inputs at once, so that reload crossfades instead.
+    expect(chainEdit(["a", "b"], ["b", "a"])).toBeUndefined();
+    expect(chainEdit(["a"], ["b"])).toBeUndefined();
+  });
+
+  it("finds the device a node is from, when one key's prefix begins another's", () => {
+    expect(ownerOf(["a", "a_b"], "xa_b_left")).toBe("a_b");
+    expect(ownerOf(["a", "a_b"], "xa_left")).toBe("a");
+    expect(ownerOf(["a"], "xc_left")).toBeUndefined();
+  });
+
+  const compiled = (links: ChainLink[]) => {
+    const composed = composeChain(links);
+    return { composed, plan: compileDefinition(composed.definition, { params: composed.schema }) };
+  };
+  const pluckEcho = [link("engine-pluck", "instrument", false), link("engine-echo", "a")];
+  const withResonator = [...pluckEcho, link("engine-resonator", "b")];
+  const keepFrom = (keys: string[]) => (name: string) =>
+    keys.includes(
+      ownerOf(
+        withResonator.map((each) => each.key),
+        name,
+      )!,
+    );
+
+  it("carries the kept devices' nodes and the voices, and starts the added ones fresh", () => {
+    const before = compiled(pluckEcho).plan;
+    const after = compiled(withResonator).plan;
+    const words = carryWords(before, after, keepFrom(["instrument", "a"]))!;
+    expect(words[0]).toBe(1);
+    const post = Array.from(words.slice(3 + words[1]));
+    after.nodes.post.forEach((node, index) => {
+      const from = post[index];
+      if (node.name.startsWith("xb_")) expect(from).toBe(-1);
+      else expect(before.nodes.post[from]).toEqual(node);
+    });
+    // Nothing kept, nothing carried.
+    expect(carryWords(before, after, () => false)).toBeUndefined();
+  });
+
+  it("plays on through an effect added bypassed exactly as if nothing had changed", () => {
+    const before = compiled(pluckEcho);
+    const after = compiled(withResonator);
+    const values = (composed: ReturnType<typeof composeChain>) => ({
+      ...defaultsOf(composed.schema),
+      [chainParam("a", "time")]: 0.1,
+      [chainParam("b", BYPASS)]: 1,
+    });
+    /**
+     * A note held through a reload at block 20 (carrying, crossfading, or no reload), 40 blocks of it;
+     * `fadeIn` adds the resonator unbypassed, ramping in from bypassed.
+     */
+    const played = (reload: "carry" | "crossfade" | "none", fadeIn = false) => {
+      const bank = new EngineBank(wasm, RATE, 1);
+      bank.load(0, before.plan, values(before.composed));
+      bank.noteOn(0, 57, 1, 0);
+      return Array.from({ length: 40 }, (_, block) => {
+        if (block === 20 && reload !== "none")
+          bank.load(
+            0,
+            after.plan,
+            { ...values(after.composed), ...(fadeIn ? { [chainParam("b", BYPASS)]: 0 } : {}) },
+            reload === "carry"
+              ? {
+                  carry: carryWords(before.plan, after.plan, keepFrom(["instrument", "a"])),
+                  ...(fadeIn ? { from: { [chainParam("b", BYPASS)]: 1 } } : {}),
+                }
+              : {},
+          );
+        bank.process((block * BLOCK) / RATE);
+        return Array.from(bank.output(0, 0));
+      }).flat();
+    };
+    const unchanged = played("none");
+    const carried = played("carry");
+    expect(Math.max(...carried.map((sample, index) => Math.abs(sample - unchanged[index])))).toBeLessThan(1e-6);
+    // Without the carry the note starts again and the echo empties: not the same at all.
+    // Added unbypassed, the resonator ramps in over the block from bypassed: at its first sample it is
+    // a 128th of the way in, so barely there.
+    const fading = played("carry", true);
+    const at = 20 * BLOCK;
+    expect(Math.abs(fading[at] - unchanged[at])).toBeLessThan(1e-3);
+    expect(
+      Math.max(...fading.slice(at + BLOCK).map((sample, index) => Math.abs(sample - unchanged[at + BLOCK + index]))),
+    ).toBeGreaterThan(0.01);
+    const crossfaded = played("crossfade");
+    expect(Math.max(...crossfaded.map((sample, index) => Math.abs(sample - unchanged[index])))).toBeGreaterThan(0.01);
   });
 });

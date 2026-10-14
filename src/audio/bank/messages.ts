@@ -3,10 +3,11 @@
  * AudioContext seconds; a track is the bank's track slot, which is also the node's output index.
  */
 import type { CompiledPlan } from "../definitions/compile";
-import type { SampleAudio } from "./bank";
+import type { LoadOptions, SampleAudio } from "./bank";
 
 export type ToBank =
-  | { type: "load"; track: number; plan: CompiledPlan; values: Record<string, number> }
+  /** `options`: what carries on from the plan it replaces, and params that ramp in (EngineBank.load). */
+  | { type: "load"; track: number; plan: CompiledPlan; values: Record<string, number>; options?: LoadOptions }
   | { type: "unload"; track: number }
   | { type: "noteOn"; track: number; note: number; velocity: number; time: number }
   | { type: "noteOff"; track: number; note: number; time: number }

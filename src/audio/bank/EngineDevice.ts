@@ -12,8 +12,18 @@
  * worklet can't decode) and sent to the bank, which keeps it in a slot by name. One a wavetable plays
  * is sent as a table, band-limited (samples/tables.ts), under its own name. `ready` waits for
  * those too, so an offline render doesn't start before its samples are in.
+ *
+ * A chain's plan (INST-36.7) reloads keeping what it can: when devices are added to or removed from
+ * the chain and the rest stay in order, the kept devices' nodes carry on in the new plan (carry.ts),
+ * so tails ring on and held notes play on. With nothing crossfading, the change is made smooth here:
+ * - **An added effect starts bypassed** and its bypass ramps to where it should be over the first
+ *   block, so it fades in from the dry signal it passes through.
+ * - **A removed effect is bypassed first,** and the plan without it loads a little later, once the
+ *   bypass has ramped (live only; an offline render has no edits).
  */
 import type { CompiledPlan } from "../definitions/compile";
+import { carryWords } from "./carry";
+import { chainEdit, ownerOf, type ChainEdit, type ChainLayout } from "./chainPlan";
 import { engineValueOf } from "../definitions/values";
 import { buildBanks } from "../dsp/wavetable";
 import { loadSampleBuffer } from "../samples/builtinUrls";
@@ -49,6 +59,15 @@ export const storeParams = (plan: CompiledPlan, store: ParamStore): ParamSources
       .map((source) => [source.param, { store, id: source.param }]),
   );
 
+/** How long a removed effect's bypass gets to ramp before the plan without it loads: a few blocks. */
+const FADE_OUT_MS = 20;
+
+/** What was last sent to the bank, to work out what a reload keeps. */
+interface Sent {
+  plan: CompiledPlan;
+  chain?: ChainLayout;
+}
+
 export class EngineDevice {
   /** The slot's output, once it arrives: silent until then. */
   readonly output: GainNode;
@@ -67,13 +86,25 @@ export class EngineDevice {
   private readonly samples = new Map<string, { ref: string; done: Promise<void> }>();
   /** What to call when the bank says it has dealt with a param's sample, by param and ref. */
   private readonly sampled = new Map<string, () => void>();
+  /** Which devices the plan is made of, for a chain's. */
+  private chain: ChainLayout | undefined;
+  private sent: Sent | undefined;
+  /** A reload waiting for removed effects to fade out. */
+  private pending: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(context: BaseAudioContext, plan: CompiledPlan, sources: ParamSources, place: DevicePlace) {
+  constructor(
+    context: BaseAudioContext,
+    plan: CompiledPlan,
+    sources: ParamSources,
+    place: DevicePlace,
+    chain?: ChainLayout,
+  ) {
     this.context = context;
     this.input = place.input;
     this.output = new GainNode(context);
     this.plan = plan;
     this.sources = sources;
+    this.chain = chain;
     let loaded = () => {};
     const heard = new Promise<void>((resolve) => (loaded = resolve));
     const listener = (message: FromBank) => {
@@ -102,12 +133,29 @@ export class EngineDevice {
 
   /**
    * Play another plan on the same slot, its params from `sources`: it crossfades in over a block,
-   * and the notes held start again in it (INST-36.5).
+   * and the notes held start again in it (INST-36.5). A chain's plan, given its `chain`, keeps the
+   * state of the devices it keeps instead, if the edit allows (chainEdit).
    */
-  reload(plan: CompiledPlan, sources: ParamSources): void {
+  reload(plan: CompiledPlan, sources: ParamSources, chain?: ChainLayout): void {
     this.plan = plan;
     this.sources = sources;
-    if (this.slot) this.loadPlan();
+    this.chain = chain;
+    if (!this.slot) return;
+    clearTimeout(this.pending);
+    this.pending = undefined;
+    const before = this.sent?.chain;
+    const edit = before && chain ? chainEdit(before.keys, chain.keys) : undefined;
+    const fading = (edit?.removed ?? []).flatMap((key) => before?.bypass.get(key) ?? []);
+    // An offline context renders ahead without waiting, so there is no later to load at.
+    if (fading.length === 0 || "startRendering" in this.context) {
+      this.loadPlan(edit);
+      return;
+    }
+    fading.forEach((param) => this.send({ type: "param", param, value: 1, time: this.context.currentTime }));
+    this.pending = setTimeout(() => {
+      this.pending = undefined;
+      this.loadPlan(edit);
+    }, FADE_OUT_MS);
   }
 
   /** Set a plan param no store holds (a chain's bypass), now and for every later plan. */
@@ -117,9 +165,12 @@ export class EngineDevice {
     this.send({ type: "param", param, value, time: this.context.currentTime });
   }
 
-  /** Send the plan with every param's value, and follow the stores from now on. */
-  private loadPlan(): void {
-    const { plan, sources } = this;
+  /**
+   * Send the plan with every param's value, and follow the stores from now on. With an `edit`, the
+   * kept devices' nodes carry on from the plan sent before, and added effects fade in.
+   */
+  private loadPlan(edit?: ChainEdit): void {
+    const { plan, sources, chain } = this;
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     const named = (sample: boolean) => [
       ...new Set(
@@ -137,7 +188,23 @@ export class EngineDevice {
         named(false).map((param) => [param, valueOf(param, sources[param].store.get(sources[param].id))]),
       ),
     };
-    this.send({ type: "load", plan, values });
+    const before = this.sent;
+    const keys = [...(before?.chain?.keys ?? []), ...(chain?.keys ?? [])];
+    const carry =
+      edit && before ? carryWords(before.plan, plan, (name) => edit.kept.has(ownerOf(keys, name) ?? "")) : undefined;
+    // Added effects start bypassed when anything carries, then ramp to their bypass as set.
+    const from = carry
+      ? Object.fromEntries(
+          (edit?.added ?? []).flatMap((key) => chain?.bypass.get(key) ?? []).map((param) => [param, 1]),
+        )
+      : {};
+    this.send({ type: "load", plan, values, ...(carry ? { options: { carry, from } } : {}) });
+    // Removed effects' bypass values go with them.
+    (edit?.removed ?? []).forEach((key) => {
+      const param = before?.chain?.bypass.get(key);
+      if (param) this.fixed.delete(param);
+    });
+    this.sent = { plan, chain };
     // Bind each store's params, under the names the plan reads them by.
     const stores = new Set(Object.values(sources).map((source) => source.store));
     this.unsubscribe = [...stores].map((store) => {
@@ -167,6 +234,7 @@ export class EngineDevice {
 
   dispose(): void {
     this.disposed = true;
+    clearTimeout(this.pending);
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     this.unsubscribe = [];
     if (!this.slot) return;

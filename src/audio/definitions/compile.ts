@@ -81,6 +81,14 @@ export interface CompiledPlan {
   cost: Cost;
   /** Each section's steps by node name (sums show as `node.input+n`), for tests and describing. */
   steps: Record<Section, { mode: StepMode; nodes: string[] }[]>;
+  /** Each section's nodes in the engine's order, so a reload can say which carry on (bank/carry.ts). */
+  nodes: Record<Section, PlanNode[]>;
+}
+
+/** A node of a compiled plan: its name, and the block it runs. */
+export interface PlanNode {
+  name: string;
+  block: string;
 }
 
 /** Every problem with a definition, so they can all be fixed at once. */
@@ -382,6 +390,12 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       : {}),
     voices: resolved.voices,
     cost,
+    nodes: Object.fromEntries(
+      SECTIONS.map((section) => [
+        section,
+        planned[section].map((node) => ({ name: node.name, block: node.block.name })),
+      ]),
+    ) as CompiledPlan["nodes"],
     steps: Object.fromEntries(
       SECTIONS.map((section) => [
         section,

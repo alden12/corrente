@@ -21,9 +21,9 @@ class EngineBankProcessor extends AudioWorkletProcessor {
     this.loaded = new Uint8Array(tracks);
     // What each message does, by type.
     const handlers: { [Type in ToBank["type"]]: (message: Extract<ToBank, { type: Type }>) => void } = {
-      load: ({ track, plan, values }) => {
+      load: ({ track, plan, values, options }) => {
         try {
-          this.bank.load(track, plan, values);
+          this.bank.load(track, plan, values, options);
           this.loaded[track] = 1;
           this.port.postMessage({ type: "loaded", track } satisfies FromBank);
         } catch (error) {

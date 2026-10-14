@@ -7,12 +7,17 @@
 //! - **A stolen voice fades out** over CUT samples rather than stopping dead. Each graph has
 //!   SPARE_VOICES more slots than its plan asks for, so the new note starts in a free one on time
 //!   while the old one fades.
+//! - **Or a new plan carries on** (INST-36.7): straight after a load, JS can say which of the new
+//!   plan's nodes are the old plan's (`carry`), and those take over their state, so a delay's tail
+//!   rings on and held notes keep playing. There's no crossfade then, since the old graph has given
+//!   its state away: JS makes the change smooth itself (an effect added or removed is bypassed
+//!   around the load).
 
 use super::render::{Render, Unit};
 use super::sampler::Sample;
 use super::sources::{Context, Sources};
 use super::{BLOCK, NO_SIGNALS, NO_VOICE_SUM, SILENCE, SILENT_SLOT, SLOT, Slot};
-use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
+use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Node, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_VELOCITY, Section, VOICE_SIGNALS};
 
 /// One section's state, in a track or in one voice: a unit per node and a buffer per node output.
 struct SectionState {
@@ -283,6 +288,54 @@ impl Track {
         self.graph = Some(Graph::new(plan, sample_rate));
     }
 
+    /// Hand the outgoing graph's state to the one just loaded. `words` are whether the voices carry
+    /// (1 or 0), then for the pre and the post section a count and, for each of the new plan's nodes,
+    /// the old node it takes over or -1. The number of nodes carried, or None (nothing changed) if
+    /// there's no outgoing graph or the words don't fit both plans: a count that isn't the section's,
+    /// an old node used twice, or a pair of nodes that aren't the same kind. Voices carry only
+    /// between voice sections of the same nodes, since a voice moves over whole.
+    // TS:
+    //   const [voices, ...rest] = words; const [pre, afterPre] = sectionMap(rest); const [post, end] = sectionMap(afterPre);
+    //   if (!this.graph || !this.outgoing || end.length || !fits(...)) return undefined;
+    //   let carried = takeOver(pre section) + takeOver(post section);
+    //   if (voices === 1) { swap the two graphs' voices; carried += voice nodes }
+    //   if (carried > 0 || voices === 1) this.fading = false;
+    //   return carried;
+    pub(super) fn carry(&mut self, words: &[i32]) -> Option<usize> {
+        // `split_first` gives the first item and the rest, or None if empty.
+        let (&voices, rest) = words.split_first()?;
+        let (pre, rest) = section_map(rest)?;
+        let (post, rest) = section_map(rest)?;
+        let (Some(graph), Some(old)) = (self.graph.as_mut(), self.outgoing.as_mut()) else { return None };
+        // TS: const voicesFit = () => same lengths && every voice node the same kind as the old one at its place
+        let voices_fit = || {
+            graph.voices.len() == old.voices.len()
+                && graph.plan.voice.buffer_count == old.plan.voice.buffer_count
+                && graph.plan.voice.nodes.len() == old.plan.voice.nodes.len()
+                && graph.plan.voice.nodes.iter().zip(&old.plan.voice.nodes).all(|(node, other)| same_node(node, other))
+        };
+        // Check it all before changing anything.
+        let fits = rest.is_empty()
+            && (voices == 0 || (voices == 1 && voices_fit()))
+            && map_fits(&graph.plan.pre, &graph.pre, &old.plan.pre, &old.pre, pre)
+            && map_fits(&graph.plan.post, &graph.post, &old.plan.post, &old.post, post);
+        if !fits {
+            return None;
+        }
+        let mut carried = take_over(&graph.plan.pre, &mut graph.pre, &old.plan.pre, &mut old.pre, pre)
+            + take_over(&graph.plan.post, &mut graph.post, &old.plan.post, &mut old.post, post);
+        if voices == 1 {
+            // TS: [graph.voices, old.voices] = [old.voices, graph.voices]
+            std::mem::swap(&mut graph.voices, &mut old.voices);
+            carried += graph.plan.voice.nodes.len();
+        }
+        // The old graph has given away what it would fade out with.
+        if carried > 0 || voices == 1 {
+            self.fading = false;
+        }
+        Some(carried)
+    }
+
     /// Render one block into `output`, crossfading from the outgoing graph in the block after a load.
     pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>]) {
         // TS: if (this.graph) this.graph.render(this.inputs, host, samples, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
@@ -476,4 +529,71 @@ impl Track {
             _ => None,
         }
     }
+}
+
+/// One section's part of carry's words: its count, then that many old node indices; and the rest.
+// TS: const count = words[0]; return count >= 0 && words.length > count ? [words.slice(1, count + 1), words.slice(count + 1)] : undefined
+// `split_at(n)` gives the first n and the rest, as two views of the same words.
+fn section_map(words: &[i32]) -> Option<(&[i32], &[i32])> {
+    let (&count, rest) = words.split_first()?;
+    let count = usize::try_from(count).ok()?;
+    (rest.len() >= count).then(|| rest.split_at(count))
+}
+
+/// Whether two plans' nodes are the same kind of thing, so one can take over the other's state.
+// TS: return node.kind === other.kind && node.outputs === other.outputs
+fn same_node(node: &Node, other: &Node) -> bool {
+    node.kind == other.kind && node.outputs == other.outputs
+}
+
+/// Whether a section's map fits: one entry per new node, each -1 or an old node of the same kind
+/// (and, for a delay, the same ring length), no old node taken twice.
+// TS:
+//   const taken = new Set<number>();
+//   return map.length === section.nodes.length && map.every((from, index) => {
+//     if (from < 0) return true;
+//     const other = old.nodes[from];
+//     if (!other || taken.has(from) || !sameNode(section.nodes[index], other) || !state.units[index].fits(oldState.units[from])) return false;
+//     taken.add(from); return true;
+//   });
+// It allocates (the `taken` list), which is fine here: carry runs with a load, never while rendering.
+fn map_fits(section: &Section, state: &SectionState, old: &Section, old_state: &SectionState, map: &[i32]) -> bool {
+    let mut taken = vec![false; old.nodes.len()];
+    map.len() == section.nodes.len()
+        && map.iter().enumerate().all(|(index, &from)| {
+            let Ok(from) = usize::try_from(from) else { return true };
+            let fits = old.nodes.get(from).is_some_and(|other| same_node(&section.nodes[index], other))
+                && !taken[from]
+                && state.units[index].fits(&old_state.units[from]);
+            if fits {
+                taken[from] = true;
+            }
+            fits
+        })
+}
+
+/// Move each mapped node's unit, and its output buffers (its last sample, for feedback), from the old
+/// section to the new. The old section gets the new one's fresh units in their place. Returns how
+/// many moved.
+// TS:
+//   return map.filter((from, index) => {
+//     if (from < 0) return false;
+//     [state.units[index], oldState.units[from]] = [oldState.units[from], state.units[index]];
+//     for (let port = 0; port < section.nodes[index].outputs; port++) state.buffers[section.base[index] + port].set(oldState.buffers[old.base[from] + port]);
+//     return true;
+//   }).length;
+// `std::mem::swap` trades two values in place: the only way to move a unit out of a list without
+// leaving a hole.
+fn take_over(section: &Section, state: &mut SectionState, old: &Section, old_state: &mut SectionState, map: &[i32]) -> usize {
+    map.iter()
+        .enumerate()
+        .filter(|&(index, &from)| {
+            let Ok(from) = usize::try_from(from) else { return false };
+            std::mem::swap(&mut state.units[index], &mut old_state.units[from]);
+            (0..section.nodes[index].outputs).for_each(|port| {
+                state.buffers[section.base[index] + port] = old_state.buffers[old.base[from] + port];
+            });
+            true
+        })
+        .count()
 }

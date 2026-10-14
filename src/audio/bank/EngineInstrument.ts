@@ -6,6 +6,7 @@
  */
 import type { CompiledPlan } from "../definitions/compile";
 import type { Instrument } from "../instruments/types";
+import type { ChainLayout, ChainPlan } from "./chainPlan";
 import { EngineDevice, type ParamSources } from "./EngineDevice";
 import { INSTRUMENT_STAGE } from "./stages";
 
@@ -15,14 +16,19 @@ export class EngineInstrument implements Instrument {
   /** The bypass param of each effect its plan carries, by effect id. */
   bypass = new Map<string, string>();
 
-  constructor(context: BaseAudioContext, plan: CompiledPlan, sources: ParamSources) {
-    this.device = new EngineDevice(context, plan, sources, { stage: INSTRUMENT_STAGE });
+  constructor(context: BaseAudioContext, plan: CompiledPlan, sources: ParamSources, chain?: ChainLayout) {
+    this.device = new EngineDevice(context, plan, sources, { stage: INSTRUMENT_STAGE }, chain);
     this.output = this.device.output;
+    if (chain) this.bypass = chain.bypass;
   }
 
-  /** Play another plan (the instrument with other effects after it), crossfading, notes kept. */
-  reload(plan: CompiledPlan, sources: ParamSources): void {
-    this.device.reload(plan, sources);
+  /**
+   * Play another chain plan (the instrument with other effects after it), notes kept: what it keeps
+   * carries on, or else it crossfades.
+   */
+  reload(chain: ChainPlan): void {
+    this.bypass = chain.bypass;
+    this.device.reload(chain.plan, chain.sources, chain);
   }
 
   /** Set a param no store holds: an effect's bypass in the instrument's chain. */

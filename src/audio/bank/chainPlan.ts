@@ -7,7 +7,7 @@
  * alone, or each effect gets its own slot.
  */
 import type { ParamStore } from "../params/store";
-import { BYPASS, chainParam, composeChain, type ChainLink } from "../definitions/chain";
+import { BYPASS, chainParam, composeChain, linkPrefix, type ChainLink } from "../definitions/chain";
 import { compileDefinition, DefinitionError, type CompiledPlan } from "../definitions/compile";
 import { engineDevice } from "../definitions/engineDevices";
 import type { EffectInstance } from "../project/projectStore";
@@ -21,12 +21,17 @@ export interface ChainMember {
   store: ParamStore;
 }
 
-/** A chain's devices as one plan, where each param comes from, and each effect's bypass param. */
-export interface ChainPlan {
-  plan: CompiledPlan;
-  sources: ParamSources;
+/** Which devices a chain's plan is made of, in order, and each effect's bypass param. */
+export interface ChainLayout {
+  keys: string[];
   /** The bypass param of each member that is an effect, by key. */
   bypass: Map<string, string>;
+}
+
+/** A chain's devices as one plan, and where each param comes from. */
+export interface ChainPlan extends ChainLayout {
+  plan: CompiledPlan;
+  sources: ParamSources;
 }
 
 /**
@@ -57,8 +62,39 @@ export const chainPlan = (members: ChainMember[], instrument: boolean): ChainPla
       .filter((_, index) => !(instrument && index === 0))
       .map((member) => [member.key, chainParam(member.key, BYPASS)]),
   );
-  return { plan, sources, bypass };
+  return { plan, sources, keys: members.map((member) => member.key), bypass };
 };
+
+/**
+ * A change of a chain's devices that can keep state (part 3): the devices in both, still in the same
+ * order, and those added and removed. Undefined if the ones kept have moved around, since their
+ * inputs then change at once: that reload crossfades instead.
+ */
+export interface ChainEdit {
+  kept: Set<string>;
+  added: string[];
+  removed: string[];
+}
+
+export const chainEdit = (before: string[], after: string[]): ChainEdit | undefined => {
+  const keptAfter = after.filter((key) => before.includes(key));
+  const keptBefore = before.filter((key) => after.includes(key));
+  if (keptAfter.length === 0 || keptAfter.some((key, index) => keptBefore[index] !== key)) return undefined;
+  return {
+    kept: new Set(keptAfter),
+    added: after.filter((key) => !before.includes(key)),
+    removed: before.filter((key) => !after.includes(key)),
+  };
+};
+
+/**
+ * The device a node of a chain's plan belongs to: the key whose prefix it starts with, the longest
+ * if several do (one key's prefix can begin another's).
+ */
+export const ownerOf = (keys: string[], name: string): string | undefined =>
+  keys
+    .filter((key) => name.startsWith(linkPrefix(key)))
+    .reduce<string | undefined>((longest, key) => (longest && longest.length >= key.length ? longest : key), undefined);
 
 /** An effect instance as a chain member. */
 export const memberOf = (effect: EffectInstance): ChainMember => ({
@@ -122,8 +158,7 @@ export const runEffects = (
       console.error(`${effects[0].type}: too heavy for the engine`);
       return [];
     }
-    const effect = new EngineEffect(context, plan.plan, plan.sources, stageOf(effects[0]));
-    effect.bypass = plan.bypass;
+    const effect = new EngineEffect(context, plan.plan, plan.sources, stageOf(effects[0]), plan);
     applyBypass(effect, plan.bypass, effects);
     return [effect];
   });

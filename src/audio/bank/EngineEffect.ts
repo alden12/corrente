@@ -9,6 +9,7 @@
  */
 import type { CompiledPlan } from "../definitions/compile";
 import type { Effect } from "../effects/types";
+import type { ChainLayout, ChainPlan } from "./chainPlan";
 import { EngineDevice, type ParamSources } from "./EngineDevice";
 
 export class EngineEffect implements Effect {
@@ -19,11 +20,24 @@ export class EngineEffect implements Effect {
   bypass = new Map<string, string>();
   private readonly device: EngineDevice;
 
-  constructor(context: BaseAudioContext, plan: CompiledPlan, sources: ParamSources, stage: number) {
+  constructor(
+    context: BaseAudioContext,
+    plan: CompiledPlan,
+    sources: ParamSources,
+    stage: number,
+    chain?: ChainLayout,
+  ) {
     this.input = new GainNode(context);
     this.stage = stage;
-    this.device = new EngineDevice(context, plan, sources, { stage, input: this.input });
+    this.device = new EngineDevice(context, plan, sources, { stage, input: this.input }, chain);
     this.output = this.device.output;
+    if (chain) this.bypass = chain.bypass;
+  }
+
+  /** Play another run's plan on the same slot: the effects it keeps carry on, or else it crossfades. */
+  reload(chain: ChainPlan): void {
+    this.bypass = chain.bypass;
+    this.device.reload(chain.plan, chain.sources, chain);
   }
 
   /** Set a param no store holds: an effect's bypass in the run. */

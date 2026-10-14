@@ -142,6 +142,8 @@ impl Source {
 }
 
 // TS: type NodeKind = { type: "faust"; kind: number } | { type: "delay" } | { type: "sampler" } | { type: "wavetable" }
+// `PartialEq` lets two kinds compare with ==, as a carried node's must (INST-36.7).
+#[derive(PartialEq)]
 pub enum NodeKind {
     Faust(usize),
     Delay,

@@ -52,6 +52,13 @@ impl Engine {
         true
     }
 
+    /// Hand the state of the plan a track just replaced to the one it loaded (Track::carry). The
+    /// number of nodes carried, or None if there is no such track or the words don't fit both plans.
+    // TS: return this.tracks[track]?.carry(words)
+    pub fn carry(&mut self, track: usize, words: &[i32]) -> Option<usize> {
+        self.tracks.get_mut(track)?.carry(words)
+    }
+
     /// Set a track param's value; it ramps there over the next block.
     // TS: this.tracks[track]?.setParam(source, value)
     pub fn set_param(&mut self, track: usize, source: usize, value: f32) {

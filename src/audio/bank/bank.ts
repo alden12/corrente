@@ -11,6 +11,8 @@
  *   than while rendering.
  * - **Edits don't click.** A new plan crossfades in over a block in the engine, and the notes held
  *   start again in it; a voice stolen for a new note fades out while the note starts in a spare slot.
+ *   Or, told which of the old plan carries on (INST-36.7, carry.ts), the new plan takes over those
+ *   nodes' state, and its voices too if they carry: then held notes play on rather than start again.
  * - **Samples are shared by name** (INST-36.6): a sample param's value is a ref, and the bank keeps
  *   each ref it's given in one engine slot however many tracks play it, freeing it when the last
  *   stops. The param's engine value is the slot, set at once rather than ramped.
@@ -29,6 +31,7 @@ import {
   ZONE_SIGNAL,
   type EngineExports,
 } from "./exports";
+import { carriesVoices } from "./carry";
 import { EVENT, EventQueue, type TimedEvent } from "./events";
 import type { Transport } from "./messages";
 import { VoiceAllocator } from "./voices";
@@ -78,6 +81,12 @@ export interface SampleAudio {
   rate: number;
 }
 
+/** How a plan loads, beyond its values (`EngineBank.load`). */
+export interface LoadOptions {
+  carry?: Int32Array;
+  from?: Record<string, number>;
+}
+
 export class EngineBank {
   readonly engine: EngineExports;
   readonly sampleRate: number;
@@ -117,39 +126,53 @@ export class EngineBank {
    * Play a compiled plan on a track, its params starting at `values` (by name; any left out keep
    * the value they had, or 0). The old plan fades out over a block with the notes it was releasing;
    * the notes held start again in the new one. Queued events still play, in the new plan.
+   *
+   * With `carry` (carry.ts, against the plan this track has now), the nodes it names carry on
+   * instead, with no fade; if the voices carry, the notes play on in them. Words that don't fit are
+   * ignored, and the plan loads as without them. Params in `from` start there and ramp to their
+   * value over the first block: how an effect added to a chain fades in from bypassed.
    */
-  load(track: number, plan: CompiledPlan, values: Record<string, number> = {}): void {
+  load(track: number, plan: CompiledPlan, values: Record<string, number> = {}, options: LoadOptions = {}): void {
+    const { carry, from = {} } = options;
     const state = this.trackAt(track);
-    const pointer = this.engine.eng_malloc(plan.words.length * 4);
-    new Int32Array(this.engine.memory.buffer, pointer, plan.words.length).set(plan.words);
-    const code = this.engine.eng_load(track, pointer, plan.words.length);
+    const code = this.withWords(plan.words, (pointer) => this.engine.eng_load(track, pointer, plan.words.length));
+    if (code !== 0) throw new PlanRejected(track, code);
+    const carried =
+      carry !== undefined &&
+      this.withWords(carry, (pointer) => this.engine.eng_carry(track, pointer, carry.length)) >= 0;
+    const voicesCarried = carried && carriesVoices(carry);
+    const held = voicesCarried ? [] : state.voices.heldNotes();
+    state.plan = plan;
+    // Voices that carry on keep their slots, so the allocator that placed them stays.
+    if (!voicesCarried) state.voices = new VoiceAllocator(this.engine.eng_voice_slots(track), plan.voices);
+    state.values = { ...state.values, ...values };
+    plan.params.forEach((source, index) => {
+      if (source.sample) {
+        this.engine.eng_init_param(track, index, state.values[source.param] ?? EMPTY_SAMPLE);
+        return;
+      }
+      const value = resolveNumber(state.values[source.param] ?? 0, source);
+      const start = from[source.param];
+      this.engine.eng_init_param(track, index, start === undefined ? value : resolveNumber(start, source));
+      if (start !== undefined) this.engine.eng_set_param(track, index, value);
+    });
+    held.forEach(({ note, velocity }) => this.startNote(track, note, velocity, 0, 0));
+  }
+
+  /** Copy `words` into the engine's memory for `call`, then free them. */
+  private withWords(words: Int32Array, call: (pointer: number) => number): number {
+    const pointer = this.engine.eng_malloc(words.length * 4);
+    new Int32Array(this.engine.memory.buffer, pointer, words.length).set(words);
+    const result = call(pointer);
     this.engine.eng_free(pointer);
     this.view();
-    if (code !== 0) throw new PlanRejected(track, code);
-    const held = state.voices.heldNotes();
-    state.plan = plan;
-    state.voices = new VoiceAllocator(this.engine.eng_voice_slots(track), plan.voices);
-    state.values = { ...state.values, ...values };
-    plan.params.forEach((source, index) =>
-      this.engine.eng_init_param(
-        track,
-        index,
-        source.sample
-          ? (state.values[source.param] ?? EMPTY_SAMPLE)
-          : resolveNumber(state.values[source.param] ?? 0, source),
-      ),
-    );
-    held.forEach(({ note, velocity }) => this.startNote(track, note, velocity, 0, 0));
+    return result;
   }
 
   /** Empty a track (its device went): it plays nothing, its queued events and knob values are dropped. */
   unload(track: number): void {
     const state = this.trackAt(track);
-    const pointer = this.engine.eng_malloc(EMPTY_PLAN.length * 4);
-    new Int32Array(this.engine.memory.buffer, pointer, EMPTY_PLAN.length).set(EMPTY_PLAN);
-    this.engine.eng_load(track, pointer, EMPTY_PLAN.length);
-    this.engine.eng_free(pointer);
-    this.view();
+    this.withWords(EMPTY_PLAN, (pointer) => this.engine.eng_load(track, pointer, EMPTY_PLAN.length));
     state.plan = null;
     state.voices = new VoiceAllocator(0, 0);
     state.values = {};

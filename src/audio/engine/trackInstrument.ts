@@ -48,15 +48,15 @@ export const trackInstrument = (
 ): { instrument: Instrument; absorbed: EffectInstance[] } => {
   const chain = instrumentChain(type, store, effects);
   if (!chain) return { instrument: createInstrument(type, context, store), absorbed: [] };
-  const instrument = new EngineInstrument(context, chain.plan.plan, chain.plan.sources);
-  instrument.bypass = chain.plan.bypass;
+  const instrument = new EngineInstrument(context, chain.plan.plan, chain.plan.sources, chain.plan);
   applyBypass(instrument, chain.plan.bypass, chain.absorbed);
   return { instrument, absorbed: chain.absorbed };
 };
 
 /**
- * Bring an engine instrument's plan in line with its chain: reloaded in place (a crossfade, notes
- * kept) when the effects it takes in change, bypass set either way. Returns what it took in.
+ * Bring an engine instrument's plan in line with its chain: reloaded in place when the effects it
+ * takes in change (what it keeps carries on, notes held and tails ringing; EngineDevice), bypass set
+ * either way. Returns what it took in.
  */
 export const updateTrackInstrument = (
   instrument: EngineInstrument,
@@ -67,10 +67,8 @@ export const updateTrackInstrument = (
 ): EffectInstance[] => {
   const chain = instrumentChain(type, store, effects);
   if (!chain) return before;
-  if (absorbedKey(chain.absorbed) !== absorbedKey(before)) {
-    instrument.reload(chain.plan.plan, chain.plan.sources);
-    instrument.bypass = chain.plan.bypass;
-  }
-  applyBypass(instrument, instrument.bypass, chain.absorbed);
+  // Bypass before the reload, so an effect being added knows where to ramp to as it fades in.
+  applyBypass(instrument, chain.plan.bypass, chain.absorbed);
+  if (absorbedKey(chain.absorbed) !== absorbedKey(before)) instrument.reload(chain.plan);
   return chain.absorbed;
 };

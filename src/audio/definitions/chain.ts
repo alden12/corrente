@@ -53,7 +53,7 @@ const MIX = "mix";
 export const chainParam = (key: string, param: string) => `${key}.${param}`;
 
 /** A link's node-name prefix: its key made a valid name (letters, digits and _, a letter first). */
-const prefixOf = (key: string) => `x${key.replace(/[^A-Za-z0-9]/g, "_")}_`;
+export const linkPrefix = (key: string) => `x${key.replace(/[^A-Za-z0-9]/g, "_")}_`;
 
 /** Signals every device reads as they are: the voice's, the voices summed, and the host's. */
 const SHARED_SIGNALS = new Set<string>([
@@ -87,7 +87,7 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
   let previous: [string, string] = ["input.left", "input.right"];
   let first = true;
   links.forEach((link, index) => {
-    const prefix = prefixOf(link.key);
+    const prefix = linkPrefix(link.key);
     const namespaced = (param: string) => chainParam(link.key, param);
     const before = previous;
     /** A reference in this link's terms, as the chain names it. */
@@ -169,7 +169,7 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
       ? {
           voices: instrument.definition.voices ?? DEFAULT_VOICES,
           ...(instrument.definition.voice !== undefined
-            ? { voice: renameVoice(instrument.definition.voice, prefixOf(instrumentKey)) }
+            ? { voice: renameVoice(instrument.definition.voice, linkPrefix(instrumentKey)) }
             : {}),
           ...(instrument.definition.zones
             ? {
