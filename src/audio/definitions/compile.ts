@@ -9,7 +9,27 @@
  * its schema (schema.ts); the compiler adds what each section may read.
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
-import { SAMPLE_INPUTS, TABLE_INPUTS, type DeviceDefinition, type ParamBinding } from "./format";
+import type { DeviceDefinition, ParamBinding } from "./format";
+
+import { costOf, overCap, type Cost, type CostedNode } from "./cost";
+import { orderSection, type Step, type StepMode } from "./loops";
+import { bodyWords, SECTIONS, type Laid, type Planned } from "./words";
+import type { ParamSchema } from "../params/types";
+import {
+  channelsOf,
+  outputOf,
+  referenceTo,
+  sampleParamsOf,
+  sourcesOf,
+  underlying,
+  voicesOf,
+  type InputSource,
+  type Source,
+} from "./references";
+import { definitionSchemaFor, problemsIn } from "./schema";
+
+/** The sections a plan runs in a block: once before the voices, once per voice, once after. */
+export type Section = "pre" | "voice" | "post";
 
 /** A sample zone as the bank uses it (INST-36.6): every range filled in. */
 export interface PlanZone {
@@ -21,51 +41,6 @@ export interface PlanZone {
   start: number;
   end: number;
 }
-import { costOf, overCap, type Cost, type CostedNode } from "./cost";
-import { isFeedback, orderSection, type Step, type StepMode } from "./loops";
-import type { ParamSchema } from "../params/types";
-import {
-  channelsOf,
-  outputOf,
-  referenceTo,
-  sourcesOf,
-  underlying,
-  voicesOf,
-  type InputSource,
-  type Source,
-} from "./references";
-import { definitionSchemaFor, problemsIn } from "./schema";
-
-/**
- * How the plan words name what an input reads, and how a step runs: engine/src/plan/mod.rs reads
- * these numbers, so they change together.
- */
-const INPUT_TYPE = {
-  /** A node in the same section, this block: (node, port). */
-  buffer: 0,
-  /** A node in the same section, the sample before (a feedback edge): (node, port). */
-  previous: 1,
-  /** A param source: (index). */
-  param: 2,
-  /** A fixed number: (0, its f32 bits). */
-  constant: 3,
-  /** A voice signal: (signal). */
-  voice: 4,
-  /** A node in the pre section, read from a later one: (node, port). */
-  shared: 5,
-  /** The voices summed: (channel). */
-  voiceSum: 6,
-  /** The track's audio input: (channel). */
-  input: 7,
-  /** A host signal: (signal). */
-  host: 8,
-} as const;
-const STEP_MODE: Record<StepMode, number> = { node: 0, "sample-loop": 1, "chunk-loop": 2 };
-
-/** The sections a plan runs in a block: once before the voices, once per voice, once after. */
-export type Section = "pre" | "voice" | "post";
-const SECTIONS: Section[] = ["pre", "voice", "post"];
-
 /** A param source the engine keeps a smoothed buffer for: which param, and how to turn it into a value. */
 export interface ParamSource {
   param: string;
@@ -112,15 +87,6 @@ export class DefinitionError extends Error {
     super(`The definition can't be compiled:\n${problems.map((problem) => `  - ${problem}`).join("\n")}`);
     this.problems = problems;
   }
-}
-
-/** A node of the plan: the definition's, or an `add` the compiler put in to sum an input. */
-interface Planned {
-  name: string;
-  block: BlockSpec;
-  section: Section;
-  /** One list per input, audio inputs then controls; several sources are summed. */
-  inputs: Source[][];
 }
 
 /**
@@ -214,12 +180,62 @@ interface Resolved {
   trackOut: Source[];
 }
 
-/** The plan for a definition already checked: sections, sums, order, then words. */
+/** The plan for a definition already checked: its nodes laid out, params numbered, sections ordered, costed, then words. */
 const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan => {
+  const planned = layOut(resolved);
+  const { params, paramIndex } = paramTable(definition, resolved.schema);
+  const { indices, steps } = orderSections(planned);
+  const cost = costed(planned, steps, resolved.voices);
+  const laid: Laid = { planned, indices, steps, ...resolved };
+  const body = bodyWords(laid, paramIndex);
+  const zones = definition.zones;
+  // A zone's sample param is the bank's to read, so it's a param of the plan though no node reads it.
+  zones?.forEach((zone) => paramIndex(zone.sample));
+  // Params are numbered as the words are written, so the header, which counts them, goes on last.
+  const words = Int32Array.from([params.length, resolved.voices, definition.latency ?? 0, ...body]);
+  return {
+    words,
+    params,
+    ...(zones
+      ? {
+          zones: zones.map((zone) => ({
+            param: zone.sample.param,
+            root: zone.root,
+            keys: zone.keys ?? [0, 127],
+            velocities: zone.velocities ?? [0, 1],
+            start: zone.start ?? 0,
+            end: zone.end ?? 1,
+          })),
+        }
+      : {}),
+    voices: resolved.voices,
+    latency: definition.latency ?? 0,
+    cost,
+    nodes: Object.fromEntries(
+      SECTIONS.map((section) => [
+        section,
+        planned[section].map((node) => ({ name: node.name, block: node.block.name })),
+      ]),
+    ) as CompiledPlan["nodes"],
+    steps: Object.fromEntries(
+      SECTIONS.map((section) => [
+        section,
+        steps[section].map((step) => ({
+          mode: step.mode,
+          nodes: step.nodes.map((node) => planned[section][node].name),
+        })),
+      ]),
+    ) as CompiledPlan["steps"],
+  };
+};
+
+/**
+ * Each section's nodes in definition order, then the nodes the compiler adds: an `add` for each
+ * input summing several sources, and a `mul` and an `add` for each scaled reference.
+ */
+const layOut = (resolved: Resolved): Record<Section, Planned[]> => {
   const add = blockNamed("add")!;
   const mul = blockNamed("mul")!;
-  // Each section's nodes in definition order, then the adds that sum their inputs and the nodes that
-  // scale them.
   const planned: Record<Section, Planned[]> = { pre: [], voice: [], post: [] };
   Object.keys(resolved.blocks).forEach((name) => {
     planned[resolved.sectionOf[name]].push({
@@ -273,24 +289,15 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       });
     }),
   );
+  return planned;
+};
 
-  // Params, each binding once.
-  const zones = definition.zones;
-  const paramsOn = (inputs: Record<string, readonly string[]>) =>
-    Object.values(definition.nodes).flatMap((node) =>
-      (inputs[node.block] ?? [])
-        .map((port) => node.inputs?.[port])
-        .flatMap((input) => (typeof input === "object" && "param" in input ? [input.param] : [])),
-    );
-  const tableParams = new Set(paramsOn(TABLE_INPUTS));
-  const sampleParams = new Set([
-    ...paramsOn(SAMPLE_INPUTS),
-    ...tableParams,
-    ...(zones ?? []).map((zone) => zone.sample.param),
-  ]);
+/** The plan's params, each binding once: the list, and a binding's place in it, added the first time it's read. */
+const paramTable = (definition: DeviceDefinition, schema: ParamSchema | undefined) => {
+  const { samples: sampleParams, tables: tableParams } = sampleParamsOf(definition);
   const params: ParamSource[] = [];
   const smoothing = new Map(
-    (resolved.schema ?? []).flatMap((spec) =>
+    (schema ?? []).flatMap((spec) =>
       spec.kind === "number" && spec.smoothMs ? [[spec.id, spec.smoothMs] as const] : [],
     ),
   );
@@ -309,8 +316,11 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     const found = params.findIndex((existing) => JSON.stringify(existing) === key);
     return found >= 0 ? found : params.push(source) - 1;
   };
+  return { params, paramIndex };
+};
 
-  // Order each section.
+/** Each section in order: its nodes' places by name, and the steps they run in. */
+const orderSections = (planned: Record<Section, Planned[]>) => {
   const indexIn = (section: Section) => new Map(planned[section].map((node, index) => [node.name, index]));
   const indices = Object.fromEntries(SECTIONS.map((section) => [section, indexIn(section)])) as Record<
     Section,
@@ -334,96 +344,20 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       return [section, orderSection(order)];
     }),
   ) as Record<Section, Step[]>;
+  return { indices, steps };
+};
 
-  // What it costs, and whether a phone could run it.
-  const costed = (section: Section): CostedNode[] =>
+/** What a plan costs, refused if a phone couldn't run it. */
+const costed = (planned: Record<Section, Planned[]>, steps: Record<Section, Step[]>, voices: number): Cost => {
+  const nodesOf = (section: Section): CostedNode[] =>
     steps[section].flatMap((step) =>
       step.nodes.map((index) => ({
         block: planned[section][index].block.name,
         sampleLoop: step.mode === "sample-loop",
       })),
     );
-  const cost = costOf([...costed("pre"), ...costed("post")], costed("voice"), resolved.voices);
-  const tooHeavy = overCap(cost, resolved.voices);
-  if (tooHeavy) throw new DefinitionError([`${resolved.voices > 0 ? "voices" : "nodes"}: ${tooHeavy}`]);
-
-  // The words.
-  const floatBits = (value: number) => new Int32Array(Float32Array.of(value).buffer)[0];
-  const stepOf = (section: Section, node: number) => steps[section].find((step) => step.nodes.includes(node))!;
-  /** One source as (type, index, extra), read from `section` by node `reader` (-1 for an output). */
-  const encoders: {
-    [Type in Source["type"]]: (source: Extract<Source, { type: Type }>, section: Section, reader: number) => number[];
-  } = {
-    node: (source, section, reader) => {
-      const from = resolved.sectionOf[source.name] ?? section;
-      const index = indices[from].get(source.name)!;
-      if (from !== section) return [INPUT_TYPE.shared, index, source.port];
-      const feedback = reader >= 0 && isFeedback(stepOf(section, reader), reader, index);
-      return [feedback ? INPUT_TYPE.previous : INPUT_TYPE.buffer, index, source.port];
-    },
-    param: (source) => [INPUT_TYPE.param, paramIndex(source.binding), 0],
-    const: (source) => [INPUT_TYPE.constant, 0, floatBits(source.value)],
-    voice: (source) => [INPUT_TYPE.voice, source.signal, 0],
-    voiceSum: (source) => [INPUT_TYPE.voiceSum, source.channel, 0],
-    input: (source) => [INPUT_TYPE.input, source.channel, 0],
-    host: (source) => [INPUT_TYPE.host, source.signal, 0],
-  };
-  const encode = (source: Source, section: Section, reader: number) =>
-    (encoders[source.type] as (source: Source, section: Section, reader: number) => number[])(source, section, reader);
-  const sectionWords = (section: Section) => [
-    planned[section].length,
-    steps[section].length,
-    ...planned[section].flatMap((node, index) => [
-      node.block.kind,
-      node.block.inputs.length,
-      node.block.controls.length,
-      ...node.inputs.flatMap((sources) => encode(sources[0], section, index)),
-    ]),
-    ...steps[section].flatMap((step) => [STEP_MODE[step.mode], step.nodes.length, ...step.nodes]),
-  ];
-  const body = [
-    ...SECTIONS.flatMap(sectionWords),
-    resolved.voiceOut.length,
-    ...resolved.voiceOut.flatMap((source) => encode(source, "voice", -1)),
-    resolved.trackOut.length,
-    ...resolved.trackOut.flatMap((source) => encode(source, "post", -1)),
-  ];
-  // A zone's sample param is the bank's to read, so it's a param of the plan though no node reads it.
-  zones?.forEach((zone) => paramIndex(zone.sample));
-  // Params are numbered as the words are written, so the header, which counts them, goes on last.
-  const words = Int32Array.from([params.length, resolved.voices, definition.latency ?? 0, ...body]);
-  return {
-    words,
-    params,
-    ...(zones
-      ? {
-          zones: zones.map((zone) => ({
-            param: zone.sample.param,
-            root: zone.root,
-            keys: zone.keys ?? [0, 127],
-            velocities: zone.velocities ?? [0, 1],
-            start: zone.start ?? 0,
-            end: zone.end ?? 1,
-          })),
-        }
-      : {}),
-    voices: resolved.voices,
-    latency: definition.latency ?? 0,
-    cost,
-    nodes: Object.fromEntries(
-      SECTIONS.map((section) => [
-        section,
-        planned[section].map((node) => ({ name: node.name, block: node.block.name })),
-      ]),
-    ) as CompiledPlan["nodes"],
-    steps: Object.fromEntries(
-      SECTIONS.map((section) => [
-        section,
-        steps[section].map((step) => ({
-          mode: step.mode,
-          nodes: step.nodes.map((node) => planned[section][node].name),
-        })),
-      ]),
-    ) as CompiledPlan["steps"],
-  };
+  const cost = costOf([...nodesOf("pre"), ...nodesOf("post")], nodesOf("voice"), voices);
+  const tooHeavy = overCap(cost, voices);
+  if (tooHeavy) throw new DefinitionError([`${voices > 0 ? "voices" : "nodes"}: ${tooHeavy}`]);
+  return cost;
 };

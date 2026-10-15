@@ -7,11 +7,10 @@
  * alone, or each effect gets its own slot.
  */
 import type { ParamStore } from "../params/store";
-import { BYPASS, chainParam, composeChain, linkPrefix, type ChainLink } from "../definitions/chain";
+import { BYPASS, chainParam, composeChain, type ChainLink } from "../definitions/chain";
 import { compileDefinition, DefinitionError, type CompiledPlan } from "../definitions/compile";
 import { engineDevice } from "../definitions/engineDevices";
 import type { EffectInstance } from "../project/projectStore";
-import type { ParamSources } from "./EngineDevice";
 import { EngineEffect } from "./EngineEffect";
 
 /** One device in a chain: its key (the effect's id), type and params. */
@@ -29,6 +28,12 @@ export interface ChainLayout {
   /** The bypass param of each member that is an effect, by key. */
   bypass: Map<string, string>;
 }
+
+/**
+ * Where each of a chain's plan params comes from: a device's store and the param's id there, read
+ * under its namespace. A plan param with no source (an effect's bypass) is set with `setFixed`.
+ */
+export type ParamSources = Record<string, { store: ParamStore; id: string }>;
 
 /** A chain's devices as one plan, and where each param comes from. */
 export interface ChainPlan extends ChainLayout {
@@ -66,41 +71,6 @@ export const chainPlan = (members: ChainMember[], instrument: boolean): ChainPla
   );
   return { plan, sources, keys: members.map((member) => member.key), bypass };
 };
-
-/**
- * A change of a chain's devices, keeping the state of those in both (part 3): which those are, and
- * which were added and removed. If the kept ones changed order, they are all `moved`: their inputs
- * change at once, so the effects among them fade out around the reload, start fresh and fade back in
- * (EngineDevice). Undefined if nothing is kept.
- */
-export interface ChainEdit {
-  kept: Set<string>;
-  added: string[];
-  removed: string[];
-  moved: string[];
-}
-
-export const chainEdit = (before: string[], after: string[]): ChainEdit | undefined => {
-  const keptAfter = after.filter((key) => before.includes(key));
-  const keptBefore = before.filter((key) => after.includes(key));
-  if (keptAfter.length === 0) return undefined;
-  const reordered = keptAfter.some((key, index) => keptBefore[index] !== key);
-  return {
-    kept: new Set(keptAfter),
-    added: after.filter((key) => !before.includes(key)),
-    removed: before.filter((key) => !after.includes(key)),
-    moved: reordered ? keptAfter : [],
-  };
-};
-
-/**
- * The device a node of a chain's plan belongs to: the key whose prefix it starts with, the longest
- * if several do (one key's prefix can begin another's).
- */
-export const ownerOf = (keys: string[], name: string): string | undefined =>
-  keys
-    .filter((key) => name.startsWith(linkPrefix(key)))
-    .reduce<string | undefined>((longest, key) => (longest && longest.length >= key.length ? longest : key), undefined);
 
 /** An effect instance as a chain member; `keyed` if another track keys it. */
 export const memberOf = (effect: EffectInstance, keyed = false): ChainMember => ({
@@ -174,7 +144,7 @@ export const runEffects = (
     }
     // A keyed effect is a run of its own (piecesOf), so a part has at most one key.
     const key = effects.map((each) => keys.get(each.id)).find((node) => node !== undefined);
-    const effect = new EngineEffect(context, plan.plan, plan.sources, stageOf(effects[0]), plan, key);
+    const effect = new EngineEffect(context, plan, stageOf(effects[0]), key);
     applyBypass(effect, plan.bypass, effects);
     return [effect];
   });

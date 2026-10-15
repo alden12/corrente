@@ -11,24 +11,22 @@
 import { z } from "zod";
 import { CATALOGUE, type BlockSpec, type Port } from "./catalogue";
 import {
-  channelsSchema,
-  DEFINITION_FORMAT,
-  MAX_VOICES,
+  definitionSchema,
   NODE_NAME,
   RESERVED_NAMES,
   FIXED_INPUTS,
   SAMPLE_INPUTS,
+  sampleBindingSchema,
   singleInputSchema,
   TABLE_INPUTS,
   ZONE_SIGNALS,
-  zonesSchema,
   type DeviceDefinition,
   type InputValue,
   type ParamBinding,
   type Synced,
 } from "./format";
 import type { ParamSchema } from "../params/types";
-import { beatsOf, channelsOf, isScaled, isSynced, listOf, referenceTo, voicesOf } from "./references";
+import { beatsOf, channelsOf, isScaled, isSynced, listOf, referenceTo, sampleParamsOf, voicesOf } from "./references";
 
 const NOT_WIRED = "not wired (every audio input needs a value, a param or a connection)";
 
@@ -51,22 +49,54 @@ const portInput = (port: Port, required: boolean) => {
   return required ? input : input.optional();
 };
 
+const PLAIN_SAMPLE = "takes a sample param as { param }, with no scale, offset or table";
+
+/**
+ * An input naming a sample or a wavetable: a sample param as it is (the bank turns it into a slot),
+ * or for a sampler, `voice.sample`, the sample of the zone each note took (checked against the zones
+ * later). Always wanted.
+ */
+const sampleInput = (what: "sample" | "wavetable", zoned: boolean) =>
+  z.unknown().superRefine((value, context) => {
+    if (value === undefined)
+      context.addIssue({ code: "custom", message: `needs a sample param (which ${what} it plays)` });
+    else if (!(zoned && value === "voice.sample") && !sampleBindingSchema.safeParse(value).success)
+      context.addIssue({ code: "custom", message: PLAIN_SAMPLE });
+  });
+
+/** A control read once, when the device loads: a plain number in its range. */
+const fixedInput = (port: Port) =>
+  z
+    .number({ error: "takes a number: it's set once, when the device loads" })
+    .min(port.min, `${port.min} is the least it takes`)
+    .max(port.max, `${port.max} is the most it takes`)
+    .optional();
+
+/** The schema for each of a block's inputs, by name. */
+const inputsOf = (block: BlockSpec) => {
+  const has = (inputs: Record<string, readonly string[]>, port: Port) => inputs[block.name]?.includes(port.name);
+  const schemaOf = (port: Port, required: boolean) => {
+    if (has(SAMPLE_INPUTS, port)) return sampleInput("sample", true);
+    if (has(TABLE_INPUTS, port)) return sampleInput("wavetable", false);
+    if (has(FIXED_INPUTS, port)) return fixedInput(port);
+    return portInput(port, required);
+  };
+  return Object.fromEntries([
+    ...block.inputs.map((port) => [port.name, schemaOf(port, true)]),
+    ...block.controls.map((port) => [port.name, schemaOf(port, false)]),
+  ]);
+};
+
 /** A node of one block: `inputs` holds exactly that block's inputs. */
 const nodeOf = (block: BlockSpec) => {
   const names = [...block.inputs, ...block.controls].map((port) => port.name).join(", ") || "none";
   const inputs = z
-    .strictObject(
-      Object.fromEntries([
-        ...block.inputs.map((port) => [port.name, portInput(port, true)]),
-        ...block.controls.map((port) => [port.name, portInput(port, false)]),
-      ]),
-      {
-        error: (issue) =>
-          issue.code === "unrecognized_keys"
-            ? `a ${block.name} has no input ${issue.keys.map((key) => `"${key}"`).join(", ")} (it has ${names})`
-            : undefined,
-      },
-    )
+    .strictObject(inputsOf(block), {
+      error: (issue) =>
+        issue.code === "unrecognized_keys"
+          ? `a ${block.name} has no input ${issue.keys.map((key) => `"${key}"`).join(", ")} (it has ${names})`
+          : undefined,
+    })
     // Left out, it's no inputs, so each audio input is reported as not wired.
     .prefault({});
   return z.strictObject(
@@ -121,22 +151,6 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
     else if (spec && spec.kind !== "sample") problem(path, `${binding.param} is a ${spec.kind} param, not a sample`);
   };
 
-  /**
-   * An input that names a sample or a wavetable: a sample param, as it is (the bank turns it into a
-   * slot), or for a sample with zones, `voice.sample`, the sample of the zone each note took.
-   */
-  const checkSampleInput = (value: InputValue, path: (string | number)[], zoned: boolean) => {
-    if (value === "voice.sample" && zoned) return;
-    const plain =
-      typeof value === "object" && !Array.isArray(value) && "param" in value && Object.keys(value).length === 1;
-    if (!plain)
-      return problem(
-        path,
-        `takes a sample param as { param }, with no scale, offset or table${zoned ? ', or "voice.sample"' : ""}`,
-      );
-    checkSampleParam(value, path);
-  };
-
   /** A zone signal read in a definition with no zones, which would always read 0. */
   const checkZoneSignal = (reference: string, path: (string | number)[]) => {
     if (!definition.zones && (ZONE_SIGNALS as readonly string[]).includes(reference))
@@ -165,10 +179,14 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
   Object.entries(nodes).forEach(([name, node]) =>
     Object.entries(node.inputs ?? {}).forEach(([port, value]: [string, InputValue]) => {
       const inputPath = ["nodes", name, "inputs", port];
-      if (SAMPLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, inputPath, !!definition.zones);
-      if (TABLE_INPUTS[node.block]?.includes(port)) return checkSampleInput(value, inputPath, false);
-      if (FIXED_INPUTS[node.block]?.includes(port) && typeof value !== "number")
-        return problem(inputPath, "takes a number: it's set once, when the device loads");
+      // Its shape is the node schema's: a sample param, or voice.sample for a sampler.
+      if (SAMPLE_INPUTS[node.block]?.includes(port) || TABLE_INPUTS[node.block]?.includes(port)) {
+        if (typeof value === "object" && !Array.isArray(value) && "param" in value) checkSampleParam(value, inputPath);
+        else if (value === "voice.sample" && SAMPLE_INPUTS[node.block]?.includes(port))
+          checkZoneSignal(value, inputPath);
+        return;
+      }
+      if (FIXED_INPUTS[node.block]?.includes(port)) return;
       listOf(value).forEach((item, index) => {
         const path = ["nodes", name, "inputs", port, ...(Array.isArray(value) ? [index] : [])];
         if (typeof item === "number") return;
@@ -189,26 +207,10 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       });
     }),
   );
-  Object.entries(nodes).forEach(([name, node]) => {
-    (SAMPLE_INPUTS[node.block] ?? [])
-      .filter((port) => node.inputs?.[port] === undefined)
-      .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which sample it plays)"));
-    (TABLE_INPUTS[node.block] ?? [])
-      .filter((port) => node.inputs?.[port] === undefined)
-      .forEach((port) => problem(["nodes", name, "inputs", port], "needs a sample param (which wavetable it plays)"));
-  });
   // A param is cut into wavetable cycles or played as a sample, so it can't feed both.
-  const named = (inputs: Record<string, readonly string[]>) =>
-    Object.values(nodes).flatMap((node) =>
-      (inputs[node.block] ?? []).flatMap((port) => {
-        const input = node.inputs?.[port];
-        return typeof input === "object" && !Array.isArray(input) && "param" in input ? [input.param] : [];
-      }),
-    );
-  const asTables = new Set(named(TABLE_INPUTS));
-  [...named(SAMPLE_INPUTS), ...(definition.zones ?? []).map((zone) => zone.sample.param)]
-    .filter((param, index, all) => asTables.has(param) && all.indexOf(param) === index)
-    .forEach((param) => problem(["nodes"], `${param} feeds both a sample and a wavetable; give each its own param`));
+  new Set(sampleParamsOf(definition).both).forEach((param) =>
+    problem(["nodes"], `${param} feeds both a sample and a wavetable; give each its own param`),
+  );
 
   definition.zones?.forEach((zone, index) => {
     checkSampleParam(zone.sample, ["zones", index, "sample"]);
@@ -242,16 +244,8 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
  * to any other param, or to one that can't be a number (a sample), is a problem.
  */
 export const definitionSchemaFor = (params?: ParamSchema) =>
-  z
-    .strictObject({
-      format: z.literal(DEFINITION_FORMAT),
-      voices: z.number().int().min(0).max(MAX_VOICES).optional(),
-      latency: z.number().int().min(0).optional(),
-      nodes: z.record(nodeName, nodeSchema),
-      voice: channelsSchema.optional(),
-      output: channelsSchema.optional(),
-      zones: zonesSchema.optional(),
-    })
+  definitionSchema
+    .extend({ nodes: z.record(nodeName, nodeSchema) })
     .superRefine((definition, context) => checkAcross(definition as DeviceDefinition, params, context));
 
 /**

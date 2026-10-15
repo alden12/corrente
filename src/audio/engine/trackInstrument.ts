@@ -50,7 +50,7 @@ export const trackInstrument = (
 ): { instrument: Instrument; absorbed: EffectInstance[] } => {
   const chain = instrumentChain(type, store, effects);
   if (!chain) return { instrument: createInstrument(type, context, store), absorbed: [] };
-  const instrument = new EngineInstrument(context, chain.plan.plan, chain.plan.sources, chain.plan);
+  const instrument = new EngineInstrument(context, chain.plan);
   applyBypass(instrument, chain.plan.bypass, chain.absorbed);
   return { instrument, absorbed: chain.absorbed };
 };

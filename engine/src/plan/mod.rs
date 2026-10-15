@@ -65,6 +65,8 @@ pub const MAX_PORTS: usize = 16;
 pub const MAX_OUTPUTS: usize = 8;
 /// The most voices a track may have.
 pub const MAX_VOICES: usize = 64;
+/// The most sample zones a definition may have (format.ts's MAX_ZONES): each is a param no node reads.
+pub const MAX_ZONES: usize = 128;
 /// A track's output and its voice sum are stereo.
 pub const CHANNELS: usize = 2;
 /// A track's audio inputs: a stereo main input and a stereo sidechain.
@@ -238,9 +240,10 @@ pub fn parse(words: &[i32]) -> Result<Plan, i32> {
     let param_count = reader.count()?;
     let voice_count = reader.count()?;
     let latency = reader.count()?;
-    // Each param is read by an input of at least one word, so there can't be more than there are
-    // words: a bigger count is a bad plan, and turned away before a track makes room for it.
-    if voice_count > MAX_VOICES || param_count > words.len() {
+    // Each param is read by an input of at least one word, or is a zone's sample (which the bank
+    // reads, not a node), so there can't be more than that: a bigger count is a bad plan, turned away
+    // before a track makes room for it.
+    if voice_count > MAX_VOICES || param_count > words.len() + MAX_ZONES {
         return Err(REJECTED);
     }
     // The pre section reads no other section, so it is given an empty list as `pre`.

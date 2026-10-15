@@ -26,6 +26,10 @@ fn bad_plans_are_refused() {
     let mut huge_params = mul(vec![constant(1.0), constant(1.0)]).words();
     huge_params[0] = i32::MAX;
     assert_eq!(plan::parse(&huge_params).err(), Some(plan::REJECTED), "a huge param count");
+    // A plan of few words can still have a param for each of the most zones there can be.
+    let mut zoned = mul(vec![constant(1.0), constant(1.0)]).words();
+    zoned[0] = (zoned.len() + plan::MAX_ZONES) as i32;
+    assert!(plan::parse(&zoned).is_ok(), "a param for every zone");
 
     let mut words_left_over = mul(vec![constant(1.0), constant(1.0)]).words();
     words_left_over.push(0);

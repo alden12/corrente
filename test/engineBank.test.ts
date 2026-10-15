@@ -7,7 +7,7 @@ import { BLOCK } from "../src/audio/bank/exports";
 import { TEST_EFFECTS, TEST_INSTRUMENTS } from "../src/audio/bank/testInstruments";
 import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
-import type { DeviceDefinition } from "../src/audio/definitions/format";
+import { MAX_ZONES, type DeviceDefinition } from "../src/audio/definitions/format";
 import { buildBanks } from "../src/audio/dsp/wavetable";
 import { tableOf } from "../src/audio/samples/tables";
 
@@ -351,6 +351,28 @@ describe("EngineBank", () => {
         },
         voice: "player.left",
       });
+      it("loads a plan with as many zones as there can be, each its own sample param", () => {
+        const many = compileDefinition({
+          format: 1,
+          zones: Array.from({ length: MAX_ZONES }, (_, index) => ({
+            sample: { param: `pad${index}` },
+            root: 60,
+            keys: [index % 128, index % 128] as [number, number],
+          })),
+          nodes: {
+            player: {
+              block: "sampler",
+              voice: true,
+              inputs: { frequency: "voice.frequency", gate: "voice.gate", sample: "voice.sample", root: "voice.root" },
+            },
+          },
+          voice: "player.left",
+        });
+        // More params than the plan has words: no node reads a zone's.
+        expect(many.params.length).toBeGreaterThan(many.words.length);
+        expect(() => new EngineBank(wasm, RATE, 1).load(0, many)).not.toThrow();
+      });
+
       /** A second of one value. */
       const flat = (value: number) => ({ channels: [new Float32Array(RATE).fill(value)], rate: RATE });
       const zonedBank = () => {

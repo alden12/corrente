@@ -7,57 +7,24 @@
  * Its `stage` keeps its slot in a bank after the one feeding it: a bank is one worklet node, and
  * audio that came out of a node and went back into it would be a loop, which Web Audio silences.
  */
-import type { CompiledPlan } from "../definitions/compile";
 import type { Effect } from "../effects/types";
-import type { ChainLayout, ChainPlan } from "./chainPlan";
-import { EngineDevice, type ParamSources } from "./EngineDevice";
+import type { ChainPlan } from "./chainPlan";
+import { EngineDevice } from "./EngineDevice";
 
-export class EngineEffect implements Effect {
+export class EngineEffect extends EngineDevice implements Effect {
   readonly input: GainNode;
-  readonly output: GainNode;
   readonly stage: number;
-  /** Each of its effects' bypass param in its plan, by effect id. */
-  bypass = new Map<string, string>();
-  private readonly device: EngineDevice;
 
-  constructor(
-    context: BaseAudioContext,
-    plan: CompiledPlan,
-    sources: ParamSources,
-    stage: number,
-    chain?: ChainLayout,
-    sidechain?: AudioNode,
-  ) {
-    this.input = new GainNode(context);
+  /** `sidechain`: what keys it, for a keyed effect (part 5). */
+  constructor(context: BaseAudioContext, chain: ChainPlan, stage: number, sidechain?: AudioNode) {
+    const input = new GainNode(context);
+    super(context, chain, { stage, input, sidechain });
+    this.input = input;
     this.stage = stage;
-    this.device = new EngineDevice(context, plan, sources, { stage, input: this.input, sidechain }, chain);
-    this.output = this.device.output;
-    if (chain) this.bypass = chain.bypass;
-  }
-
-  /** Play another run's plan on the same slot: the effects it keeps carry on, or else it crossfades. */
-  reload(chain: ChainPlan): void {
-    this.bypass = chain.bypass;
-    this.device.reload(chain.plan, chain.sources, chain);
-  }
-
-  /** Set a param no store holds: an effect's bypass in the run. */
-  setFixed(param: string, value: number): void {
-    this.device.setFixed(param, value);
-  }
-
-  /** How many samples late its output is. */
-  get latency(): number {
-    return this.device.latency;
-  }
-
-  /** Resolves once the plan and its samples are with the engine. */
-  ready(): Promise<void> {
-    return this.device.ready();
   }
 
   dispose(): void {
-    this.device.dispose();
+    super.dispose();
     this.input.disconnect();
   }
 }

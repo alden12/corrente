@@ -4,16 +4,12 @@
  * hold a new-engine device until the old format converts and retires (decided 2026-10-14). They go
  * when the built-ins convert.
  */
-import { compileDefinition } from "../definitions/compile";
 import type { DeviceDefinition } from "../definitions/format";
 import { registerInstrument } from "../instruments/catalog";
-import { registerInstrumentFactory } from "../instruments/registry";
 import type { ParamSchema, ParamSpec } from "../params/types";
 import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../samples/catalog";
 import { registerEffect } from "../effects/catalog";
 import { registerEngineDevice } from "../definitions/engineDevices";
-import { storeParams } from "./EngineDevice";
-import { EngineInstrument } from "./EngineInstrument";
 
 interface TestInstrument {
   type: string;
@@ -500,10 +496,9 @@ export const TEST_EFFECTS = [echo, resonator, sidechainCompressor];
 /** Put the test instruments and effects in the library, as engine devices. */
 export const registerTestInstruments = (): void => {
   TEST_INSTRUMENTS.forEach(({ type, label, family = "Synths", schema, definition }) => {
-    const plan = compileDefinition(definition, { params: schema });
+    // No instrument factory: an engine instrument is made as a chain (trackInstrument).
     registerEngineDevice(type, { definition, schema });
     registerInstrument({ type, label, schema, family, custom: true });
-    registerInstrumentFactory(type, (context, store) => new EngineInstrument(context, plan, storeParams(plan, store)));
   });
   TEST_EFFECTS.forEach(({ type, label, schema, definition }) => {
     registerEngineDevice(type, { definition, schema });

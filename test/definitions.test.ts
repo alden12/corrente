@@ -579,7 +579,7 @@ describe("definitions the compiler refuses", () => {
           "zones[0].velocities: the lowest velocity comes first",
         ]);
         expect(problemsOf(zonedWith(undefined, "voice.sample", 60))).toEqual([
-          "x.sample: takes a sample param as { param }, with no scale, offset or table",
+          "x.sample: voice.sample is the sample zone a note took, and there are no zones",
         ]);
         expect(problemsOf(zonedWith(undefined, { param: "drum" }), [drum])).toEqual([
           "x.root: voice.root is the sample zone a note took, and there are no zones",

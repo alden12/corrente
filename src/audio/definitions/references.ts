@@ -8,6 +8,8 @@ import type { ParamSchema } from "../params/types";
 import {
   DEFAULT_VOICES,
   HOST_SIGNALS,
+  SAMPLE_INPUTS,
+  TABLE_INPUTS,
   TRACK_INPUTS,
   VOICE_SIGNALS,
   VOICE_SUM,
@@ -88,6 +90,25 @@ export const voicesOf = (definition: DeviceDefinition): number =>
 /** What a definition plays, by channel: its output, or the voices summed if it has voices and doesn't say. */
 export const outputOf = (definition: DeviceDefinition): string[] =>
   channelsOf(definition.output ?? (voicesOf(definition) > 0 ? ["voices.left", "voices.right"] : undefined));
+
+/** The params a definition binds to the inputs `inputs` names by block (SAMPLE_INPUTS, TABLE_INPUTS). */
+export const paramsOn = (definition: DeviceDefinition, inputs: Record<string, readonly string[]>): string[] =>
+  Object.values(definition.nodes).flatMap((node) =>
+    (inputs[node.block] ?? []).flatMap((port) => {
+      const input = node.inputs?.[port];
+      return typeof input === "object" && !Array.isArray(input) && "param" in input ? [input.param] : [];
+    }),
+  );
+
+/** A definition's sample params: those its sample and table inputs and its zones name, and which are tables. */
+export const sampleParamsOf = (definition: DeviceDefinition) => {
+  const tables = new Set(paramsOn(definition, TABLE_INPUTS));
+  const samples = [
+    ...paramsOn(definition, SAMPLE_INPUTS),
+    ...(definition.zones ?? []).map((zone) => zone.sample.param),
+  ];
+  return { samples: new Set([...samples, ...tables]), tables, both: samples.filter((param) => tables.has(param)) };
+};
 
 /** A reference as a source, or what's wrong with it. */
 export const referenceTo = (reference: string, nodes: DeviceDefinition["nodes"]): Source | string => {

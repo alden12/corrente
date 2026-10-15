@@ -1,17 +1,15 @@
 /**
- * A device on the new engine (INST-36.5): a compiled definition on a track slot in an engine bank,
- * its params kept in step with its ParamStore. `EngineInstrument` plays notes on one and
- * `EngineEffect` feeds audio through one, so tracks don't know which engine they're on while both
- * exist.
+ * A device on the new engine (INST-36.5): a chain's plan (chainPlan.ts: an instrument and the
+ * engine effects after it, or a run of effects) on a track slot in an engine bank, its params kept in
+ * step with their ParamStores. `EngineInstrument` plays notes on one and `EngineEffect` feeds audio
+ * through one, both built on this, so tracks don't know which engine they're on while both exist.
  *
  * The slot arrives once the bank's worklet has loaded (the first time, the engine is fetched), so
  * whatever is sent before then waits and goes in order behind the plan. `ready` waits for the
  * worklet to say the plan is in, since an offline render outruns the messages that carry it.
  *
- * A sample param (INST-36.6) names a sample: each time it changes, the sample is decoded here (the
- * worklet can't decode) and sent to the bank, which keeps it in a slot by name. One a wavetable plays
- * is sent as a table, band-limited (samples/tables.ts), under its own name. `ready` waits for
- * those too, so an offline render doesn't start before its samples are in.
+ * Sample params (INST-36.6) send their samples through deviceSamples.ts, and `ready` waits for those
+ * too.
  *
  * A chain's plan (INST-36.7) reloads keeping what it can: when devices are added to or removed from
  * the chain and the rest stay in order, the kept devices' nodes carry on in the new plan (carry.ts),
@@ -19,18 +17,12 @@
  * or moved effect is bypassed first, and the plan loads a little later, once the bypass has ramped
  * (live only; an offline render has no edits).
  */
-import type { CompiledPlan } from "../definitions/compile";
-import { chainEdit, type ChainEdit, type ChainLayout } from "./chainPlan";
-import { reloadOptions, type Sent } from "./reloadPlan";
+import type { ChainPlan } from "./chainPlan";
+import { chainEdit, reloadOptions, type ChainEdit, type Sent } from "./reloadPlan";
+import { DeviceSamples } from "./deviceSamples";
 import { engineValueOf } from "../definitions/values";
-import { buildBanks } from "../dsp/wavetable";
-import { loadSampleBuffer } from "../samples/builtinUrls";
-import { BUILTIN_WAVETABLES, parseRef } from "../samples/catalog";
-import { cyclesOf, tableOf } from "../samples/tables";
 import { bindParams, type ParamBinding } from "../params/binding";
-import type { ParamStore } from "../params/store";
 import type { ParamValue } from "../params/types";
-import type { SampleAudio } from "./bank";
 import type { FromBank, ToBank } from "./messages";
 import { mainInput, sidechainInput, takeSlot, type BankSlot } from "./pool";
 
@@ -45,21 +37,6 @@ export interface DevicePlace {
 }
 
 /**
- * Where each of a plan's params comes from: a store and the param's id there. One device's plan reads
- * its own store by the same ids; a chain's (INST-36.7) reads each device's store under its namespace.
- * A plan param with no source (a chain's bypass) is set with `setFixed`.
- */
-export type ParamSources = Record<string, { store: ParamStore; id: string }>;
-
-/** A single device's params: every param its plan reads, from `store` by the same id. */
-export const storeParams = (plan: CompiledPlan, store: ParamStore): ParamSources =>
-  Object.fromEntries(
-    plan.params
-      .filter((source) => store.has(source.param))
-      .map((source) => [source.param, { store, id: source.param }]),
-  );
-
-/**
  * How long a removed or moved effect's bypass gets before the plan loads: its 20 ms ramp
  * (definitions/chain.ts) and time for the message to arrive.
  */
@@ -69,49 +46,38 @@ export class EngineDevice {
   /** The slot's output, once it arrives: silent until then. */
   readonly output: GainNode;
   readonly context: BaseAudioContext;
-  private readonly input: AudioNode | undefined;
+  /** What plays into the slot's input, for an effect. */
+  private readonly feed: AudioNode | undefined;
   private readonly sidechain: AudioNode | undefined;
   private slot: BankSlot | null = null;
   private waiting: ToBank[] = [];
   private unsubscribe: (() => void)[] = [];
   private disposed = false;
   private readonly arrived: Promise<void>;
-  private plan: CompiledPlan;
-  private sources: ParamSources;
+  /** The plan, which devices it's made of, and where its params come from. */
+  private chain: ChainPlan;
   /** Values set directly rather than from a store, by plan param. */
   private readonly fixed = new Map<string, number>();
-  /** Each sample param's latest sample, done once the bank has it. */
-  private readonly samples = new Map<string, { ref: string; done: Promise<void> }>();
-  /** What to call when the bank says it has dealt with a param's sample, by param and ref. */
-  private readonly sampled = new Map<string, () => void>();
-  /** Which devices the plan is made of, for a chain's. */
-  private chain: ChainLayout | undefined;
+  private readonly samples: DeviceSamples;
   private sent: Sent | undefined;
   /** A reload waiting for removed effects to fade out. */
   private pending: ReturnType<typeof setTimeout> | undefined;
   /** Bypass params sent to 1 for that reload, until a plan loads. */
   private readonly fadingOut = new Set<string>();
 
-  constructor(
-    context: BaseAudioContext,
-    plan: CompiledPlan,
-    sources: ParamSources,
-    place: DevicePlace,
-    chain?: ChainLayout,
-  ) {
+  constructor(context: BaseAudioContext, chain: ChainPlan, place: DevicePlace) {
     this.context = context;
-    this.input = place.input;
+    this.feed = place.input;
     this.sidechain = place.sidechain;
     this.output = new GainNode(context);
-    this.plan = plan;
-    this.sources = sources;
     this.chain = chain;
+    this.samples = new DeviceSamples(context, (message) => this.send({ type: "sample", ...message }));
     let loaded = () => {};
     const heard = new Promise<void>((resolve) => (loaded = resolve));
     const listener = (message: FromBank) => {
       if (message.type === "sampled") {
         if (message.message) console.error(message.message);
-        this.sampled.get(sampleKey(message.param, message.ref))?.();
+        this.samples.heard(message.param, message.ref);
         return;
       }
       if (message.type === "refused") console.error(message.message);
@@ -124,7 +90,7 @@ export class EngineDevice {
       }
       this.slot = slot;
       slot.node.connect(this.output, slot.track);
-      this.input?.connect(slot.node, 0, mainInput(slot.track));
+      this.feed?.connect(slot.node, 0, mainInput(slot.track));
       this.sidechain?.connect(slot.node, 0, sidechainInput(slot.track));
       this.loadPlan();
       this.waiting.forEach((message) => slot.post({ ...message, track: slot.track } as ToBank));
@@ -133,20 +99,23 @@ export class EngineDevice {
     });
   }
 
+  /** Each effect's bypass param in the plan, by effect id. */
+  get bypass(): Map<string, string> {
+    return this.chain.bypass;
+  }
+
   /**
-   * Play another plan on the same slot, its params from `sources`: it crossfades in over a block,
-   * and the notes held start again in it (INST-36.5). A chain's plan, given its `chain`, keeps the
-   * state of the devices it keeps instead, if the edit allows (chainEdit).
+   * Play another chain's plan on the same slot. The devices it keeps carry on, if the edit allows
+   * (chainEdit); otherwise it crossfades in over a block, and the notes held start again in it
+   * (INST-36.5).
    */
-  reload(plan: CompiledPlan, sources: ParamSources, chain?: ChainLayout): void {
-    this.plan = plan;
-    this.sources = sources;
+  reload(chain: ChainPlan): void {
     this.chain = chain;
     if (!this.slot) return;
     clearTimeout(this.pending);
     this.pending = undefined;
     const before = this.sent?.chain;
-    const edit = before && chain ? chainEdit(before.keys, chain.keys) : undefined;
+    const edit = before ? chainEdit(before.keys, chain.keys) : undefined;
     const fading = [...(edit?.removed ?? []), ...(edit?.moved ?? [])].flatMap((key) => before?.bypass.get(key) ?? []);
     // An offline context renders ahead without waiting, so there is no later to load at.
     if (fading.length === 0 || "startRendering" in this.context) {
@@ -165,7 +134,7 @@ export class EngineDevice {
 
   /** How many samples late the plan's output is. */
   get latency(): number {
-    return this.plan.latency;
+    return this.chain.plan.latency;
   }
 
   /** Set a plan param no store holds (a chain's bypass), now and for every later plan. */
@@ -180,7 +149,8 @@ export class EngineDevice {
    * kept devices' nodes carry on from the plan sent before, and added effects fade in.
    */
   private loadPlan(edit?: ChainEdit): void {
-    const { plan, sources, chain } = this;
+    const { chain } = this;
+    const { plan, sources } = chain;
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     const named = (sample: boolean) => [
       ...new Set(
@@ -222,7 +192,7 @@ export class EngineDevice {
         ]),
         ...mine(true).map((param): [string, ParamBinding] => [
           sources[param].id,
-          { apply: (value) => this.sendSample(param, String(value), tables.has(param)) },
+          { apply: (value) => this.samples.request(param, String(value), tables.has(param)) },
         ]),
       ]);
       return bindParams(store, bindings);
@@ -232,49 +202,21 @@ export class EngineDevice {
   /** Resolves once the plan and its samples are with the engine, so an offline render doesn't start silent. */
   async ready(): Promise<void> {
     await this.arrived;
-    await Promise.all([...this.samples.values()].map((sample) => sample.done));
+    await this.samples.ready();
   }
 
   dispose(): void {
     this.disposed = true;
+    this.samples.dispose();
     clearTimeout(this.pending);
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     this.unsubscribe = [];
     if (!this.slot) return;
     this.slot.node.disconnect(this.output, this.slot.track);
-    this.input?.disconnect(this.slot.node, 0, mainInput(this.slot.track));
+    this.feed?.disconnect(this.slot.node, 0, mainInput(this.slot.track));
     this.sidechain?.disconnect(this.slot.node, 0, sidechainInput(this.slot.track));
     this.slot.release();
     this.slot = null;
-  }
-
-  /**
-   * Decode the sample `ref` names and send it to the bank for `param`, unless the param has moved on
-   * by the time it's decoded. A sample that won't decode is sent as none.
-   */
-  private sendSample(param: string, sampleRef: string, asTable: boolean): void {
-    // A table is the bank's own thing, apart from the same sample played as one.
-    const ref = sampleRef && asTable ? `table:${sampleRef}` : sampleRef;
-    if (this.samples.get(param)?.ref === ref) return;
-    const request = { ref, done: Promise.resolve() };
-    this.samples.set(param, request);
-    const key = sampleKey(param, ref);
-    let heard: (() => void) | undefined;
-    request.done = (asTable ? tableAudio(this.context, sampleRef) : sampleAudio(this.context, sampleRef))
-      .catch((error: unknown) => {
-        console.error(`${param}: couldn't load ${sampleRef}`, error);
-        return null;
-      })
-      .then((audio) => {
-        if (this.disposed || this.samples.get(param) !== request) return;
-        const answered = new Promise<void>((resolve) => this.sampled.set(key, (heard = resolve)));
-        this.send({ type: "sample", param, ref, audio });
-        return answered;
-      })
-      .finally(() => {
-        // Only this request's own: a later one for the same sample may be waiting too.
-        if (this.sampled.get(key) === heard) this.sampled.delete(key);
-      });
   }
 
   /** Send a message for this device's track, or keep it until the slot arrives. */
@@ -284,41 +226,5 @@ export class EngineDevice {
     else this.waiting.push({ ...message, track: -1 } as ToBank);
   }
 }
-
-const sampleKey = (param: string, ref: string) => `${param}\n${ref}`;
-
-/** A sample decoded: up to two channels at its own rate, or null for none. */
-const sampleAudio = async (context: BaseAudioContext, ref: string): Promise<SampleAudio | null> => {
-  const buffer = await loadSampleBuffer(context, ref);
-  return (
-    buffer && {
-      channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
-        buffer.getChannelData(channel).slice(),
-      ),
-      rate: buffer.sampleRate,
-    }
-  );
-};
-
-/** Built-in wavetables, made once each: their levels take a moment to work out. */
-const builtinTables = new Map<string, Float32Array>();
-
-/**
- * A wavetable, band-limited at every level the engine reads: a built-in, or a sample's first channel
- * cut into 2048-sample cycles. Null for none, or a sample shorter than a cycle.
- */
-const tableAudio = async (context: BaseAudioContext, ref: string): Promise<SampleAudio | null> => {
-  const parsed = parseRef(ref);
-  if (parsed.kind === "wavetable") {
-    const index = BUILTIN_WAVETABLES.findIndex((table) => table.id === parsed.id);
-    if (index < 0) return null;
-    const table = builtinTables.get(parsed.id) ?? tableOf(buildBanks()[index]);
-    builtinTables.set(parsed.id, table);
-    return { channels: [table], rate: context.sampleRate };
-  }
-  const buffer = await loadSampleBuffer(context, ref);
-  const cycles = buffer ? cyclesOf(buffer.getChannelData(0)) : [];
-  return cycles.length > 0 ? { channels: [tableOf(cycles)], rate: context.sampleRate } : null;
-};
 
 export type DistributiveOmit<Type, Key extends PropertyKey> = Type extends unknown ? Omit<Type, Key> : never;
