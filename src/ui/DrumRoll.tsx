@@ -6,7 +6,7 @@
  * at the pad's pitch), so a pattern drawn here and one drawn in the grid are identical
  * data - the two are just different editors over the same clip.
  */
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { ClipStore } from "../audio/sequencer/clipStore";
 import type { ParamStore } from "../audio/params/store";
 import type { Scheduler } from "../audio/sequencer/scheduler";
@@ -31,6 +31,7 @@ export function DrumRoll({
   dispatch,
   projectStore,
   compact,
+  footer,
 }: {
   clipStore: ClipStore;
   params: ParamStore;
@@ -44,6 +45,8 @@ export function DrumRoll({
   /** Touch layout, forwarded verbatim to the roll (MOBILE-18). A drum track is a roll like any
    *  other, so it gets the same treatment; the prop was simply never threaded through. */
   compact?: boolean;
+  /** Under the roll, as on any other (the desktop keys panel). */
+  footer?: ReactNode;
 }) {
   const pads = usePads(params);
   const rows = useMemo<RollRows>(() => {
@@ -84,6 +87,7 @@ export function DrumRoll({
       projectStore={projectStore}
       rows={rows}
       compact={compact}
+      footer={footer}
     />
   );
 }

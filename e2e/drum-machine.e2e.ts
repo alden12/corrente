@@ -54,6 +54,8 @@ test("a Drum Kit track can switch to the piano roll (Keys), editing the same cli
   // with its assigned note + drum name ("C2 Kick" - GM kick is MIDI 36, which the C4 = 60
   // octave numbering displays as C2), so you can see and play the mapping.
   await expect(page.getByText("C2 Kick", { exact: true })).toBeVisible();
+  // The desktop keys panel sits under it, as under any other roll.
+  await expect(page.getByRole("slider", { name: "Velocity", exact: true })).toBeVisible();
 
   // Back to Pads: the step grid returns with the hit still lit.
   await page.getByRole("radio", { name: "Pads", exact: true }).click();

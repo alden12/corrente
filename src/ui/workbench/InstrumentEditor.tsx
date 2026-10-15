@@ -62,7 +62,7 @@ export function InstrumentEditor({
   projectStore: ProjectStore;
   /** Touch layout: the roll hands its toolbar to the shell's ⋮ (MOBILE-1). */
   compact?: boolean;
-  /** Under the piano roll's velocity lane (not the drum editors, whose keys are the kit's). */
+  /** Under the roll's velocity lane, the drum roll's too (not the step grid, which is its own pads). */
   rollFooter?: ReactNode;
 }) {
   const isDrumkit = track.instrumentType === "drumkit";
@@ -106,6 +106,7 @@ export function InstrumentEditor({
             dispatch={dispatch}
             projectStore={projectStore}
             compact={compact}
+            footer={rollFooter}
           />
         ) : (
           <PianoRoll
