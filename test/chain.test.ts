@@ -187,7 +187,7 @@ describe("chain pieces", () => {
     const store = new ParamStore(device("engine-pluck").schema);
     const chain = [effect("a", "engine-echo"), effect("b", OLD), effect("c", "engine-echo")];
     expect(instrumentChain("engine-pluck", store, chain)?.absorbed.map(({ id }) => id)).toEqual(["a"]);
-    expect(instrumentChain("nimbus", store, chain)).toBeUndefined();
+    expect(instrumentChain(OLD, store, chain)).toBeUndefined();
     expect(chainPlan([{ key: "x", type: OLD, store }], false)).toBeUndefined();
   });
 });
