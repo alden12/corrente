@@ -3,7 +3,10 @@ import { EngineBank } from "../src/audio/bank/bank";
 import { BLOCK } from "../src/audio/bank/exports";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import { effectFromGraph, instrumentFromGraph, type Converted } from "../src/audio/definitions/fromGraph";
+import { engineDevice } from "../src/audio/definitions/engineDevices";
 import { engineValueOf } from "../src/audio/definitions/values";
+import { effectSchema } from "../src/audio/effects/catalog";
+import { instrumentSchema } from "../src/audio/instruments/catalog";
 import { BUILTIN_GRAPH_EFFECTS, BUILTIN_GRAPH_INSTRUMENTS } from "../src/audio/graph/builtins";
 import type { GraphEffectDef, GraphInstrumentDef } from "../src/audio/graph/types";
 import type { ParamSchema } from "../src/audio/params/types";
@@ -83,6 +86,13 @@ describe("converting the built-ins", () => {
 
   it.each(BUILTIN_GRAPH_EFFECTS.map((def) => [def.type, def] as const))("%s converts, compiles and plays", (_, def) => {
     healthy(through(effectFromGraph(def)));
+  });
+
+  it("plays every built-in on the engine, under the schema its projects were saved with", () => {
+    BUILTIN_GRAPH_INSTRUMENTS.forEach((def) =>
+      expect(engineDevice(def.type)?.schema).toEqual(instrumentSchema(def.type)),
+    );
+    BUILTIN_GRAPH_EFFECTS.forEach((def) => expect(engineDevice(def.type)?.schema).toEqual(effectSchema(def.type)));
   });
 
   it("says what sounds different: the reverb's convolution", () => {

@@ -62,13 +62,14 @@ export default defineConfig({
       manifest: PWA_MANIFEST,
       workbox: {
         // The worklets are in here as ordinary `assets/*.js`, and they have to be: without
-        // them there is no audio at all, which is a strange way to be offline.
+        // them there is no audio at all, which is a strange way to be offline. The same goes for
+        // the engine's `wasm` (INST-36.8), which every built-in plays through.
         //
         // Fonts are the one thing filtered rather than swept up. The two families ship a
         // subset per script (adlam, nushu, syriac, math, ...) and `unicode-range` means a
         // browser only ever fetches the ones a glyph needs, which for this UI is latin. Taking
         // all fourteen would put 184KB into the install to cover text the app does not have.
-        globPatterns: ["**/*.{js,css,html,svg,png}", "**/*latin*.woff2"],
+        globPatterns: ["**/*.{js,css,html,svg,png,wasm}", "**/*latin*.woff2"],
         // A deep link (`/p/<project>`) is a client-side route, so offline it has to resolve to
         // the shell. The API and the socket are the server's, and answering either from a
         // cache would be worse than failing: the app already knows what to do with a network

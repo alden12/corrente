@@ -32,8 +32,9 @@ export function createInstrument(type: string, ctx: BaseAudioContext, store: Par
 
 // --- built-in factories (self-registered) ---------------------------------
 // Every instrument but Wavetable and Nimbus is a declarative graph (data, not code). Those two are
-// whole polyphonic synths in one worklet each, and stay that way until a graph can run its voices
-// as cheaply (INST-15, INST-19). See src/audio/graph and INST-4.
+// whole polyphonic synths in one worklet each (INST-15, INST-19). The graph ones play on the new
+// engine, converted (definitions/engineDevices.ts); these factories go with the old engine
+// (INST-36.8 part 6).
 BUILTIN_GRAPH_INSTRUMENTS.forEach((def) =>
   registerInstrumentFactory(def.type, (ctx, store) => new GraphInstrument(ctx, store, def)),
 );

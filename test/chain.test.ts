@@ -166,27 +166,29 @@ describe("chain pieces", () => {
   // Register the test devices as engine devices, as devTools does.
   registerTestInstruments();
   const effect = (id: string, type: string, bypassed = false) => ({ id, type, bypassed, params: new ParamStore([]) });
+  /** An effect on the old engine: a custom one, until custom devices move over too. */
+  const OLD = "custom-old-effect";
 
   it("groups consecutive engine effects into runs, the rest on their own", () => {
     const chain = [
       effect("a", "engine-echo"),
       effect("b", "engine-resonator", true),
-      effect("c", "delay"),
+      effect("c", OLD),
       effect("d", "engine-echo"),
     ];
     expect(
       piecesOf(chain).map((piece) => (piece.kind === "run" ? piece.effects.map(({ id }) => id) : piece.effect.id)),
     ).toEqual([["a", "b"], "c", ["d"]]);
     expect(leadingRun(chain).map(({ id }) => id)).toEqual(["a", "b"]);
-    expect(leadingRun([effect("c", "delay"), ...chain]).map(({ id }) => id)).toEqual([]);
+    expect(leadingRun([effect("c", OLD), ...chain]).map(({ id }) => id)).toEqual([]);
   });
 
   it("composes an engine instrument with the run after it, and nothing else", () => {
     const store = new ParamStore(device("engine-pluck").schema);
-    const chain = [effect("a", "engine-echo"), effect("b", "delay"), effect("c", "engine-echo")];
+    const chain = [effect("a", "engine-echo"), effect("b", OLD), effect("c", "engine-echo")];
     expect(instrumentChain("engine-pluck", store, chain)?.absorbed.map(({ id }) => id)).toEqual(["a"]);
-    expect(instrumentChain("subtractive", store, chain)).toBeUndefined();
-    expect(chainPlan([{ key: "x", type: "delay", store }], false)).toBeUndefined();
+    expect(instrumentChain("nimbus", store, chain)).toBeUndefined();
+    expect(chainPlan([{ key: "x", type: OLD, store }], false)).toBeUndefined();
   });
 });
 

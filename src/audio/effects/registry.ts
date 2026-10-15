@@ -34,7 +34,8 @@ export function createEffect(type: string, ctx: BaseAudioContext, store: ParamSt
 
 // --- built-in factories (self-registered) ---------------------------------
 // Every effect is a declarative graph (data, not code); the Bitcrusher's is a custom-DSP block
-// (INST-15). See src/audio/graph and INST-4.
+// (INST-15). They play on the new engine, converted (definitions/engineDevices.ts); these factories
+// go with the old engine (INST-36.8 part 6).
 BUILTIN_GRAPH_EFFECTS.forEach((def) =>
   registerEffectFactory(def.type, (ctx, store) => new GraphEffect(ctx, store, def)),
 );
