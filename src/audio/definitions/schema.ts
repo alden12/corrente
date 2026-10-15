@@ -214,7 +214,15 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
 
   definition.zones?.forEach((zone, index) => {
     checkSampleParam(zone.sample, ["zones", index, "sample"]);
-    if (zone.keys && zone.keys[0] > zone.keys[1]) problem(["zones", index, "keys"], "the lowest key comes first");
+    // Settings read from params, which must be the device's and read as numbers.
+    (["root", "start", "end", "trimStart", "trimEnd", "tune", "level", "keytrack"] as const).forEach((setting) => {
+      const value = zone[setting];
+      if (typeof value === "object") checkParam(value, ["zones", index, setting]);
+    });
+    zone.keys?.forEach((key, end) => typeof key === "object" && checkParam(key, ["zones", index, "keys", end]));
+    const [low, high] = zone.keys ?? [];
+    if (typeof low === "number" && typeof high === "number" && low > high)
+      problem(["zones", index, "keys"], "the lowest key comes first");
     if (zone.velocities && zone.velocities[0] > zone.velocities[1])
       problem(["zones", index, "velocities"], "the lowest velocity comes first");
   });

@@ -550,8 +550,46 @@ describe("definitions the compiler refuses", () => {
         const plan = compileDefinition(zonedWith([{ sample: { param: "drum" }, root: 36, keys: [36, 36] }]), {
           params: [drum],
         });
-        expect(plan.zones).toEqual([{ param: "drum", root: 36, keys: [36, 36], velocities: [0, 1], start: 0, end: 1 }]);
+        expect(plan.zones).toEqual([
+          {
+            param: "drum",
+            root: 36,
+            keys: [36, 36],
+            velocities: [0, 1],
+            start: 0,
+            end: 1,
+            trimStart: 0,
+            trimEnd: 0,
+            tune: 0,
+            level: 1,
+            keytrack: 1,
+          },
+        ]);
         expect(plan.params).toEqual([{ param: "drum", scale: 1, offset: 0, sample: true }]);
+      });
+
+      it("reads a zone's settings from params, which the plan lists so the device sends them", () => {
+        const note = { id: "note", label: "Note", kind: "number", min: 0, max: 127, default: 38 } as const;
+        const plan = compileDefinition(
+          zonedWith([
+            {
+              sample: { param: "drum" },
+              root: { param: "note" },
+              keys: [{ param: "note" }, { param: "note" }],
+              keytrack: false,
+            },
+          ]),
+          { params: [drum, note] },
+        );
+        expect(plan.zones?.[0]).toMatchObject({
+          root: { param: "note" },
+          keys: [{ param: "note" }, { param: "note" }],
+          keytrack: 0,
+        });
+        expect(plan.params.map((source) => source.param)).toEqual(["drum", "note"]);
+        expect(
+          problemsOf(zonedWith([{ sample: { param: "drum" }, root: 36, tune: { param: "missing" } }]), [drum]),
+        ).toEqual(['zones[0].tune: there is no param "missing" (the device has drum)']);
       });
 
       it("checks zones, and keeps zone signals for definitions with zones", () => {

@@ -20,13 +20,14 @@
  *   ahead (decision 4 of INST-36). The memory only grows on init, load and loading a sample, so
  *   views are re-made then (the addresses the engine gave stay put).
  */
-import type { CompiledPlan, PlanZone } from "../definitions/compile";
+import type { CompiledPlan, PlanZone, ZoneValue } from "../definitions/compile";
 import { resolveNumber } from "../graph/table";
 import {
   BLOCK,
   EMPTY_SAMPLE,
   INPUT_CHANNELS,
   OUTPUT_CHANNELS,
+  SAMPLE_SLOTS,
   startEngine,
   withWords,
   ZONE_SIGNAL,
@@ -48,14 +49,25 @@ export class PlanRejected extends Error {
 
 const frequencyOf = (note: number) => 440 * 2 ** ((note - 69) / 12);
 
+/** A zone setting now: a number as it is, or its param's value through the binding. */
+const zoneValue = (setting: ZoneValue, values: Record<string, number>): number =>
+  typeof setting === "number" ? setting : resolveNumber(values[setting.param] ?? 0, setting);
+
 /**
- * The first of a plan's zones a note fits, by key and velocity. A plain indexed loop: it runs while
- * rendering, where a closure or an iterator would be garbage.
+ * The first of a plan's zones a note fits, by key and velocity, its keys read from their params if
+ * they have them. A plain indexed loop: it runs while rendering, where a closure or an iterator would
+ * be garbage.
  */
-const zoneFor = (zones: PlanZone[], note: number, velocity: number): PlanZone | undefined => {
+const zoneFor = (
+  zones: PlanZone[],
+  note: number,
+  velocity: number,
+  values: Record<string, number>,
+): PlanZone | undefined => {
   for (let index = 0; index < zones.length; index++) {
     const zone = zones[index];
-    const [lowKey, highKey] = zone.keys;
+    const lowKey = Math.round(zoneValue(zone.keys[0], values));
+    const highKey = Math.round(zoneValue(zone.keys[1], values));
     const [lowVelocity, highVelocity] = zone.velocities;
     if (note >= lowKey && note <= highKey && velocity >= lowVelocity && velocity <= highVelocity) return zone;
   }
@@ -98,6 +110,8 @@ export class EngineBank {
   private readonly tracks: Track[];
   /** Each sample loaded, by ref: its slot, and how many sample params name it. */
   private readonly sampleSlots = new Map<string, { slot: number; users: number }>();
+  /** Each slot's sample's length in seconds (0 when empty), for a zone's trims in milliseconds. */
+  private readonly sampleSeconds = new Float64Array(SAMPLE_SLOTS);
   private outputs: Float32Array[][] = [];
   private inputs: Float32Array[][] = [];
   /**
@@ -255,12 +269,14 @@ export class EngineBank {
     }
     const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);
     channels.forEach((channel, index) => data.set(channel, index * frames));
+    this.sampleSeconds[slot] = frames / rate;
     this.view();
   }
 
   /** Empty a sample slot. A sampler still naming it plays silence. */
   freeSample(slot: number): void {
     this.engine.eng_sample_free(slot);
+    this.sampleSeconds[slot] = 0;
   }
 
   noteOn(track: number, note: number, velocity: number, time: number): void {
@@ -352,22 +368,36 @@ export class EngineBank {
   /**
    * Start a note in a voice slot, cutting the voice it steals, `offset` samples into the coming
    * block. With zones, the note takes the first that fits and its voice is told which, and a note no
-   * zone fits doesn't sound (or take a voice).
+   * zone fits doesn't sound (or take a voice). A zone's settings are read now: its tune and key
+   * tracking set the note's frequency, its level scales the velocity, and its trims, in milliseconds,
+   * move the start and end by the sample's length.
    */
   private startNote(track: number, note: number, velocity: number, time: number, offset: number): void {
     const state = this.tracks[track];
     if (!state || state.voices.slots === 0) return;
     const zones = state.plan?.zones;
-    const zone = zones && zoneFor(zones, note, velocity);
+    const zone = zones && zoneFor(zones, note, velocity, state.values);
     if (zones && !zone) return;
     const slot = state.voices.noteOn(note, velocity, time, state.sounding);
     if (state.voices.cut >= 0) this.engine.eng_note_cut(track, state.voices.cut, offset);
-    this.engine.eng_note_on(track, slot, offset, frequencyOf(note), velocity, note);
-    if (!zone) return;
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.sample, state.values[zone.param] ?? EMPTY_SAMPLE);
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.root, zone.root);
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.start, zone.start);
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.end, zone.end);
+    if (!zone) {
+      this.engine.eng_note_on(track, slot, offset, frequencyOf(note), velocity, note);
+      return;
+    }
+    const { values } = state;
+    const root = zoneValue(zone.root, values);
+    const played = zoneValue(zone.keytrack, values) >= 0.5 ? note : root;
+    const frequency = frequencyOf(played) * 2 ** (zoneValue(zone.tune, values) / 12);
+    this.engine.eng_note_on(track, slot, offset, frequency, velocity * zoneValue(zone.level, values), note);
+    const sample = values[zone.param] ?? EMPTY_SAMPLE;
+    // Milliseconds as a share of the sample, inline: this runs while rendering, so no closures.
+    const perMs = this.sampleSeconds[sample] > 0 ? 1 / (1000 * this.sampleSeconds[sample]) : 0;
+    const start = Math.min(1, Math.max(0, zoneValue(zone.start, values) + zoneValue(zone.trimStart, values) * perMs));
+    const end = Math.min(1, Math.max(start, zoneValue(zone.end, values) - zoneValue(zone.trimEnd, values) * perMs));
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.sample, sample);
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.root, root);
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.start, start);
+    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.end, end);
   }
 
   private playNoteOff(event: TimedEvent, offset: number): void {

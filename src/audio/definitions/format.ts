@@ -190,18 +190,29 @@ export const sampleBindingSchema = z.strictObject({ param: z.string().min(1) });
 const noteNumber = z.number().int().min(0).max(127);
 const unit = z.number().min(0).max(1);
 
+/** A zone's setting: a number, or a param's value read when a note starts (a pad's note, its tune). */
+const zoneValue = <Value extends z.ZodNumber>(value: Value) => z.union([value, paramBindingSchema]);
+
 /**
  * A sample zone: which sample (a sample param), the note it plays at its own pitch (`root`), the
  * keys and velocities it answers (both ends included; every key and velocity if left out), and the
- * part of it to play (fractions, the whole sample if left out).
+ * part of it to play: `start` and `end` as fractions of it, and `trimStart` and `trimEnd` as
+ * milliseconds cut off each end (both, if given: the whole sample if neither). `tune` moves it in
+ * semitones, `level` scales the note's velocity, and `keytrack` off plays it at its own pitch
+ * whatever the key. Each but the sample and velocities can be a param, read as a note starts.
  */
 export const zoneSchema = z.strictObject({
   sample: sampleBindingSchema,
-  root: noteNumber,
-  keys: z.tuple([noteNumber, noteNumber]).optional(),
+  root: zoneValue(noteNumber),
+  keys: z.tuple([zoneValue(noteNumber), zoneValue(noteNumber)]).optional(),
   velocities: z.tuple([unit, unit]).optional(),
-  start: unit.optional(),
-  end: unit.optional(),
+  start: zoneValue(unit).optional(),
+  end: zoneValue(unit).optional(),
+  trimStart: zoneValue(z.number().min(0)).optional(),
+  trimEnd: zoneValue(z.number().min(0)).optional(),
+  tune: zoneValue(z.number().min(-48).max(48)).optional(),
+  level: zoneValue(z.number().min(0).max(4)).optional(),
+  keytrack: z.union([z.boolean(), paramBindingSchema]).optional(),
 });
 
 /** The most zones a definition may have. */

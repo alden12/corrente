@@ -71,7 +71,7 @@ const healthy = (channels: number[][]) => {
   expect(peakOf(all)).toBeLessThan(4);
 };
 
-/** The drum kit waits for zones that carry their own level and tune. */
+/** The drum kit plays only on its pads' notes, so it has a test of its own. */
 const INSTRUMENTS = BUILTIN_GRAPH_INSTRUMENTS.filter((def) => def.type !== "drumkit");
 const instrumentNamed = (type: string) => BUILTIN_GRAPH_INSTRUMENTS.find((def) => def.type === type)!;
 const effectNamed = (type: string) => BUILTIN_GRAPH_EFFECTS.find((def) => def.type === type)!;
@@ -90,8 +90,29 @@ describe("converting the built-ins", () => {
     expect(instrumentFromGraph(instrumentNamed("subtractive")).notes).toEqual([]);
   });
 
-  it("refuses a drum kit until zones carry their own level and tune", () => {
-    expect(() => instrumentFromGraph(instrumentNamed("drumkit"))).toThrow(/drum kit/);
+  it("converts the drum kit to a zone per pad, its note, level and tune read from the pad's params", () => {
+    const converted = instrumentFromGraph(instrumentNamed("drumkit"));
+    expect(converted.definition.zones).toHaveLength(32);
+    expect(converted.definition.zones?.[0]).toEqual({
+      sample: { param: "pad1.sample" },
+      root: 60,
+      keys: [
+        { param: "pad1.note", scale: 1 },
+        { param: "pad1.note", scale: 1 },
+      ],
+      tune: { param: "pad1.tune", scale: 1 },
+      level: { param: "pad1.level", scale: 1 },
+      keytrack: false,
+    });
+    // A pad's note plays it; a note no pad has doesn't sound.
+    const pad = (note: number) => {
+      const bank = loaded(converted);
+      bank.noteOn(0, note, 0.9, 0);
+      return rendered(bank, 0.2)[0];
+    };
+    const kick = defaultsOf(converted.schema)["pad1.note"];
+    expect(peakOf(pad(kick))).toBeGreaterThan(0.01);
+    expect(peakOf(pad(0))).toBe(0);
   });
 });
 

@@ -153,7 +153,7 @@ export async function renderEngineAb(): Promise<void> {
     }),
     element(
       "p",
-      "Each built-in converted to the new engine. Instruments play A3 for a second; effects get a second of a 220 Hz tone. Levels are RMS dBFS; octave gaps over 3 dB are marked.",
+      "Each built-in converted to the new engine. Instruments play A3 for a second (a drum kit its first pad); effects get a second of a 220 Hz tone. Levels are RMS dBFS; octave gaps over 3 dB are marked.",
       { color: COLOURS.quiet, margin: "0 0 12px", maxWidth: "65ch" },
     ),
     status,

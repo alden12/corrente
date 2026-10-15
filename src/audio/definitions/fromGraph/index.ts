@@ -19,6 +19,7 @@ import { compileDefinition, DefinitionError } from "../compile";
 import { DEFAULT_VOICES, RESERVED_NAMES, type DefinitionNode, type DeviceDefinition, type InputValue } from "../format";
 import { summed, type SingleInput } from "./fields";
 import { KINDS, type KindContext } from "./kinds";
+import { zonedSamples, type ZonedSamples } from "./zones";
 
 export interface Converted {
   /** The old schema, plus any params the conversion added (a sample a node named directly). */
@@ -47,10 +48,16 @@ interface Conversion {
   channelsInto(to: string): 1 | 2;
   /** A fresh node name. */
   allocate(base: string): string;
+  /** The zoned sampler's name, when the sample nodes became zones of one. */
+  zonedName?: string;
 }
 
-/** Convert a graph's nodes. `voice` marks them as per-voice: an instrument's. */
-const convertGraph = (graph: Graph, schema: ParamSchema, voice: boolean): Conversion => {
+/**
+ * Convert a graph's nodes. `voice` marks them as per-voice: an instrument's. With `zoned`, the nodes it
+ * replaced are played by one zoned sampler (named in the result, for the caller to build), not each
+ * converted.
+ */
+const convertGraph = (graph: Graph, schema: ParamSchema, voice: boolean, zoned?: ZonedSamples): Conversion => {
   const taken = new Set<string>(RESERVED_NAMES);
   const allocate = (base: string) => {
     const word = base.replace(/[^A-Za-z0-9_]/g, "_").replace(/^(?=[^A-Za-z])/, "n");
@@ -63,10 +70,11 @@ const convertGraph = (graph: Graph, schema: ParamSchema, voice: boolean): Conver
   };
   const specs = new Map(graph.nodes.map((spec) => [spec.id, spec]));
   const names = new Map(graph.nodes.map((spec) => [spec.id, allocate(spec.id)]));
+  const zonedName = zoned && allocate("samples");
   const into = (to: string) => graph.connections.filter((connection: Connection) => connection[1] === to);
 
   // Which nodes carry stereo: worked out until nothing changes, since a feedback loop can carry it round.
-  const stereo = new Set<string>([EFFECT_INPUT]);
+  const stereo = new Set<string>([EFFECT_INPUT, ...(zoned?.replaced ?? [])]);
   const fedStereo = (id: string) => into(id).some(([from]) => stereo.has(from));
   const carriesStereo = (spec: NodeSpec) => {
     const channels = KINDS[spec.kind].channels;
@@ -81,6 +89,7 @@ const convertGraph = (graph: Graph, schema: ParamSchema, voice: boolean): Conver
   const copyOf = (id: string, channel: number) => `${names.get(id)}_${SIDES[channel]}`;
   const outputsOf = (id: string): string[] => {
     if (id === EFFECT_INPUT) return ["input.left", "input.right"];
+    if (zonedName && zoned?.replaced.has(id)) return [`${zonedName}_l`, `${zonedName}_r`];
     const spec = specs.get(id);
     if (!spec) return [];
     const kind = KINDS[spec.kind];
@@ -88,11 +97,15 @@ const convertGraph = (graph: Graph, schema: ParamSchema, voice: boolean): Conver
     if (kind.outputs) return kind.outputs(name, (channel) => copyOf(id, channel), 2);
     return stereo.has(id) ? [copyOf(id, 0), copyOf(id, 1)] : [name];
   };
-  const sources = (to: string, channel: number) =>
-    into(to).flatMap(([from]) => {
-      const outputs = outputsOf(from);
-      return outputs.length === 0 ? [] : [outputs[Math.min(channel, outputs.length - 1)]];
-    });
+  // Each once: every pad of a kit reaches the voice through the one zoned sampler.
+  const sources = (to: string, channel: number) => [
+    ...new Set(
+      into(to).flatMap(([from]) => {
+        const outputs = outputsOf(from);
+        return outputs.length === 0 ? [] : [outputs[Math.min(channel, outputs.length - 1)]];
+      }),
+    ),
+  ];
 
   const nodes: Record<string, DefinitionNode> = {};
   const notes: string[] = [];
@@ -100,32 +113,34 @@ const convertGraph = (graph: Graph, schema: ParamSchema, voice: boolean): Conver
   const add = (name: string, block: string, inputs: Record<string, InputValue>) =>
     void (nodes[name] = { block, ...(voice && { voice: true }), inputs });
 
-  graph.nodes.forEach((spec) => {
-    const name = names.get(spec.id)!;
-    const context: KindContext = {
-      name,
-      voice,
-      channels: fedStereo(spec.id) ? 2 : 1,
-      copy: (channel) =>
-        KINDS[spec.kind].channels === "copies" && !stereo.has(spec.id) ? name : copyOf(spec.id, channel),
-      audioIn: (channel) => summed(sources(spec.id, channel)),
-      modulators: (param, channel = 0) => sources(`${spec.id}.${param}`, channel),
-      helper: (suffix) => allocate(`${name}_${suffix}`),
-      add,
-      note: (message) => void notes.push(message),
-      addParam: (param) => {
-        added.push(param);
-        return param.id;
-      },
-      options: (param) => {
-        const found = [...schema, ...added].find((each) => each.id === param);
-        return found?.kind === "enum" ? found.options : [];
-      },
-    };
-    (KINDS[spec.kind].convert as (spec: NodeSpec, context: KindContext) => void)(spec, context);
-  });
+  graph.nodes
+    .filter((spec) => !zoned?.replaced.has(spec.id))
+    .forEach((spec) => {
+      const name = names.get(spec.id)!;
+      const context: KindContext = {
+        name,
+        voice,
+        channels: fedStereo(spec.id) ? 2 : 1,
+        copy: (channel) =>
+          KINDS[spec.kind].channels === "copies" && !stereo.has(spec.id) ? name : copyOf(spec.id, channel),
+        audioIn: (channel) => summed(sources(spec.id, channel)),
+        modulators: (param, channel = 0) => sources(`${spec.id}.${param}`, channel),
+        helper: (suffix) => allocate(`${name}_${suffix}`),
+        add,
+        note: (message) => void notes.push(message),
+        addParam: (param) => {
+          added.push(param);
+          return param.id;
+        },
+        options: (param) => {
+          const found = [...schema, ...added].find((each) => each.id === param);
+          return found?.kind === "enum" ? found.options : [];
+        },
+      };
+      (KINDS[spec.kind].convert as (spec: NodeSpec, context: KindContext) => void)(spec, context);
+    });
   const channelsInto = (to: string) => (into(to).some(([from]) => outputsOf(from).length === 2) ? 2 : 1);
-  return { nodes, notes, added, outputsOf, sources, channelsInto, allocate };
+  return { nodes, notes, added, outputsOf, sources, channelsInto, allocate, zonedName };
 };
 
 /**
@@ -164,13 +179,10 @@ const channelsOf = (references: string[]): string | [string, string] =>
  * the base's attack and release (`env.attack` and `env.release`, milliseconds); into `out`, nothing.
  */
 export const instrumentFromGraph = (def: GraphInstrumentDef): Converted => {
-  if (def.voice.nodes.some((spec) => spec.kind === "buffer" && spec.note !== undefined)) {
-    throw new Error(
-      `${def.type} plays a sample per note (a drum kit): those convert to zones with their own level and tune, which aren't in yet`,
-    );
-  }
-  const conversion = convertGraph(def.voice, def.schema, true);
-  const schema = [...def.schema, ...conversion.added];
+  const zoned = zonedSamples(def.voice);
+  const conversion = convertGraph(def.voice, def.schema, true, zoned);
+  if (zoned && conversion.zonedName) zonedSampler(conversion, conversion.zonedName, zoned);
+  const schema = [...def.schema, ...conversion.added, ...(zoned?.added ?? [])];
   const time = (id: string, fallbackMs: number): SingleInput =>
     has(schema, id) ? { param: id, scale: 0.001 } : fallbackMs / 1000;
   const reaches = (to: string) => conversion.sources(to, 0).length > 0;
@@ -208,8 +220,9 @@ export const instrumentFromGraph = (def: GraphInstrumentDef): Converted => {
     nodes,
     ...(voice && { voice: channelsOf(voice) }),
     ...(output && { output }),
+    ...(zoned && { zones: zoned.zones }),
   };
-  return withVoicesThatFit({ schema, definition, notes: unique(conversion.notes) });
+  return withVoicesThatFit({ schema, definition, notes: unique([...conversion.notes, ...(zoned?.notes ?? [])]) });
 };
 
 /** An effect: its graph once, on the track's input, playing `wet`. */
@@ -223,6 +236,52 @@ export const effectFromGraph = (def: GraphEffectDef): Converted => {
   };
   if (wet.length === 0) conversion.notes.push("nothing reached its output, so it plays silence");
   return { schema: [...def.schema, ...conversion.added], definition, notes: unique(conversion.notes) };
+};
+
+/**
+ * The one sampler the zones play, as `${name}_l` and `${name}_r`: the zone a note took, through an
+ * envelope that stops it with the note unless it's a one-shot (or a param that says which).
+ */
+const zonedSampler = (conversion: Conversion, name: string, zoned: ZonedSamples) => {
+  const player = conversion.allocate(`${name}_player`);
+  conversion.nodes[player] = {
+    block: "sampler",
+    voice: true,
+    inputs: {
+      frequency: "voice.frequency",
+      gate: "voice.gate",
+      sample: "voice.sample",
+      root: "voice.root",
+      start: "voice.start",
+      end: "voice.end",
+    },
+  };
+  const level = (): SingleInput => {
+    if (zoned.oneShot === true) return 1;
+    const gate = conversion.allocate(`${name}_gate`);
+    conversion.nodes[gate] = {
+      block: "adsr",
+      voice: true,
+      inputs: { gate: "voice.gate", attack: 0, decay: 0, sustain: 1, release: 0.02 },
+    };
+    if (zoned.oneShot === false) return gate;
+    // A switch reads 0 or 1: off stops with the note, on plays on.
+    const chosen = conversion.allocate(`${name}_oneshot`);
+    conversion.nodes[chosen] = {
+      block: "select",
+      voice: true,
+      inputs: { index: zoned.oneShot, a: gate, b: 1, c: 1, d: 1 },
+    };
+    return chosen;
+  };
+  const after = level();
+  ["left", "right"].forEach((side, channel) => {
+    conversion.nodes[`${name}_${SIDES[channel]}`] = {
+      block: "mul",
+      voice: true,
+      inputs: { a: `${player}.${side}`, b: after },
+    };
+  });
 };
 
 /** The voices' outputs, `amp` and `out` added when a voice used both. */

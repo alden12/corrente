@@ -21,8 +21,21 @@ import { renderIsolated, type IsolatedInput } from "./renderIsolated";
 
 const RATE = 48000;
 const SECONDS = 2.5;
-/** An instrument plays A3 for a second; an effect gets a second of a 220 Hz tone burst. */
+/**
+ * An instrument plays A3 for a second, or the note of its first zone (a drum kit's first pad); an
+ * effect gets a second of a 220 Hz tone burst.
+ */
 const NOTE = { pitch: 57, holdSec: 1, velocity: 0.9 };
+
+const pitchOf = (abCase: AbCase): number => {
+  if ("problem" in abCase.converted) return NOTE.pitch;
+  const { definition, schema } = abCase.converted;
+  const key = definition.zones?.[0].keys?.[0];
+  if (key === undefined) return NOTE.pitch;
+  if (typeof key === "number") return key;
+  const spec = schema.find((each) => each.id === key.param);
+  return spec?.kind === "number" ? spec.default : NOTE.pitch;
+};
 const BURST = { kind: "burst", frequency: 220, seconds: 1 } as const satisfies IsolatedInput;
 
 /** A built-in to compare: converted, or why it couldn't be. */
@@ -77,7 +90,7 @@ const measured = (channels: Float32Array[]): Measured => {
 /** The old engine's render. */
 export async function renderOld(abCase: AbCase): Promise<Measured> {
   const chain = abCase.effect ? { effects: [{ type: abCase.type }] } : { instrument: { type: abCase.type } };
-  const input: IsolatedInput = abCase.effect ? BURST : { kind: "note", ...NOTE };
+  const input: IsolatedInput = abCase.effect ? BURST : { kind: "note", ...NOTE, pitch: pitchOf(abCase) };
   const buffer = await renderIsolated(chain, input, { durationSec: SECONDS, sampleRate: RATE });
   return measured([0, 1].map((channel) => buffer.getChannelData(Math.min(channel, buffer.numberOfChannels - 1))));
 }
@@ -112,8 +125,8 @@ export async function renderNew(abCase: AbCase): Promise<Measured> {
   await samples.ready();
 
   if (!abCase.effect) {
-    bank.noteOn(0, NOTE.pitch, NOTE.velocity, 0);
-    bank.noteOff(0, NOTE.pitch, NOTE.holdSec);
+    bank.noteOn(0, pitchOf(abCase), NOTE.velocity, 0);
+    bank.noteOff(0, pitchOf(abCase), NOTE.holdSec);
   }
   const blocks = Math.ceil((SECONDS * RATE) / BLOCK);
   const channels = [new Float32Array(blocks * BLOCK), new Float32Array(blocks * BLOCK)];

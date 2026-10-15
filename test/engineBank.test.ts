@@ -403,6 +403,59 @@ describe("EngineBank", () => {
         expect(bank.engine.eng_voice_active(0, 0)).toBe(0);
       });
 
+      it("reads a zone's settings from its params as each note starts", () => {
+        // A pad: its note a param (so it can be moved), tuned up an octave, at half level, not following
+        // the keys, with 250 ms trimmed off the front of a one-second ramp.
+        const pad = compileDefinition({
+          format: 1,
+          zones: [
+            {
+              sample: { param: "pad" },
+              root: { param: "note" },
+              keys: [{ param: "note" }, { param: "note" }],
+              tune: { param: "tune" },
+              level: { param: "level" },
+              keytrack: false,
+              trimStart: { param: "trim" },
+            },
+          ],
+          nodes: {
+            player: {
+              block: "sampler",
+              voice: true,
+              inputs: {
+                frequency: "voice.frequency",
+                gate: "voice.gate",
+                sample: "voice.sample",
+                root: "voice.root",
+                start: "voice.start",
+                end: "voice.end",
+              },
+            },
+          },
+          voice: "player.left",
+        });
+        const padBank = (note: number) => {
+          const bank = new EngineBank(wasm, RATE, 1);
+          bank.load(0, pad, { note, tune: 12, level: 0.5, trim: 250 });
+          bank.setSample(0, "pad", "ramp", { channels: [ramp], rate: RATE });
+          return bank;
+        };
+        const hit = (bank: EngineBank, note: number) => {
+          bank.noteOn(0, note, 1, 0);
+          bank.process(0);
+          return Array.from(bank.output(0, 0));
+        };
+        // Its note: from a quarter in, two frames a sample, at half level. Any other: silent.
+        expect(hit(padBank(40), 40)[10]).toBeCloseTo(0.5 * (0.25 + 20 / RATE), 5);
+        expect(hit(padBank(40), 41).every((sample) => sample === 0)).toBe(true);
+        // Moved to 50: 50 plays it, at the same pitch whatever the key, and 40 doesn't.
+        const moved = padBank(40);
+        moved.setParam(0, "note", 50, 0);
+        expect(hit(moved, 40).every((sample) => sample === 0)).toBe(true);
+        expect(hit(padBank(50), 50)[10]).toBeCloseTo(0.5 * (0.25 + 20 / RATE), 5);
+      });
+
       it("restarts held notes in their zones in a new plan", () => {
         const bank = zonedBank();
         bank.noteOn(0, 48, 1, 0);

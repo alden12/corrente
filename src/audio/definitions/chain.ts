@@ -29,6 +29,7 @@ import {
   type DeviceDefinition,
   type InputValue,
   type ParamBinding,
+  type Zone,
 } from "./format";
 import { blockNamed } from "./catalogue";
 import { isScaled, isSynced, outputOf, voicesOf } from "./references";
@@ -78,6 +79,17 @@ const SHARED_SIGNALS = new Set<string>([
 type SingleInput = Exclude<InputValue, unknown[]>;
 
 /** An instrument's `voice` (one reference or a left and a right) in the chain's names. */
+/** A zone with every param it reads (its sample, and any setting bound to one) under the link's name. */
+const renameZone = (zone: Zone, key: string): Zone => {
+  const renamed = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(renamed)
+      : typeof value === "object" && value !== null && "param" in value
+        ? { ...value, param: chainParam(key, (value as ParamBinding).param) }
+        : value;
+  return Object.fromEntries(Object.entries(zone).map(([setting, value]) => [setting, renamed(value)])) as Zone;
+};
+
 const renameVoice = (voice: string | [string, string], prefix: string): string | [string, string] => {
   const rename = (reference: string) => (SHARED_SIGNALS.has(reference) ? reference : `${prefix}${reference}`);
   return typeof voice === "string" ? rename(voice) : [rename(voice[0]), rename(voice[1])];
@@ -207,10 +219,7 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
             : {}),
           ...(instrument.definition.zones
             ? {
-                zones: instrument.definition.zones.map((zone) => ({
-                  ...zone,
-                  sample: { param: chainParam(instrumentKey, zone.sample.param) },
-                })),
+                zones: instrument.definition.zones.map((zone) => renameZone(zone, instrumentKey)),
               }
             : {}),
         }

@@ -133,6 +133,33 @@ describe("composeChain", () => {
       expect.arrayContaining([{ param: chainParam("instrument", "kick"), scale: 1, offset: 0, sample: true }]),
     );
   });
+
+  it("names the params a zone's settings read under the instrument too", () => {
+    const pads: ChainLink = {
+      key: "instrument",
+      effect: false,
+      schema: [
+        { id: "pad", label: "Pad", kind: "sample", default: "" },
+        { id: "note", label: "Note", kind: "number", min: 0, max: 127, default: 38 },
+      ],
+      definition: {
+        format: 1,
+        zones: [{ sample: { param: "pad" }, root: { param: "note" }, keys: [{ param: "note" }, 40] }],
+        nodes: {
+          player: {
+            block: "sampler",
+            voice: true,
+            inputs: { frequency: "voice.frequency", gate: "voice.gate", sample: "voice.sample", root: "voice.root" },
+          },
+        },
+        voice: "player.left",
+      },
+    };
+    const composed = composeChain([pads]);
+    const note = { param: chainParam("instrument", "note") };
+    expect(composed.definition.zones?.[0]).toMatchObject({ root: note, keys: [note, 40] });
+    expect(() => compileDefinition(composed.definition, { params: composed.schema })).not.toThrow();
+  });
 });
 
 describe("chain pieces", () => {

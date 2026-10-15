@@ -9,7 +9,7 @@
  * its schema (schema.ts); the compiler adds what each section may read.
  */
 import { blockNamed, type BlockSpec } from "./catalogue";
-import type { DeviceDefinition, ParamBinding } from "./format";
+import type { DeviceDefinition, ParamBinding, Zone } from "./format";
 
 import { costOf, overCap, type Cost, type CostedNode } from "./cost";
 import { orderSection, type Step, type StepMode } from "./loops";
@@ -31,15 +31,26 @@ import { definitionSchemaFor, problemsIn } from "./schema";
 /** The sections a plan runs in a block: once before the voices, once per voice, once after. */
 export type Section = "pre" | "voice" | "post";
 
-/** A sample zone as the bank uses it (INST-36.6): every range filled in. */
+/** A zone setting as the bank reads it: a number, or a param through its binding. */
+export type ZoneValue = number | ParamBinding;
+
+/** A sample zone as the bank uses it (INST-36.6): every setting filled in, read as a note starts. */
 export interface PlanZone {
   /** The sample param it plays. */
   param: string;
-  root: number;
-  keys: [number, number];
+  root: ZoneValue;
+  keys: [ZoneValue, ZoneValue];
   velocities: [number, number];
-  start: number;
-  end: number;
+  start: ZoneValue;
+  end: ZoneValue;
+  /** Milliseconds cut off each end, on top of `start` and `end`: the bank knows the sample's length. */
+  trimStart: ZoneValue;
+  trimEnd: ZoneValue;
+  /** Semitones. */
+  tune: ZoneValue;
+  level: ZoneValue;
+  /** 1 to follow the keys, 0 to play at its own pitch whatever the key. */
+  keytrack: ZoneValue;
 }
 /** A param source the engine keeps a smoothed buffer for: which param, and how to turn it into a value. */
 export interface ParamSource {
@@ -188,9 +199,10 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
   const cost = costed(planned, steps, resolved.voices);
   const laid: Laid = { planned, indices, steps, ...resolved };
   const body = bodyWords(laid, paramIndex);
-  const zones = definition.zones;
-  // A zone's sample param is the bank's to read, so it's a param of the plan though no node reads it.
-  zones?.forEach((zone) => paramIndex(zone.sample));
+  const zones = definition.zones?.map(planZone);
+  // A zone's params are the bank's to read, so they're params of the plan though no node reads them:
+  // that is what has the device send their values.
+  zones?.forEach((zone) => [{ param: zone.param }, ...zoneBindings(zone)].forEach((binding) => paramIndex(binding)));
   // Params are numbered as the words are written, so the header, which counts them, goes on last.
   const words = Int32Array.from([params.length, resolved.voices, ...body]);
   return {
@@ -198,14 +210,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
     params,
     ...(zones
       ? {
-          zones: zones.map((zone) => ({
-            param: zone.sample.param,
-            root: zone.root,
-            keys: zone.keys ?? [0, 127],
-            velocities: zone.velocities ?? [0, 1],
-            start: zone.start ?? 0,
-            end: zone.end ?? 1,
-          })),
+          zones,
         }
       : {}),
     voices: resolved.voices,
@@ -361,3 +366,32 @@ const costed = (planned: Record<Section, Planned[]>, steps: Record<Section, Step
   if (tooHeavy) throw new DefinitionError([`${voices > 0 ? "voices" : "nodes"}: ${tooHeavy}`]);
   return cost;
 };
+
+/** A zone with every setting filled in: a switch as 1 or 0, or the param that switches it. */
+const planZone = (zone: Zone): PlanZone => ({
+  param: zone.sample.param,
+  root: zone.root,
+  keys: zone.keys ?? [0, 127],
+  velocities: zone.velocities ?? [0, 1],
+  start: zone.start ?? 0,
+  end: zone.end ?? 1,
+  trimStart: zone.trimStart ?? 0,
+  trimEnd: zone.trimEnd ?? 0,
+  tune: zone.tune ?? 0,
+  level: zone.level ?? 1,
+  keytrack: typeof zone.keytrack === "boolean" ? Number(zone.keytrack) : (zone.keytrack ?? 1),
+});
+
+/** The param bindings among a zone's settings. */
+export const zoneBindings = (zone: PlanZone): ParamBinding[] =>
+  [
+    zone.root,
+    ...zone.keys,
+    zone.start,
+    zone.end,
+    zone.trimStart,
+    zone.trimEnd,
+    zone.tune,
+    zone.level,
+    zone.keytrack,
+  ].filter((value): value is ParamBinding => typeof value === "object");
