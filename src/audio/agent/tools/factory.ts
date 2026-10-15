@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import type { AgentTool } from "../types";
+import { issueLines } from "../../../util";
 import type { ProjectStore, InstrumentTrack, Track, EffectInstance } from "../../project/projectStore";
 import type { Author, Dispatch } from "../../commands/types";
 import type { Scheduler } from "../../sequencer/scheduler";
@@ -71,10 +72,7 @@ export function defineTool<Schema extends z.ZodType>(def: {
     async run(rawArgs: unknown) {
       const parsed = def.schema.safeParse(rawArgs ?? {});
       if (!parsed.success) {
-        const detail = parsed.error.issues
-          .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
-          .join("; ");
-        throw new Error(`Invalid arguments: ${detail}`);
+        throw new Error(`Invalid arguments: ${issueLines(parsed.error).join("; ")}`);
       }
       return def.run(parsed.data);
     },

@@ -87,6 +87,8 @@ describe("MCP server (tracks)", () => {
     const blocks = doc.blocks.map((block: { name: string }) => block.name);
     expect(blocks).toEqual(expect.arrayContaining(["saw", "adsr", "svf", "sampler"]));
     expect(doc.device).toContain("{ label?, schema, definition }");
+    // The param kinds come from the zod that checks them, so they can't drift apart.
+    expect(JSON.stringify(doc.paramKinds)).toContain('"wavetable"');
     expect(doc.blocks.every((block: { description?: string }) => (block.description ?? "").length > 10)).toBe(true);
   });
 

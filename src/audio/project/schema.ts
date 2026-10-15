@@ -20,6 +20,7 @@
 import { z } from "zod";
 import type { CustomDevice } from "../definitions/custom";
 import { KEYFRAME_INDEX_PATH } from "../history/keyframes";
+import { issueLines } from "../../util";
 
 /* -------------------------------------------------------------------------- */
 /* Leaves                                                                     */
@@ -353,6 +354,5 @@ export function validateBundleFile(path: string, json: unknown): ValidationResul
   if (!schema) return { ok: true };
   const result = schema.safeParse(json);
   if (result.success) return { ok: true };
-  const error = result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ");
-  return { ok: false, error };
+  return { ok: false, error: issueLines(result.error).join("; ") };
 }

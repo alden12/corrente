@@ -11,6 +11,8 @@ import { paramSchemaSchema } from "../params/declaration";
 import type { ParamSchema } from "../params/types";
 import { compileDefinition, DefinitionError } from "./compile";
 import type { DeviceDefinition } from "./format";
+import { hasVoiceNodes } from "./references";
+import { issueLines } from "../../util";
 
 /**
  * The version of the custom-device shape a project stores. 1 was the graph format the old engine
@@ -37,25 +39,18 @@ const customDeviceSchema = z.strictObject({
 
 export type DeviceResult = { ok: true; device: CustomDevice } | { ok: false; errors: string[] };
 
-const hasVoices = (definition: DeviceDefinition) => Object.values(definition.nodes).some((node) => node.voice);
-
 /** What makes a definition the wrong kind of device, if anything. */
 const KIND_PROBLEMS: Record<CustomKind, (definition: DeviceDefinition) => string | undefined> = {
   instrument: (definition) =>
-    hasVoices(definition) ? undefined : "an instrument needs voice nodes (`voice: true`) to play its notes",
+    hasVoiceNodes(definition) ? undefined : "an instrument needs voice nodes (`voice: true`) to play its notes",
   effect: (definition) =>
-    hasVoices(definition) ? "an effect has no voices: read `input.left` and `input.right` instead" : undefined,
+    hasVoiceNodes(definition) ? "an effect has no voices: read `input.left` and `input.right` instead" : undefined,
 };
 
 /** Check a custom device of one kind: its shape, then its definition compiled against its schema. */
 export const parseCustomDevice = (raw: unknown, kind: CustomKind): DeviceResult => {
   const parsed = customDeviceSchema.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      errors: parsed.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`),
-    };
-  }
+  if (!parsed.success) return { ok: false, errors: issueLines(parsed.error) };
   const schema = parsed.data.schema as ParamSchema;
   try {
     compileDefinition(parsed.data.definition, { params: schema });

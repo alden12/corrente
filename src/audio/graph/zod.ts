@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 import { paramSchemaSchema } from "../params/declaration";
+import { issueLines } from "../../util";
 import type { ParamSchema } from "../params/types";
 import { ANALOG_WAVEFORMS, IMPULSE_SHAPES, NOISE_COLORS, SHAPER_SHAPES, WAVETABLE_BANKS } from "./types";
 import type { Graph, GraphInstrumentDef, GraphEffectDef } from "./types";
@@ -165,46 +166,11 @@ export const effectDefSchema = z
   .object({ type: z.string(), label: z.string().optional(), schema: paramSchema, graph: graph })
   .strict();
 
-/**
- * Tool-input shapes: an author supplies everything but the `type` id (the server mints that).
- *
- * **Deliberately an outline, not the format.** These were the strict schemas above, which made
- * each authoring tool's JSON schema ~17.6KB of nested unions against under 1KB for any other tool
- * - and the claude.ai client never surfaced `create_instrument`, `create_effect` or the two
- * `update_` tools at all, while their small neighbours loaded fine. The shape is here so a client
- * knows what to send; the format is `describe_device_format`'s to explain, and every def is
- * still checked in full by `parseInstrumentDef` / `parseEffectDef`, whose errors name the exact
- * field.
- */
-const outlineObject = z.record(z.string(), z.unknown());
-const outlineGraph = z.object({
-  nodes: z.array(outlineObject).describe("Nodes, each { id, kind, ...fields } - see describe_device_format."),
-  connections: z
-    .array(z.tuple([z.string(), z.string()]))
-    .describe('[from, to] pairs; `to` is a node id or "nodeId.param" to modulate it.'),
-});
-const outlineSchema = z
-  .array(outlineObject)
-  .describe("Parameter declarations, each { id, label, kind, ... } - see describe_device_format.");
-export const instrumentDefInputSchema = z.object({
-  label: z.string().optional(),
-  schema: outlineSchema,
-  voice: outlineGraph.describe("The per-note voice graph, wired to `amp` or `out`."),
-});
-export const effectDefInputSchema = z.object({
-  label: z.string().optional(),
-  schema: outlineSchema,
-  graph: outlineGraph.describe("The effect graph, from `in` to `wet`."),
-});
-
 export type DefResult<T> = { ok: true; def: T } | { ok: false; errors: string[] };
-
-const zodErrors = (error: z.ZodError): string[] =>
-  error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`);
 
 export function parseInstrumentDef(raw: unknown): DefResult<GraphInstrumentDef> {
   const parsed = instrumentDefSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false, errors: zodErrors(parsed.error) };
+  if (!parsed.success) return { ok: false, errors: issueLines(parsed.error) };
   const semantic = validateGraph(parsed.data.schema as ParamSchema, parsed.data.voice as Graph, INSTRUMENT_RESERVED);
   if (semantic.length) return { ok: false, errors: semantic };
   return { ok: true, def: parsed.data as GraphInstrumentDef };
@@ -212,7 +178,7 @@ export function parseInstrumentDef(raw: unknown): DefResult<GraphInstrumentDef> 
 
 export function parseEffectDef(raw: unknown): DefResult<GraphEffectDef> {
   const parsed = effectDefSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false, errors: zodErrors(parsed.error) };
+  if (!parsed.success) return { ok: false, errors: issueLines(parsed.error) };
   const semantic = validateGraph(parsed.data.schema as ParamSchema, parsed.data.graph as Graph, EFFECT_RESERVED);
   if (semantic.length) return { ok: false, errors: semantic };
   return { ok: true, def: parsed.data as GraphEffectDef };

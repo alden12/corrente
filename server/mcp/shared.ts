@@ -2,7 +2,13 @@
  * What every group of MCP tools shares: id minters, the device-format document, and the text
  * result shapes. Pure data and helpers, with no project or transport in sight.
  */
+import { z } from "zod";
 import { definitionFormatDoc } from "../../src/audio/definitions/describe";
+import { paramSpecSchema } from "../../src/audio/params/declaration";
+
+/** The param kinds a schema may declare, read off the same zod that checks them. */
+const paramKindsDoc = z.toJSONSchema(paramSpecSchema) as Record<string, unknown>;
+delete paramKindsDoc.$schema; // a bare schema, as the agent's tools give one
 
 export const randomId = () => crypto.randomUUID();
 export const makeTrackId = () => `t-${randomId().slice(0, 8)}`;
@@ -22,9 +28,10 @@ export const deviceFormatDoc = () => ({
     "them as { param: id }. An instrument's definition has voice nodes; an effect's has none and reads " +
     "input.left and input.right. It's checked by compiling it, and every problem comes back at once.",
   params:
-    "Each schema entry is { id, label, kind, default, ... }: kind number (min, max, unit?, taper?: linear | " +
-    'exponential, step?, format?: "note"), enum (options), boolean, or sample (a sample ref; wavetable?: true ' +
-    "offers the built-in wavetables). A level is a number param into a mul; dry/wet is two muls summed.",
+    "`schema` is a list of params, each one of `paramKinds`. A sample param's default is a sample ref; " +
+    "`wavetable: true` offers the built-in wavetables in its picker. A level is a number param into a mul; " +
+    "dry/wet is two muls summed.",
+  paramKinds: paramKindsDoc,
   ...definitionFormatDoc(),
 });
 

@@ -26,7 +26,17 @@ import {
   type Synced,
 } from "./format";
 import type { ParamSchema } from "../params/types";
-import { beatsOf, channelsOf, isScaled, isSynced, listOf, referenceTo, sampleParamsOf, voicesOf } from "./references";
+import {
+  beatsOf,
+  channelsOf,
+  hasVoiceNodes,
+  isScaled,
+  isSynced,
+  listOf,
+  referenceTo,
+  sampleParamsOf,
+  voicesOf,
+} from "./references";
 
 const NOT_WIRED = "not wired (every audio input needs a value, a param or a connection)";
 
@@ -227,7 +237,6 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
       problem(["zones", index, "velocities"], "the lowest velocity comes first");
   });
 
-  const voiceNodes = Object.keys(nodes).filter((name) => nodes[name].voice);
   channelsOf(definition.voice).forEach((reference) => {
     const source = referenceTo(reference, nodes);
     if (typeof source === "string") problem(["voice"], source);
@@ -240,10 +249,11 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
   });
 
   const voices = voicesOf(definition);
-  if (voiceNodes.length > 0 && definition.voice === undefined)
+  const voiced = hasVoiceNodes(definition);
+  if (voiced && definition.voice === undefined)
     problem(["voice"], "the voices play nothing (name what each voice plays)");
-  if (voiceNodes.length > 0 && voices === 0) problem(["voices"], "there are voice nodes but no voices");
-  if (voiceNodes.length === 0 && definition.voice !== undefined) problem(["voice"], "there are no voice nodes to play");
+  if (voiced && voices === 0) problem(["voices"], "there are voice nodes but no voices");
+  if (!voiced && definition.voice !== undefined) problem(["voice"], "there are no voice nodes to play");
   if (definition.output === undefined && voices === 0) problem(["output"], "the track plays nothing (name its output)");
 };
 

@@ -51,9 +51,12 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     async () => ok(JSON.stringify(deviceFormatDoc(), null, 2)),
   );
 
+  const invalid = (kind: CustomKind, errors: string[]) =>
+    fail(`Invalid ${kind}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+
   const create = (kind: CustomKind, type: string, input: { label?: string; schema: unknown; definition: unknown }) => {
     const result = parseCustomDevice({ type, ...input }, kind);
-    if (!result.ok) return fail(`Invalid ${kind}:\n${result.errors.map((error) => `- ${error}`).join("\n")}`);
+    if (!result.ok) return invalid(kind, result.errors);
     if (!target.send({ type: KINDS[kind].add, def: result.device })) return fail("No DAW tab connected.");
     KINDS[kind].store(result.device);
     return ok(`Created ${kind} "${input.label ?? type}" (type ${type}). Use ${KINDS[kind].use} "${type}".`);
@@ -67,7 +70,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     const current = KINDS[kind].list().find((device) => device.type === deviceType);
     if (!current) return fail(`No custom ${kind} with type "${deviceType}". Use list_custom_devices.`);
     const result = parseCustomDevice({ ...input, type: deviceType, label: input.label ?? current.label }, kind);
-    if (!result.ok) return fail(`Invalid ${kind}:\n${result.errors.map((error) => `- ${error}`).join("\n")}`);
+    if (!result.ok) return invalid(kind, result.errors);
     if (!target.send({ type: KINDS[kind].update, def: result.device })) return fail("No DAW tab connected.");
     KINDS[kind].store(result.device);
     return ok(`Updated ${kind} "${result.device.label ?? deviceType}" (type ${deviceType}).`);

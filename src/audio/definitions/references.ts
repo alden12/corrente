@@ -83,9 +83,13 @@ export const listOf = (value: InputValue) => (Array.isArray(value) ? value : [va
 export const channelsOf = (value: string | string[] | undefined) =>
   value === undefined ? [] : Array.isArray(value) ? value : [value];
 
+/** Whether any node runs per voice: an instrument's definition does, an effect's doesn't. */
+export const hasVoiceNodes = (definition: DeviceDefinition): boolean =>
+  Object.values(definition.nodes).some((node) => node.voice);
+
 /** How many voices a definition plays: as it says, or DEFAULT_VOICES if it has voice nodes and doesn't. */
 export const voicesOf = (definition: DeviceDefinition): number =>
-  definition.voices ?? (Object.values(definition.nodes).some((node) => node.voice) ? DEFAULT_VOICES : 0);
+  definition.voices ?? (hasVoiceNodes(definition) ? DEFAULT_VOICES : 0);
 
 /** What a definition plays, by channel: its output, or the voices summed if it has voices and doesn't say. */
 export const outputOf = (definition: DeviceDefinition): string[] =>
