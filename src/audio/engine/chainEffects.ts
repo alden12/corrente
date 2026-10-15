@@ -54,7 +54,8 @@ export class ChainEffects {
     for (const [key, live] of this.live) {
       const { piece, effects } = live;
       const next = wanted.get(key);
-      const stale = !next || (piece.kind === "single" && edited.has(piece.effect.type)) || keyOf(next) !== live.key;
+      const types = piece.kind === "single" ? [piece.effect.type] : piece.effects.map((effect) => effect.type);
+      const stale = !next || types.some((type) => edited.has(type)) || keyOf(next) !== live.key;
       const moved =
         next !== undefined && effects[0]?.stage !== undefined && effects[0].stage !== stageOf(firstOf(next));
       if (!stale && !moved) continue;

@@ -9,7 +9,7 @@
 import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
 import type { ClipContent, ProjectData } from "../project/types";
-import type { GraphInstrumentDef, GraphEffectDef } from "../graph/types";
+import type { CustomDevice } from "../definitions/custom";
 
 /**
  * Version-history RPC. The commit DAG lives in the tab (OPFS), so the server
@@ -55,16 +55,16 @@ export type ServerToBrowser =
   | { type: "setTrack"; trackId: string; muted?: boolean; solo?: boolean; volume?: number; name?: string }
   // Assign (or swap) the instrument on an existing track - e.g. an empty track picks one.
   | { type: "setInstrument"; trackId: string; instrumentType: string }
-  // Custom devices: user/AI-authored instruments & effects (declarative graphs), stored in the
+  // Custom devices: user/AI-authored instruments & effects (engine definitions), stored in the
   // project. The def carries its own minted `type` id; removal addresses it by `deviceType`.
-  | { type: "addCustomInstrument"; def: GraphInstrumentDef }
+  | { type: "addCustomInstrument"; def: CustomDevice }
   | { type: "removeCustomInstrument"; deviceType: string }
-  | { type: "addCustomEffect"; def: GraphEffectDef }
+  | { type: "addCustomEffect"; def: CustomDevice }
   | { type: "removeCustomEffect"; deviceType: string }
   // Replace a custom device's def under its existing type: tracks and slots using it keep the
   // values of params it still has, and are rebuilt with the new graph.
-  | { type: "updateCustomInstrument"; def: GraphInstrumentDef }
-  | { type: "updateCustomEffect"; def: GraphEffectDef }
+  | { type: "updateCustomInstrument"; def: CustomDevice }
+  | { type: "updateCustomEffect"; def: CustomDevice }
   // Group structure (bus tree; id assigned by the creator so both ends agree)
   | { type: "createGroup"; id: string; name?: string; parentId?: string | null }
   | { type: "removeGroup"; groupId: string }

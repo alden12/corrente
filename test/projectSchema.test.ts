@@ -63,7 +63,7 @@ describe("projectDataSchema", () => {
     const snapshot = {
       ...new ProjectStore().snapshot(),
       customInstruments: [
-        { type: "ci-newer", schema: [], voice: { nodes: [{ id: "x", kind: "reverbtron" }], connections: [] } },
+        { type: "ci-newer", schema: [], definition: { format: 1, nodes: { x: { block: "reverbtron" } } } },
       ],
     };
     expect(projectDataSchema.safeParse(snapshot).success).toBe(true);
@@ -73,11 +73,11 @@ describe("projectDataSchema", () => {
     expect(validateBundleFile("project.json", DEEP_PROJECT).ok).toBe(true);
   });
 
-  it("accepts an embedded custom-device def (reuses the graph def schema)", () => {
+  it("accepts an embedded custom device, leaving it to be checked on load", () => {
     const withCustom = {
       ...DEEP_PROJECT,
-      deviceFormatVersion: 1,
-      customInstruments: [{ type: "myVoice", schema: [], voice: { nodes: [], connections: [] } }],
+      deviceFormatVersion: 2,
+      customInstruments: [{ type: "myVoice", schema: [], definition: { format: 1, nodes: {} } }],
     };
     expect(validateBundleFile("project.json", withCustom).ok).toBe(true);
   });

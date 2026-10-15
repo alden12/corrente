@@ -5,20 +5,17 @@
  * adds the semantic checks zod can't express (param refs resolve, connections wire to
  * real nodes/params). DOM-free, so the Node MCP server validates with the same code.
  *
- * `parseCustomDevices` is lenient by design: it drops any invalid def with a warning
- * rather than throwing, so a corrupt or hostile project still opens (its bad devices
- * just don't load). `parseInstrumentDef` / `parseEffectDef` validate a single def and
- * return its errors, for the MCP tools to surface.
+ * `parseInstrumentDef` / `parseEffectDef` validate a single def and return its errors.
+ * Custom devices are no longer in this format (definitions/custom.ts); it goes with the
+ * old engine (INST-36.8 part 6).
  */
 import { z } from "zod";
+import { paramSchemaSchema } from "../params/declaration";
 import type { ParamSchema } from "../params/types";
 import { ANALOG_WAVEFORMS, IMPULSE_SHAPES, NOISE_COLORS, SHAPER_SHAPES, WAVETABLE_BANKS } from "./types";
 import type { Graph, GraphInstrumentDef, GraphEffectDef } from "./types";
 import { validateGraph, INSTRUMENT_RESERVED, EFFECT_RESERVED } from "./validate";
 import { tableProblem } from "./table";
-
-/** Bump when the def shape changes incompatibly; older/newer versions are refused. */
-export const DEVICE_FORMAT_VERSION = 1;
 
 const paramRef = z.object({ param: z.string(), scale: z.number().optional(), offset: z.number().optional() }).strict();
 const table = z.array(z.tuple([z.number(), z.number()])).superRefine((points, issues) => {
@@ -159,28 +156,7 @@ const nodeSpec = z.discriminatedUnion("kind", [
 
 const graph = z.object({ nodes: z.array(nodeSpec), connections: z.array(z.tuple([z.string(), z.string()])) }).strict();
 
-// A parameter *declaration* (the schema entry), distinct from specToZod which validates a value.
-const baseSpec = { id: z.string(), label: z.string() };
-const paramSpec = z.discriminatedUnion("kind", [
-  z
-    .object({
-      ...baseSpec,
-      kind: z.literal("number"),
-      min: z.number(),
-      max: z.number(),
-      default: z.number(),
-      unit: z.string().optional(),
-      taper: z.enum(["linear", "exponential"]).optional(),
-      step: z.number().optional(),
-      smoothMs: z.number().optional(),
-      format: z.literal("note").optional(),
-    })
-    .strict(),
-  z.object({ ...baseSpec, kind: z.literal("enum"), options: z.array(z.string()), default: z.string() }).strict(),
-  z.object({ ...baseSpec, kind: z.literal("boolean"), default: z.boolean() }).strict(),
-  z.object({ ...baseSpec, kind: z.literal("sample"), default: z.string(), wavetable: z.boolean().optional() }).strict(),
-]);
-const paramSchema = z.array(paramSpec);
+const paramSchema = paramSchemaSchema;
 
 export const instrumentDefSchema = z
   .object({ type: z.string(), label: z.string().optional(), schema: paramSchema, voice: graph })
@@ -240,52 +216,4 @@ export function parseEffectDef(raw: unknown): DefResult<GraphEffectDef> {
   const semantic = validateGraph(parsed.data.schema as ParamSchema, parsed.data.graph as Graph, EFFECT_RESERVED);
   if (semantic.length) return { ok: false, errors: semantic };
   return { ok: true, def: parsed.data as GraphEffectDef };
-}
-
-/** The defs `parseCustomDevices` could not read, exactly as they were stored. */
-export interface UnreadableDevices {
-  instruments: unknown[];
-  effects: unknown[];
-}
-
-/**
- * Validate a project's custom devices, dropping any that don't pass (with a warning).
- * Never throws: an unknown format version or a malformed def must not stop the project
- * from opening.
- *
- * What it drops comes back as `unreadable`, untouched, for the project to write back out. A def
- * this build cannot read may be one a newer build can - a block kind added since - and opening
- * the project here must not be what deletes it.
- */
-export function parseCustomDevices(data: {
-  customInstruments?: unknown;
-  customEffects?: unknown;
-  deviceFormatVersion?: number;
-}): { instruments: GraphInstrumentDef[]; effects: GraphEffectDef[]; unreadable: UnreadableDevices } {
-  const entries = (raw: unknown): unknown[] => (Array.isArray(raw) ? raw : []);
-  if (data.deviceFormatVersion !== undefined && data.deviceFormatVersion !== DEVICE_FORMAT_VERSION) {
-    console.warn(`Ignoring custom devices: format version ${data.deviceFormatVersion} != ${DEVICE_FORMAT_VERSION}.`);
-    return {
-      instruments: [],
-      effects: [],
-      unreadable: { instruments: entries(data.customInstruments), effects: entries(data.customEffects) },
-    };
-  }
-  const sort = <T>(raw: unknown, parse: (value: unknown) => DefResult<T>, label: string) => {
-    const results = entries(raw).map((entry) => ({ entry, result: parse(entry) }));
-    results.forEach(({ result }) => {
-      if (!result.ok) console.warn(`Dropping invalid custom ${label}: ${result.errors.join("; ")}`);
-    });
-    return {
-      kept: results.flatMap(({ result }) => (result.ok ? [result.def] : [])),
-      dropped: results.filter(({ result }) => !result.ok).map(({ entry }) => entry),
-    };
-  };
-  const instruments = sort(data.customInstruments, parseInstrumentDef, "instrument");
-  const effects = sort(data.customEffects, parseEffectDef, "effect");
-  return {
-    instruments: instruments.kept,
-    effects: effects.kept,
-    unreadable: { instruments: instruments.dropped, effects: effects.dropped },
-  };
 }

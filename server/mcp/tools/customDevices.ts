@@ -1,42 +1,87 @@
-/** MCP tools: Custom devices (author declarative instruments/effects, stored in the project). */
+/** MCP tools: Custom devices (author instruments and effects for the engine, stored in the project). */
 import { z } from "zod";
-import {
-  parseInstrumentDef,
-  parseEffectDef,
-  instrumentDefInputSchema,
-  effectDefInputSchema,
-} from "../../../src/audio/graph/zod";
+import { parseCustomDevice, type CustomKind } from "../../../src/audio/definitions/custom";
 import { makeCustomInstrumentId, makeCustomEffectId, deviceFormatDoc, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 
+/**
+ * What an author sends: everything but the `type` id (the server mints that). **An outline, not the
+ * format**: the full schema made the authoring tools' JSON schemas too big for a client to surface
+ * (the claude.ai client never showed them). `describe_device_format` explains the format, and
+ * parseCustomDevice checks every device in full, naming each problem.
+ */
+const deviceInput = {
+  label: z.string().optional(),
+  schema: z
+    .array(z.record(z.string(), z.unknown()))
+    .describe("Param declarations, each { id, label, kind, ... } - see describe_device_format."),
+  definition: z
+    .record(z.string(), z.unknown())
+    .describe("The engine definition, { format, nodes, voice?, output?, ... } - see describe_device_format."),
+};
+
 export function registerCustomDevicesTools({ server, target, trackArg, resolveTrack }: ToolContext): void {
+  /** The project's devices of a kind, and how to store one. */
+  const KINDS = {
+    instrument: {
+      list: () => target.project.customInstruments,
+      add: "addCustomInstrument",
+      update: "updateCustomInstrument",
+      store: (device: Parameters<typeof target.project.addCustomInstrument>[0]) =>
+        target.project.addCustomInstrument(device),
+      use: "create_track with instrument",
+    },
+    effect: {
+      list: () => target.project.customEffects,
+      add: "addCustomEffect",
+      update: "updateCustomEffect",
+      store: (device: Parameters<typeof target.project.addCustomEffect>[0]) => target.project.addCustomEffect(device),
+      use: "add_effect with effect",
+    },
+  } as const;
+
   server.registerTool(
     "describe_device_format",
     {
       title: "Describe device format",
       description:
-        "The declarative format for custom instruments/effects: node kinds and their parameters, plus connection and binding syntax. Read this before create_instrument / create_effect.",
+        "The format for custom instruments and effects: params, the engine's blocks with their ports and ranges, and how to wire them. Read this before create_instrument / create_effect.",
       inputSchema: {},
     },
     async () => ok(JSON.stringify(deviceFormatDoc(), null, 2)),
   );
+
+  const create = (kind: CustomKind, type: string, input: { label?: string; schema: unknown; definition: unknown }) => {
+    const result = parseCustomDevice({ type, ...input }, kind);
+    if (!result.ok) return fail(`Invalid ${kind}:\n${result.errors.map((error) => `- ${error}`).join("\n")}`);
+    if (!target.send({ type: KINDS[kind].add, def: result.device })) return fail("No DAW tab connected.");
+    KINDS[kind].store(result.device);
+    return ok(`Created ${kind} "${input.label ?? type}" (type ${type}). Use ${KINDS[kind].use} "${type}".`);
+  };
+
+  const update = (
+    kind: CustomKind,
+    deviceType: string,
+    input: { label?: string; schema: unknown; definition: unknown },
+  ) => {
+    const current = KINDS[kind].list().find((device) => device.type === deviceType);
+    if (!current) return fail(`No custom ${kind} with type "${deviceType}". Use list_custom_devices.`);
+    const result = parseCustomDevice({ ...input, type: deviceType, label: input.label ?? current.label }, kind);
+    if (!result.ok) return fail(`Invalid ${kind}:\n${result.errors.map((error) => `- ${error}`).join("\n")}`);
+    if (!target.send({ type: KINDS[kind].update, def: result.device })) return fail("No DAW tab connected.");
+    KINDS[kind].store(result.device);
+    return ok(`Updated ${kind} "${result.device.label ?? deviceType}" (type ${deviceType}).`);
+  };
 
   server.registerTool(
     "create_instrument",
     {
       title: "Create custom instrument",
       description:
-        "Author a custom instrument from a declarative node graph (see describe_device_format) and store it in the project. Returns its type id; use it with create_track.",
-      inputSchema: instrumentDefInputSchema.shape,
+        "Author a custom instrument (see describe_device_format) and store it in the project. Returns its type id; use it with create_track.",
+      inputSchema: deviceInput,
     },
-    async ({ label, schema, voice }) => {
-      const type = makeCustomInstrumentId();
-      const result = parseInstrumentDef({ type, label, schema, voice });
-      if (!result.ok) return fail(`Invalid instrument: ${result.errors.join("; ")}`);
-      if (!target.send({ type: "addCustomInstrument", def: result.def })) return fail("No DAW tab connected.");
-      target.project.addCustomInstrument(result.def);
-      return ok(`Created instrument "${label ?? type}" (type ${type}). Use create_track with instrument "${type}".`);
-    },
+    async (input) => create("instrument", makeCustomInstrumentId(), input),
   );
 
   server.registerTool(
@@ -44,17 +89,10 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Create custom effect",
       description:
-        "Author a custom effect from a declarative node graph (see describe_device_format; process from `in` to `wet`, include a `mix` param) and store it in the project. Returns its type id; use it with add_effect.",
-      inputSchema: effectDefInputSchema.shape,
+        "Author a custom effect (see describe_device_format; no voice nodes, reading input.left and input.right) and store it in the project. Returns its type id; use it with add_effect.",
+      inputSchema: deviceInput,
     },
-    async ({ label, schema, graph }) => {
-      const type = makeCustomEffectId();
-      const result = parseEffectDef({ type, label, schema, graph });
-      if (!result.ok) return fail(`Invalid effect: ${result.errors.join("; ")}`);
-      if (!target.send({ type: "addCustomEffect", def: result.def })) return fail("No DAW tab connected.");
-      target.project.addCustomEffect(result.def);
-      return ok(`Created effect "${label ?? type}" (type ${type}). Use add_effect with effect "${type}".`);
-    },
+    async (input) => create("effect", makeCustomEffectId(), input),
   );
 
   server.registerTool(
@@ -62,18 +100,10 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Edit custom instrument",
       description:
-        "Replace a custom instrument's definition, keeping its type id, so every track playing it picks up the change (params it still has keep their values). Pass the whole new definition: read the current one with get_custom_device, change it, send it back. Omit label to keep the current one.",
-      inputSchema: { deviceType: z.string(), ...instrumentDefInputSchema.shape },
+        "Replace a custom instrument's definition, keeping its type id, so every track playing it picks up the change (params it still has keep their values). Pass the whole new device: read the current one with get_custom_device, change it, send it back. Omit label to keep the current one.",
+      inputSchema: { deviceType: z.string(), ...deviceInput },
     },
-    async ({ deviceType, label, schema, voice }) => {
-      const current = target.project.customInstruments.find((def) => def.type === deviceType);
-      if (!current) return fail(`No custom instrument with type "${deviceType}". Use list_custom_devices.`);
-      const result = parseInstrumentDef({ type: deviceType, label: label ?? current.label, schema, voice });
-      if (!result.ok) return fail(`Invalid instrument: ${result.errors.join("; ")}`);
-      if (!target.send({ type: "updateCustomInstrument", def: result.def })) return fail("No DAW tab connected.");
-      target.project.addCustomInstrument(result.def);
-      return ok(`Updated instrument "${result.def.label ?? deviceType}" (type ${deviceType}).`);
-    },
+    async ({ deviceType, ...input }) => update("instrument", deviceType, input),
   );
 
   server.registerTool(
@@ -81,18 +111,10 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Edit custom effect",
       description:
-        "Replace a custom effect's definition, keeping its type id, so every slot holding it picks up the change (params it still has keep their values). Pass the whole new definition: read the current one with get_custom_device, change it, send it back. Omit label to keep the current one.",
-      inputSchema: { deviceType: z.string(), ...effectDefInputSchema.shape },
+        "Replace a custom effect's definition, keeping its type id, so every slot holding it picks up the change (params it still has keep their values). Pass the whole new device: read the current one with get_custom_device, change it, send it back. Omit label to keep the current one.",
+      inputSchema: { deviceType: z.string(), ...deviceInput },
     },
-    async ({ deviceType, label, schema, graph }) => {
-      const current = target.project.customEffects.find((def) => def.type === deviceType);
-      if (!current) return fail(`No custom effect with type "${deviceType}". Use list_custom_devices.`);
-      const result = parseEffectDef({ type: deviceType, label: label ?? current.label, schema, graph });
-      if (!result.ok) return fail(`Invalid effect: ${result.errors.join("; ")}`);
-      if (!target.send({ type: "updateCustomEffect", def: result.def })) return fail("No DAW tab connected.");
-      target.project.addCustomEffect(result.def);
-      return ok(`Updated effect "${result.def.label ?? deviceType}" (type ${deviceType}).`);
-    },
+    async ({ deviceType, ...input }) => update("effect", deviceType, input),
   );
 
   server.registerTool(
@@ -100,7 +122,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Get custom device",
       description:
-        "A custom instrument's or effect's full definition (label, schema, and voice or graph), to read before update_instrument / update_effect.",
+        "A custom instrument's or effect's full device (label, schema and definition), to read before update_instrument / update_effect.",
       inputSchema: { deviceType: z.string() },
     },
     async ({ deviceType }) => {
@@ -117,7 +139,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "List custom devices",
       description:
-        "The project's user/AI-authored instruments and effects (declarative devices). `uses` counts the tracks playing an instrument or the slots holding an effect; one at 0 is safe to remove.",
+        "The project's user/AI-authored instruments and effects. `uses` counts the tracks playing an instrument or the slots holding an effect; one at 0 is safe to remove.",
       inputSchema: {},
     },
     async () => {

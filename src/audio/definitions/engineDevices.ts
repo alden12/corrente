@@ -28,6 +28,11 @@ export const registerEngineDevice = (type: string, spec: EngineDeviceSpec): void
   DEVICES.set(type, spec);
 };
 
+/** Forget a device registered under `type` (a custom one, as its project unloads or drops it). */
+export const unregisterEngineDevice = (type: string): void => {
+  DEVICES.delete(type);
+};
+
 /** A type's engine definition, if it runs on the new engine. */
 export const engineDevice = (type: string): EngineDeviceSpec | undefined => {
   const registered = DEVICES.get(type);

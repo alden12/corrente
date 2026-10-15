@@ -7,8 +7,8 @@
  * boundary cannot drift.
  *
  * Pure zod, DOM/Node-free (like graph/zod.ts and params/zod.ts), so the Node server
- * imports it under a DOM-less tsconfig. Reuses graph/zod's instrument/effect def
- * schemas for embedded custom devices rather than redefining them.
+ * imports it under a DOM-less tsconfig. Embedded custom devices are checked apart, on load
+ * (definitions/custom.ts).
  *
  * Depth: project.json is deep-validated down the tree (tracks/groups/clips/placements/
  * effects/params). Parameter *value* maps validate as `Record<string, ParamValue>` and
@@ -18,7 +18,7 @@
  * validation is a gate, never a filter - evolving/extra fields never break a save.
  */
 import { z } from "zod";
-import type { GraphInstrumentDef, GraphEffectDef } from "../graph/types";
+import type { CustomDevice } from "../definitions/custom";
 import { KEYFRAME_INDEX_PATH } from "../history/keyframes";
 
 /* -------------------------------------------------------------------------- */
@@ -160,8 +160,8 @@ export const groupDataSchema = z.object({
 // cannot read - a block kind added by a newer build, say - fail the whole project as "not a
 // project" (the recovery dialog), rather than costing just that device. Typed as the def so the
 // rest of the code reads them as what they will be once parsed.
-const customInstrumentSchema = z.unknown() as unknown as z.ZodType<GraphInstrumentDef>;
-const customEffectSchema = z.unknown() as unknown as z.ZodType<GraphEffectDef>;
+const customInstrumentSchema = z.unknown() as unknown as z.ZodType<CustomDevice>;
+const customEffectSchema = z.unknown() as unknown as z.ZodType<CustomDevice>;
 
 /**
  * A project's time signature: `numerator` beats to the bar, each a `1/denominator` note. A "beat"

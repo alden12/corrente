@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { WebSocket } from "ws";
 import { createDawMcp, type DawMcp } from "../server/mcpServer";
-import { parseInstrumentDef } from "../src/audio/graph/zod";
+import { compileDefinition } from "../src/audio/definitions/compile";
 
 const PORT = 8799;
 const URL = `ws://localhost:${PORT}`;
@@ -66,39 +66,51 @@ describe("MCP server (tracks)", () => {
     await daw.close();
   });
 
-  it("describe_device_format lists the node vocabulary", async () => {
+  /** A saw through a filter (the cutoff a param if `toned`), at a level: a new-format instrument. */
+  const synth = (toned = false) => ({
+    format: 1,
+    nodes: {
+      osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+      envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
+      ...(toned && { filter: { block: "onepole", voice: true, inputs: { signal: "osc", cutoff: { param: "tone" } } } }),
+      amp: { block: "mul", voice: true, inputs: { a: toned ? "filter" : "osc", b: "envelope" } },
+      level_l: { block: "mul", inputs: { a: "voices.left", b: { param: "level" } } },
+      level_r: { block: "mul", inputs: { a: "voices.right", b: { param: "level" } } },
+    },
+    voice: "amp",
+    output: ["level_l", "level_r"],
+  });
+  const level = { id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 };
+
+  it("describe_device_format lists the engine's blocks, each with how to use it", async () => {
     const doc = parse(await call("describe_device_format"));
-    const kinds = doc.nodeKinds.map((entry: { kind: string }) => entry.kind);
-    expect(kinds).toContain("osc");
-    expect(kinds).toContain("biquad");
-    expect(doc.reserved.instrument).toContain("amp");
-    expect(kinds).toContain("env");
-    expect(kinds).toContain("noise");
-    // Every kind comes with its line of how to use it, or the agent is left guessing.
-    expect(doc.nodeKinds.every((entry: { summary?: string }) => (entry.summary ?? "").length > 20)).toBe(true);
+    const blocks = doc.blocks.map((block: { name: string }) => block.name);
+    expect(blocks).toEqual(expect.arrayContaining(["saw", "adsr", "svf", "sampler"]));
+    expect(doc.device).toContain("{ label?, schema, definition }");
+    expect(doc.blocks.every((block: { description?: string }) => (block.description ?? "").length > 10)).toBe(true);
   });
 
-  it("describe_device_format's example is a def that validates, so it teaches a working one", async () => {
+  it("describe_device_format's example compiles, so it teaches a working one", async () => {
     const doc = parse(await call("describe_device_format"));
-    const result = parseInstrumentDef({ ...doc.example, type: "ci-example" });
-    expect(result.ok ? [] : result.errors).toEqual([]);
+    expect(() => compileDefinition(doc.example)).not.toThrow();
   });
 
-  it("create_instrument rejects a malformed def at the boundary", async () => {
+  it("create_instrument rejects a malformed device at the boundary, naming the problem", async () => {
     const res = await call("create_instrument", {
       schema: [],
-      voice: { nodes: [{ id: "osc", kind: "osc" }], connections: [["osc", "ghost"]] },
+      definition: {
+        format: 1,
+        nodes: { osc: { block: "saw", voice: true, inputs: { frequency: "ghost" } } },
+        voice: "osc",
+      },
     });
     expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain("osc.frequency");
   });
 
   it("create_instrument stores a valid device, forwards it, and lists it", async () => {
     const messages = await connectTab();
-    const res = await call("create_instrument", {
-      label: "Test Synth",
-      schema: [{ id: "amp.level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
-      voice: { nodes: [{ id: "osc", kind: "osc", waveform: "sawtooth" }], connections: [["osc", "amp"]] },
-    });
+    const res = await call("create_instrument", { label: "Test Synth", schema: [level], definition: synth() });
     expect(res.isError).toBeFalsy();
     const created = /type (ci-\w+)/.exec(res.content[0].text)?.[1];
     expect(created).toBeTruthy();
@@ -113,30 +125,19 @@ describe("MCP server (tracks)", () => {
 
   it("update_instrument edits a device in place: tracks keep it, and the values of params it still has", async () => {
     const messages = await connectTab();
-    const level = { id: "amp.level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 };
-    const created = await call("create_instrument", {
-      label: "Edit Me",
-      schema: [level],
-      voice: { nodes: [{ id: "osc", kind: "osc", waveform: "sawtooth" }], connections: [["osc", "amp"]] },
-    });
+    const created = await call("create_instrument", { label: "Edit Me", schema: [level], definition: synth() });
     const type = /type (ci-\w+)/.exec(created.content[0].text)![1];
     await makeTrack(type);
-    await call("set_parameter", { id: "amp.level", value: 0.3 });
+    await call("set_parameter", { id: "level", value: 0.3 });
 
     // Read it back, add a Tone knob, and send the whole thing back.
     const current = parse(await call("get_custom_device", { deviceType: type }));
-    expect(current).toMatchObject({ kind: "instrument", type, label: "Edit Me" });
+    expect(current).toMatchObject({ kind: "instrument", type, label: "Edit Me", definition: synth() });
     const tone = { id: "tone", label: "Tone", kind: "number", min: 20, max: 20000, default: 1200 };
     const res = await call("update_instrument", {
       deviceType: type,
       schema: [...current.schema, tone],
-      voice: {
-        nodes: [...current.voice.nodes, { id: "filter", kind: "biquad", frequency: { param: "tone" } }],
-        connections: [
-          ["osc", "filter"],
-          ["filter", "amp"],
-        ],
-      },
+      definition: synth(true),
     });
     expect(res.isError).toBeFalsy();
     await waitFor(() => typesOf(messages).includes("updateCustomInstrument"));
@@ -148,24 +149,26 @@ describe("MCP server (tracks)", () => {
       param.value,
     ]);
     expect(values).toEqual([
-      ["amp.level", 0.3],
+      ["level", 0.3],
       ["tone", 1200],
     ]);
 
     await call("remove_custom_device", { deviceType: type }); // cleanup (global catalog)
   });
 
-  it("update_instrument refuses an unknown device and an invalid graph, changing nothing", async () => {
+  it("update_instrument refuses an unknown device and an invalid definition, changing nothing", async () => {
     await connectTab();
-    const voice = { nodes: [{ id: "osc", kind: "osc" }], connections: [["osc", "amp"]] };
-    expect((await call("update_instrument", { deviceType: "ci-nope", schema: [], voice })).isError).toBe(true);
-    const created = await call("create_instrument", { label: "Keep Me", schema: [], voice });
+    const definition = synth();
+    expect((await call("update_instrument", { deviceType: "ci-nope", schema: [level], definition })).isError).toBe(
+      true,
+    );
+    const created = await call("create_instrument", { label: "Keep Me", schema: [level], definition });
     const type = /type (ci-\w+)/.exec(created.content[0].text)![1];
-    const broken = { nodes: [{ id: "osc", kind: "osc" }], connections: [["osc", "ghost"]] };
-    expect((await call("update_instrument", { deviceType: type, schema: [], voice: broken })).isError).toBe(true);
-    expect(parse(await call("get_custom_device", { deviceType: type })).voice).toEqual(voice);
+    // Binds a param it doesn't declare.
+    expect((await call("update_instrument", { deviceType: type, schema: [], definition })).isError).toBe(true);
+    expect(parse(await call("get_custom_device", { deviceType: type })).definition).toEqual(definition);
     // An instrument is not an effect.
-    expect((await call("update_effect", { deviceType: type, schema: [], graph: voice })).isError).toBe(true);
+    expect((await call("update_effect", { deviceType: type, schema: [level], definition })).isError).toBe(true);
     await call("remove_custom_device", { deviceType: type });
   });
 

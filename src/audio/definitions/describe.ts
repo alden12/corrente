@@ -88,10 +88,13 @@ export const definitionFormatDoc = () => ({
     "`output` what the track plays, the voices summed unless it says. A device with no voice nodes is an effect: " +
     "read `input.left` and `input.right`.",
   zones:
-    "zones?: [{ sample: { param }, root, keys?: [low, high], velocities?: [low, high], start?, end? }, ...] maps " +
-    "notes to samples: each zone a sample param, the note it plays at its own pitch, the keys (MIDI, both ends " +
-    "included) and velocities (0 to 1) it answers, and the part of the sample (fractions). A note takes the first " +
-    "zone that fits (none: it doesn't sound), and its voice reads it as voice.sample, voice.root, voice.start and " +
+    "zones?: [{ sample: { param }, root, keys?: [low, high], velocities?: [low, high], start?, end?, trimStart?, " +
+    "trimEnd?, tune?, level?, keytrack? }, ...] maps notes to samples: each zone a sample param, the note it plays " +
+    "at its own pitch, the keys (MIDI, both ends included) and velocities (0 to 1) it answers, and the part of the " +
+    "sample: start and end as fractions, trimStart and trimEnd as milliseconds cut off each end. tune moves it in " +
+    "semitones, level scales the note's velocity (0 to 4), keytrack false plays it at its own pitch on any key. " +
+    "Each but sample and velocities can be { param } instead, read as a note starts (a pad's note, its tune). " +
+    "A note takes the first zone that fits (none: it doesn't sound), and its voice reads it as voice.sample, voice.root, voice.start and " +
     'voice.end: wire those to a sampler. A drum kit is a zone per pad, root on its own key: { "sample": { "param": ' +
     '"kick" }, "root": 36, "keys": [36, 36] }.',
   voices: `Up to ${MAX_VOICES}; ${DEFAULT_VOICES} if a device with voice nodes doesn't say. Past them, the voice released longest ago fades out for a new note.`,

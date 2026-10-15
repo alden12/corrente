@@ -13,14 +13,20 @@ test("an edited custom instrument is rebuilt on its track; an unchanged reload k
     const { AudioEngine } = await import(/* @vite-ignore */ "/src/audio/engine/AudioEngine.ts");
     const { ProjectStore } = await import(/* @vite-ignore */ "/src/audio/project/projectStore.ts");
     const project = new ProjectStore(false);
+    const voiceOf = (block: string) => ({
+      format: 1,
+      nodes: {
+        osc: { block, voice: true, inputs: { frequency: "voice.frequency" } },
+        envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
+        amp: { block: "mul", voice: true, inputs: { a: "osc", b: "envelope" } },
+      },
+      voice: "amp",
+    });
     const def = {
       type: "ci-e2e-edit",
       label: "Edit Me",
-      schema: [{ id: "amp.level", label: "Level", kind: "number" as const, min: 0, max: 1, default: 0.8 }],
-      voice: {
-        nodes: [{ id: "osc", kind: "osc" as const, waveform: "sawtooth" as const }],
-        connections: [["osc", "amp"]] as [string, string][],
-      },
+      schema: [{ id: "level", label: "Level", kind: "number" as const, min: 0, max: 1, default: 0.8 }],
+      definition: voiceOf("saw"),
     };
     project.addCustomInstrument(def);
     const track = project.addTrack(def.type);
@@ -31,10 +37,7 @@ test("an edited custom instrument is rebuilt on its track; an unchanged reload k
     project.load(project.snapshot()); // re-parses every def, but none changed
     const afterReload = engine.getInstrument(track.id);
 
-    project.addCustomInstrument({
-      ...def,
-      voice: { ...def.voice, nodes: [{ id: "osc", kind: "osc", waveform: "square" }] },
-    });
+    project.addCustomInstrument({ ...def, definition: voiceOf("triangle") });
     const afterEdit = engine.getInstrument(track.id);
     engine.dispose();
     return {

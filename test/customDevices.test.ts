@@ -1,66 +1,110 @@
 import { describe, it, expect } from "vitest";
-import { parseCustomDevices, DEVICE_FORMAT_VERSION } from "../src/audio/graph/zod";
+import {
+  parseCustomDevice,
+  parseCustomDevices,
+  DEVICE_FORMAT_VERSION,
+  type CustomDevice,
+} from "../src/audio/definitions/custom";
+import { engineDevice } from "../src/audio/definitions/engineDevices";
 import { ProjectStore } from "../src/audio/project/projectStore";
 import { EditLog } from "../src/audio/commands/editLog";
 import { hasInstrument, instrumentSchema } from "../src/audio/instruments/catalog";
-import type { GraphInstrumentDef } from "../src/audio/graph/types";
 
-const validInstrument: GraphInstrumentDef = {
+const validInstrument: CustomDevice = {
   type: "ci-test",
   label: "Test Synth",
   schema: [
-    { id: "amp.level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 },
-    { id: "osc.detune", label: "Detune", kind: "number", min: -100, max: 100, default: 0 },
+    { id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 },
+    { id: "cutoff", label: "Cutoff", kind: "number", min: 20, max: 20000, default: 2000 },
   ],
-  voice: {
-    nodes: [{ id: "osc", kind: "osc", waveform: "sawtooth", detune: { param: "osc.detune" } }],
-    connections: [["osc", "amp"]],
+  definition: {
+    format: 1,
+    nodes: {
+      osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+      envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
+      filter: { block: "onepole", voice: true, inputs: { signal: "osc", cutoff: { param: "cutoff" } } },
+      amp: { block: "mul", voice: true, inputs: { a: "filter", b: "envelope" } },
+      level_l: { block: "mul", inputs: { a: "voices.left", b: { param: "level" } } },
+      level_r: { block: "mul", inputs: { a: "voices.right", b: { param: "level" } } },
+    },
+    voice: "amp",
+    output: ["level_l", "level_r"],
   },
 };
 
-describe("parseCustomDevices (untrusted-input gate)", () => {
-  it("keeps a valid instrument def", () => {
-    const { instruments } = parseCustomDevices({
-      customInstruments: [validInstrument],
-      deviceFormatVersion: DEVICE_FORMAT_VERSION,
-    });
-    expect(instruments).toHaveLength(1);
-    expect(instruments[0].type).toBe("ci-test");
+const validEffect: CustomDevice = {
+  type: "ce-test",
+  schema: [{ id: "gain", label: "Gain", kind: "number", min: 0, max: 2, default: 1 }],
+  definition: {
+    format: 1,
+    nodes: {
+      left: { block: "mul", inputs: { a: "input.left", b: { param: "gain" } } },
+      right: { block: "mul", inputs: { a: "input.right", b: { param: "gain" } } },
+    },
+    output: ["left", "right"],
+  },
+};
+
+/** One that a newer build might read: a block this one doesn't have. */
+const newer = {
+  ...validInstrument,
+  type: "ci-newer",
+  definition: { format: 1, nodes: { x: { block: "reverbtron", voice: true } }, voice: "x" },
+};
+
+describe("parseCustomDevice (untrusted-input gate)", () => {
+  it("keeps an instrument and an effect that compile", () => {
+    expect(parseCustomDevice(validInstrument, "instrument")).toEqual({ ok: true, device: validInstrument });
+    expect(parseCustomDevice(validEffect, "effect")).toEqual({ ok: true, device: validEffect });
   });
 
-  it("drops a def with a dangling connection", () => {
-    const bad = { ...validInstrument, voice: { nodes: [{ id: "osc", kind: "osc" }], connections: [["osc", "ghost"]] } };
-    expect(parseCustomDevices({ customInstruments: [bad] }).instruments).toHaveLength(0);
-  });
-
-  it("drops a def binding a parameter not in its schema", () => {
+  it("refuses one that won't compile, naming every problem", () => {
     const bad = {
       ...validInstrument,
-      voice: { nodes: [{ id: "osc", kind: "osc", detune: { param: "nope" } }], connections: [["osc", "amp"]] },
+      definition: {
+        ...validInstrument.definition,
+        nodes: {
+          ...validInstrument.definition.nodes,
+          filter: { block: "onepole", voice: true, inputs: { signal: "ghost", cutoff: { param: "nope" } } },
+        },
+      },
     };
-    expect(parseCustomDevices({ customInstruments: [bad] }).instruments).toHaveLength(0);
+    const result = parseCustomDevice(bad, "instrument");
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("drops a def with an unknown node kind", () => {
-    const bad = { ...validInstrument, voice: { nodes: [{ id: "x", kind: "reverbtron" }], connections: [] } };
-    expect(parseCustomDevices({ customInstruments: [bad] }).instruments).toHaveLength(0);
+  it("refuses an instrument with no voices, and an effect with them", () => {
+    expect(parseCustomDevice({ ...validEffect, type: "ci-x" }, "instrument")).toMatchObject({ ok: false });
+    expect(parseCustomDevice({ ...validInstrument, type: "ce-x" }, "effect")).toMatchObject({ ok: false });
   });
 
-  it("ignores all custom devices on an unknown format version, handing them back as unreadable", () => {
-    const result = parseCustomDevices({ customInstruments: [validInstrument], deviceFormatVersion: 999 });
+  it("refuses a device in the old graph format", () => {
+    const old = {
+      type: "ci-old",
+      schema: [],
+      voice: { nodes: [{ id: "osc", kind: "osc" }], connections: [["osc", "amp"]] },
+    };
+    expect(parseCustomDevice(old, "instrument")).toMatchObject({ ok: false });
+  });
+});
+
+describe("parseCustomDevices (a project's)", () => {
+  it("keeps the ones that compile, and hands back the rest exactly as they were", () => {
+    const result = parseCustomDevices({
+      customInstruments: [validInstrument, newer],
+      customEffects: [validEffect],
+      deviceFormatVersion: DEVICE_FORMAT_VERSION,
+    });
+    expect(result.instruments.map((device) => device.type)).toEqual(["ci-test"]);
+    expect(result.effects.map((device) => device.type)).toEqual(["ce-test"]);
+    expect(result.unreadable.instruments).toEqual([newer]);
+  });
+
+  it("plays none from another format version (the old graph format is 1), handing them all back", () => {
+    const result = parseCustomDevices({ customInstruments: [validInstrument], deviceFormatVersion: 1 });
     expect(result.instruments).toHaveLength(0);
     expect(result.unreadable.instruments).toEqual([validInstrument]);
-  });
-
-  it("hands back what it drops exactly as it was, so a newer build can still read it", () => {
-    const newer = {
-      ...validInstrument,
-      type: "ci-newer",
-      voice: { nodes: [{ id: "x", kind: "reverbtron" }], connections: [] },
-    };
-    const result = parseCustomDevices({ customInstruments: [validInstrument, newer] });
-    expect(result.instruments.map((def) => def.type)).toEqual(["ci-test"]);
-    expect(result.unreadable.instruments).toEqual([newer]);
   });
 });
 
@@ -70,7 +114,9 @@ describe("custom devices through ProjectStore", () => {
     store.addCustomInstrument(validInstrument);
     // Its schema is registered, so a track could build a param store from it.
     expect(hasInstrument("ci-test")).toBe(true);
-    expect(instrumentSchema("ci-test").some((spec) => spec.id === "osc.detune")).toBe(true);
+    expect(instrumentSchema("ci-test").some((spec) => spec.id === "cutoff")).toBe(true);
+    // And its definition, so the engine plays it.
+    expect(engineDevice("ci-test")?.definition).toEqual(validInstrument.definition);
 
     const snap = store.snapshot();
     expect(snap.customInstruments?.map((def) => def.type)).toContain("ci-test");
@@ -84,16 +130,12 @@ describe("custom devices through ProjectStore", () => {
 
     reloaded.removeCustomInstrument("ci-test");
     expect(hasInstrument("ci-test")).toBe(false);
+    expect(engineDevice("ci-test")).toBeUndefined();
   });
 
-  it("keeps a def it cannot read through a load and a save, for the build that can", () => {
-    const newer = {
-      ...validInstrument,
-      type: "ci-newer",
-      voice: { nodes: [{ id: "x", kind: "reverbtron" }], connections: [] },
-    };
+  it("keeps a device it cannot read through a load and a save, for the build that can", () => {
     const store = new ProjectStore();
-    store.load({ ...new ProjectStore().snapshot(), customInstruments: [validInstrument, newer as GraphInstrumentDef] });
+    store.load({ ...new ProjectStore().snapshot(), customInstruments: [validInstrument, newer as CustomDevice] });
     // Not playable here: only the readable one is registered.
     expect(store.customInstruments.map((def) => def.type)).toEqual(["ci-test"]);
     expect(hasInstrument("ci-newer")).toBe(false);
@@ -101,10 +143,10 @@ describe("custom devices through ProjectStore", () => {
     expect(store.snapshot().customInstruments).toEqual([validInstrument, newer]);
   });
 
-  it("drops an invalid embedded def on load rather than throwing", () => {
+  it("sets aside an invalid embedded device on load rather than throwing", () => {
     const store = new ProjectStore();
     const bad = {
-      customInstruments: [{ type: "ci-bad", schema: [], voice: { nodes: [], connections: [["a", "b"]] } }],
+      customInstruments: [{ type: "ci-bad", schema: [], definition: { format: 1, nodes: {} } }],
     };
     expect(() => store.load(bad as never)).not.toThrow();
     expect(store.customInstruments).toHaveLength(0);

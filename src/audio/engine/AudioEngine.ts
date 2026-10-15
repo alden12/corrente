@@ -17,9 +17,7 @@
  */
 import type { ProjectStore, EffectInstance, InstrumentTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
-import { registerInstrumentFactory } from "../instruments/registry";
 import type { Instrument } from "../instruments/types";
-import { registerEffectFactory } from "../effects/registry";
 import { groupDepth, groupEffectStage } from "../bank/stages";
 import { EngineInstrument } from "../bank/EngineInstrument";
 import { ChainEffects } from "./chainEffects";
@@ -30,8 +28,6 @@ import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice
 import type { TransportClock } from "../midi/device/clock";
 import { setTransport as setEngineTransport } from "../bank/pool";
 import type { Transport } from "../bank/messages";
-import { GraphInstrument } from "../graph/GraphInstrument";
-import { GraphEffect } from "../graph/GraphEffect";
 import { getAudioBuffer } from "../audioStore";
 import { setSampleAssets } from "../samples/sampleRegistry";
 import { loadSampleBuffer } from "../samples/builtinUrls";
@@ -114,9 +110,9 @@ export class AudioEngine {
   private readonly audioBuffers = new Map<string, AudioBuffer>();
   private readonly decoding = new Set<string>();
   private project: ProjectStore | null = null;
-  /** Each custom-device type's registered definition, as JSON: registering is idempotent, and an
-   *  edited one (a different definition under the same type) is re-registered and rebuilt. */
-  private readonly registeredCustomDefs = new Map<string, string>();
+  /** Each custom device's definition as last played, as JSON: one edited since (a different
+   *  definition under the same type) is rebuilt. */
+  private readonly playedCustomDefs = new Map<string, string>();
   private unsubscribe: (() => void) | null = null;
   /** The transport clock MIDI devices read (set by AppShell once the scheduler exists). */
   private transport: TransportClock | null = null;
@@ -235,30 +231,19 @@ export class AudioEngine {
   }
 
   /**
-   * Register a GraphInstrument/GraphEffect factory for each of the project's custom defs, and
-   * return the types whose definition changed since they were last registered (edited), whose
-   * live instruments and effects must be rebuilt. Compared by content, not identity: a load
-   * (undo, redo) re-parses every def, and an unchanged one should not cut its notes.
+   * The custom devices whose definition changed since they were last played (edited), whose live
+   * instruments and effects must be rebuilt fresh: an edited device's old nodes must not carry into
+   * its new wiring by name. Compared by content, not identity: a load (undo, redo) re-parses every
+   * device, and an unchanged one should not cut its notes. The store registers them to play.
    */
-  private registerCustomFactories(project: ProjectStore): Set<string> {
-    const edited = new Set<string>();
-    const register = (type: string, def: unknown, registerFactory: () => void): void => {
-      const json = JSON.stringify(def);
-      const previous = this.registeredCustomDefs.get(type);
-      if (previous === json) return;
-      if (previous !== undefined) edited.add(type);
-      registerFactory();
-      this.registeredCustomDefs.set(type, json);
-    };
-    for (const def of project.customInstruments) {
-      register(def.type, def, () =>
-        registerInstrumentFactory(def.type, (ctx, store) => new GraphInstrument(ctx, store, def)),
-      );
-    }
-    for (const def of project.customEffects) {
-      register(def.type, def, () => registerEffectFactory(def.type, (ctx, store) => new GraphEffect(ctx, store, def)));
-    }
-    return edited;
+  private editedCustomDevices(project: ProjectStore): Set<string> {
+    const edited = [...project.customInstruments, ...project.customEffects].filter((device) => {
+      const json = JSON.stringify(device);
+      const previous = this.playedCustomDefs.get(device.type);
+      this.playedCustomDefs.set(device.type, json);
+      return previous !== undefined && previous !== json;
+    });
+    return new Set(edited.map((device) => device.type));
   }
 
   private reconcile(): void {
@@ -266,10 +251,7 @@ export class AudioEngine {
     const project = this.project;
     if (!ctx || !project || !this.master) return;
 
-    // Register audio factories for the project's custom (declarative) devices before building
-    // nodes, so createInstrument/createEffect can realize a custom type. The store already
-    // registered their schemas; this is the Web Audio half, kept here (the store stays DOM-free).
-    const edited = this.registerCustomFactories(project);
+    const edited = this.editedCustomDevices(project);
 
     const groups = project.getGroups();
     const tracks = project.getTracks();
@@ -352,10 +334,13 @@ export class AudioEngine {
             noteHead: instrument,
           };
           this.nodes.set(track.id, node);
-        } else if (node.instrumentType !== track.instrumentType || edited.has(track.instrumentType)) {
+        } else if (
+          node.instrumentType !== track.instrumentType ||
+          [track.instrumentType, ...node.absorbed.map((effect) => effect.type)].some((type) => edited.has(type))
+        ) {
           // The track's instrument was swapped (setInstrument, e.g. assigning one to an
-          // empty track), or its custom definition was edited: dispose the old node and
-          // build the new one over the same gain.
+          // empty track), or its custom definition was edited, or one of the effects it plays
+          // itself: dispose the old node and build the new one over the same gain.
           node.instrument.dispose();
           const made = trackInstrument(ctx, track.instrumentType, track.params, track.effects);
           node.instrument = made.instrument;

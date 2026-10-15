@@ -36,8 +36,8 @@ import {
 } from "../instruments/catalog";
 import { hasEffect, effectSchema, registerEffect, unregisterEffect, DEFAULT_EFFECT } from "../effects/catalog";
 import { hasMidiDevice, midiDeviceSchema, DEFAULT_MIDI_DEVICE } from "../midi/device/catalog";
-import type { GraphInstrumentDef, GraphEffectDef } from "../graph/types";
-import { parseCustomDevices, type UnreadableDevices } from "../graph/zod";
+import { parseCustomDevices, type CustomDevice, type UnreadableDevices } from "../definitions/custom";
+import { registerEngineDevice, unregisterEngineDevice } from "../definitions/engineDevices";
 import { DEFAULT_GROOVE_ID } from "../grooves/catalog";
 import {
   DEFAULT_TIME_SIGNATURE,
@@ -200,11 +200,11 @@ export class ProjectStore {
    *  place at the applyEdit seam via setAuthor; snapshot() copies it out and load() restores it,
    *  so it rides undo/redo/reload like the rest of the project. */
   private authorship: Record<string, ClipAuthor> = {};
-  // User-authored devices (declarative graphs) embedded in the project. Their schemas are
-  // (un)registered in the catalogs as they load/change so tracks resolve them; the engine
-  // registers the audio factories (it owns Web Audio, keeping this store DOM-free).
-  private customInstrumentDefs: GraphInstrumentDef[] = [];
-  private customEffectDefs: GraphEffectDef[] = [];
+  // User-authored devices embedded in the project. Their schemas are (un)registered in the catalogs
+  // as they load and change, so tracks resolve them, and their definitions as engine devices, so the
+  // engine plays them (both registries DOM-free).
+  private customInstrumentDefs: CustomDevice[] = [];
+  private customEffectDefs: CustomDevice[] = [];
   /** Custom devices this build could not read, kept as stored and written back out (parseCustomDevices). */
   private unreadableDevices: UnreadableDevices = { instruments: [], effects: [] };
   private selectedTrackId: string | null = null;
@@ -1453,11 +1453,8 @@ export class ProjectStore {
       // reordering either (DAW-34). Sorting also hands out a copy rather than the live map.
       authorship: sortedByKey(this.authorship),
       // Ones this build could not read go back out as they came in, for a build that can.
-      customInstruments: [
-        ...this.customInstrumentDefs,
-        ...(this.unreadableDevices.instruments as GraphInstrumentDef[]),
-      ],
-      customEffects: [...this.customEffectDefs, ...(this.unreadableDevices.effects as GraphEffectDef[])],
+      customInstruments: [...this.customInstrumentDefs, ...(this.unreadableDevices.instruments as CustomDevice[])],
+      customEffects: [...this.customEffectDefs, ...(this.unreadableDevices.effects as CustomDevice[])],
     });
   }
 
@@ -1501,16 +1498,16 @@ export class ProjectStore {
     if (removed) this.emit();
   }
 
-  // --- custom devices (user/AI-authored declarative instruments & effects) ---
+  // --- custom devices (user/AI-authored instruments & effects) ---
 
-  get customInstruments(): GraphInstrumentDef[] {
+  get customInstruments(): CustomDevice[] {
     return this.customInstrumentDefs;
   }
-  get customEffects(): GraphEffectDef[] {
+  get customEffects(): CustomDevice[] {
     return this.customEffectDefs;
   }
 
-  private registerInstrumentDef(def: GraphInstrumentDef): void {
+  private registerInstrumentDef(def: CustomDevice): void {
     registerInstrument({
       type: def.type,
       label: def.label ?? def.type,
@@ -1518,20 +1515,30 @@ export class ProjectStore {
       family: "Custom",
       custom: true,
     });
+    registerEngineDevice(def.type, def);
   }
-  private registerEffectDef(def: GraphEffectDef): void {
+  private registerEffectDef(def: CustomDevice): void {
     registerEffect({ type: def.type, label: def.label ?? def.type, schema: def.schema, custom: true });
+    registerEngineDevice(def.type, def);
+  }
+  private unregisterInstrumentDef(type: string): void {
+    unregisterInstrument(type);
+    unregisterEngineDevice(type);
+  }
+  private unregisterEffectDef(type: string): void {
+    unregisterEffect(type);
+    unregisterEngineDevice(type);
   }
 
   /**
    * Validate + (re)register the project's custom device schemas, replacing any previously
    * registered set (so switching/reloading a project can't leak the old project's devices).
-   * Invalid defs are dropped by parseCustomDevices. Called at the top of load(), before tracks
+   * Ones that don't compile are set aside by parseCustomDevices. Called at the top of load(), before tracks
    * build their param stores from these schemas.
    */
   private syncCustomDevices(data: ProjectData): void {
-    for (const def of this.customInstrumentDefs) unregisterInstrument(def.type);
-    for (const def of this.customEffectDefs) unregisterEffect(def.type);
+    for (const def of this.customInstrumentDefs) this.unregisterInstrumentDef(def.type);
+    for (const def of this.customEffectDefs) this.unregisterEffectDef(def.type);
     const { instruments, effects, unreadable } = parseCustomDevices(data);
     this.customInstrumentDefs = instruments;
     this.customEffectDefs = effects;
@@ -1543,7 +1550,7 @@ export class ProjectStore {
   /** Add (or replace by type) a custom instrument, registering its schema. The def is validated at
    *  the boundary (MCP / project load); this is also the authored command's replay path. Tracks
    *  already playing it take the new schema, keeping the values of params it still has. */
-  addCustomInstrument(def: GraphInstrumentDef): void {
+  addCustomInstrument(def: CustomDevice): void {
     this.customInstrumentDefs = [...this.customInstrumentDefs.filter((existing) => existing.type !== def.type), def];
     this.registerInstrumentDef(def);
     for (const track of this.tracks) {
@@ -1554,10 +1561,10 @@ export class ProjectStore {
   removeCustomInstrument(type: string): void {
     if (!this.customInstrumentDefs.some((def) => def.type === type)) return;
     this.customInstrumentDefs = this.customInstrumentDefs.filter((def) => def.type !== type);
-    unregisterInstrument(type);
+    this.unregisterInstrumentDef(type);
     this.emit();
   }
-  addCustomEffect(def: GraphEffectDef): void {
+  addCustomEffect(def: CustomDevice): void {
     this.customEffectDefs = [...this.customEffectDefs.filter((existing) => existing.type !== def.type), def];
     this.registerEffectDef(def);
     const hosts = [...this.tracks, ...this.groups];
@@ -1579,7 +1586,7 @@ export class ProjectStore {
   removeCustomEffect(type: string): void {
     if (!this.customEffectDefs.some((def) => def.type === type)) return;
     this.customEffectDefs = this.customEffectDefs.filter((def) => def.type !== type);
-    unregisterEffect(type);
+    this.unregisterEffectDef(type);
     this.emit();
   }
 

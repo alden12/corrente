@@ -29,8 +29,7 @@ import type {
 } from "./types";
 import type { Track, Group, NoteClip, EffectInstance, EffectHost, MidiDeviceInstance } from "./projectStore";
 import type { SampleAsset } from "../samples/catalog";
-import type { GraphInstrumentDef, GraphEffectDef } from "../graph/types";
-import { DEVICE_FORMAT_VERSION } from "../graph/zod";
+import { DEVICE_FORMAT_VERSION, type CustomDevice } from "../definitions/custom";
 import { FIRST_CLIP_NAME } from "./seedClip";
 
 /** Serialize an effect chain (its params snapshotted) for persistence. */
@@ -66,9 +65,9 @@ export interface TransportState {
   samples: SampleAsset[];
   /** Last-editor map; only the persistable snapshot carries it (the reactive structure omits it). */
   authorship?: Record<string, ClipAuthor>;
-  /** User-authored declarative devices embedded in the project (see ProjectData). */
-  customInstruments?: GraphInstrumentDef[];
-  customEffects?: GraphEffectDef[];
+  /** User-authored devices embedded in the project (see ProjectData). */
+  customInstruments?: CustomDevice[];
+  customEffects?: CustomDevice[];
 }
 
 /**

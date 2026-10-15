@@ -11,25 +11,34 @@
 import { ProjectStore } from "../../src/audio/project/projectStore";
 import { EditLog } from "../../src/audio/commands/editLog";
 import type { EditCommand } from "../../src/audio/commands/types";
-import type { GraphEffectDef, GraphInstrumentDef } from "../../src/audio/graph/types";
+import type { CustomDevice } from "../../src/audio/definitions/custom";
 
-const CUSTOM_INSTRUMENT: GraphInstrumentDef = {
+const CUSTOM_INSTRUMENT: CustomDevice = {
   type: "ci-invert",
   label: "Invert Synth",
-  schema: [{ id: "amp.level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
-  voice: { nodes: [{ id: "osc", kind: "osc", waveform: "sawtooth" }], connections: [["osc", "amp"]] },
+  schema: [{ id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
+  definition: {
+    format: 1,
+    nodes: {
+      osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+      envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
+      amp: { block: "mul", voice: true, inputs: { a: "osc", b: { from: "envelope", scale: { param: "level" } } } },
+    },
+    voice: "amp",
+  },
 };
 
-const CUSTOM_EFFECT: GraphEffectDef = {
+const CUSTOM_EFFECT: CustomDevice = {
   type: "ce-invert",
   label: "Invert Effect",
   schema: [{ id: "mix", label: "Mix", kind: "number", min: 0, max: 1, default: 0.5 }],
-  graph: {
-    nodes: [{ id: "gain", kind: "gain", gain: 0.5 }],
-    connections: [
-      ["in", "gain"],
-      ["gain", "wet"],
-    ],
+  definition: {
+    format: 1,
+    nodes: {
+      left: { block: "mul", inputs: { a: "input.left", b: { param: "mix" } } },
+      right: { block: "mul", inputs: { a: "input.right", b: { param: "mix" } } },
+    },
+    output: ["left", "right"],
   },
 };
 
