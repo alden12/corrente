@@ -12,8 +12,9 @@ import { defineConfig, devices } from "@playwright/test";
  * adopts whatever is already listening without checking what it is. Running `open_viewer`
  * and `yarn test:e2e` in the same session then silently tests the roadmap viewer instead
  * of the app: every locator misses and the failures point nowhere near the cause.
+ * `E2E_PORT` moves it, so a second checkout's run can go beside this one's.
  */
-const PORT = 4319;
+const PORT = Number(process.env.E2E_PORT) || 4319;
 
 export default defineConfig({
   testDir: "./e2e",
