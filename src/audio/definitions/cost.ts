@@ -20,7 +20,12 @@ interface Costs {
   blocks: Record<string, number>;
   /** A sounding voice's own cost beyond its blocks. */
   voice: number;
-  /** How many times dearer a block is in a loop run a sample at a time. */
+  /**
+   * How many times dearer a block is in a loop run a sample at a time, measured on `mul`. Heavier
+   * blocks come out nearer 6 times (onepole 5.8, ladder 6.4, timed 2026-10-15), so this over-charges
+   * them, which errs safe. A fixed cost per looped node fits worse: Faust reruns a block's
+   * per-call setup each sample, so what the loop adds grows with the block.
+   */
   sampleLoop: number;
 }
 

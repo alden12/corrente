@@ -28,6 +28,7 @@ import {
   INPUT_CHANNELS,
   OUTPUT_CHANNELS,
   startEngine,
+  withWords,
   ZONE_SIGNAL,
   type EngineExports,
 } from "./exports";
@@ -167,12 +168,9 @@ export class EngineBank {
     held.forEach(({ note, velocity }) => this.startNote(track, note, velocity, 0, 0));
   }
 
-  /** Copy `words` into the engine's memory for `call`, then free them. */
+  /** Copy `words` into the engine's memory for `call`, then free them. Loading can grow the memory. */
   private withWords(words: Int32Array, call: (pointer: number) => number): number {
-    const pointer = this.engine.eng_malloc(words.length * 4);
-    new Int32Array(this.engine.memory.buffer, pointer, words.length).set(words);
-    const result = call(pointer);
-    this.engine.eng_free(pointer);
+    const result = withWords(this.engine, words, call);
     this.view();
     return result;
   }

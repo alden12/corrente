@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { EngineBank } from "../src/audio/bank/bank";
 import { BLOCK } from "../src/audio/bank/exports";
 import { carryWords } from "../src/audio/bank/carry";
@@ -11,13 +9,12 @@ import { chainEdit, ownerOf, reloadOptions } from "../src/audio/bank/reloadPlan"
 import { ParamStore } from "../src/audio/params/store";
 import { BYPASS, chainParam, composeChain, type ChainLink } from "../src/audio/definitions/chain";
 import { compileDefinition } from "../src/audio/definitions/compile";
+import { RATE, wasm } from "./support/engine";
 
 /**
  * A chain as one plan (INST-36.7): an instrument and the effects after it composed into one
  * definition, each effect's input the device before it, its mix and bypass params of the chain.
  */
-const RATE = 48000;
-const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.meta.url)));
 
 const device = (type: string) => [...TEST_INSTRUMENTS, ...TEST_EFFECTS].find((candidate) => candidate.type === type)!;
 const link = (type: string, key: string, effect = true): ChainLink => ({

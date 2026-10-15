@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { DefinitionError, compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
 import {
   HOST_SIGNALS,
@@ -12,44 +10,33 @@ import {
 import { EXAMPLE, definitionFormatDoc } from "../src/audio/definitions/describe";
 import { CATALOGUE } from "../src/audio/definitions/catalogue";
 import type { ParamSchema } from "../src/audio/params/types";
-import { startEngine } from "../src/audio/bank/exports";
+import { BLOCK } from "../src/audio/bank/exports";
 import { engineValueOf } from "../src/audio/definitions/values";
 import { beatsOf } from "../src/audio/definitions/references";
 import { resolveNumber } from "../src/audio/graph/table";
+import { engineOf, fillInput, loadWords, peakOf, RATE, renderBlocks } from "./support/engine";
 
 /**
  * The plan compiler (INST-36.4): definitions compiled and played in the committed engine.wasm, so a
  * plan the compiler writes is one the engine accepts and sounds as it should; and definitions it
  * must refuse, with problems that say what to fix.
  */
-const RATE = 48000;
-const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.meta.url)));
 
 /** An engine of one track playing a compiled plan, its params set from `values` (by param name). */
 const playing = (compiled: CompiledPlan, values: Record<string, number> = {}) => {
-  const engine = startEngine(wasm);
-  engine.eng_init(RATE, 1);
-  const pointer = engine.eng_malloc(compiled.words.length * 4);
-  new Int32Array(engine.memory.buffer, pointer, compiled.words.length).set(compiled.words);
-  expect(engine.eng_load(0, pointer, compiled.words.length)).toBe(0);
-  engine.eng_free(pointer);
+  const engine = engineOf();
+  expect(loadWords(engine, 0, compiled.words)).toBe(0);
   compiled.params.forEach((source, index) =>
     engine.eng_init_param(0, index, resolveNumber(values[source.param] ?? 0, source)),
   );
   /** Render `blocks` blocks, returning the left channel; `input` fills the main input first. */
   const render = (blocks: number, input?: (sample: number) => number) =>
     Array.from({ length: blocks }, (_, block) => {
-      if (input) {
-        const samples = new Float32Array(engine.memory.buffer, engine.eng_input(0, 0), 128);
-        samples.forEach((_, index) => (samples[index] = input(block * 128 + index)));
-      }
-      engine.eng_process();
-      return Array.from(new Float32Array(engine.memory.buffer, engine.eng_output(0, 0), 128));
+      if (input) fillInput(engine, 0, 0, (index) => input(block * BLOCK + index));
+      return renderBlocks(engine, 1);
     }).flat();
   return { engine, render };
 };
-
-const peakOf = (samples: number[]) => Math.max(...samples.map(Math.abs));
 
 /**
  * The pitch of a stretch of sound: the lag (between 50 Hz and 2 kHz) at which it best matches itself,

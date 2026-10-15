@@ -8,6 +8,7 @@ import { compileDefinition, type CompiledPlan } from "../src/audio/definitions/c
 import type { DeviceDefinition, InputValue } from "../src/audio/definitions/format";
 import { buildBanks } from "../src/audio/dsp/wavetable";
 import { tableOf } from "../src/audio/samples/tables";
+import { RATE, wasm } from "./support/engine";
 
 /**
  * What each block costs to run (INST-36.4's cost cap), in engine/costs.json. Timings depend on the
@@ -16,8 +17,6 @@ import { tableOf } from "../src/audio/samples/tables";
  * new block can't be added without measuring it.
  */
 const costsFile = fileURLToPath(new URL("../engine/costs.json", import.meta.url));
-const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.meta.url)));
-const RATE = 48000;
 
 describe("engine/costs.json", () => {
   // Not while measuring, which is about to write the file this reads.

@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { EngineBank } from "../src/audio/bank/bank";
 import { BLOCK } from "../src/audio/bank/exports";
 import { composeChain, chainParam, type ChainLink } from "../src/audio/definitions/chain";
@@ -8,13 +6,12 @@ import { compileDefinition } from "../src/audio/definitions/compile";
 import type { DeviceDefinition } from "../src/audio/definitions/format";
 import type { ParamSchema } from "../src/audio/params/types";
 import { compensate } from "../src/audio/engine/latency";
+import { RATE, wasm } from "./support/engine";
 
 /**
  * Latency compensation (INST-36.7): a late device's chain keeps its dry and wet in line, and the
  * mixer delays everything beside a late track so the project stays in time.
  */
-const RATE = 48000;
-const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.meta.url)));
 
 describe("compensate", () => {
   it("delays each bus's children to arrive as late as the latest", () => {

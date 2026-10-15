@@ -29,6 +29,13 @@ pub(super) struct Voice {
 
 /// Slots a graph has beyond its plan's voices, for notes that start while stolen ones fade.
 pub(super) const SPARE_VOICES: usize = 4;
+
+/// The voice slots for a plan of `voices` voices: those and the spares, or none for a plan with no
+/// voices (an effect), which has no notes to steal for.
+// TS: const slotsFor = (voices: number) => (voices === 0 ? 0 : voices + SPARE_VOICES);
+fn slots_for(voices: usize) -> usize {
+    if voices == 0 { 0 } else { voices + SPARE_VOICES }
+}
 /// How long a cut voice takes to fade out, in samples.
 const CUT: usize = BLOCK;
 
@@ -112,7 +119,7 @@ impl Graph {
             constants: plan.constants.iter().map(|&value| [value; SLOT]).collect(),
             pre: SectionState::new(&plan.pre, sample_rate, &plan.constants),
             post: SectionState::new(&plan.post, sample_rate, &plan.constants),
-            voices: (0..plan.voice_count + SPARE_VOICES).map(|_| Voice::new(&plan.voice, sample_rate, &plan.constants)).collect(),
+            voices: (0..slots_for(plan.voice_count)).map(|_| Voice::new(&plan.voice, sample_rate, &plan.constants)).collect(),
             plan,
         }
     }

@@ -25,7 +25,7 @@ export interface Planned {
  * How the words name what an input reads, and how a step runs: engine/src/plan/mod.rs reads these
  * numbers, so they change together.
  */
-const INPUT_TYPE = {
+export const INPUT_TYPE = {
   /** A node in the same section, this block: (node, port). */
   buffer: 0,
   /** A node in the same section, the sample before (a feedback edge): (node, port). */
@@ -45,7 +45,7 @@ const INPUT_TYPE = {
   /** A host signal: (signal). */
   host: 8,
 } as const;
-const STEP_MODE: Record<StepMode, number> = { node: 0, "sample-loop": 1, "chunk-loop": 2 };
+export const STEP_MODE: Record<StepMode, number> = { node: 0, "sample-loop": 1, "chunk-loop": 2 };
 
 export interface Laid {
   planned: Record<Section, Planned[]>;

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BlockSpec, Catalogue, Port } from "../engine/catalogue.ts";
-import { startEngine, type EngineExports } from "../src/audio/bank/exports";
+import { BLOCK, type EngineExports } from "../src/audio/bank/exports";
+import { engineOf, fillInput, loadWords, peakOf, renderBlocks } from "./support/engine";
 
 /**
  * Every block in the catalogue (INST-36.2), run in the committed engine.wasm: its ports agree with
@@ -12,7 +13,6 @@ import { startEngine, type EngineExports } from "../src/audio/bank/exports";
  */
 const engineDir = fileURLToPath(new URL("../engine/", import.meta.url));
 const catalogue = JSON.parse(readFileSync(`${engineDir}catalogue.json`, "utf8")) as Catalogue;
-const instantiate = () => startEngine(readFileSync(`${engineDir}engine.wasm`));
 
 /** One value per input then per control: what the block is driven with at one moment. */
 type Setting = number[];
@@ -58,11 +58,7 @@ const planFor = (block: BlockSpec, port: number) => {
 
 /** Run the block through every setting, and say where an output left its range. */
 const outOfRange = (engine: EngineExports, block: BlockSpec, port: number, output: Port) => {
-  const words = planFor(block, port);
-  const pointer = engine.eng_malloc(words.length * 4);
-  new Int32Array(engine.memory.buffer, pointer, words.length).set(words);
-  const loaded = engine.eng_load(0, pointer, words.length);
-  engine.eng_free(pointer);
+  const loaded = loadWords(engine, 0, planFor(block, port));
   if (loaded !== 0) return [`the plan was refused (${loaded})`];
   const settings = settingsFor(block);
   settings[0].forEach((value, index) => engine.eng_init_param(0, index, value));
@@ -70,10 +66,7 @@ const outOfRange = (engine: EngineExports, block: BlockSpec, port: number, outpu
   const slack = (output.max - output.min) * 0.05 + 1e-3;
   return settings.flatMap((setting, step) => {
     setting.forEach((value, index) => engine.eng_set_param(0, index, value));
-    const samples = Array.from({ length: 8 }, () => {
-      engine.eng_process();
-      return Array.from(new Float32Array(engine.memory.buffer, engine.eng_output(0, 0), 128));
-    }).flat();
+    const samples = renderBlocks(engine, 8);
     const worst = samples.find(
       (sample) => !Number.isFinite(sample) || sample < output.min - slack || sample > output.max + slack,
     );
@@ -82,7 +75,7 @@ const outOfRange = (engine: EngineExports, block: BlockSpec, port: number, outpu
 };
 
 describe("the block catalogue", () => {
-  const engine = instantiate();
+  const engine = engineOf();
   const faustBlocks = catalogue.blocks.filter((block) => block.kind < 1000);
 
   it("has a block for every kind the engine has, numbered in order", () => {
@@ -113,8 +106,7 @@ describe("every block, driven across its ranges", () => {
   it.each(catalogue.blocks.map((block) => [block.name, block] as const))(
     "%s stays within its declared output ranges",
     (_, block) => {
-      const engine = instantiate();
-      engine.eng_init(48000, 1);
+      const engine = engineOf();
       const problems = block.outputs.flatMap((output, port) => outOfRange(engine, block, port, output));
       expect(problems).toEqual([]);
     },
@@ -141,8 +133,7 @@ const runBlock = (
   },
 ) => {
   const block = catalogue.blocks.find((candidate) => candidate.name === name)!;
-  const engine = instantiate();
-  engine.eng_init(48000, 1);
+  const engine = engineOf();
   const words = [
     ...[block.controls.length, 0], // a param per control, no voices
     ...[0, 0, 0, 0], // no pre or voice section
@@ -151,21 +142,13 @@ const runBlock = (
     ...block.controls.flatMap((_, index) => [2, index, 0]),
     ...[0, 1, 0, 0, 1, 0, 0, port],
   ];
-  const pointer = engine.eng_malloc(words.length * 4);
-  new Int32Array(engine.memory.buffer, pointer, words.length).set(words);
-  expect(engine.eng_load(0, pointer, words.length)).toBe(0);
+  expect(loadWords(engine, 0, words)).toBe(0);
   block.controls.forEach((control, index) => engine.eng_init_param(0, index, controls[control.name] ?? control.init));
   return Array.from({ length: blocks }, (_, at) => {
-    block.inputs.forEach((_, channel) => {
-      const samples = new Float32Array(engine.memory.buffer, engine.eng_input(0, channel), 128);
-      samples.forEach((_, index) => (samples[index] = input(channel, at * 128 + index)));
-    });
-    engine.eng_process();
-    return Array.from(new Float32Array(engine.memory.buffer, engine.eng_output(0, 0), 128));
+    block.inputs.forEach((_, channel) => fillInput(engine, 0, channel, (index) => input(channel, at * BLOCK + index)));
+    return renderBlocks(engine, 1);
   }).flat();
 };
-
-const peakOf = (samples: number[]) => Math.max(...samples.map(Math.abs));
 
 describe("the new blocks do what they say", () => {
   it("lfo: every shape starts its cycle together", () => {

@@ -74,3 +74,16 @@ export const startEngine = (bytes: BufferSource): EngineExports => {
   engine._initialize();
   return engine;
 };
+
+/** Copy `words` (a plan, or what carries) into the engine's memory for `call`, then free them. */
+export const withWords = (
+  engine: EngineExports,
+  words: ArrayLike<number>,
+  call: (pointer: number) => number,
+): number => {
+  const pointer = engine.eng_malloc(words.length * 4);
+  new Int32Array(engine.memory.buffer, pointer, words.length).set(words);
+  const result = call(pointer);
+  engine.eng_free(pointer);
+  return result;
+};

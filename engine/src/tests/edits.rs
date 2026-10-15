@@ -56,6 +56,9 @@ fn a_cut_voice_fades_out_over_a_block_and_frees_its_slot() {
 fn a_plan_has_spare_voice_slots_for_notes_that_start_while_others_fade() {
     let engine = PlanBuilder::new().voices(4).node(kind("mul"), vec![voice(SIGNAL_GATE), constant(1.0)], vec![]).step(NODE, vec![0]).out(buffer(0)).loaded();
     assert_eq!(engine.track(0).map(|track| track.voice_slots()), Some(8));
+    // A plan with no voices has no notes to steal for, so no spares either.
+    let effect = PlanBuilder::new().voices(0).track_out(vec![input(0)]).loaded();
+    assert_eq!(effect.track(0).map(|track| track.voice_slots()), Some(0));
 }
 
 /// Carry words for `eng_carry`: whether voices carry, then the pre and post sections' maps.

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { startEngine, type EngineExports } from "../src/audio/bank/exports";
+import { startEngine } from "../src/audio/bank/exports";
+import { engineOf, fillInput, floatBits, loadWords, outputOf, wasm } from "./support/engine";
 
 /**
  * The committed engine.wasm (INST-36) loads, knows the blocks in engine/blocks, and plays a plan
@@ -10,9 +11,7 @@ import { startEngine, type EngineExports } from "../src/audio/bank/exports";
  * from JavaScript, the way the app will call it.
  */
 const engineDir = fileURLToPath(new URL("../engine/", import.meta.url));
-const bytes = readFileSync(`${engineDir}engine.wasm`);
-const instantiate = () => startEngine(bytes);
-const engine = instantiate();
+const engine = startEngine(wasm);
 
 /** Kinds are numbered by sorted file name, as compile.ts registers them. */
 const kinds = readdirSync(`${engineDir}blocks`)
@@ -66,7 +65,6 @@ describe("playing a plan", () => {
   // The plan words the compiler writes (engine/src/plan/mod.rs has the layout): four voices, each
   // multiplying its gate by 1, so a track plays 0 until the note starts and 1 after.
   const GATE = 1;
-  const floatBits = (value: number) => new Int32Array(Float32Array.of(value).buffer)[0];
   const mulOfGate = [
     ...[0, 4], // no params, four voices
     ...[0, 0], // the pre section: no nodes, no steps
@@ -80,24 +78,13 @@ describe("playing a plan", () => {
     ...[2, 6, 0, 0, 6, 1, 0], // the track plays the voices summed, left and right
   ];
 
-  const load = (exports: EngineExports, track: number, words: number[]) => {
-    const pointer = exports.eng_malloc(words.length * 4);
-    new Int32Array(exports.memory.buffer, pointer, words.length).set(words);
-    const result = exports.eng_load(track, pointer, words.length);
-    exports.eng_free(pointer);
-    return result;
-  };
-  const output = (exports: EngineExports, track: number, channel: number) =>
-    Array.from(new Float32Array(exports.memory.buffer, exports.eng_output(track, channel), 128));
-
   it("starts a note on the sample it was asked for, in both channels", () => {
-    const exports = instantiate();
-    exports.eng_init(48000, 1);
-    expect(load(exports, 0, mulOfGate)).toBe(0);
+    const exports = engineOf();
+    expect(loadWords(exports, 0, mulOfGate)).toBe(0);
     exports.eng_note_on(0, 0, 37, 440, 1);
     exports.eng_process();
     [0, 1].forEach((channel) => {
-      const block = output(exports, 0, channel);
+      const block = outputOf(exports, 0, channel);
       expect(block.slice(0, 37).every((sample) => sample === 0)).toBe(true);
       expect(block.slice(37).every((sample) => sample === 1)).toBe(true);
     });
@@ -105,25 +92,23 @@ describe("playing a plan", () => {
   });
 
   it("refuses a plan cut short, and keeps the one it had", () => {
-    const exports = instantiate();
-    exports.eng_init(48000, 1);
-    expect(load(exports, 0, mulOfGate)).toBe(0);
-    expect(load(exports, 0, mulOfGate.slice(0, -1))).toBe(-2);
+    const exports = engineOf();
+    expect(loadWords(exports, 0, mulOfGate)).toBe(0);
+    expect(loadWords(exports, 0, mulOfGate.slice(0, -1))).toBe(-2);
     exports.eng_note_on(0, 0, 0, 440, 1);
     exports.eng_process();
-    expect(output(exports, 0, 0)[0]).toBe(1);
+    expect(outputOf(exports, 0, 0)[0]).toBe(1);
   });
 
   it("runs a bank of tracks, each with its own plan and notes", () => {
-    const exports = instantiate();
-    exports.eng_init(48000, 2);
-    expect(load(exports, 0, mulOfGate)).toBe(0);
-    expect(load(exports, 1, mulOfGate)).toBe(0);
-    expect(load(exports, 2, mulOfGate)).toBe(-1);
+    const exports = engineOf(2);
+    expect(loadWords(exports, 0, mulOfGate)).toBe(0);
+    expect(loadWords(exports, 1, mulOfGate)).toBe(0);
+    expect(loadWords(exports, 2, mulOfGate)).toBe(-1);
     exports.eng_note_on(1, 0, 0, 440, 1);
     exports.eng_process();
-    expect(output(exports, 0, 0).every((sample) => sample === 0)).toBe(true);
-    expect(output(exports, 1, 0).every((sample) => sample === 1)).toBe(true);
+    expect(outputOf(exports, 0, 0).every((sample) => sample === 0)).toBe(true);
+    expect(outputOf(exports, 1, 0).every((sample) => sample === 1)).toBe(true);
   });
 
   it("takes audio in for a track with no voices", () => {
@@ -135,12 +120,11 @@ describe("playing a plan", () => {
       ...[0], // no voice output
       ...[1, 0, 0, 0], // the track plays the multiply
     ];
-    const exports = instantiate();
-    exports.eng_init(48000, 1);
-    expect(load(exports, 0, doubler)).toBe(0);
-    new Float32Array(exports.memory.buffer, exports.eng_input(0, 0), 128).fill(0.25);
+    const exports = engineOf();
+    expect(loadWords(exports, 0, doubler)).toBe(0);
+    fillInput(exports, 0, 0, () => 0.25);
     exports.eng_process();
-    expect(output(exports, 0, 0).every((sample) => sample === 0.5)).toBe(true);
+    expect(outputOf(exports, 0, 0).every((sample) => sample === 0.5)).toBe(true);
   });
 
   it("reports a track's peak and silence, and a block's meter", () => {
@@ -152,9 +136,8 @@ describe("playing a plan", () => {
       ...[1, 0, 0, 0], // each voice plays the multiply
       ...[1, 0, 0, 0], // the track plays the meter's output
     ];
-    const exports = instantiate();
-    exports.eng_init(48000, 1);
-    expect(load(exports, 0, metered)).toBe(0);
+    const exports = engineOf();
+    expect(loadWords(exports, 0, metered)).toBe(0);
     exports.eng_process();
     expect([exports.eng_track_peak(0, 0), exports.eng_track_silent(0)]).toEqual([0, 1]);
     exports.eng_note_on(0, 0, 0, 440, 1);
@@ -166,15 +149,15 @@ describe("playing a plan", () => {
   });
 
   it("grows memory to load a big plan, and its addresses still work after", () => {
-    const exports = instantiate();
+    const exports = startEngine(wasm);
     const before = exports.memory.buffer.byteLength;
     exports.eng_init(48000, 16);
     // 16 tracks of 64 voices: more than the module starts with.
     const big = [...mulOfGate.slice(0, 1), 64, ...mulOfGate.slice(2)];
-    Array.from({ length: 16 }, (_, track) => expect(load(exports, track, big)).toBe(0));
+    Array.from({ length: 16 }, (_, track) => expect(loadWords(exports, track, big)).toBe(0));
     expect(exports.memory.buffer.byteLength).toBeGreaterThan(before);
     exports.eng_note_on(15, 63, 0, 440, 1);
     exports.eng_process();
-    expect(output(exports, 15, 0).every((sample) => sample === 1)).toBe(true);
+    expect(outputOf(exports, 15, 0).every((sample) => sample === 1)).toBe(true);
   });
 });

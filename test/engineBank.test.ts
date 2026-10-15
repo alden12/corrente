@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { EngineBank, PlanRejected } from "../src/audio/bank/bank";
 import { EVENT, EventQueue } from "../src/audio/bank/events";
 import { BLOCK } from "../src/audio/bank/exports";
@@ -10,14 +8,13 @@ import { compileDefinition } from "../src/audio/definitions/compile";
 import { MAX_ZONES, type DeviceDefinition } from "../src/audio/definitions/format";
 import { buildBanks } from "../src/audio/dsp/wavetable";
 import { tableOf } from "../src/audio/samples/tables";
+import { RATE, wasm } from "./support/engine";
 
 /**
  * The engine bank (INST-36.5): the audio thread's JavaScript beside engine.wasm. Its event queue and
  * voice allocator on their own, then the bank playing compiled definitions in the real engine:
  * notes on their exact sample, voices stolen in the right order, params, tracks kept apart.
  */
-const RATE = 48000;
-const wasm = readFileSync(fileURLToPath(new URL("../engine/engine.wasm", import.meta.url)));
 const SAMPLE = 1 / RATE;
 
 describe("EventQueue", () => {
