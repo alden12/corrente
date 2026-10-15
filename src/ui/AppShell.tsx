@@ -120,6 +120,10 @@ export function AppShell() {
     () => new BufferControl(engine, { transport: scheduler, recorder, notes: liveNotes }),
   );
   useEffect(() => bufferControl.start(), [bufferControl]);
+  useEffect(() => {
+    scheduler.setBeforePlay(() => bufferControl.beforePlay());
+    return () => scheduler.setBeforePlay(null);
+  }, [scheduler, bufferControl]);
   const [midiInput] = useState(
     () =>
       new MidiInput({

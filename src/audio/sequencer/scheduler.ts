@@ -195,6 +195,14 @@ export class Scheduler implements TransportClock {
   /** Hears tempo changes while stopped, so the new engine's synced devices keep up. */
   private readonly unsubscribeTempo: () => void;
   private toldTempo: number;
+  /**
+   * Asked before a plain play (INST-43): something to wait for first (the output buffer growing for
+   * playback, which remakes the audio context), or null to start at once.
+   */
+  private beforePlay: (() => Promise<void> | null) | null = null;
+  /** Waiting on `beforePlay`, so a second press doesn't start twice; and which wait, so a stop cancels it. */
+  private starting = false;
+  private startToken = 0;
 
   constructor(engine: AudioEngine, project: ProjectStore, onStateChange?: (playing: boolean) => void) {
     this.engine = engine;
@@ -251,6 +259,27 @@ export class Scheduler implements TransportClock {
    * metronome continues the count-in grid exactly in phase, free of setTimeout jitter.
    */
   play(atTime?: number): void {
+    if (this.timer !== null || this.starting || !this.engine.started) return;
+    // A play anchored to a time (a take's count-in) is already timed on this clock: no waiting.
+    const wait = atTime === undefined ? (this.beforePlay?.() ?? null) : null;
+    if (!wait) return this.begin(atTime);
+    this.starting = true;
+    const token = ++this.startToken;
+    // Started either way: a switch that failed leaves the engine as it was, or stopped (begin checks).
+    const done = () => {
+      if (token !== this.startToken) return;
+      this.starting = false;
+      this.begin();
+    };
+    void wait.then(done, done);
+  }
+
+  /** Have something waited for before each plain play; null to stop. */
+  setBeforePlay(hook: (() => Promise<void> | null) | null): void {
+    this.beforePlay = hook;
+  }
+
+  private begin(atTime?: number): void {
     if (this.timer !== null || !this.engine.started) return;
     this.anchorTime = atTime ?? this.engine.currentTime;
     this.anchorBeat = 0;
@@ -265,6 +294,9 @@ export class Scheduler implements TransportClock {
   }
 
   stop(): void {
+    // A play still waiting to start doesn't.
+    this.startToken++;
+    this.starting = false;
     if (this.timer === null) return;
     clearInterval(this.timer);
     this.timer = null;

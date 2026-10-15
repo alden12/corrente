@@ -120,3 +120,56 @@ describe("Scheduler integration (mocked clock)", () => {
     expect(calls[0].when, "and at its own time, not bunched onto the present").toBeCloseTo(3, 2);
   });
 });
+
+describe("Scheduler before-play hook (INST-43)", () => {
+  const engineStub = () => ({
+    started: true,
+    currentTime: 0,
+    getNoteTarget: () => ({ playNote: () => {}, allNotesOff: () => {} }),
+    scheduleAudioClip: () => {},
+    stopAllAudio: () => {},
+    setTransport: () => {},
+  });
+
+  it("waits for what the hook hands back before playing, and plays at once when it hands back null", async () => {
+    const changes: boolean[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scheduler = new Scheduler(engineStub() as any, new ProjectStore(false), (playing) => changes.push(playing));
+    let release = () => {};
+    scheduler.setBeforePlay(() => new Promise<void>((resolve) => (release = resolve)));
+    scheduler.play();
+    scheduler.play();
+    expect(scheduler.isPlaying).toBe(false);
+    release();
+    await Promise.resolve();
+    expect(scheduler.isPlaying).toBe(true);
+    expect(changes).toEqual([true]);
+    scheduler.stop();
+
+    scheduler.setBeforePlay(() => null);
+    scheduler.play();
+    expect(scheduler.isPlaying).toBe(true);
+    scheduler.stop();
+  });
+
+  it("doesn't wait for a play anchored to a time (a take's count-in), and a stop cancels a waiting play", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scheduler = new Scheduler(engineStub() as any, new ProjectStore(false));
+    let asked = 0;
+    let release = () => {};
+    scheduler.setBeforePlay(() => {
+      asked++;
+      return new Promise<void>((resolve) => (release = resolve));
+    });
+    scheduler.play(1.5);
+    expect(asked).toBe(0);
+    expect(scheduler.isPlaying).toBe(true);
+    scheduler.stop();
+
+    scheduler.play();
+    scheduler.stop();
+    release();
+    await Promise.resolve();
+    expect(scheduler.isPlaying).toBe(false);
+  });
+});
