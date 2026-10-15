@@ -21,6 +21,14 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
+### biquad
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
+### bitcrush
+
+- `basics.lib/sAndH`, by Romain Michon
+
 ### chorus
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
@@ -71,6 +79,12 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
+### pinknoise
+
+- `filters.lib/fir`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `filters.lib/iir`, by Julius O. Smith III, Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>, under LicenseRef-STK-4.3
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
 ### pulse
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
@@ -103,6 +117,15 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 ### svf
 
 - `filters.lib/svf`, by Oleg Nesterov, Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>, under LicenseRef-STK-4.3
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
+### triangle
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+- `oscillators.lib/lf_sawpos`, by Bart Brouns, revised by Stéphane Letz, under LicenseRef-STK-4.3
+
+### waveshaper
+
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
 ## Licence texts

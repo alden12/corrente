@@ -117,9 +117,10 @@ export const LIBRARY_LICENCES: Record<string, readonly string[] | Record<string,
   "signals.lib": [LGPL, STK],
   "stdfaust.lib": [LGPL],
   // amp_follower and amp_follower_ar, in the jos section.
-  "analyzers.lib": { compressor: STK, keyedcompressor: STK, meter: STK },
-  // Each function declares its own: svf, lowpass, tf1 and allpass_comb are all STK.
-  "filters.lib": { lowpass: STK, onepole: STK, reverb: STK, svf: STK },
+  "analyzers.lib": { keyedcompressor: STK, meter: STK },
+  // Each function declares its own: svf, lowpass, tf1, iir, fir and allpass_comb are all STK.
+  // pinknoise reaches it through no.pink_filter's iir.
+  "filters.lib": { onepole: STK, pinknoise: STK, reverb: STK, svf: STK },
   // zita_rev1_stereo, in the jos section.
   "reverbs.lib": { reverb: STK },
   // moogLadder, which declares STK.

@@ -53,4 +53,7 @@ fn the_host_signals_follow_the_transport() {
     let mut engine = playing.loaded();
     engine.set_transport(0.0, 90.0, false);
     assert!(render(&mut engine, 1).iter().all(|&sample| sample == 0.0));
+    // The sample rate, for turning seconds into samples.
+    let rate = PlanBuilder::new().voices(0).track_out(vec![host(HOST_SAMPLE_RATE)]);
+    assert!(render(&mut rate.loaded(), 1).iter().all(|&sample| sample == RATE as f32));
 }

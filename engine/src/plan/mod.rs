@@ -91,13 +91,15 @@ pub const SIGNAL_START: usize = 7;
 pub const SIGNAL_END: usize = 8;
 /// Host signals, the same for every track: the tempo (beats a minute), the beat (counted from where
 /// the transport started, running on while it's stopped), whether it's playing (0 or 1), and how
-/// long a beat is in seconds and in samples (so a delay syncs to the tempo without dividing).
-pub const HOST_SIGNALS: usize = 5;
+/// long a beat is in seconds and in samples (so a delay syncs to the tempo without dividing), and the
+/// sample rate (so a time in seconds becomes samples by scaling it).
+pub const HOST_SIGNALS: usize = 6;
 pub const HOST_TEMPO: usize = 0;
 pub const HOST_BEAT: usize = 1;
 pub const HOST_PLAYING: usize = 2;
 pub const HOST_BEAT_SECONDS: usize = 3;
 pub const HOST_BEAT_SAMPLES: usize = 4;
+pub const HOST_SAMPLE_RATE: usize = 5;
 
 /// Where one input reads from. (node, port) pairs name a node's output.
 // TS:

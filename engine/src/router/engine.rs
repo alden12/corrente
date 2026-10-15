@@ -5,7 +5,7 @@ use super::sampler::{MAX_SAMPLES, Sample};
 use super::track::Track;
 use super::{BLOCK, SILENT_SLOT, Slot};
 use crate::faust;
-use crate::plan::{HOST_BEAT, HOST_BEAT_SAMPLES, HOST_BEAT_SECONDS, HOST_PLAYING, HOST_SIGNALS, HOST_TEMPO, Plan};
+use crate::plan::{HOST_BEAT, HOST_BEAT_SAMPLES, HOST_BEAT_SECONDS, HOST_PLAYING, HOST_SAMPLE_RATE, HOST_SIGNALS, HOST_TEMPO, Plan};
 
 /// The most tracks one engine runs (a bank; a phone wants about 16).
 pub const MAX_TRACKS: usize = 64;
@@ -109,7 +109,7 @@ impl Engine {
     //   const perSample = tempo / 60 / this.sampleRate;
     //   for (const signal of this.host) signal[0] = signal[BLOCK];  // the sample before, for feedback edges
     //   this.host[HOST_BEAT].forEach((_, i) => i > 0 && (this.host[HOST_BEAT][i] = beat + (i - 1) * perSample));
-    //   and the others filled with tempo, playing (0 or 1), 60 / tempo, and 60 * sampleRate / tempo.
+    //   and the others filled with tempo, playing (0 or 1), 60 / tempo, 60 * sampleRate / tempo, and sampleRate.
     fn fill_host(&mut self) {
         let (beat, tempo, playing) = self.transport;
         let per_sample = tempo as f64 / 60.0 / self.sample_rate as f64;
@@ -120,5 +120,6 @@ impl Engine {
         self.host[HOST_PLAYING][1..].fill(if playing { 1.0 } else { 0.0 });
         self.host[HOST_BEAT_SECONDS][1..].fill(60.0 / tempo);
         self.host[HOST_BEAT_SAMPLES][1..].fill(60.0 * self.sample_rate as f32 / tempo);
+        self.host[HOST_SAMPLE_RATE][1..].fill(self.sample_rate as f32);
     }
 }

@@ -27,7 +27,8 @@
  *     or a signal: `voice.frequency`, `voice.gate`, `voice.velocity`, `voice.note`, `voice.seed` (in
  *     voice nodes); `voices.left` and `voices.right` (the voices summed, after them); `input.left`,
  *     `input.right`, `input.sidechainLeft`, `input.sidechainRight` (the track's audio in);
- *     `host.tempo`, `host.beat`, `host.playing`, `host.beatSeconds`, `host.beatSamples` (anywhere).
+ *     `host.tempo`, `host.beat`, `host.playing`, `host.beatSeconds`, `host.beatSamples`,
+ *     `host.sampleRate` (anywhere).
  *   - A **scaled reference**, `{ "from": "lfo.sine", "scale": 12, "offset": 0 }`, is a reference
  *     times `scale` plus `offset`, each a number or a param: an LFO's -1..1 sweeps a knob's worth of
  *     semitones with no `mul` node.
@@ -72,7 +73,7 @@ export const ZONE_SIGNALS = ["voice.sample", "voice.root", "voice.start", "voice
 /**
  * The host's signals, the same for every track and readable anywhere: the tempo (beats a minute),
  * the beat (counted from where the transport started, running on while it's stopped), playing (0 or
- * 1), and a beat's length in seconds and in samples.
+ * 1), a beat's length in seconds and in samples, and the sample rate.
  */
 export const HOST_SIGNALS = {
   "host.tempo": 0,
@@ -80,6 +81,7 @@ export const HOST_SIGNALS = {
   "host.playing": 2,
   "host.beatSeconds": 3,
   "host.beatSamples": 4,
+  "host.sampleRate": 5,
 } as const;
 /** The voices summed, by channel. */
 export const VOICE_SUM = { "voices.left": 0, "voices.right": 1 } as const;

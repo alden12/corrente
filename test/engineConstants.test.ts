@@ -47,6 +47,7 @@ const TWINS: Record<string, Record<string, number>> = {
     HOST_PLAYING: HOST_SIGNALS["host.playing"],
     HOST_BEAT_SECONDS: HOST_SIGNALS["host.beatSeconds"],
     HOST_BEAT_SAMPLES: HOST_SIGNALS["host.beatSamples"],
+    HOST_SAMPLE_RATE: HOST_SIGNALS["host.sampleRate"],
     INPUT_BUFFER: INPUT_TYPE.buffer,
     INPUT_PREVIOUS: INPUT_TYPE.previous,
     INPUT_PARAM: INPUT_TYPE.param,

@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BlockSpec, Catalogue, Port } from "../engine/catalogue.ts";
 import { BLOCK, type EngineExports } from "../src/audio/bank/exports";
-import { engineOf, fillInput, loadWords, peakOf, renderBlocks } from "./support/engine";
+import { SHAPER_CURVES } from "../src/audio/graph/nodes";
+import { SHAPER_SHAPES } from "../src/audio/graph/types";
+import { engineOf, fillInput, loadWords, peakOf, RATE, renderBlocks } from "./support/engine";
 
 /**
  * Every block in the catalogue (INST-36.2), run in the committed engine.wasm: its ports agree with
@@ -216,5 +218,106 @@ describe("the new blocks do what they say", () => {
     expect(peakOf(out.slice(0, 400))).toBeLessThan(1e-6);
     expect(second(0)).toBeGreaterThan(0.001);
     expect(second(4)).toBeLessThan(second(0) / 100);
+  });
+
+  it("biquad: has Web Audio's response for every type", () => {
+    // The magnitude Web Audio's spec gives (its Audio EQ Cookbook coefficients), against a sine's level
+    // through the block once it settles.
+    const TYPES = ["lowpass", "highpass", "bandpass", "lowshelf", "highshelf", "peaking", "notch", "allpass"];
+    const specResponse = (type: number, cutoff: number, q: number, gain: number, at: number) => {
+      const w0 = (2 * Math.PI * cutoff) / RATE;
+      const [cos, sin] = [Math.cos(w0), Math.sin(w0)];
+      const A = 10 ** (gain / 40);
+      const alphaQ = sin / (2 * q);
+      const alphaQdB = sin / (2 * 10 ** (q / 20));
+      const root = 2 * (sin / Math.SQRT2) * Math.sqrt(A);
+      const coefficients: [number, number, number, number, number, number][] = [
+        [(1 - cos) / 2, 1 - cos, (1 - cos) / 2, 1 + alphaQdB, -2 * cos, 1 - alphaQdB],
+        [(1 + cos) / 2, -(1 + cos), (1 + cos) / 2, 1 + alphaQdB, -2 * cos, 1 - alphaQdB],
+        [alphaQ, 0, -alphaQ, 1 + alphaQ, -2 * cos, 1 - alphaQ],
+        [
+          A * (A + 1 - (A - 1) * cos + root),
+          2 * A * (A - 1 - (A + 1) * cos),
+          A * (A + 1 - (A - 1) * cos - root),
+          A + 1 + (A - 1) * cos + root,
+          -2 * (A - 1 + (A + 1) * cos),
+          A + 1 + (A - 1) * cos - root,
+        ],
+        [
+          A * (A + 1 + (A - 1) * cos + root),
+          -2 * A * (A - 1 + (A + 1) * cos),
+          A * (A + 1 + (A - 1) * cos - root),
+          A + 1 - (A - 1) * cos + root,
+          2 * (A - 1 - (A + 1) * cos),
+          A + 1 - (A - 1) * cos - root,
+        ],
+        [1 + alphaQ * A, -2 * cos, 1 - alphaQ * A, 1 + alphaQ / A, -2 * cos, 1 - alphaQ / A],
+        [1, -2 * cos, 1, 1 + alphaQ, -2 * cos, 1 - alphaQ],
+        [1 - alphaQ, -2 * cos, 1 + alphaQ, 1 + alphaQ, -2 * cos, 1 - alphaQ],
+      ];
+      const [b0, b1, b2, a0, a1, a2] = coefficients[type];
+      const w = (2 * Math.PI * at) / RATE;
+      // |b0 + b1 z^-1 + b2 z^-2| / |a0 + a1 z^-1 + a2 z^-2| on the unit circle.
+      const magnitude = (c0: number, c1: number, c2: number) =>
+        Math.hypot(c0 + c1 * Math.cos(w) + c2 * Math.cos(2 * w), c1 * Math.sin(w) + c2 * Math.sin(2 * w));
+      return magnitude(b0, b1, b2) / magnitude(a0, a1, a2);
+    };
+    const problems = TYPES.flatMap((name, type) =>
+      [200, 1000, 2500, 8000].flatMap((at) => {
+        const [cutoff, q, gain] = [1000, type < 2 ? 6 : 2, 9];
+        const out = runBlock("biquad", {
+          input: (_, sample) => 0.25 * Math.sin((2 * Math.PI * at * sample) / RATE),
+          controls: { type, frequency: cutoff, q, gain },
+          blocks: 60,
+        });
+        // The level as RMS: a sampled peak misses the true one at a few samples a cycle.
+        const settled = out.slice(-2400);
+        const rms = Math.sqrt(settled.reduce((total, value) => total + value * value, 0) / settled.length);
+        const [measured, expected] = [(rms * Math.SQRT2) / 0.25, specResponse(type, cutoff, q, gain, at)];
+        const apart = Math.abs(20 * Math.log10(measured / expected));
+        // Within 0.2 dB, or both far below (a notch's floor).
+        return apart < 0.2 || Math.max(measured, expected) < 0.01
+          ? []
+          : [`${name} at ${at} Hz: ${measured} vs ${expected}`];
+      }),
+    );
+    expect(problems).toEqual([]);
+  });
+
+  it("triangle: rises from 0, at full scale", () => {
+    const out = runBlock("triangle", { input: () => 100, blocks: 4 });
+    expect(out[0]).toBeCloseTo(0, 6);
+    expect(out[1]).toBeGreaterThan(0);
+    // A quarter of a 100 Hz cycle in, at its top.
+    expect(out[120]).toBeCloseTo(1, 2);
+    expect(Math.min(...out)).toBeCloseTo(-1, 2);
+  });
+
+  it("bitcrush: holds each sample, then snaps it to its levels", () => {
+    const ramp = (sample: number) => sample / 64 - 1;
+    // At 16 bits, the hold alone: taken every 4 samples.
+    const held = runBlock("bitcrush", { input: (_, sample) => ramp(sample), controls: { bits: 16, downsample: 4 } });
+    expect(held.slice(0, 4).every((value) => value === held[0])).toBe(true);
+    expect(held[4]).toBeCloseTo(ramp(4), 3);
+    // Two bits, no hold: four levels across -1..1.
+    const snapped = runBlock("bitcrush", { input: (_, sample) => ramp(sample), controls: { bits: 2, downsample: 1 } });
+    expect(new Set(snapped.map((value) => Math.round(value * 1000) / 1000))).toEqual(new Set([-1, -0.333, 0.333, 1]));
+  });
+
+  it("waveshaper: follows the old format's curves", () => {
+    // SHAPER_CURVES are the 1024-point tables Web Audio read; the block works the same function out.
+    const problems = SHAPER_SHAPES.flatMap((shape, index) => {
+      const amount = 30;
+      const curve = SHAPER_CURVES[shape](amount);
+      const out = runBlock("waveshaper", { input: (_, sample) => sample / 64 - 1, controls: { shape: index, amount } });
+      return out.flatMap((value, sample) => {
+        const x = Math.min(1, sample / 64 - 1);
+        const place = ((x + 1) / 2) * (curve.length - 1);
+        const below = Math.floor(place);
+        const table = curve[below] + (curve[Math.min(curve.length - 1, below + 1)] - curve[below]) * (place - below);
+        return Math.abs(value - table) < 0.02 ? [] : [`${shape} at ${x}: ${value} vs ${table}`];
+      });
+    });
+    expect(problems).toEqual([]);
   });
 });

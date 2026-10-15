@@ -44,6 +44,7 @@ export const SIGNAL_MEANINGS: Record<
   "host.playing": "1 while the transport plays, 0 while stopped",
   "host.beatSeconds": "a beat's length in seconds",
   "host.beatSamples": "a beat's length in samples",
+  "host.sampleRate": "samples a second: a time in seconds scaled by it is samples",
 };
 
 const portOf = (port: Port & { init?: number }) => ({
