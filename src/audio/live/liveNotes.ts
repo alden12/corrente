@@ -52,6 +52,11 @@ export class LiveNotes {
   private readonly project: ProjectLike;
   private readonly recorder: RecorderLike;
   private readonly preview: PreviewLike | undefined;
+  /**
+   * When a note was last pressed or let go (`Date.now`), or -Infinity: how the output buffer tells
+   * someone is playing live (INST-36.9).
+   */
+  private lastActive = -Infinity;
 
   constructor(engine: EngineLike, project: ProjectLike, recorder: RecorderLike, preview?: PreviewLike) {
     this.engine = engine;
@@ -67,6 +72,7 @@ export class LiveNotes {
     // recording keeps both), then start the new press fresh.
     if (this.sustained.has(midi)) this.release(midi);
     this.held.set(midi, trackId);
+    this.lastActive = Date.now();
     this.targetOf(trackId)?.noteOn(midi, velocity);
     this.recorder.noteOn(midi, velocity);
   }
@@ -78,6 +84,16 @@ export class LiveNotes {
       return;
     }
     this.release(midi);
+  }
+
+  /** Whether a note is down (or held by the pedal). */
+  get holding(): boolean {
+    return this.held.size > 0;
+  }
+
+  /** When a note was last pressed or let go, as `Date.now`; -Infinity if none has been. */
+  get lastPlayedAt(): number {
+    return this.lastActive;
   }
 
   /** Sustain pedal (CC64). Lifting it flushes every note the pedal was holding. */
@@ -98,6 +114,7 @@ export class LiveNotes {
     const trackId = this.held.get(midi) ?? this.project.selectedId;
     this.held.delete(midi);
     this.sustained.delete(midi);
+    this.lastActive = Date.now();
     if (!trackId) return;
     this.targetOf(trackId)?.noteOff(midi);
     this.recorder.noteOff(midi);

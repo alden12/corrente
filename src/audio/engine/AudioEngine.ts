@@ -26,7 +26,8 @@ import { COMPENSATION_GLIDE_SECONDS, MixRouter, masterBus } from "./mixer";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
-import { setTransport as setEngineTransport } from "../bank/pool";
+import { onSlowBlocks, setTransport as setEngineTransport } from "../bank/pool";
+import type { BufferSize } from "./bufferSize";
 import type { Transport } from "../bank/messages";
 import { getAudioBuffer } from "../audioStore";
 import { setSampleAssets } from "../samples/sampleRegistry";
@@ -113,6 +114,15 @@ export class AudioEngine {
   /** Each custom device's definition as last played, as JSON: one edited since (a different
    *  definition under the same type) is rebuilt. */
   private readonly playedCustomDefs = new Map<string, string>();
+  /** The output buffer the context is made with (INST-36.9); `setBufferSize` remakes it. */
+  private size: BufferSize = "interactive";
+  /** What a remade context restores: the output device picked, the input open, the sound tried. */
+  private sinkId: string | null = null;
+  private inputDeviceId: string | null = null;
+  private previewTrack: InstrumentTrack | null = null;
+  /** Who hears the banks' slow blocks, across remade contexts; and the current context's stop. */
+  private readonly slowListeners = new Set<(blocks: number) => void>();
+  private stopSlow: (() => void) | null = null;
   private unsubscribe: (() => void) | null = null;
   /** The transport clock MIDI devices read (set by AppShell once the scheduler exists). */
   private transport: TransportClock | null = null;
@@ -211,8 +221,9 @@ export class AudioEngine {
       await this.ctx.resume();
       return;
     }
-    const ctx = new AudioContext();
+    const ctx = new AudioContext({ latencyHint: this.size });
     this.ctx = ctx;
+    this.stopSlow = onSlowBlocks(ctx, (blocks) => this.slowListeners.forEach((listener) => listener(blocks)));
     setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
     ({ master: this.master, limiter: this.limiter } = masterBus(ctx));
     this.router = new MixRouter(ctx, (parentId) => this.parentInput(parentId), COMPENSATION_GLIDE_SECONDS);
@@ -228,6 +239,41 @@ export class AudioEngine {
     this.reconcile();
     this.unsubscribe = project.subscribe(() => this.reconcile());
     await ctx.resume();
+  }
+
+  /** The output buffer size the context runs with. */
+  get bufferSize(): BufferSize {
+    return this.size;
+  }
+
+  /** Hear how many blocks rendered late, about once a second while there are any. Returns a stop. */
+  onSlowBlocks(listener: (blocks: number) => void): () => void {
+    this.slowListeners.add(listener);
+    return () => this.slowListeners.delete(listener);
+  }
+
+  /**
+   * Run with another output buffer size. A context's buffer is fixed when it's made, so a started
+   * engine is remade: everything torn down and built again from the project, as at start, then the
+   * output device, the input and the sound being tried put back. A brief dropout, so the caller
+   * picks a quiet moment (BufferControl). Before audio starts, it's what start will use.
+   */
+  async setBufferSize(size: BufferSize): Promise<void> {
+    if (size === this.size) return;
+    this.size = size;
+    const project = this.project;
+    if (!this.ctx || !project) return;
+    const { sinkId, inputDeviceId, previewTrack } = this;
+    // The beat runs on while stopped (synced LFOs keep moving), counted from a time on the old
+    // clock; the new clock starts again at 0, so carry on from the beat reached, at the new now.
+    const transport = this.engineTransport;
+    const beat = transport && transport.beat + ((this.currentTime - transport.time) * transport.tempo) / 60;
+    this.dispose();
+    await this.start(project);
+    if (transport && beat !== null) this.setTransport({ ...transport, beat, time: this.currentTime });
+    if (sinkId !== null) await this.setOutputDevice(sinkId);
+    if (inputDeviceId !== null) await this.enableInput(inputDeviceId || undefined);
+    if (previewTrack) this.setPreview(previewTrack);
   }
 
   /**
@@ -597,6 +643,7 @@ export class AudioEngine {
   /** Route master output to a device by id ("" / null = system default). Chrome-only; a
    *  bad id is ignored so playback stays on the current sink. */
   async setOutputDevice(deviceId: string | null): Promise<void> {
+    this.sinkId = deviceId;
     const ctx = this.ctx as (AudioContext & { setSinkId?: (id: string) => Promise<void> }) | null;
     if (!ctx?.setSinkId) return;
     try {
@@ -616,6 +663,7 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx) throw new Error("Audio engine not started");
     this.disableInput();
+    this.inputDeviceId = deviceId ?? "";
     await loadWorklets(ctx); // idempotent; ensures the capture processor is registered
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -688,6 +736,7 @@ export class AudioEngine {
     }
     for (const track of this.inputStream?.getTracks() ?? []) track.stop();
     this.inputStream = null;
+    this.inputDeviceId = null;
     this.inputSource = null;
     this.captureNode = null;
     this.captureSink = null;
@@ -720,6 +769,7 @@ export class AudioEngine {
    * saved. It feeds the master bus directly (no group, no mute/solo). `null` tears it down.
    */
   setPreview(track: InstrumentTrack | null): void {
+    this.previewTrack = track;
     if (this.preview) {
       this.preview.noteHead.allNotesOff();
       disposeTrackNode(this.preview);
@@ -813,6 +863,8 @@ export class AudioEngine {
     this.decoding.clear();
     this.metronomeGain?.disconnect();
     this.limiter?.disconnect();
+    this.stopSlow?.();
+    this.stopSlow = null;
     void this.ctx?.close();
     this.ctx = null;
     this.master = null;

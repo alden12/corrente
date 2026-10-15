@@ -5,14 +5,26 @@
  * input in (a main input and a sidechain per track, INST-36.7), and copies each track's block out. `process` creates nothing (garbage collection on the audio thread is a click).
  */
 import { EngineBank, PlanRejected } from "./bank";
-import { INPUT_CHANNELS, OUTPUT_CHANNELS } from "./exports";
+import { BLOCK, INPUT_CHANNELS, OUTPUT_CHANNELS } from "./exports";
 import { BANK_PROCESSOR, INPUTS_PER_TRACK, type BankOptions, type FromBank, type ToBank } from "./messages";
+
+/**
+ * A clock in milliseconds. Not every browser gives a worklet `performance`; `Date.now` only ticks
+ * each millisecond, so there a block is only counted slow once it is clearly over (INST-36.9).
+ */
+const now: () => number =
+  typeof globalThis.performance?.now === "function" ? () => globalThis.performance.now() : () => Date.now();
 
 class EngineBankProcessor extends AudioWorkletProcessor {
   private readonly bank: EngineBank;
   /** Whether each track has a device: an empty one's output is left as the silence it starts as. */
   private readonly loaded: Uint8Array;
   private stopped = false;
+  /** How long a block lasts, in milliseconds: rendering one takes longer than this and it's late. */
+  private readonly budget = (BLOCK / sampleRate) * 1000;
+  /** Blocks over budget since the last report, and blocks rendered since then. */
+  private slow = 0;
+  private counted = 0;
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
@@ -69,7 +81,10 @@ class EngineBankProcessor extends AudioWorkletProcessor {
         else target.fill(0);
       }
     }
+    const started = now();
     this.bank.process(currentTime);
+    if (now() - started > this.budget) this.slow++;
+    this.report();
     // Plain loops: a closure per block would be garbage.
     for (let track = 0; track < outputs.length; track++) {
       if (!this.loaded[track]) continue;
@@ -78,6 +93,13 @@ class EngineBankProcessor extends AudioWorkletProcessor {
         channels[channel].set(this.bank.output(track, channel));
     }
     return true;
+  }
+
+  /** About once a second, say how many blocks were slow, if any were. */
+  private report(): void {
+    if (++this.counted * this.budget < 1000) return;
+    if (this.slow > 0) this.port.postMessage({ type: "slow", blocks: this.slow } satisfies FromBank);
+    this.slow = this.counted = 0;
   }
 }
 

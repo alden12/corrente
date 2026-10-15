@@ -33,6 +33,7 @@ import type { EditLog } from "../audio/commands/editLog";
 import type { MidiInput } from "../audio/midi/midiInput";
 import type { Recorder } from "../audio/recording/recorder";
 import type { AudioEngine } from "../audio/engine/AudioEngine";
+import type { BufferControl } from "../audio/engine/bufferControl";
 
 export type SettingsTab =
   | "timing"
@@ -76,6 +77,7 @@ export function SettingsPanel({
   midiInput,
   recorder,
   engine,
+  bufferControl,
   projectStore,
   dispatch,
   initialTab,
@@ -88,6 +90,7 @@ export function SettingsPanel({
   midiInput: MidiInput;
   recorder: Recorder;
   engine: AudioEngine;
+  bufferControl: BufferControl;
   projectStore: ProjectStore;
   dispatch: Dispatch;
   /** The tab a caller means, if it means one. Omitted, the panel opens on the one you left it on. */
@@ -193,7 +196,9 @@ export function SettingsPanel({
             {tab === "account" && <AccountSettings config={authorColors} editLog={editLog} onClose={onClose} />}
             {tab === "agent" && <AgentSettingsSection config={agentConfig} onClose={onClose} />}
             {tab === "midi" && <MidiSettings midiInput={midiInput} />}
-            {tab === "recording" && <RecordingSettings recorder={recorder} engine={engine} />}
+            {tab === "recording" && (
+              <RecordingSettings recorder={recorder} engine={engine} bufferControl={bufferControl} />
+            )}
             {tab === "appearance" && <AppearanceSettings />}
           </div>
         </div>

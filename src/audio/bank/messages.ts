@@ -37,7 +37,12 @@ export type FromBank =
   | { type: "loaded"; track: number }
   | { type: "refused"; track: number; message: string }
   /** A sample message has been dealt with (`message` if the sample didn't fit). */
-  | { type: "sampled"; track: number; param: string; ref: string; message?: string };
+  | { type: "sampled"; track: number; param: string; ref: string; message?: string }
+  /**
+   * How many blocks over the last second or so took longer to render than they last (INST-36.9):
+   * the stalls a bigger output buffer absorbs. Sent only when there were any.
+   */
+  | { type: "slow"; blocks: number };
 
 /** What a bank's worklet is built with. */
 export interface BankOptions {

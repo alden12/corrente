@@ -67,3 +67,48 @@ test.describe("phone", () => {
     await expect(page.getByRole("tab", { name: "MIDI" })).toBeVisible();
   });
 });
+
+test("a buffer size set by hand remakes the audio context with it, and audio keeps working (INST-36.9)", async ({
+  page,
+}) => {
+  // Record every context the app makes, with the latency hint it asked for.
+  await page.addInitScript(() => {
+    const Native = window.AudioContext;
+    const made: { hint: unknown; context: AudioContext }[] = [];
+    (window as unknown as { __contexts: typeof made }).__contexts = made;
+    window.AudioContext = class extends Native {
+      constructor(options?: AudioContextOptions) {
+        super(options);
+        made.push({ hint: options?.latencyHint, context: this });
+      }
+    };
+  });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const contexts = () =>
+    page.evaluate(() =>
+      (window as unknown as { __contexts: { hint: unknown; context: AudioContext }[] }).__contexts.map(
+        ({ hint, context }) => ({ hint, state: context.state }),
+      ),
+    );
+
+  await page.goto("/");
+  await dismissStart(page);
+  await expect.poll(contexts).toEqual([{ hint: "interactive", state: "running" }]);
+
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Recording" }).click();
+  await page.getByRole("combobox", { name: "Output buffer" }).selectOption("playback");
+  await expect(page.getByText(/Always largest/)).toBeVisible();
+  // At the next quiet moment: the old context closed, a new one running with the largest buffer.
+  await expect.poll(contexts, { timeout: 10_000 }).toEqual([
+    { hint: "interactive", state: "closed" },
+    { hint: "playback", state: "running" },
+  ]);
+
+  // The rebuilt engine still plays: a note from the computer keyboard throws nothing.
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await page.keyboard.down("a");
+  await page.keyboard.up("a");
+  expect(errors).toEqual([]);
+});

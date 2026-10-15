@@ -17,6 +17,8 @@ import { usePersistentNumber, usePersistentString } from "./usePersistent";
 import { RECORD_OFFSET_KEY, RECORD_OFFSET_RANGE } from "./recordOffset";
 import { OUTPUT_DEVICE_KEY } from "./outputDevice";
 import { Select } from "./controls/Select";
+import { BufferSettings } from "./BufferSettings";
+import type { BufferControl } from "../audio/engine/bufferControl";
 
 type CalState =
   | { phase: "idle" }
@@ -24,7 +26,15 @@ type CalState =
   | { phase: "done"; offsetMs: number; matched: number; spreadMs: number }
   | { phase: "error" };
 
-export function RecordingSettings({ recorder, engine }: { recorder: Recorder; engine: AudioEngine }) {
+export function RecordingSettings({
+  recorder,
+  engine,
+  bufferControl,
+}: {
+  recorder: Recorder;
+  engine: AudioEngine;
+  bufferControl: BufferControl;
+}) {
   const rec = useRecorder(recorder);
   const [offsetMs, setOffsetMs] = usePersistentNumber(
     RECORD_OFFSET_KEY,
@@ -118,6 +128,8 @@ export function RecordingSettings({ recorder, engine }: { recorder: Recorder; en
           Device names appear after you grant microphone access (record a take or calibrate once).
         </p>
       </div>
+
+      <BufferSettings control={bufferControl} />
 
       {/* Recording latency */}
       <div className="flex flex-col gap-2">

@@ -56,6 +56,17 @@ interface Pool {
   banks: Bank[];
 }
 
+/** Who hears each context's slow blocks (INST-36.9), from every bank on it. */
+const slowListeners = new WeakMap<BaseAudioContext, Set<(blocks: number) => void>>();
+
+/** Hear how many blocks each bank on `context` rendered late, about once a second; returns a stop. */
+export const onSlowBlocks = (context: BaseAudioContext, listener: (blocks: number) => void): (() => void) => {
+  const listeners = slowListeners.get(context) ?? new Set();
+  slowListeners.set(context, listeners);
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
 /** Each context's transport as last told, for its banks now and any made later. */
 const transports = new WeakMap<BaseAudioContext, Transport>();
 
@@ -101,7 +112,10 @@ const newBank = (context: BaseAudioContext, bytes: ArrayBuffer, stage: number): 
     processorOptions,
   });
   const bank: Bank = { node, stage, taken: Array.from({ length: TRACKS_PER_BANK }, () => false), listeners: [] };
-  node.port.onmessage = ({ data }: MessageEvent<FromBank>) => bank.listeners[data.track]?.(data);
+  node.port.onmessage = ({ data }: MessageEvent<FromBank>) => {
+    if (data.type === "slow") slowListeners.get(context)?.forEach((listener) => listener(data.blocks));
+    else bank.listeners[data.track]?.(data);
+  };
   const transport = transports.get(context);
   if (transport) node.port.postMessage({ type: "transport", ...transport } satisfies ToBank);
   return bank;

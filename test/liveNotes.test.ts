@@ -118,4 +118,17 @@ describe("LiveNotes", () => {
     live.noteOff(67);
     expect(inst.off.sort()).toEqual([60, 64, 67]);
   });
+
+  it("says whether a note is held, pedal included, and when one was last played (INST-36.9)", () => {
+    expect(live.holding).toBe(false);
+    expect(live.lastPlayedAt).toBe(-Infinity);
+    const before = Date.now();
+    live.setSustain(true);
+    live.noteOn(60, 0.8);
+    live.noteOff(60);
+    expect(live.holding).toBe(true);
+    expect(live.lastPlayedAt).toBeGreaterThanOrEqual(before);
+    live.setSustain(false);
+    expect(live.holding).toBe(false);
+  });
 });

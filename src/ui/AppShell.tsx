@@ -16,6 +16,7 @@ import { Scheduler } from "../audio/sequencer/scheduler";
 import { connectMcpBridge, localBridgeReachable, type McpStatus } from "../audio/mcp/bridge";
 import { Recorder } from "../audio/recording/recorder";
 import { LiveNotes } from "../audio/live/liveNotes";
+import { BufferControl } from "../audio/engine/bufferControl";
 import { SoundPreview } from "../audio/live/preview";
 import { noteUsed } from "./explore/recent/store";
 import { MidiInput } from "../audio/midi/midiInput";
@@ -114,6 +115,11 @@ export function AppShell() {
   // In an effect, not the initializer: React may run an initializer twice and keep only one result.
   useEffect(() => recorder.setPreviewSource(preview), [recorder, preview]);
   const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
+  // The output buffer, picked from whether someone is playing live (INST-36.9).
+  const [bufferControl] = useState(
+    () => new BufferControl(engine, { transport: scheduler, recorder, notes: liveNotes }),
+  );
+  useEffect(() => bufferControl.start(), [bufferControl]);
   const [midiInput] = useState(
     () =>
       new MidiInput({
@@ -443,6 +449,7 @@ export function AppShell() {
             midiInput={midiInput}
             recorder={recorder}
             engine={engine}
+            bufferControl={bufferControl}
             projectStore={projectStore}
             dispatch={dispatch}
             initialTab={settings.tab}
