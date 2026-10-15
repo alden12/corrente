@@ -95,6 +95,31 @@ export function registerTracksTools({
   );
 
   server.registerTool(
+    "set_instrument",
+    {
+      title: "Set instrument",
+      description:
+        "Swap a track's instrument for another type (see list_tracks for ids), keeping its notes, effects, name and mix. Values of params the new instrument shares (same id) carry over; its MIDI devices are cleared.",
+      inputSchema: { ...trackArg, instrument: z.string() },
+    },
+    async ({ track, instrument }) => {
+      if (!hasInstrument(instrument)) {
+        return fail(
+          `Unknown instrument "${instrument}". Options: ${pickableInstrumentInfos()
+            .map((info) => info.type)
+            .join(", ")}.`,
+        );
+      }
+      const resolved = resolveTrack(track);
+      if ("error" in resolved) return fail(resolved.error);
+      if (!target.send({ type: "setInstrument", trackId: resolved.id, instrumentType: instrument }))
+        return fail("No DAW tab connected.");
+      target.project.setInstrument(resolved.id, instrument);
+      return ok(`Track ${resolved.id} now plays ${instrument}.`);
+    },
+  );
+
+  server.registerTool(
     "remove_track",
     { title: "Remove track", description: "Delete a track and its clip.", inputSchema: trackArg },
     async ({ track }) => {

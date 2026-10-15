@@ -223,8 +223,6 @@ export const nodeSchema = z
   .object({
     block: z.string().min(1),
     voice: z.boolean().optional(),
-    /** Once per channel (stereo.ts): made into plain `name_left` and `name_right` before it's read. */
-    stereo: z.boolean().optional(),
     inputs: z.record(z.string(), inputSchema).optional(),
   })
   .strict();
@@ -248,6 +246,22 @@ export const definitionSchema = z
     zones: zonesSchema.optional(),
   })
   .strict();
+
+/**
+ * A definition as it's written, which may use stereo nodes (stereo.ts): a node `stereo: true` runs
+ * once per channel, and its inputs may be `{ left, right }`. Made plain (a DeviceDefinition) before
+ * anything reads it.
+ */
+const authoredNodeSchema = nodeSchema.extend({
+  stereo: z.boolean().optional(),
+  inputs: z
+    .record(z.string(), z.union([inputSchema, z.strictObject({ left: inputSchema, right: inputSchema })]))
+    .optional(),
+});
+export const authoredDefinitionSchema = definitionSchema.extend({
+  nodes: z.record(z.string(), authoredNodeSchema),
+});
+export type AuthoredDefinition = z.infer<typeof authoredDefinitionSchema>;
 
 export type Zone = z.infer<typeof zoneSchema>;
 export type ParamBinding = z.infer<typeof paramBindingSchema>;

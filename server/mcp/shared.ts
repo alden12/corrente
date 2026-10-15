@@ -30,7 +30,7 @@ export const deviceFormatDoc = () => ({
   params:
     "`schema` is a list of params, each one of `paramKinds`. A sample param's default is a sample ref; " +
     "`wavetable: true` offers the built-in wavetables in its picker. A level is a number param into a mul; " +
-    "dry/wet is a `mix` node (see `stereo`).",
+    "dry/wet is the chain's, by a `mix` param (see `effects`).",
   paramKinds: paramKindsDoc,
   ...definitionFormatDoc(),
 });

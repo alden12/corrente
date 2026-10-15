@@ -10,6 +10,7 @@
  */
 import type { ParamSchema } from "../params/types";
 import type { Tag } from "../tags";
+import { ENGINE_EFFECTS } from "./engine";
 
 export const delaySchema: ParamSchema = [
   {
@@ -214,3 +215,5 @@ registerEffect({ type: "filter", label: "Filter", schema: filterSchema, tags: ["
 registerEffect({ type: "chorus", label: "Chorus", schema: chorusSchema, tags: ["lush", "warm"] });
 registerEffect({ type: "tremolo", label: "Tremolo", schema: tremoloSchema, tags: ["retro"] });
 registerEffect({ type: "bitcrusher", label: "Bitcrusher", schema: bitcrusherSchema, tags: ["gritty", "retro"] });
+// Written in the engine's own format (INST-42): their definitions play through engineDevices.ts.
+ENGINE_EFFECTS.forEach(({ type, label, tags, schema }) => registerEffect({ type, label, schema, tags }));

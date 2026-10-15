@@ -2,6 +2,10 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { ParamStore } from "../src/audio/params/store";
 import { effectInfos, effectSchema } from "../src/audio/effects/catalog";
 import { createEffect } from "../src/audio/effects/registry";
+import { ENGINE_EFFECTS } from "../src/audio/effects/engine";
+
+/** Written for the engine (INST-42): no Web Audio factory to build, so engineBank.test plays them. */
+const engineOnly = new Set(ENGINE_EFFECTS.map((effect) => effect.type));
 
 /**
  * Fake Web Audio context. `connect(undefined)` throws like the real API, so an
@@ -71,7 +75,7 @@ beforeAll(() => {
 afterAll(() => delete (globalThis as { AudioWorkletNode?: unknown }).AudioWorkletNode);
 
 describe("effects", () => {
-  for (const { type } of effectInfos()) {
+  for (const { type } of effectInfos().filter((info) => !engineOnly.has(info.type))) {
     it(`${type}: constructs with input/output and applies bindings without wiring to undefined`, () => {
       const store = new ParamStore(effectSchema(type));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

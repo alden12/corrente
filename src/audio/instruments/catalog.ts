@@ -16,6 +16,7 @@
 import type { ParamSchema, ParamSpec } from "../params/types";
 import { BUILTIN_SAMPLES, builtinRef } from "../samples/catalog";
 import type { Tag } from "../tags";
+import { ENGINE_INSTRUMENTS } from "./engine";
 
 export const WAVEFORMS = ["sine", "sawtooth", "square", "triangle"] as const;
 export type Waveform = (typeof WAVEFORMS)[number];
@@ -678,5 +679,9 @@ registerInstrument({
   family: "Percussion",
   tags: ["percussion"],
 });
+// Written in the engine's own format (INST-42): their definitions play through engineDevices.ts.
+ENGINE_INSTRUMENTS.forEach(({ type, label, family = "Synths", tags, schema }) =>
+  registerInstrument({ type, label, schema, family, tags }),
+);
 // The empty-track sentinel: no params, hidden from the palette, silent factory (registry.ts).
 registerInstrument({ type: EMPTY_INSTRUMENT, label: "No instrument", schema: [], family: "main", hidden: true });

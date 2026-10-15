@@ -179,15 +179,21 @@ describe("MCP server (tracks)", () => {
     expect(data.connected).toBe(false);
     expect(data.tracks).toEqual([]);
     expect(data.instruments.map((i: { id: string }) => i.id).sort()).toEqual([
+      "acid",
+      "bell",
       "drumkit",
       "fm",
       "mellotron",
       "nimbus",
       "organ",
+      "pad",
+      "pluck",
+      "pluck-bass",
       "sampler",
       "subtractive",
       "supersaw",
       "wavetable",
+      "wobble",
     ]);
   });
 
@@ -390,14 +396,37 @@ describe("MCP server (tracks)", () => {
     expect(list.effects).toHaveLength(1);
     expect(list.effects[0].type).toBe("reverb");
     expect(list.available.map((e: { id: string }) => e.id).sort()).toEqual([
+      "auto-pan",
       "bitcrusher",
       "chorus",
       "delay",
       "distortion",
+      "ensemble",
       "filter",
+      "flanger",
+      "lofi",
+      "phaser",
+      "ping-pong",
+      "pump",
+      "resonator",
       "reverb",
+      "sidechain-compressor",
+      "tape-echo",
       "tremolo",
+      "widener",
     ]);
+  });
+
+  it("set_instrument swaps a track's instrument, keeping the values of params both have", async () => {
+    const messages = await connectTab();
+    await makeTrack("subtractive");
+    await call("set_parameter", { id: "amp.level", value: 0.3 });
+    const res = await call("set_instrument", { instrument: "fm" });
+    expect(res.isError).toBeFalsy();
+    await waitFor(() => typesOf(messages).includes("setInstrument"));
+    const params = parse(await call("list_parameters")).parameters as { id: string; value: number }[];
+    expect(params.find((param) => param.id === "amp.level")?.value).toBe(0.3);
+    expect((await call("set_instrument", { instrument: "bogus" })).isError).toBe(true);
   });
 
   it("rejects an unknown effect type", async () => {

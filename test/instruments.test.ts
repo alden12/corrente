@@ -2,6 +2,10 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { ParamStore } from "../src/audio/params/store";
 import { instrumentSchema, pickableInstrumentInfos } from "../src/audio/instruments/catalog";
 import { createInstrument } from "../src/audio/instruments/registry";
+import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
+
+/** Written for the engine (INST-42): no Web Audio factory to build, so engineBank.test plays them. */
+const engineOnly = new Set(ENGINE_INSTRUMENTS.map((instrument) => instrument.type));
 
 /**
  * A minimal fake Web Audio context. `connect(undefined)` throws like the real
@@ -72,7 +76,7 @@ afterAll(() => delete (globalThis as { AudioWorkletNode?: unknown }).AudioWorkle
 
 describe("instruments", () => {
   // The hidden "none" sentinel is silent (empty schema, no voices) - exclude it here.
-  for (const { type } of pickableInstrumentInfos()) {
+  for (const { type } of pickableInstrumentInfos().filter((info) => !engineOnly.has(info.type))) {
     it(`${type}: constructs and plays voices without wiring to an undefined node`, () => {
       const store = new ParamStore(instrumentSchema(type));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

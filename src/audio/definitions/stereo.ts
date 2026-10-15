@@ -14,7 +14,7 @@
  * Elsewhere a stereo node is read one channel at a time, as `x_left` or `x_right`, except in `voice`
  * and `output`, where `x` alone means both. DOM-free, like the rest of the format.
  */
-import type { DeviceDefinition } from "./format";
+import type { AuthoredDefinition, DeviceDefinition } from "./format";
 
 const SIDES = ["left", "right"] as const;
 type Side = (typeof SIDES)[number];
@@ -126,5 +126,5 @@ export const expandStereo = (definition: unknown): { definition: unknown; proble
 };
 
 /** A definition known to be good, made plain: what the engine is given. */
-export const plainDefinition = (definition: DeviceDefinition): DeviceDefinition =>
+export const plainDefinition = (definition: AuthoredDefinition): DeviceDefinition =>
   expandStereo(definition).definition as DeviceDefinition;

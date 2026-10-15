@@ -674,7 +674,7 @@
     {
       "name": "mix",
       "kind": 12,
-      "description": "Crossfades from a dry signal to a wet one: mix 0 is all dry, 1 all wet, in a straight line between, so an effect's dry/wet knob is one node. Mix is held to 0..1.",
+      "description": "Crossfades from one signal to another: mix 0 is all dry, 1 all wet, in a straight line between; held to 0..1. For a blend that makes the sound, such as a phaser's input and all-passed signal at half and half. An effect's dry/wet knob is its chain's, by a mix param.",
       "inputs": [
         {
           "name": "dry",

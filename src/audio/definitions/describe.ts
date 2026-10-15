@@ -127,8 +127,13 @@ export const definitionFormatDoc = () => ({
     "right copy. In its inputs, `input` is that channel's input (`input.sidechain` its sidechain, `voices` " +
     "the voices on it), another stereo node is the same channel's copy, anything else (an LFO) is shared, " +
     'and { "left": ..., "right": ... } gives each channel its own. `output: "x"` plays both of its channels; ' +
-    "from a shared node, read one as x_left or x_right. Dry/wet is a stereo `mix` node: " +
-    '{ "block": "mix", "stereo": true, "inputs": { "dry": "input", "wet": "filter", "mix": { "param": "mix" } } }.',
+    "from a shared node, read one as x_left or x_right.",
+  effects:
+    "An effect plays only what it adds: give its schema a param with id `mix` (0 to 1) and the chain " +
+    "crossfades the effect's output with its input by it, and bypasses it the same way, so don't mix the " +
+    "dry signal in yourself. Where dry and processed must be summed to make the sound at all (a phaser's " +
+    'notches, a flanger\'s comb), use a `mix` node: { "block": "mix", "stereo": true, "inputs": { "dry": ' +
+    '"input", "wet": "stage4", "mix": 0.5 } }.',
   feedback:
     "Loops are allowed. A loop through a `delay` whose length comes from outside the loop runs in chunks; any " +
     "other loop runs a sample at a time (one sample of delay round it, and much dearer).",

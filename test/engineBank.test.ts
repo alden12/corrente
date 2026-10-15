@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { EngineBank, PlanRejected } from "../src/audio/bank/bank";
 import { EVENT, EventQueue } from "../src/audio/bank/events";
 import { BLOCK } from "../src/audio/bank/exports";
-import { TEST_EFFECTS, TEST_INSTRUMENTS } from "../src/audio/bank/testInstruments";
+import { TEST_EFFECTS, TEST_INSTRUMENTS } from "./support/testDevices";
+import { ENGINE_EFFECTS } from "../src/audio/effects/engine";
+import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
 import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import { MAX_ZONES, type DeviceDefinition } from "../src/audio/definitions/format";
@@ -539,8 +541,8 @@ describe("EngineBank", () => {
   });
 });
 
-describe("the new engine's test instruments", () => {
-  it.each(TEST_INSTRUMENTS.map((instrument) => [instrument.type, instrument] as const))(
+describe("the engine's instruments: the built-ins written for it, and the test devices", () => {
+  it.each([...ENGINE_INSTRUMENTS, ...TEST_INSTRUMENTS].map((instrument) => [instrument.type, instrument] as const))(
     "%s compiles against its params and sounds",
     (_type, { schema, definition }) => {
       const compiled = compileDefinition(definition, { params: schema });
@@ -562,9 +564,9 @@ describe("the new engine's test instruments", () => {
         if (spec.kind === "sample")
           bank.setSample(0, spec.id, spec.id, spec.wavetable ? classic : { channels: [sine], rate: RATE });
       });
-      // A kit's first pad, or A3.
+      // A kit's first pad, or A3, for a second: long enough for a pad's slow attack to rise.
       bank.noteOn(0, definition.zones?.[0].root ?? 57, 1, 0);
-      const sound = Array.from({ length: 100 }, (_, block) => {
+      const sound = Array.from({ length: Math.ceil(RATE / BLOCK) }, (_, block) => {
         bank.process((block * BLOCK) / RATE);
         return Array.from(bank.output(0, 0));
       }).flat();
@@ -574,9 +576,9 @@ describe("the new engine's test instruments", () => {
   );
 });
 
-describe("the new engine's test effects", () => {
-  const RINGS = new Set(["engine-echo", "engine-resonator"]);
-  it.each(TEST_EFFECTS.map((effect) => [effect.type, effect] as const))(
+describe("the engine's effects: the built-ins written for it, and the test devices", () => {
+  const RINGS = new Set(["engine-echo", "engine-resonator", "ping-pong", "tape-echo", "resonator"]);
+  it.each([...ENGINE_EFFECTS, ...TEST_EFFECTS].map((effect) => [effect.type, effect] as const))(
     "%s compiles against its params and processes its input",
     (_type, { schema, definition }) => {
       const compiled = compileDefinition(definition, { params: schema });

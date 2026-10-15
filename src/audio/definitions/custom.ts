@@ -10,7 +10,7 @@ import { z } from "zod";
 import { paramSchemaSchema } from "../params/declaration";
 import type { ParamSchema } from "../params/types";
 import { compileDefinition, DefinitionError } from "./compile";
-import type { DeviceDefinition } from "./format";
+import type { AuthoredDefinition } from "./format";
 import { hasVoiceNodes } from "./references";
 import { issueLines } from "../../util";
 
@@ -24,7 +24,7 @@ export interface CustomDevice {
   type: string;
   label?: string;
   schema: ParamSchema;
-  definition: DeviceDefinition;
+  definition: AuthoredDefinition;
 }
 
 export type CustomKind = "instrument" | "effect";
@@ -40,7 +40,7 @@ const customDeviceSchema = z.strictObject({
 export type DeviceResult = { ok: true; device: CustomDevice } | { ok: false; errors: string[] };
 
 /** What makes a definition the wrong kind of device, if anything. */
-const KIND_PROBLEMS: Record<CustomKind, (definition: DeviceDefinition) => string | undefined> = {
+const KIND_PROBLEMS: Record<CustomKind, (definition: AuthoredDefinition) => string | undefined> = {
   instrument: (definition) =>
     hasVoiceNodes(definition) ? undefined : "an instrument needs voice nodes (`voice: true`) to play its notes",
   effect: (definition) =>
@@ -58,7 +58,7 @@ export const parseCustomDevice = (raw: unknown, kind: CustomKind): DeviceResult 
     if (error instanceof DefinitionError) return { ok: false, errors: error.problems };
     throw error;
   }
-  const device = { ...parsed.data, schema, definition: parsed.data.definition as DeviceDefinition };
+  const device = { ...parsed.data, schema, definition: parsed.data.definition as AuthoredDefinition };
   const problem = KIND_PROBLEMS[kind](device.definition);
   return problem ? { ok: false, errors: [problem] } : { ok: true, device };
 };

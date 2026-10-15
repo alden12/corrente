@@ -1,15 +1,15 @@
 /**
- * Instruments and effects to try the new engine with in development (INST-36.5, INST-36.7), before
- * any device moves over (INST-36.8). Registered by devTools.ts, so they never ship: no project on the real deployment may
- * hold a new-engine device until the old format converts and retires (decided 2026-10-14). They go
- * when the built-ins convert.
+ * Devices for the engine's tests (INST-36.5, INST-36.7): an instrument and effects of each kind the
+ * chain and bank handle (a feedback loop, a ring, zones, a sidechain), kept here rather than taken
+ * from the built-ins so the tests don't move when a built-in is retuned. Some became built-ins
+ * (INST-42: Pluck, Wobble, Resonator, Sidechain Compressor) under their own names.
  */
-import type { DeviceDefinition } from "../definitions/format";
-import { registerInstrument } from "../instruments/catalog";
-import type { ParamSchema, ParamSpec } from "../params/types";
-import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../samples/catalog";
-import { registerEffect } from "../effects/catalog";
-import { registerEngineDevice } from "../definitions/engineDevices";
+import type { DeviceDefinition } from "../../src/audio/definitions/format";
+import { registerInstrument } from "../../src/audio/instruments/catalog";
+import type { ParamSchema, ParamSpec } from "../../src/audio/params/types";
+import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../../src/audio/samples/catalog";
+import { registerEffect } from "../../src/audio/effects/catalog";
+import { registerEngineDevice } from "../../src/audio/definitions/engineDevices";
 
 interface TestInstrument {
   type: string;

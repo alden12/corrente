@@ -3,7 +3,7 @@ import { EngineBank } from "../src/audio/bank/bank";
 import { BLOCK } from "../src/audio/bank/exports";
 import { carryWords } from "../src/audio/bank/carry";
 import { chainPlan, leadingRun, piecesOf } from "../src/audio/bank/chainPlan";
-import { TEST_EFFECTS, TEST_INSTRUMENTS, registerTestInstruments } from "../src/audio/bank/testInstruments";
+import { TEST_EFFECTS, TEST_INSTRUMENTS, registerTestInstruments } from "./support/testDevices";
 import { instrumentChain } from "../src/audio/engine/trackInstrument";
 import { chainEdit, ownerOf, reloadOptions } from "../src/audio/bank/reloadPlan";
 import { ParamStore } from "../src/audio/params/store";
