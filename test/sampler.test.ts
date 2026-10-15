@@ -5,7 +5,7 @@ import { midiToFreq } from "../src/audio/instruments/binding";
 /** The rate for a MIDI note, as the Sampler plays it. */
 const playbackRateFor = (midi: number, root: number, keytrack: boolean) =>
   rateForFreq(midiToFreq(midi), root, keytrack);
-import { samplerSchema } from "../src/audio/instruments/catalog";
+import { samplerSchema } from "../src/audio/instruments/engine/sampler";
 
 describe("sampler playback rate (keytracking)", () => {
   it("is unity at the root note when keytracking", () => {

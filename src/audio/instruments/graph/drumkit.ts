@@ -12,7 +12,7 @@
  * on the same note now both sound, layered, where the class version played the first.
  */
 import type { GraphInstrumentDef, NodeSpec, Connection } from "../../graph/types";
-import { drumkitSchema, DRUMKIT_PADS } from "../catalog";
+import { drumkitSchema, DRUMKIT_PADS } from "../engine/drumkit";
 
 /** Cents in a semitone, so `pad<N>.tune` can stay in semitones and land on the buffer's `detune`. */
 const CENTS = 100;

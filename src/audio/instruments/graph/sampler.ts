@@ -9,7 +9,7 @@
  * cuts it, which the class did not do for sequenced hits.
  */
 import type { GraphInstrumentDef } from "../../graph/types";
-import { samplerSchema } from "../catalog";
+import { samplerSchema } from "../engine/sampler";
 
 export const sampler: GraphInstrumentDef = {
   type: "sampler",

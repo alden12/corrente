@@ -4,7 +4,7 @@
  * `chorus.depth`, exactly as the class version did; `mix` by BaseEffect.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { chorusSchema } from "../catalog";
+import { chorusSchema } from "../engine/chorus";
 
 /** The delay the LFO swings around, and the furthest it swings, in seconds. */
 const BASE_DELAY = 0.025;

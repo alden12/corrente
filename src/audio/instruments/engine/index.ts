@@ -1,5 +1,12 @@
-/** The instruments written in the engine's own format (INST-42), in the order the library lists them. */
+/** The built-in instruments, written in the engine's own format, in the order the library lists them. */
 import { acid } from "./acid";
+import { drumkit } from "./drumkit";
+import { fm } from "./fm";
+import { mellotronFlute } from "./mellotronFlute";
+import { organ } from "./organ";
+import { sampler } from "./sampler";
+import { subtractive } from "./subtractive";
+import { supersaw } from "./supersaw";
 import { bell } from "./bell";
 import { pad } from "./pad";
 import { pluck } from "./pluck";
@@ -10,8 +17,15 @@ import { wobble } from "./wobble";
 import type { EngineBuiltin } from "../../definitions/builtin";
 
 export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
-  nimbus,
+  subtractive,
+  fm,
+  supersaw,
+  organ,
+  mellotronFlute,
   wavetable,
+  nimbus,
+  sampler,
+  drumkit,
   pad,
   bell,
   pluck,

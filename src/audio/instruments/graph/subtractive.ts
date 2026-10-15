@@ -11,7 +11,7 @@
  * it an octave at the envelope's peak, whatever the cutoff.
  */
 import type { GraphInstrumentDef } from "../../graph/types";
-import { subtractiveSchema } from "../catalog";
+import { subtractiveSchema } from "../engine/subtractive";
 
 /** Cents per semitone, so `filter.env` can be authored in semitones and land on `detune`. */
 const CENTS = 100;

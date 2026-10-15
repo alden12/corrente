@@ -10,16 +10,9 @@
  */
 import type { GraphInstrumentDef, NodeSpec } from "../../graph/types";
 import { tableOf } from "../../graph/table";
-import { organSchema } from "../catalog";
+import { ORGAN_HARMONICS, organPartialLevel, organSchema } from "../engine/organ";
 
-export const ORGAN_HARMONICS = [1, 2, 3, 4, 5, 6];
-
-/** Partial `harmonic`'s share of the voice at a brightness: its weight over the sum of all. */
-export const organPartialLevel = (harmonic: number, brightness: number): number => {
-  const weights = ORGAN_HARMONICS.map((each) => Math.pow(brightness, each - 1));
-  const total = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-  return weights[harmonic - 1] / total;
-};
+export { ORGAN_HARMONICS, organPartialLevel };
 
 export const organ: GraphInstrumentDef = {
   type: "organ",

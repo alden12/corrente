@@ -6,7 +6,7 @@
  * and a note-relative oscillator frequency (`noteRatio`).
  */
 import type { GraphInstrumentDef } from "../../graph/types";
-import { fmSchema } from "../catalog";
+import { fmSchema } from "../engine/fm";
 
 export const fm: GraphInstrumentDef = {
   type: "fm",

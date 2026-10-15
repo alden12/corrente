@@ -7,7 +7,7 @@
  * mellotronFluteSchema, so UI/MCP/automation/persistence are the usual projections.
  */
 import type { GraphInstrumentDef } from "../../graph/types";
-import { mellotronFluteSchema } from "../catalog";
+import { mellotronFluteSchema } from "../engine/mellotronFlute";
 
 export const mellotronFlute: GraphInstrumentDef = {
   type: "mellotron",

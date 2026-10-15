@@ -5,7 +5,7 @@
  * BaseEffect. Shows a parameterized curve primitive.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { distortionSchema } from "../catalog";
+import { distortionSchema } from "../engine/distortion";
 
 export const distortion: GraphEffectDef = {
   type: "distortion",

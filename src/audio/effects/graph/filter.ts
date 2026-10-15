@@ -6,7 +6,7 @@
  * close at the default depth and even at every cutoff, which the Hz one was not. `mix` by BaseEffect.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { filterSchema } from "../catalog";
+import { filterSchema } from "../engine/filter";
 
 /** Cents in an octave: the sweep at full `lfo.depth`, either side of the cutoff. */
 const OCTAVE_CENTS = 1200;

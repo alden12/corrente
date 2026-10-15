@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { pruneGraph } from "../src/audio/graph/prune";
 import { drumkit } from "../src/audio/instruments/graph/drumkit";
 import { validateGraph, INSTRUMENT_RESERVED } from "../src/audio/graph/validate";
-import { DRUMKIT_PADS } from "../src/audio/instruments/catalog";
+import { DRUMKIT_PADS } from "../src/audio/instruments/engine/drumkit";
 import type { Graph, NodeSpec } from "../src/audio/graph/types";
 
 const ids = (graph: Graph) => graph.nodes.map((node) => node.id).sort();

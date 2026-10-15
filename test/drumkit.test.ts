@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  drumkitSchema,
-  DRUMKIT_PADS,
-  DRUMKIT_BASE_NOTE,
-  noteForPad,
-  instrumentSchema,
-  hasInstrument,
-} from "../src/audio/instruments/catalog";
+import { instrumentSchema, hasInstrument } from "../src/audio/instruments/catalog";
+import { drumkitSchema, DRUMKIT_PADS, DRUMKIT_BASE_NOTE, noteForPad } from "../src/audio/instruments/engine/drumkit";
 import { BUILTIN_SAMPLES } from "../src/audio/samples/catalog";
 
 describe("drumkit catalog", () => {

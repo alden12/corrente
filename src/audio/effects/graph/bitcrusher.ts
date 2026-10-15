@@ -4,7 +4,7 @@
  * kind any def can use. Reuses bitcrusherSchema; `mix` by BaseEffect.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { bitcrusherSchema } from "../catalog";
+import { bitcrusherSchema } from "../engine/bitcrusher";
 
 export const bitcrusher: GraphEffectDef = {
   type: "bitcrusher",

@@ -6,7 +6,7 @@
  * modulation into an AudioParam with linear transforms.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { tremoloSchema } from "../catalog";
+import { tremoloSchema } from "../engine/tremolo";
 
 export const tremolo: GraphEffectDef = {
   type: "tremolo",

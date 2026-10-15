@@ -4,7 +4,7 @@
  * BaseEffect via the reserved `wet` bus. Shows a feedback loop in the format.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { delaySchema } from "../catalog";
+import { delaySchema } from "../engine/delay";
 
 export const delay: GraphEffectDef = {
   type: "delay",

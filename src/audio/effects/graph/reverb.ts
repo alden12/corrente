@@ -5,7 +5,7 @@
  * impulse) bound to a param, as the distortion's curve is.
  */
 import type { GraphEffectDef } from "../../graph/types";
-import { reverbSchema } from "../catalog";
+import { reverbSchema } from "../engine/reverb";
 
 export const reverb: GraphEffectDef = {
   type: "reverb",

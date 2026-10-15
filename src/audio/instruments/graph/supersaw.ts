@@ -12,7 +12,7 @@
  * Both are live, so turning either knob reaches notes already held.
  */
 import type { GraphInstrumentDef, NodeSpec, TablePoint } from "../../graph/types";
-import { supersawSchema } from "../catalog";
+import { supersawSchema } from "../engine/supersaw";
 
 export const SUPERSAW_MAX = 9;
 const SAWS = Array.from({ length: SUPERSAW_MAX }, (_unused, index) => index + 1);

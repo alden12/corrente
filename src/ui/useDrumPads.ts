@@ -5,7 +5,7 @@
  */
 import { useRef, useSyncExternalStore } from "react";
 import type { ParamStore } from "../audio/params/store";
-import { DRUMKIT_PADS } from "../audio/instruments/catalog";
+import { DRUMKIT_PADS } from "../audio/instruments/engine/drumkit";
 
 export interface DrumPad {
   /** 0-based pad index. */

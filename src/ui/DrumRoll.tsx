@@ -14,7 +14,7 @@ import type { Recorder } from "../audio/recording/recorder";
 import type { Dispatch } from "../audio/commands/types";
 import type { ProjectStore } from "../audio/project/projectStore";
 import type { SampleAsset } from "../audio/samples/catalog";
-import { DRUMKIT_BASE_NOTE, DRUMKIT_PADS } from "../audio/instruments/catalog";
+import { DRUMKIT_BASE_NOTE, DRUMKIT_PADS } from "../audio/instruments/engine/drumkit";
 import { refLabel } from "../audio/samples/catalog";
 import { PianoRoll, type RollRows } from "./PianoRoll";
 import { pitchName } from "./noteNames";
