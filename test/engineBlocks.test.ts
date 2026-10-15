@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BlockSpec, Catalogue, Port } from "../engine/catalogue.ts";
 import { BLOCK, type EngineExports } from "../src/audio/bank/exports";
-import { SHAPER_CURVES, SHAPER_SHAPES } from "./support/shaperCurves";
 import { engineOf, fillInput, loadWords, peakOf, RATE, renderBlocks } from "./support/engine";
 
 /**
@@ -303,18 +302,22 @@ describe("the new blocks do what they say", () => {
     expect(new Set(snapped.map((value) => Math.round(value * 1000) / 1000))).toEqual(new Set([-1, -0.333, 0.333, 1]));
   });
 
-  it("waveshaper: follows the old format's curves", () => {
-    // SHAPER_CURVES are the 1024-point tables Web Audio read; the block works the same function out.
-    const problems = SHAPER_SHAPES.flatMap((shape, index) => {
-      const amount = 30;
-      const curve = SHAPER_CURVES[shape](amount);
-      const out = runBlock("waveshaper", { input: (_, sample) => sample / 64 - 1, controls: { shape: index, amount } });
+  it("waveshaper: plays each of its curves", () => {
+    // The Distortion's four curves, by `shape`'s index, as functions of x in -1..1 and `amount`.
+    const drive = (amount: number, per: number) => 1 + amount * per;
+    const curves = [
+      (x: number, amount: number) => ((3 + amount) * x * 20 * (Math.PI / 180)) / (Math.PI + amount * Math.abs(x)),
+      (x: number, amount: number) => Math.tanh(drive(amount, 0.2) * x) / Math.tanh(drive(amount, 0.2)),
+      (x: number, amount: number) => Math.max(-1, Math.min(1, drive(amount, 0.2) * x)),
+      (x: number, amount: number) => Math.sin((Math.PI / 2) * drive(amount, 0.1) * x),
+    ];
+    const amount = 30;
+    const problems = curves.flatMap((curve, shape) => {
+      const out = runBlock("waveshaper", { input: (_, sample) => sample / 64 - 1, controls: { shape, amount } });
       return out.flatMap((value, sample) => {
         const x = Math.min(1, sample / 64 - 1);
-        const place = ((x + 1) / 2) * (curve.length - 1);
-        const below = Math.floor(place);
-        const table = curve[below] + (curve[Math.min(curve.length - 1, below + 1)] - curve[below]) * (place - below);
-        return Math.abs(value - table) < 0.02 ? [] : [`${shape} at ${x}: ${value} vs ${table}`];
+        const expected = curve(x, amount);
+        return Math.abs(value - expected) < 0.02 ? [] : [`shape ${shape} at ${x}: ${value} vs ${expected}`];
       });
     });
     expect(problems).toEqual([]);
