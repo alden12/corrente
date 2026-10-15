@@ -16,15 +16,18 @@ import type { ParamSchema } from "../params/types";
 // the def format - stays DOM-free and can be imported by the Node MCP server. The Web Audio
 // builders (nodes.ts) cast these to the DOM types when setting a node property.
 export type OscWaveform = "sine" | "sawtooth" | "square" | "triangle";
-export type FilterKind =
-  | "lowpass"
-  | "highpass"
-  | "bandpass"
-  | "lowshelf"
-  | "highshelf"
-  | "peaking"
-  | "notch"
-  | "allpass";
+/** Web Audio's filter types, in the order the engine's biquad block numbers them. */
+export const FILTER_KINDS = [
+  "lowpass",
+  "highpass",
+  "bandpass",
+  "lowshelf",
+  "highshelf",
+  "peaking",
+  "notch",
+  "allpass",
+] as const;
+export type FilterKind = (typeof FILTER_KINDS)[number];
 export type Oversample = "none" | "2x" | "4x";
 
 /** A parameter reference: the param value, optionally scaled/offset (value*scale + offset). */
