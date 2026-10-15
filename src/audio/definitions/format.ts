@@ -223,6 +223,8 @@ export const nodeSchema = z
   .object({
     block: z.string().min(1),
     voice: z.boolean().optional(),
+    /** Once per channel (stereo.ts): made into plain `name_left` and `name_right` before it's read. */
+    stereo: z.boolean().optional(),
     inputs: z.record(z.string(), inputSchema).optional(),
   })
   .strict();

@@ -672,8 +672,41 @@
       ]
     },
     {
-      "name": "mul",
+      "name": "mix",
       "kind": 12,
+      "description": "Crossfades from a dry signal to a wet one: mix 0 is all dry, 1 all wet, in a straight line between, so an effect's dry/wet knob is one node. Mix is held to 0..1.",
+      "inputs": [
+        {
+          "name": "dry",
+          "min": -16,
+          "max": 16
+        },
+        {
+          "name": "wet",
+          "min": -16,
+          "max": 16
+        },
+        {
+          "name": "mix",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "signal",
+          "min": -16,
+          "max": 16
+        }
+      ],
+      "controls": [],
+      "meters": [],
+      "credits": [],
+      "licences": []
+    },
+    {
+      "name": "mul",
+      "kind": 13,
       "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
       "inputs": [
         {
@@ -701,7 +734,7 @@
     },
     {
       "name": "noise",
-      "kind": 13,
+      "kind": 14,
       "description": "White noise.",
       "inputs": [],
       "outputs": [
@@ -721,7 +754,7 @@
     },
     {
       "name": "onepole",
-      "kind": 14,
+      "kind": 15,
       "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
       "inputs": [
         {
@@ -786,7 +819,7 @@
     },
     {
       "name": "pan",
-      "kind": 15,
+      "kind": 16,
       "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
       "inputs": [
         {
@@ -830,7 +863,7 @@
     },
     {
       "name": "period",
-      "kind": 16,
+      "kind": 17,
       "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
       "inputs": [
         {
@@ -870,7 +903,7 @@
     },
     {
       "name": "pinknoise",
-      "kind": 17,
+      "kind": 18,
       "description": "Pink noise: falling 3 dB an octave, softer and closer to rain than white noise's hiss.",
       "inputs": [],
       "outputs": [
@@ -909,7 +942,7 @@
     },
     {
       "name": "pitch",
-      "kind": 18,
+      "kind": 19,
       "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
       "inputs": [
         {
@@ -941,7 +974,7 @@
     },
     {
       "name": "pulse",
-      "kind": 19,
+      "kind": 20,
       "description": "A band-limited pulse wave whose width can move every sample (pulse-width modulation): width 0.5 is a square from -1 to 1. It has no DC offset, as an analog synth's output has none, so a narrow pulse reaches towards 2 on its short side. An octave down, it is a sub-oscillator.",
       "inputs": [
         {
@@ -990,7 +1023,7 @@
     },
     {
       "name": "reverb",
-      "kind": 20,
+      "kind": 21,
       "description": "A stereo algorithmic reverb (Zita-Rev1): a short pre-delay, then a dense tail that decays over the time set, faster in the highs above the damping frequency.",
       "inputs": [
         {
@@ -1095,7 +1128,7 @@
     },
     {
       "name": "saw",
-      "kind": 21,
+      "kind": 22,
       "description": "A band-limited sawtooth.",
       "inputs": [
         {
@@ -1134,7 +1167,7 @@
     },
     {
       "name": "select",
-      "kind": 22,
+      "kind": 23,
       "description": "Picks one of four signals by index (0 to 3, rounded to the nearest): a waveform or mode switch, fed by a choice param, which reads as its option's index. Wire any unused choice to 0. The switch is instant, so changing it mid-note can click.",
       "inputs": [
         {
@@ -1179,7 +1212,7 @@
     },
     {
       "name": "shaper",
-      "kind": 23,
+      "kind": 24,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -1218,7 +1251,7 @@
     },
     {
       "name": "sine",
-      "kind": 24,
+      "kind": 25,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -1252,7 +1285,7 @@
     },
     {
       "name": "svf",
-      "kind": 25,
+      "kind": 26,
       "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
       "inputs": [
         {
@@ -1315,7 +1348,7 @@
     },
     {
       "name": "triangle",
-      "kind": 26,
+      "kind": 27,
       "description": "A band-limited triangle wave, rising from 0 at the start of its cycle. Its frequency can move every sample.",
       "inputs": [
         {
@@ -1354,7 +1387,7 @@
     },
     {
       "name": "waveshaper",
-      "kind": 27,
+      "kind": 28,
       "description": "Distortion by a curve, as the original graph format's shaper had them. shape: 0 classic (the original Distortion's), 1 tanh (smooth saturation), 2 hardClip (flat at full scale), 3 fold (folds back past full scale, bright). amount is the drive. The input is held to -1..1 first, as Web Audio's WaveShaperNode does.",
       "inputs": [
         {

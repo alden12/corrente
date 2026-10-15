@@ -27,6 +27,7 @@ import {
   type Source,
 } from "./references";
 import { definitionSchemaFor, problemsIn } from "./schema";
+import { expandStereo } from "./stereo";
 
 /** The sections a plan runs in a block: once before the voices, once per voice, once after. */
 export type Section = "pre" | "voice" | "post";
@@ -143,7 +144,9 @@ export interface CompileOptions {
 }
 
 export const compileDefinition = (input: unknown, options: CompileOptions = {}): CompiledPlan => {
-  const parsed = definitionSchemaFor(options.params).safeParse(input);
+  const expanded = expandStereo(input);
+  if (expanded.problems.length > 0) throw new DefinitionError(expanded.problems);
+  const parsed = definitionSchemaFor(options.params).safeParse(expanded.definition);
   if (!parsed.success) {
     throw new DefinitionError(problemsIn(parsed.error));
   }

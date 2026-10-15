@@ -1,6 +1,7 @@
 /**
  * The devices that run on the new engine, by type (INST-36.7): their definitions and param schemas,
- * so a track's chain can compose its engine devices into one plan (chain.ts). DOM-free.
+ * so a track's chain can compose its engine devices into one plan (chain.ts). Stereo nodes are made
+ * plain as a device registers (stereo.ts), so chains only ever see plain ones. DOM-free.
  *
  * The built-ins written in the old graph format run here converted (INST-36.8), each converted the
  * first time it's asked for. Their schemas don't change, so a project's values for them carry over.
@@ -9,6 +10,7 @@ import { BUILTIN_GRAPH_EFFECTS, BUILTIN_GRAPH_INSTRUMENTS } from "../graph/built
 import type { ParamSchema } from "../params/types";
 import type { DeviceDefinition } from "./format";
 import { effectFromGraph, instrumentFromGraph, type Converted } from "./fromGraph";
+import { plainDefinition } from "./stereo";
 
 export interface EngineDeviceSpec {
   definition: DeviceDefinition;
@@ -25,7 +27,7 @@ const BUILTINS = new Map<string, () => Converted>([
 
 /** Record that a device type runs on the new engine, and how. */
 export const registerEngineDevice = (type: string, spec: EngineDeviceSpec): void => {
-  DEVICES.set(type, spec);
+  DEVICES.set(type, { schema: spec.schema, definition: plainDefinition(spec.definition) });
 };
 
 /** Forget a device registered under `type` (a custom one, as its project unloads or drops it). */
