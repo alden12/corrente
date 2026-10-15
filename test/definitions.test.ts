@@ -99,9 +99,9 @@ const subtractive: DeviceDefinition = {
     filterEnv: { block: "adsr", voice: true, inputs: { gate: "voice.gate", attack: 0.01, decay: 0.3, sustain: 0.2 } },
     envDepth: { block: "mul", voice: true, inputs: { a: "filterEnv", b: { param: "envelope", scale: 48 } } },
     cutoff: { block: "pitch", voice: true, inputs: { frequency: { param: "cutoff" }, semitones: "envDepth" } },
-    filter: { block: "lowpass", voice: true, inputs: { signal: "osc", cutoff: "cutoff", q: { param: "resonance" } } },
+    filter: { block: "svf", voice: true, inputs: { signal: "osc", cutoff: "cutoff", q: { param: "resonance" } } },
     ampEnv: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
-    vca: { block: "mul", voice: true, inputs: { a: "filter", b: "ampEnv" } },
+    vca: { block: "mul", voice: true, inputs: { a: "filter.lowpass", b: "ampEnv" } },
   },
   voice: "vca",
 };
@@ -492,9 +492,9 @@ describe("definitions the compiler refuses", () => {
     expect(problemsOf(voiceWith({ x: { block: "mul", voice: true, inputs: { a: 1 } } }))).toEqual([
       "x.b: not wired (every audio input needs a value, a param or a connection)",
     ]);
-    expect(
-      problemsOf(voiceWith({ x: { block: "lowpass", voice: true, inputs: { signal: 0, cutoff: 50000 } } })),
-    ).toEqual(["x.cutoff: 50000 is outside 20..20000"]);
+    expect(problemsOf(voiceWith({ x: { block: "svf", voice: true, inputs: { signal: 0, cutoff: 50000 } } }))).toEqual([
+      "x.cutoff: 50000 is outside 20..20000",
+    ]);
   });
 
   it("keeps each section to what it can read", () => {

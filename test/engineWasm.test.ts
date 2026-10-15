@@ -68,7 +68,7 @@ describe("playing a plan", () => {
   const GATE = 1;
   const floatBits = (value: number) => new Int32Array(Float32Array.of(value).buffer)[0];
   const mulOfGate = [
-    ...[0, 4, 0], // no params, four voices, no latency
+    ...[0, 4], // no params, four voices
     ...[0, 0], // the pre section: no nodes, no steps
     ...[1, 1], // the voice section: one node, one step
     ...[kindOf("mul"), 2, 0], // a multiply with two audio inputs and no controls
@@ -129,7 +129,7 @@ describe("playing a plan", () => {
   it("takes audio in for a track with no voices", () => {
     // A return track: its post section doubles the main input's left channel.
     const doubler = [
-      ...[0, 0, 0], // no params, no voices, no latency
+      ...[0, 0], // no params, no voices
       ...[0, 0, 0, 0], // no pre or voice section
       ...[1, 1, kindOf("mul"), 2, 0, ...[7, 0, 0], ...[3, 0, floatBits(2)], ...[0, 1, 0]],
       ...[0], // no voice output
@@ -143,11 +143,11 @@ describe("playing a plan", () => {
     expect(output(exports, 0, 0).every((sample) => sample === 0.5)).toBe(true);
   });
 
-  it("reports a track's peak, silence and latency, and a block's meter", () => {
-    // The gate plan with a meter on the voices summed, and 64 samples of latency declared.
+  it("reports a track's peak and silence, and a block's meter", () => {
+    // The gate plan with a meter on the voices summed.
     const metered = [
-      ...[0, 4, 64],
-      ...mulOfGate.slice(3, -13), // the same pre and voice sections
+      ...[0, 4],
+      ...mulOfGate.slice(2, -13), // the same pre and voice sections
       ...[1, 1, kindOf("meter"), 1, 0, ...[6, 0, 0], ...[0, 1, 0]], // post: a meter on the sum
       ...[1, 0, 0, 0], // each voice plays the multiply
       ...[1, 0, 0, 0], // the track plays the meter's output
@@ -162,10 +162,7 @@ describe("playing a plan", () => {
     expect([exports.eng_track_peak(0, 1), exports.eng_track_silent(0)]).toEqual([1, 0]);
     expect(exports.eng_meter(0, 2, 0, 0)).toBe(1);
     expect(exports.eng_meter(0, 2, 0, 1)).toBeNaN();
-    expect(exports.eng_track_latency(0)).toBe(64);
-    expect([exports.eng_track_latency(1), exports.eng_track_silent(1), exports.eng_track_peak(1, 0)]).toEqual([
-      -1, -1, -1,
-    ]);
+    expect([exports.eng_track_silent(1), exports.eng_track_peak(1, 0)]).toEqual([-1, -1]);
   });
 
   it("grows memory to load a big plan, and its addresses still work after", () => {

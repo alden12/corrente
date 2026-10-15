@@ -20,7 +20,10 @@
 //! - `f64` is a 64-bit float (JS's number). The read position is one: an f32 runs out of precision
 //!   to count fractions of a sample a few minutes into a long sample.
 
-use super::render::{Render, Unit};
+use super::render::Chunk;
+use super::sources::Sources;
+use super::Slot;
+use crate::plan::Node;
 use crate::plan::SAMPLER_CONTROLS;
 
 /// How many samples a bank holds at once.
@@ -172,24 +175,20 @@ impl SamplerState {
     }
 }
 
-// The sampler's methods on Render. The rest are in render.rs.
-impl Render<'_> {
-    /// Run a sampler over [start, start + length), reading its controls first if `set_controls`.
-    pub(super) fn run_sampler(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
-        let samples = self.context.samples;
-        self.with_node(index, start, |node, unit, outputs, sources| {
-            // TS: if (unit.type !== "sampler") return; const state = unit.state;
-            let Unit::Sampler(state) = unit else { return };
-            if set_controls {
-                // TS: node.control.forEach((source, i) => (state.controls[i] = sources.samples(source, start, 1)[0]))
-                state.controls.iter_mut().zip(&node.control).for_each(|(control, &source)| *control = sources.samples(source, start, 1)[0]);
-                state.set_root();
-            }
-            let frequencies = sources.samples(node.audio[0], start, length);
-            let gates = sources.samples(node.audio[1], start, length);
-            // The two outputs are two buffers side by side; `split_at_mut` lends each writably.
-            let (left, right) = outputs.split_at_mut(1);
-            state.play(samples, frequencies, gates, &mut left[0][start + 1..start + 1 + length], &mut right[0][start + 1..start + 1 + length]);
-        });
+impl SamplerState {
+    /// Run over the chunk, reading its controls first if it says.
+    // TS: run(node, outputs, sources, samples, { start, length, setControls }) { ... }
+    pub(super) fn run(&mut self, node: &Node, outputs: &mut [Slot], sources: &Sources, samples: &[Option<Sample>], chunk: Chunk) {
+        let Chunk { start, length, set_controls } = chunk;
+        if set_controls {
+            // TS: node.control.forEach((source, i) => (this.controls[i] = sources.samples(source, start, 1)[0]))
+            self.controls.iter_mut().zip(&node.control).for_each(|(control, &source)| *control = sources.samples(source, start, 1)[0]);
+            self.set_root();
+        }
+        let frequencies = sources.samples(node.audio[0], start, length);
+        let gates = sources.samples(node.audio[1], start, length);
+        // The two outputs are two buffers side by side; `split_at_mut` lends each writably.
+        let (left, right) = outputs.split_at_mut(1);
+        self.play(samples, frequencies, gates, &mut left[0][start + 1..start + 1 + length], &mut right[0][start + 1..start + 1 + length]);
     }
 }

@@ -22,7 +22,10 @@
 //!
 //! The files, from the outside in:
 //! - engine.rs: the bank, and everything lib.rs calls.
-//! - track.rs: one track's block: params, the pre section, the voices, the post section.
+//! - track.rs: one track: loading a plan, notes, params, and its block (crossfading after a load).
+//! - graph.rs: a plan and what it runs on, rendering the pre section, the voices, the post section.
+//! - params.rs: a param's buffer, ramping to each new value.
+//! - carry.rs: what a reloaded plan takes over from the one it replaced.
 //! - render.rs: running one section's steps over its nodes.
 //! - sources.rs: what a node reads while it runs.
 //! - delay.rs: the native delay line, and its steps.
@@ -39,16 +42,22 @@
 //! - One type's methods can be spread over several `impl` blocks in different files: `Render` has
 //!   most of its methods in render.rs and the delay's in delay.rs.
 
+mod carry;
 mod delay;
 mod engine;
+mod graph;
+mod params;
 mod render;
 mod sampler;
 mod sources;
-mod wavetable;
 mod track;
+mod wavetable;
 
 // TS: export { Engine } from "./engine". `pub use` re-exports, so lib.rs writes `router::Engine`.
 pub use engine::Engine;
+pub use track::Track;
+// The tests write wavetables at these sizes. `#[cfg(test)]` builds the line into the tests only.
+#[cfg(test)]
 pub use wavetable::{CYCLE, LEVELS};
 
 use crate::plan::{CHANNELS, VOICE_SIGNALS};

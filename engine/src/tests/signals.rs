@@ -12,7 +12,7 @@ fn playing_signal(signal: usize) -> PlanBuilder {
 #[test]
 fn a_voice_reads_its_note_number() {
     let mut engine = playing_signal(SIGNAL_NOTE).loaded();
-    engine.note_on(0, 0, 0, 261.63, 1.0, 60.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 261.63, 1.0, 60.0);
     assert!(render(&mut engine, 1).iter().all(|&sample| sample == 60.0));
 }
 
@@ -23,10 +23,10 @@ fn each_note_gets_its_own_seed_the_same_every_run() {
         let mut engine = playing_signal(SIGNAL_SEED).loaded();
         (0..3)
             .map(|slot| {
-                engine.note_on(0, slot, 0, 440.0, 1.0, 69.0);
+                engine.track_mut(0).unwrap().note_on(slot, 0, 440.0, 1.0, 69.0);
                 engine.process();
                 // The voices sum, so each new seed is the total less what was there before.
-                engine.output(0, 0).expect("track 0")[0]
+                engine.track(0).and_then(|track| track.output(0)).expect("track 0")[0]
             })
             .collect()
     };
@@ -48,7 +48,7 @@ fn the_host_signals_follow_the_transport() {
     // 120 beats a minute is 2 a second, so a sample is 2 / 48000 of a beat, and the beat runs on into
     // the next block.
     beats.iter().enumerate().for_each(|(index, &beat)| assert!((beat - (4.0 + index as f32 * 2.0 / 48000.0)).abs() < 1e-4));
-    assert_eq!(engine.output(0, 1).expect("track 0")[0], 24000.0);
+    assert_eq!(engine.track(0).and_then(|track| track.output(1)).expect("track 0")[0], 24000.0);
     let playing = PlanBuilder::new().voices(0).track_out(vec![host(HOST_PLAYING)]);
     let mut engine = playing.loaded();
     engine.set_transport(0.0, 90.0, false);

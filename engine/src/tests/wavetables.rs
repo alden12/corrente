@@ -28,11 +28,11 @@ fn near(a: f32, b: f32) -> bool {
 fn reads_a_cycle_round_at_the_notes_frequency() {
     let mut engine = wavetable(0.0).loaded();
     table(&mut engine, 1, |_, _, index| index as f32 / CYCLE as f32);
-    engine.note_on(0, 0, 0, ONE_A_SAMPLE, 1.0, 0.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, ONE_A_SAMPLE, 1.0, 0.0);
     let out = render(&mut engine, 1);
     assert!(out.iter().enumerate().all(|(index, &sample)| near(sample, index as f32 / CYCLE as f32)));
     // Twice the frequency, twice as fast.
-    engine.note_on(0, 0, 0, 2.0 * ONE_A_SAMPLE, 1.0, 0.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 2.0 * ONE_A_SAMPLE, 1.0, 0.0);
     let out = render(&mut engine, 1);
     assert!(out.iter().enumerate().all(|(index, &sample)| near(sample, 2.0 * index as f32 / CYCLE as f32)));
 }
@@ -51,7 +51,7 @@ fn reads_the_brightest_level_that_stays_under_half_the_sample_rate() {
     let level_at = |frequency: f32| {
         let mut engine = wavetable(0.0).loaded();
         table(&mut engine, 1, |level, _, _| level as f32);
-        engine.note_on(0, 0, 0, frequency, 1.0, 0.0);
+        engine.track_mut(0).unwrap().note_on(0, 0, frequency, 1.0, 0.0);
         render(&mut engine, 1)[0]
     };
     // 1024 harmonics of 23 Hz fit under 24 kHz; at 1 kHz, 16 do (level 6); at 12 kHz, 2 (level 9).

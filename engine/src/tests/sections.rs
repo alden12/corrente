@@ -14,7 +14,7 @@ fn the_shared_section_runs_once_a_block_for_every_voice() {
         .step(NODE, vec![0])
         .out(buffer(0));
     let mut engine = plan.playing(0);
-    engine.note_on(0, 1, 0, 220.0, 1.0, 69.0);
+    engine.track_mut(0).unwrap().note_on(1, 0, 220.0, 1.0, 69.0);
     let output = render(&mut engine, 2);
     assert_eq!(&output[..3], &[2.0, 4.0, 6.0]);
     assert_eq!(output[BLOCK], 2.0 * (BLOCK + 1) as f32);
@@ -29,7 +29,7 @@ fn a_block_with_two_outputs_plays_in_stereo() {
         .voice_out(vec![port(0, 0), port(0, 1)]);
     let mut engine = plan.playing(0);
     engine.process();
-    let (left, right) = (engine.output(0, 0).unwrap(), engine.output(0, 1).unwrap());
+    let (left, right) = (engine.track(0).and_then(|track| track.output(0)).unwrap(), engine.track(0).and_then(|track| track.output(1)).unwrap());
     assert!(left.iter().all(|&sample| (sample - 1.0).abs() < 1e-6));
     assert!(right.iter().all(|&sample| sample.abs() < 1e-6));
 }
@@ -45,7 +45,7 @@ fn the_post_section_runs_on_the_voices_summed() {
         .step_in(POST, NODE, vec![0])
         .track_out(vec![buffer(0)]);
     let mut engine = plan.playing(0);
-    engine.note_on(0, 1, 0, 220.0, 1.0, 69.0);
+    engine.track_mut(0).unwrap().note_on(1, 0, 220.0, 1.0, 69.0);
     assert!(render(&mut engine, 1).iter().all(|&sample| sample == 1.0));
 }
 
@@ -59,7 +59,7 @@ fn a_track_with_no_voices_processes_its_input() {
         .track_out(vec![buffer(0)]);
     let mut engine = plan.loaded();
     // TS: engine.inputMut(0, 0).forEach((_, i, input) => (input[i] = i / BLOCK))
-    engine.input_mut(0, 0).unwrap().iter_mut().enumerate().for_each(|(index, sample)| *sample = index as f32 / BLOCK as f32);
+    engine.track_mut(0).and_then(|track| track.input_mut(0)).unwrap().iter_mut().enumerate().for_each(|(index, sample)| *sample = index as f32 / BLOCK as f32);
     let output = render(&mut engine, 1);
     output.iter().enumerate().for_each(|(index, &sample)| assert_eq!(sample, 2.0 * index as f32 / BLOCK as f32));
 }
@@ -73,10 +73,10 @@ fn tracks_in_a_bank_play_independently() {
     engine.init(RATE, 2);
     assert!(engine.load(0, gate.plan()));
     assert!(engine.load(1, half.plan()));
-    engine.note_on(1, 0, 0, 440.0, 1.0, 69.0);
+    engine.track_mut(1).unwrap().note_on(0, 0, 440.0, 1.0, 69.0);
     engine.process();
-    assert!(engine.output(0, 0).unwrap().iter().all(|&sample| sample == 0.0));
-    assert!(engine.output(1, 0).unwrap().iter().all(|&sample| sample == 0.5));
+    assert!(engine.track(0).and_then(|track| track.output(0)).unwrap().iter().all(|&sample| sample == 0.0));
+    assert!(engine.track(1).and_then(|track| track.output(0)).unwrap().iter().all(|&sample| sample == 0.5));
     // A track that doesn't exist takes no plan.
     assert!(!engine.load(2, gate.plan()));
 }

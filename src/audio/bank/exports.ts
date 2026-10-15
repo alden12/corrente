@@ -45,7 +45,6 @@ export interface EngineExports {
   eng_process(): void;
   eng_track_peak(track: number, channel: number): number;
   eng_track_silent(track: number): number;
-  eng_track_latency(track: number): number;
   eng_meter(track: number, section: number, node: number, meter: number): number;
   eng_block_count(): number;
   eng_block_inputs(kind: number): number;

@@ -38,7 +38,7 @@ fn plays_a_sample_at_its_root_note_frame_by_frame() {
 fn an_octave_up_reads_twice_as_fast_and_ends_twice_as_soon() {
     let mut engine = sampler(WHOLE).loaded();
     ramp(&mut engine, 200, RATE as f32);
-    engine.note_on(0, 0, 0, 880.0, 1.0, 81.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 880.0, 1.0, 81.0);
     let out = render(&mut engine, 2);
     assert!(out[..100].iter().enumerate().all(|(index, &sample)| near(sample, index as f32 * 0.002)));
     assert!(out[100..].iter().all(|&sample| sample == 0.0), "silent past the end");
@@ -50,7 +50,7 @@ fn reads_between_frames_on_a_curve_through_them() {
     // away from the first frame (where the frame before is taken as the first).
     let mut engine = sampler(WHOLE).loaded();
     ramp(&mut engine, 1000, RATE as f32);
-    engine.note_on(0, 0, 0, 220.0, 1.0, 57.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 220.0, 1.0, 57.0);
     let out = render(&mut engine, 1);
     assert!(out[4..].iter().enumerate().all(|(index, &sample)| near(sample, (index + 4) as f32 * 0.0005)));
 }
@@ -93,7 +93,7 @@ fn a_stereo_sample_plays_each_channel_to_its_side() {
     right.fill(-0.5);
     let lefts = render_channel(&mut engine, 0, 0, 1);
     assert!(lefts.iter().all(|&sample| near(sample, 0.25)));
-    assert!(engine.output(0, 1).expect("track 0").iter().all(|&sample| near(sample, -0.5)));
+    assert!(engine.track(0).and_then(|track| track.output(1)).expect("track 0").iter().all(|&sample| near(sample, -0.5)));
 }
 
 #[test]
@@ -102,12 +102,12 @@ fn a_released_note_plays_on_to_the_end_then_frees_its_voice() {
     let mut engine = sampler(WHOLE).playing(0);
     ramp(&mut engine, 300, RATE as f32);
     render(&mut engine, 1);
-    engine.note_off(0, 0, 0);
+    engine.track_mut(0).unwrap().note_off(0, 0);
     let out = render(&mut engine, 1);
     assert!(near(out[72], 0.2));
-    assert!(engine.voice_active(0, 0), "still sounding at the end of the sample");
+    assert!(engine.track(0).is_some_and(|track| track.voice_active(0)), "still sounding at the end of the sample");
     render(&mut engine, 2);
-    assert!(!engine.voice_active(0, 0));
+    assert!(!engine.track(0).is_some_and(|track| track.voice_active(0)));
 }
 
 #[test]
@@ -157,13 +157,13 @@ fn dragging_the_end_in_and_out_again_plays_on_from_where_it_was() {
     };
     for looping in [0.0, 1.0] {
         let mut engine = with_end(looping).loaded();
-        engine.init_param(0, 0, 0.5);
+        engine.track_mut(0).unwrap().init_param(0, 0.5);
         ramp(&mut engine, 1000, RATE as f32);
-        engine.note_on(0, 0, 0, 440.0, 1.0, 69.0);
+        engine.track_mut(0).unwrap().note_on(0, 0, 440.0, 1.0, 69.0);
         render(&mut engine, 1);
-        engine.init_param(0, 0, 0.0);
+        engine.track_mut(0).unwrap().init_param(0, 0.0);
         assert!(render(&mut engine, 1).iter().all(|&sample| sample == 0.0), "silent while the end is at 0");
-        engine.init_param(0, 0, 0.5);
+        engine.track_mut(0).unwrap().init_param(0, 0.5);
         let out = render(&mut engine, 1);
         assert!(out.iter().enumerate().all(|(index, &sample)| near(sample, (128 + index) as f32 * 0.001)));
     }
@@ -184,21 +184,21 @@ fn each_voice_plays_the_zone_it_was_given() {
     let zone = |engine: &mut Engine, slot: usize, sample: f32, root: f32| {
         [(SIGNAL_SAMPLE, sample), (SIGNAL_ROOT, root), (SIGNAL_START, 0.0), (SIGNAL_END, 1.0)]
             .into_iter()
-            .for_each(|(signal, value)| engine.set_voice_signal(0, slot, signal, value));
+            .for_each(|(signal, value)| engine.track_mut(0).unwrap().set_voice_signal(slot, signal, value));
     };
-    engine.note_on(0, 0, 0, 65.41, 1.0, 36.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 65.41, 1.0, 36.0);
     zone(&mut engine, 0, 1.0, 36.0);
     let first = render(&mut engine, 1);
     assert!(first.iter().all(|&sample| near(sample, 0.25)));
     // A second note, 10 samples in (between control reads), in its own zone: the two sum from it.
-    engine.note_on(0, 1, 10, 73.42, 1.0, 38.0);
+    engine.track_mut(0).unwrap().note_on(1, 10, 73.42, 1.0, 38.0);
     zone(&mut engine, 1, 2.0, 38.0);
     let both = render(&mut engine, 1);
     assert!(both[..10].iter().all(|&sample| near(sample, 0.25)));
     assert!(both[10..].iter().all(|&sample| near(sample, -0.25)));
     // A signal that isn't a zone's, or a slot not sounding, is left alone.
-    engine.set_voice_signal(0, 0, SIGNAL_GATE, 0.0);
-    engine.set_voice_signal(0, 3, SIGNAL_SAMPLE, 2.0);
+    engine.track_mut(0).unwrap().set_voice_signal(0, SIGNAL_GATE, 0.0);
+    engine.track_mut(0).unwrap().set_voice_signal(3, SIGNAL_SAMPLE, 2.0);
     assert!(render(&mut engine, 1).iter().all(|&sample| near(sample, -0.25)));
-    assert!(!engine.voice_active(0, 3));
+    assert!(!engine.track(0).is_some_and(|track| track.voice_active(3)));
 }

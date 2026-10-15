@@ -69,7 +69,7 @@ fn a_delay_holds_as_long_as_its_size_and_no_longer() {
     };
     let first_sound = |plan: PlanBuilder, blocks: usize| {
         let mut engine = plan.loaded();
-        engine.input_mut(0, 0).expect("track 0")[0] = 1.0;
+        engine.track_mut(0).and_then(|track| track.input_mut(0)).expect("track 0")[0] = 1.0;
         let out = render(&mut engine, blocks);
         out.iter().position(|&sample| sample != 0.0)
     };

@@ -7,7 +7,7 @@
 
 use super::Slot;
 use super::sampler::Sample;
-use super::track::ParamSource;
+use super::params::ParamSource;
 use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, MAX_OUTPUTS, Source, VOICE_SIGNALS};
 
 /// What a section reads besides its own buffers. The same for every node in it, so it is built once

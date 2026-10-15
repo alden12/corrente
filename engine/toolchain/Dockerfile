@@ -5,16 +5,23 @@
 # One compile job: emulating x86 on an ARM Mac, more than that runs Docker out of memory.
 #
 # Changing a version here changes the engine's output, so rebuild and commit engine.wasm with it.
-FROM rust:1.99.0-slim-bookworm
+# Each is pinned by its content too, not only its name, so a tag moved or a release re-uploaded
+# upstream can't change the build unseen: the base image by its digest, Faust by its checksum.
+# (rustup checks what it downloads itself. The apt packages only build Faust, whose output doesn't
+# depend on the compiler that built it, and CI's comparison would show it if it did.)
+FROM rust:1.99.0-slim-bookworm@sha256:2c3a22f0a5533ea2dd5a16627bc841228151faa2d4de2644ac9987e4a2f1f2fa
 
 ARG FAUST_VERSION=2.88.0
+ARG FAUST_SHA256=e4e175cf236924b5b7d4784cbb8c50cc01e211159e169655dd9e6d8f92b871d9
 RUN apt-get update \
   && apt-get install -y --no-install-recommends cmake make g++ pkg-config curl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 RUN rustup target add wasm32-unknown-unknown
 COPY faust-backends.cmake faust-targets.cmake /tmp/
-RUN curl -fsSL https://github.com/grame-cncm/faust/releases/download/${FAUST_VERSION}/faust-${FAUST_VERSION}.tar.gz \
-    | tar -xz -C /tmp \
+RUN curl -fsSL -o /tmp/faust.tar.gz https://github.com/grame-cncm/faust/releases/download/${FAUST_VERSION}/faust-${FAUST_VERSION}.tar.gz \
+  && echo "${FAUST_SHA256}  /tmp/faust.tar.gz" | sha256sum -c - \
+  && tar -xzf /tmp/faust.tar.gz -C /tmp \
+  && rm /tmp/faust.tar.gz \
   && cd /tmp/faust-${FAUST_VERSION} \
   && cp /tmp/faust-backends.cmake build/backends/ \
   && cp /tmp/faust-targets.cmake build/targets/ \

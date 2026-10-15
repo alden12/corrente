@@ -46,7 +46,7 @@ const planFor = (block: BlockSpec, port: number) => {
   const params = block.inputs.length + block.controls.length;
   const param = (index: number) => [2, index, 0];
   return [
-    ...[params, 0, 0], // a param per input and control, no voices, no latency
+    ...[params, 0], // a param per input and control, no voices
     ...[0, 0, 0, 0], // no pre or voice section
     ...[1, 1, block.kind, block.inputs.length, block.controls.length],
     ...Array.from({ length: params }, (_, index) => param(index)).flat(),
@@ -144,7 +144,8 @@ const runBlock = (
   const engine = instantiate();
   engine.eng_init(48000, 1);
   const words = [
-    ...[block.controls.length, 0, 0, 0, 0, 0, 0],
+    ...[block.controls.length, 0], // a param per control, no voices
+    ...[0, 0, 0, 0], // no pre or voice section
     ...[1, 1, block.kind, block.inputs.length, block.controls.length],
     ...block.inputs.flatMap((_, channel) => [7, channel, 0]),
     ...block.controls.flatMap((_, index) => [2, index, 0]),
@@ -198,9 +199,10 @@ describe("the new blocks do what they say", () => {
     expect(band).toBeLessThan(low);
   });
 
-  it("compressor: turns a loud signal down by its ratio", () => {
-    // Full scale, threshold -18 dB, ratio 4: 18 dB over becomes 4.5 dB over, -13.5 dB in all.
-    const out = runBlock("compressor", {
+  it("keyedcompressor: keyed by the signal itself, turns it down by its ratio", () => {
+    // Full scale in every input, the key too, threshold -18 dB, ratio 4: 18 dB over becomes 4.5 dB
+    // over, -13.5 dB in all.
+    const out = runBlock("keyedcompressor", {
       input: () => 1,
       controls: { threshold: -18, ratio: 4, attack: 0.001 },
       blocks: 40,

@@ -9,8 +9,8 @@
 //!   writes and the reads never overlap.
 //! - `|args| body` is a closure, like an arrow function. `impl FnOnce(...)` accepts any closure that
 //!   is called once.
-//! - `let Unit::Faust { block, controls, .. } = unit else { return };` takes `unit` apart if it is a
-//!   Faust unit, and returns otherwise; `..` skips the fields it doesn't name.
+//! - `match unit { Unit::Faust { block, controls, .. } => ..., ... }` takes `unit` apart by variant,
+//!   naming what each carries; `..` skips the fields it doesn't name.
 
 use super::delay::{DEFAULT_SIZE, DelayLine};
 use super::sampler::SamplerState;
@@ -133,49 +133,24 @@ impl Render<'_> {
         run(node, &mut self.units[index], outputs, &sources)
     }
 
-    /// Read the control inputs at sample `start` into the block's sliders, then run it over the chunk.
-    fn run_faust(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
-        self.with_node(index, start, |node, unit, outputs, sources| {
-            // TS: if (unit.type !== "faust") return; const { block, controls } = unit;
-            let Unit::Faust { block, controls, .. } = unit else { return };
-            if set_controls {
-                // TS: controls.forEach((param, i) => block.setParam(param, sources.samples(node.control[i], start, 1)[0]))
-                // `.zip(other)` walks two lists in step, giving pairs. `|(&param, &source)|`
-                // destructures the pair and copies both values out of their references.
-                controls.iter().zip(&node.control).for_each(|(&param, &source)| {
-                    block.set_param(param, sources.samples(source, start, 1)[0]);
-                });
-            }
-            // TS: const inputs = node.audio.map((source) => sources.samples(source, start, length))
-            // Written as fixed arrays of empty slices (`Default::default()`), then filled, so nothing
-            // is allocated on the heap mid-render (a Vec would be). `*input = ...` writes through the
-            // writable loan.
-            let mut inputs: [&[f32]; MAX_PORTS] = Default::default();
-            inputs.iter_mut().zip(&node.audio).for_each(|(input, &source)| {
-                *input = sources.samples(source, start, length);
-            });
-            // TS: const outs = outputs.map((slot) => slot.subarray(start + 1, start + 1 + length))
-            let mut outs: [&mut [f32]; MAX_OUTPUTS] = Default::default();
-            outs.iter_mut().zip(outputs.iter_mut()).for_each(|(out, slot)| {
-                *out = &mut slot[start + 1..start + 1 + length];
-            });
-            block.compute(length as i32, &inputs[..node.audio.len()], &mut outs[..node.outputs]);
-        });
-    }
-
     fn is_delay(&self, index: usize) -> bool {
         self.section.nodes[index].is_delay()
     }
 
     /// Run a node that isn't a delay over [start, start + length): a Faust block, a sampler or a
-    /// wavetable.
-    // TS: ({ sampler: runSampler, wavetable: runWavetable })[kind.type]?.(...) ?? this.runFaust(...)
+    /// wavetable, each reading its controls first if `set_controls`.
+    // TS: this.withNode(index, start, (node, unit, outputs, sources) => ({ faust: runFaust, sampler: unit.state.run, wavetable: unit.state.run })[unit.type]?.(...))
+    // `match unit` both picks the variant and names what it carries, so each arm gets its own state.
     fn run_unit(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
-        match self.section.nodes[index].kind {
-            NodeKind::Sampler => self.run_sampler(index, start, length, set_controls),
-            NodeKind::Wavetable => self.run_wavetable(index, start, length, set_controls),
-            _ => self.run_faust(index, start, length, set_controls),
-        }
+        let samples = self.context.samples;
+        let chunk = Chunk { start, length, set_controls };
+        self.with_node(index, start, |node, unit, outputs, sources| match unit {
+            Unit::Faust { block, controls, .. } => run_faust(block.as_mut(), controls, node, outputs, sources, chunk),
+            Unit::Sampler(state) => state.run(node, outputs, sources, samples, chunk),
+            Unit::Wavetable(state) => state.run(node, outputs, sources, samples, chunk),
+            // A delay runs as a read and a write either side of its loop (delay.rs), never as a unit.
+            Unit::Delay(_) => {}
+        });
     }
 
     // TS: if (isDelay) return runDelay(index); for (let start = 0; start < BLOCK; start += CONTROL) runUnit(...)
@@ -235,4 +210,43 @@ impl Render<'_> {
             delays().for_each(|index| self.delay_write(index, start, length));
         }
     }
+}
+
+/// Where in the block a unit runs: from sample `start` for `length` samples, and whether it reads its
+/// controls first (once every CONTROL samples).
+// TS: type Chunk = { start: number; length: number; setControls: boolean }
+// `#[derive(Clone, Copy)]` lets it be passed by value and still used after, like a number.
+#[derive(Clone, Copy)]
+pub(super) struct Chunk {
+    pub(super) start: usize,
+    pub(super) length: usize,
+    pub(super) set_controls: bool,
+}
+
+/// Read the control inputs at sample `start` into the block's sliders, then run it over the chunk.
+// TS: function runFaust(block, controls, node, outputs, sources, { start, length, setControls }) { ... }
+fn run_faust(block: &mut Block, controls: &[ParamIndex], node: &Node, outputs: &mut [Slot], sources: &Sources, chunk: Chunk) {
+    let Chunk { start, length, set_controls } = chunk;
+    if set_controls {
+        // TS: controls.forEach((param, i) => block.setParam(param, sources.samples(node.control[i], start, 1)[0]))
+        // `.zip(other)` walks two lists in step, giving pairs. `|(&param, &source)|`
+        // destructures the pair and copies both values out of their references.
+        controls.iter().zip(&node.control).for_each(|(&param, &source)| {
+            block.set_param(param, sources.samples(source, start, 1)[0]);
+        });
+    }
+    // TS: const inputs = node.audio.map((source) => sources.samples(source, start, length))
+    // Written as fixed arrays of empty slices (`Default::default()`), then filled, so nothing
+    // is allocated on the heap mid-render (a Vec would be). `*input = ...` writes through the
+    // writable loan.
+    let mut inputs: [&[f32]; MAX_PORTS] = Default::default();
+    inputs.iter_mut().zip(&node.audio).for_each(|(input, &source)| {
+        *input = sources.samples(source, start, length);
+    });
+    // TS: const outs = outputs.map((slot) => slot.subarray(start + 1, start + 1 + length))
+    let mut outs: [&mut [f32]; MAX_OUTPUTS] = Default::default();
+    outs.iter_mut().zip(outputs.iter_mut()).for_each(|(out, slot)| {
+        *out = &mut slot[start + 1..start + 1 + length];
+    });
+    block.compute(length as i32, &inputs[..node.audio.len()], &mut outs[..node.outputs]);
 }

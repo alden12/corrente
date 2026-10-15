@@ -236,108 +236,8 @@
       ]
     },
     {
-      "name": "compressor",
-      "kind": 4,
-      "description": "A stereo compressor: both channels turned down together when the louder passes the threshold, then made up by the gain. Its meter shows the reduction in dB.",
-      "inputs": [
-        {
-          "name": "left",
-          "min": -1,
-          "max": 1
-        },
-        {
-          "name": "right",
-          "min": -1,
-          "max": 1
-        }
-      ],
-      "outputs": [
-        {
-          "name": "left",
-          "min": -16,
-          "max": 16
-        },
-        {
-          "name": "right",
-          "min": -16,
-          "max": 16
-        }
-      ],
-      "controls": [
-        {
-          "name": "threshold",
-          "min": -60,
-          "max": 0,
-          "unit": "dB",
-          "init": -18
-        },
-        {
-          "name": "ratio",
-          "min": 1,
-          "max": 20,
-          "init": 4
-        },
-        {
-          "name": "attack",
-          "min": 0.0001,
-          "max": 1,
-          "unit": "s",
-          "init": 0.01
-        },
-        {
-          "name": "release",
-          "min": 0.001,
-          "max": 2,
-          "unit": "s",
-          "init": 0.1
-        },
-        {
-          "name": "makeup",
-          "min": 0,
-          "max": 24,
-          "unit": "dB",
-          "init": 0
-        }
-      ],
-      "meters": [
-        {
-          "name": "reduction",
-          "min": -60,
-          "max": 0,
-          "unit": "dB"
-        }
-      ],
-      "credits": [
-        {
-          "source": "analyzers.lib/amp_follower_ar",
-          "author": "Jonatan Liljedahl, revised by Romain Michon"
-        },
-        {
-          "source": "compressors.lib/compression_gain_mono",
-          "author": "Julius O. Smith III",
-          "copyright": "Copyright (C) 2014-2020 by Julius O. Smith III <jos@ccrma.stanford.edu>",
-          "licence": "LicenseRef-STK-4.3"
-        },
-        {
-          "source": "maths.lib",
-          "author": "GRAME",
-          "copyright": "GRAME",
-          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
-        },
-        {
-          "source": "signals.lib/onePoleSwitching",
-          "author": "Jonatan Liljedahl, revised by Dario Sanfilippo",
-          "licence": "LicenseRef-STK-4.3"
-        }
-      ],
-      "licences": [
-        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
-        "LicenseRef-STK-4.3"
-      ]
-    },
-    {
       "name": "hold",
-      "kind": 5,
+      "kind": 4,
       "description": "Sample and hold: takes its signal's value each time the trigger rises above 0.5, and holds it until the next. With noise in, it makes random steps.",
       "inputs": [
         {
@@ -373,7 +273,7 @@
     },
     {
       "name": "keyedcompressor",
-      "kind": 6,
+      "kind": 5,
       "description": "A stereo compressor turned down by its key rather than by itself: both channels go down together when the louder side of the key passes the threshold, then are made up by the gain. A kick on the key ducks a bass (sidechain compression). Its meter shows the reduction in dB.",
       "inputs": [
         {
@@ -483,7 +383,7 @@
     },
     {
       "name": "ladder",
-      "kind": 7,
+      "kind": 6,
       "description": "A zero-delay-feedback Moog ladder low-pass, which self-oscillates as resonance nears 1.",
       "inputs": [
         {
@@ -535,7 +435,7 @@
     },
     {
       "name": "lfo",
-      "kind": 8,
+      "kind": 7,
       "description": "A low-frequency oscillator with sine, triangle, saw and square outputs from -1 to 1, all starting their cycle together: sine and triangle rise from 0, the square is high for the first half, the saw climbs from -1. Its rate can move every sample.",
       "inputs": [
         {
@@ -589,7 +489,7 @@
     },
     {
       "name": "loopgain",
-      "kind": 9,
+      "kind": 8,
       "description": "The gain for a feedback loop: what a signal going round a loop of `period` samples is multiplied by each time round, so that it dies away by 60 dB in `time` seconds whatever the period. Keeps a plucked string's decay even from low notes to high ones. Both are controls, read every 32 samples, since they barely move within a note.",
       "inputs": [],
       "outputs": [
@@ -629,61 +529,8 @@
       ]
     },
     {
-      "name": "lowpass",
-      "kind": 10,
-      "description": "A resonant two-pole low-pass, the counterpart of Web Audio's biquad, whose peak at the cutoff rises with q. A state-variable filter, so it stays stable however fast the cutoff moves.",
-      "inputs": [
-        {
-          "name": "signal",
-          "min": -1,
-          "max": 1
-        }
-      ],
-      "outputs": [
-        {
-          "name": "signal",
-          "min": -40,
-          "max": 40
-        }
-      ],
-      "controls": [
-        {
-          "name": "cutoff",
-          "min": 20,
-          "max": 20000,
-          "unit": "Hz",
-          "init": 4000
-        },
-        {
-          "name": "q",
-          "min": 0.1,
-          "max": 40,
-          "init": 0.707
-        }
-      ],
-      "meters": [],
-      "credits": [
-        {
-          "source": "filters.lib/svf",
-          "author": "Oleg Nesterov",
-          "copyright": "Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>",
-          "licence": "LicenseRef-STK-4.3"
-        },
-        {
-          "source": "maths.lib",
-          "author": "GRAME",
-          "copyright": "GRAME",
-          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
-        }
-      ],
-      "licences": [
-        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
-        "LicenseRef-STK-4.3"
-      ]
-    },
-    {
       "name": "meter",
-      "kind": 11,
+      "kind": 9,
       "description": "Passes its signal through unchanged and shows its level on a meter, as a channel meter does: it rises at once and falls back over about 300 ms.",
       "inputs": [
         {
@@ -722,7 +569,7 @@
     },
     {
       "name": "mul",
-      "kind": 12,
+      "kind": 10,
       "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
       "inputs": [
         {
@@ -750,7 +597,7 @@
     },
     {
       "name": "noise",
-      "kind": 13,
+      "kind": 11,
       "description": "White noise.",
       "inputs": [],
       "outputs": [
@@ -770,7 +617,7 @@
     },
     {
       "name": "onepole",
-      "kind": 14,
+      "kind": 12,
       "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
       "inputs": [
         {
@@ -835,7 +682,7 @@
     },
     {
       "name": "pan",
-      "kind": 15,
+      "kind": 13,
       "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
       "inputs": [
         {
@@ -879,7 +726,7 @@
     },
     {
       "name": "period",
-      "kind": 16,
+      "kind": 14,
       "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
       "inputs": [
         {
@@ -919,7 +766,7 @@
     },
     {
       "name": "pitch",
-      "kind": 17,
+      "kind": 15,
       "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
       "inputs": [
         {
@@ -951,7 +798,7 @@
     },
     {
       "name": "pulse",
-      "kind": 18,
+      "kind": 16,
       "description": "A band-limited pulse wave whose width can move every sample (pulse-width modulation): width 0.5 is a square from -1 to 1. It has no DC offset, as an analog synth's output has none, so a narrow pulse reaches towards 2 on its short side. An octave down, it is a sub-oscillator.",
       "inputs": [
         {
@@ -1000,7 +847,7 @@
     },
     {
       "name": "reverb",
-      "kind": 19,
+      "kind": 17,
       "description": "A stereo algorithmic reverb (Zita-Rev1): a short pre-delay, then a dense tail that decays over the time set, faster in the highs above the damping frequency.",
       "inputs": [
         {
@@ -1105,7 +952,7 @@
     },
     {
       "name": "saw",
-      "kind": 20,
+      "kind": 18,
       "description": "A band-limited sawtooth.",
       "inputs": [
         {
@@ -1144,7 +991,7 @@
     },
     {
       "name": "select",
-      "kind": 21,
+      "kind": 19,
       "description": "Picks one of four signals by index (0 to 3, rounded to the nearest): a waveform or mode switch, fed by a choice param, which reads as its option's index. Wire any unused choice to 0. The switch is instant, so changing it mid-note can click.",
       "inputs": [
         {
@@ -1189,7 +1036,7 @@
     },
     {
       "name": "shaper",
-      "kind": 22,
+      "kind": 20,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -1228,7 +1075,7 @@
     },
     {
       "name": "sine",
-      "kind": 23,
+      "kind": 21,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -1262,7 +1109,7 @@
     },
     {
       "name": "svf",
-      "kind": 24,
+      "kind": 22,
       "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
       "inputs": [
         {

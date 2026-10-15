@@ -1,4 +1,5 @@
-//! The bank: the engine lib.rs drives, holding every track and passing each call to the one it names.
+//! The bank: the engine lib.rs drives, holding every track, the transport and the samples they share.
+//! What concerns one track is the track's: lib.rs looks it up with `track` and calls it.
 
 use super::sampler::{MAX_SAMPLES, Sample};
 use super::track::Track;
@@ -52,77 +53,18 @@ impl Engine {
         true
     }
 
-    /// Hand the state of the plan a track just replaced to the one it loaded (Track::carry). The
-    /// number of nodes carried, or None if there is no such track or the words don't fit both plans.
-    // TS: return this.tracks[track]?.carry(words)
-    pub fn carry(&mut self, track: usize, words: &[i32]) -> Option<usize> {
-        self.tracks.get_mut(track)?.carry(words)
+    /// A track, to read: None if there is no such track. Only the tests read one without changing it.
+    // TS: return this.tracks[track]
+    // `#[cfg(test)]` builds it into the tests only.
+    #[cfg(test)]
+    pub fn track(&self, track: usize) -> Option<&Track> {
+        self.tracks.get(track)
     }
 
-    /// How many samples a track param's changes ramp over (Track::set_ramp).
-    // TS: this.tracks[track]?.setRamp(source, samples)
-    pub fn set_ramp(&mut self, track: usize, source: usize, samples: usize) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.set_ramp(source, samples);
-        }
-    }
-
-    /// Set a track param's value; it ramps there over its ramp (a block unless set_ramp says).
-    // TS: this.tracks[track]?.setParam(source, value)
-    pub fn set_param(&mut self, track: usize, source: usize, value: f32) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.set_param(source, value);
-        }
-    }
-
-    /// Jump a track param to a value with no ramp (initial values).
-    // TS: this.tracks[track]?.initParam(source, value)
-    pub fn init_param(&mut self, track: usize, source: usize, value: f32) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.init_param(source, value);
-        }
-    }
-
-    // TS: this.tracks[track]?.noteOn(slot, offset, frequency, velocity, note)
-    pub fn note_on(&mut self, track: usize, slot: usize, offset: i32, frequency: f32, velocity: f32, note: f32) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.note_on(slot, offset, frequency, velocity, note);
-        }
-    }
-
-    /// Set a voice's zone signal: see `Track::set_voice_signal`.
-    // TS: this.tracks[track]?.setVoiceSignal(slot, signal, value)
-    pub fn set_voice_signal(&mut self, track: usize, slot: usize, signal: usize, value: f32) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.set_voice_signal(slot, signal, value);
-        }
-    }
-
-    // TS: this.tracks[track]?.noteOff(slot, offset)
-    pub fn note_off(&mut self, track: usize, slot: usize, offset: i32) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.note_off(slot, offset);
-        }
-    }
-
-    /// Fade a voice out and free it: see `Track::cut`.
-    // TS: this.tracks[track]?.cut(slot, offset)
-    pub fn cut(&mut self, track: usize, slot: usize, offset: i32) {
-        if let Some(track) = self.tracks.get_mut(track) {
-            track.cut(slot, offset);
-        }
-    }
-
-    /// How many voice slots a track's plan has, spares included.
-    // TS: return this.tracks[track]?.voiceSlots()
-    pub fn voice_slots(&self, track: usize) -> Option<usize> {
-        self.tracks.get(track).map(|track| track.voice_slots())
-    }
-
-    // TS: return this.tracks[track]?.voiceActive(slot) ?? false
-    // `.is_some_and(f)` is `x !== undefined && f(x)`.
-    pub fn voice_active(&self, track: usize, slot: usize) -> bool {
-        self.tracks.get(track).is_some_and(|track| track.voice_active(slot))
+    /// A track, to play notes on, set params on, or read: None if there is no such track.
+    // TS: return this.tracks[track]
+    pub fn track_mut(&mut self, track: usize) -> Option<&mut Track> {
+        self.tracks.get_mut(track)
     }
 
     /// Where the transport is at the start of the coming block: the beat, the tempo, and whether it's
@@ -178,39 +120,5 @@ impl Engine {
         self.host[HOST_PLAYING][1..].fill(if playing { 1.0 } else { 0.0 });
         self.host[HOST_BEAT_SECONDS][1..].fill(60.0 / tempo);
         self.host[HOST_BEAT_SAMPLES][1..].fill(60.0 * self.sample_rate as f32 / tempo);
-    }
-
-    /// A track's output channel for the block just rendered.
-    // TS: return this.tracks[track]?.output(channel)
-    // `.and_then(f)` chains a second lookup that may also come up empty, like `?.`.
-    pub fn output(&self, track: usize, channel: usize) -> Option<&[f32; BLOCK]> {
-        self.tracks.get(track).and_then(|track| track.output(channel))
-    }
-
-    /// A track's audio input channel, for the next block, to be written before `process`.
-    // TS: return this.tracks[track]?.inputMut(channel)
-    pub fn input_mut(&mut self, track: usize, channel: usize) -> Option<&mut [f32]> {
-        self.tracks.get_mut(track).and_then(|track| track.input_mut(channel))
-    }
-
-    /// The loudest sample in a track's output channel last block.
-    // TS: return this.tracks[track]?.peak(channel)
-    pub fn peak(&self, track: usize, channel: usize) -> Option<f32> {
-        self.tracks.get(track).and_then(|track| track.peak(channel))
-    }
-
-    /// Whether a track was silent last block (no voice sounding, nothing out).
-    pub fn silent(&self, track: usize) -> Option<bool> {
-        self.tracks.get(track).map(|track| track.silent())
-    }
-
-    /// How many samples late a track's output is, from its plan.
-    pub fn latency(&self, track: usize) -> Option<usize> {
-        self.tracks.get(track).map(|track| track.latency())
-    }
-
-    /// What a node's meter shows: see `Track::meter`.
-    pub fn meter(&self, track: usize, section: usize, node: usize, index: usize) -> Option<f32> {
-        self.tracks.get(track).and_then(|track| track.meter(section, node, index))
     }
 }

@@ -1,5 +1,5 @@
 //! What the engine reports and promises: rendering allocates nothing, and each track's peaks,
-//! silence, latency and block meters read back.
+//! silence and block meters read back.
 
 use super::*;
 use crate::plan::SIGNAL_VELOCITY;
@@ -72,25 +72,25 @@ fn rendering_allocates_nothing() {
         .step_in(POST, NODE, vec![3])
         .track_out(vec![buffer(3)]);
     let mut engine = plan.loaded();
-    engine.init_param(0, 0, 2000.0);
-    engine.note_on(0, 0, 0, 220.0, 1.0, 69.0);
+    engine.track_mut(0).unwrap().init_param(0, 2000.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 220.0, 1.0, 69.0);
     render(&mut engine, 4);
     // Loaded again, so the first block measured crossfades from the graph this replaces.
     assert!(engine.load(0, plan.plan()));
-    engine.init_param(0, 0, 2000.0);
-    engine.note_on(0, 0, 0, 220.0, 1.0, 69.0);
+    engine.track_mut(0).unwrap().init_param(0, 2000.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 220.0, 1.0, 69.0);
     // Everything that happens while playing: blocks, a crossfade, param moves, notes on, off and
     // cut, reading reports.
     let count = allocations_during(|| {
         (0..16).for_each(|block| {
-            engine.set_param(0, 0, 1000.0 + block as f32 * 100.0);
+            engine.track_mut(0).unwrap().set_param(0, 1000.0 + block as f32 * 100.0);
             if block % 4 == 0 {
-                engine.cut(0, 1, 10);
+                engine.track_mut(0).unwrap().cut(1, 10);
             }
-            engine.note_on(0, 1, 5, 330.0, 0.8, 69.0);
-            engine.note_off(0, 0, 3);
+            engine.track_mut(0).unwrap().note_on(1, 5, 330.0, 0.8, 69.0);
+            engine.track_mut(0).unwrap().note_off(0, 3);
             engine.process();
-            let _ = (engine.peak(0, 0), engine.silent(0), engine.meter(0, POST, 3, 0));
+            let _ = (engine.track(0).and_then(|track| track.peak(0)), engine.track(0).map(|track| track.silent()), engine.track(0).and_then(|track| track.meter(POST, 3, 0)));
         });
     });
     assert_eq!(count, 0);
@@ -98,7 +98,7 @@ fn rendering_allocates_nothing() {
     // seeing the list is never used and removing it.
     assert_eq!(allocations_during(|| drop(std::hint::black_box(vec![0u8; 16]))), 1);
     // And the plan really played.
-    assert!(engine.peak(0, 0).unwrap() > 0.01);
+    assert!(engine.track(0).and_then(|track| track.peak(0)).unwrap() > 0.01);
 }
 
 #[test]
@@ -109,24 +109,16 @@ fn a_track_reports_its_peaks_and_when_it_falls_silent() {
         .out(buffer(0));
     let mut engine = plan.loaded();
     engine.process();
-    assert_eq!((engine.peak(0, 0), engine.silent(0)), (Some(0.0), Some(true)));
-    engine.note_on(0, 0, 0, 440.0, 1.0, 69.0);
+    assert_eq!((engine.track(0).and_then(|track| track.peak(0)), engine.track(0).map(|track| track.silent())), (Some(0.0), Some(true)));
+    engine.track_mut(0).unwrap().note_on(0, 0, 440.0, 1.0, 69.0);
     engine.process();
-    assert_eq!((engine.peak(0, 1), engine.silent(0)), (Some(0.5), Some(false)));
+    assert_eq!((engine.track(0).and_then(|track| track.peak(1)), engine.track(0).map(|track| track.silent())), (Some(0.5), Some(false)));
     // The gate closes at once, so the voice finishes in the same block and the track falls silent.
-    engine.note_off(0, 0, 0);
+    engine.track_mut(0).unwrap().note_off(0, 0);
     engine.process();
-    assert_eq!(engine.silent(0), Some(true));
+    assert_eq!(engine.track(0).map(|track| track.silent()), Some(true));
     // A track or channel that doesn't exist.
-    assert_eq!((engine.peak(1, 0), engine.peak(0, 2), engine.silent(1)), (None, None, None));
-}
-
-#[test]
-fn a_track_reports_the_latency_its_plan_declares() {
-    let plan = PlanBuilder::new().latency(64).node(kind("mul"), vec![constant(1.0), constant(1.0)], vec![]).step(NODE, vec![0]);
-    let engine = plan.loaded();
-    assert_eq!(engine.latency(0), Some(64));
-    assert_eq!(engine.latency(1), None);
+    assert_eq!((engine.track(1).and_then(|track| track.peak(0)), engine.track(0).and_then(|track| track.peak(2)), engine.track(1).map(|track| track.silent())), (None, None, None));
 }
 
 #[test]
@@ -142,16 +134,16 @@ fn block_meters_read_back_from_each_section() {
     let mut engine = plan.loaded();
     engine.process();
     // No voice sounding: the voice section's meter reads 0.
-    assert_eq!(engine.meter(0, VOICE, 0, 0), Some(0.0));
-    engine.note_on(0, 0, 0, 440.0, 0.3, 69.0);
-    engine.note_on(0, 1, 0, 440.0, 0.8, 69.0);
+    assert_eq!(engine.track(0).and_then(|track| track.meter(VOICE, 0, 0)), Some(0.0));
+    engine.track_mut(0).unwrap().note_on(0, 0, 440.0, 0.3, 69.0);
+    engine.track_mut(0).unwrap().note_on(1, 0, 440.0, 0.8, 69.0);
     engine.process();
     // The loudest of the voices.
-    assert_eq!(engine.meter(0, VOICE, 0, 0), Some(0.8));
+    assert_eq!(engine.track(0).and_then(|track| track.meter(VOICE, 0, 0)), Some(0.8));
     // Each voice plays its velocity, scaled by its velocity on the way into the sum: 0.09 + 0.64.
-    assert!((engine.meter(0, POST, 0, 0).unwrap() - 0.73).abs() < 1e-6);
+    assert!((engine.track(0).and_then(|track| track.meter(POST, 0, 0)).unwrap() - 0.73).abs() < 1e-6);
     // Things that aren't there: a second meter, a node, a section.
-    assert_eq!(engine.meter(0, POST, 0, 1), None);
-    assert_eq!(engine.meter(0, POST, 1, 0), None);
-    assert_eq!(engine.meter(0, 3, 0, 0), None);
+    assert_eq!(engine.track(0).and_then(|track| track.meter(POST, 0, 1)), None);
+    assert_eq!(engine.track(0).and_then(|track| track.meter(POST, 1, 0)), None);
+    assert_eq!(engine.track(0).and_then(|track| track.meter(3, 0, 0)), None);
 }

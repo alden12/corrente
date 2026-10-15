@@ -20,7 +20,7 @@ fn a_mono_voice_plays_in_both_channels() {
     let plan = PlanBuilder::new().node(kind("saw"), vec![voice(0)], vec![]).step(NODE, vec![0]).out(buffer(0));
     let mut engine = plan.playing(0);
     engine.process();
-    assert_eq!(engine.output(0, 0), engine.output(0, 1));
+    assert_eq!(engine.track(0).and_then(|track| track.output(0)), engine.track(0).and_then(|track| track.output(1)));
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn nothing_sounds_until_a_note_plays() {
     let plan = PlanBuilder::new().node(kind("saw"), vec![voice(0)], vec![]).step(NODE, vec![0]).out(buffer(0));
     let mut engine = plan.loaded();
     assert!(render(&mut engine, 2).iter().all(|&sample| sample == 0.0));
-    engine.note_on(0, 0, 0, 440.0, 1.0, 69.0);
+    engine.track_mut(0).unwrap().note_on(0, 0, 440.0, 1.0, 69.0);
     assert!(render(&mut engine, 2).iter().any(|&sample| sample.abs() > 0.1));
 }
 
@@ -45,9 +45,9 @@ fn a_released_voice_frees_its_slot_once_silent() {
         .out(buffer(2));
     let mut engine = plan.playing(0);
     render(&mut engine, 8);
-    assert!(engine.voice_active(0, 0));
-    engine.note_off(0, 0, 0);
+    assert!(engine.track(0).is_some_and(|track| track.voice_active(0)));
+    engine.track_mut(0).unwrap().note_off(0, 0);
     // 10 ms is 480 samples, under 4 blocks; give it 8.
     render(&mut engine, 8);
-    assert!(!engine.voice_active(0, 0));
+    assert!(!engine.track(0).is_some_and(|track| track.voice_active(0)));
 }

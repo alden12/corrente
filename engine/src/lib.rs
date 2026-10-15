@@ -32,7 +32,7 @@ mod router;
 
 use std::cell::RefCell;
 
-use router::Engine;
+use router::{Engine, Track};
 
 // TS: let ENGINE = new Engine(); let ALLOCATIONS: Int32Array[] = [];  (module-level state)
 // Rust won't let plain globals be changed freely (two threads could race), so mutable state goes in
@@ -90,6 +90,12 @@ pub extern "C" fn eng_free(pointer: *mut i32) {
     });
 }
 
+// TS: function withTrack<R>(track: number, run: (track: Track) => R): R | undefined { return ENGINE.tracks[track] && run(ENGINE.tracks[track]) }
+// The track an export names, or None (ignored) if it's negative or there's no such track.
+fn with_track<R>(track: i32, run: impl FnOnce(&mut Track) -> R) -> Option<R> {
+    with_engine(|engine| engine.track_mut(index(track)?).map(run))
+}
+
 // TS: const index = (value: number) => (value >= 0 ? value : undefined)
 // Every export takes i32s from JS; this turns one into an index, or None if it is negative.
 fn index(value: i32) -> Option<usize> {
@@ -142,125 +148,126 @@ pub extern "C" fn eng_load(track: i32, pointer: *const i32, length: i32) -> i32 
 /// many nodes carried, or -1 if the words don't fit both plans (nothing changes).
 // TS:
 //   const words = wordsAt(pointer, length);  // as eng_load reads them
-//   const carried = words && track >= 0 ? withEngine((engine) => engine.carry(track, words)) : undefined;
+//   const carried = words ? withTrack(track, (track) => track.carry(words)) : undefined;
 //   return carried ?? REJECTED;
-// `.map_or(default, f)` on an Option: f(value), or the default for None.
+// `.map_or(default, f)` on an Option: f(value), or the default for None. `.flatten()` turns the
+// Option (is there a track?) of an Option (did the words fit?) into one.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32 {
     let carried = ALLOCATIONS.with_borrow(|allocations| {
         let allocation = allocations.iter().find(|allocation| allocation.as_ptr() == pointer)?;
         let words = allocation.get(..index(length)?)?;
-        with_engine(|engine| engine.carry(index(track)?, words))
+        with_track(track, |track| track.carry(words)).flatten()
     });
     carried.map_or(plan::REJECTED, |count| count as i32)
 }
 
 /// Set a track param's value; it ramps there over its ramp (a block unless eng_param_ramp says).
-// TS: if (track >= 0 && source >= 0) withEngine((engine) => engine.setParam(track, source, value));
-// `if let (Some(a), Some(b)) = (x, y)` runs the block only if both are present, naming them: a
-// one-case `match` on a pair.
+// TS: if (source >= 0) withTrack(track, (track) => track.setParam(source, value));
+// `if let Some(source) = index(source)` runs the block only if it's there, naming it: a one-case
+// `match`. `if let (Some(a), Some(b)) = (x, y)`, below, does it for a pair.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_set_param(track: i32, source: i32, value: f32) {
-    if let (Some(track), Some(source)) = (index(track), index(source)) {
-        with_engine(|engine| engine.set_param(track, source, value));
+    if let Some(source) = index(source) {
+        with_track(track, |track| track.set_param(source, value));
     }
 }
 
 /// How many samples a track param's changes ramp over, at least one (a block unless this says).
-// TS: if (track >= 0 && source >= 0 && samples >= 0) withEngine((engine) => engine.setRamp(track, source, samples));
+// TS: if (source >= 0 && samples >= 0) withTrack(track, (track) => track.setRamp(source, samples));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_param_ramp(track: i32, source: i32, samples: i32) {
-    if let (Some(track), Some(source), Some(samples)) = (index(track), index(source), index(samples)) {
-        with_engine(|engine| engine.set_ramp(track, source, samples));
+    if let (Some(source), Some(samples)) = (index(source), index(samples)) {
+        with_track(track, |track| track.set_ramp(source, samples));
     }
 }
 
 /// Jump a track param to a value with no ramp (its starting value).
-// TS: if (track >= 0 && source >= 0) withEngine((engine) => engine.initParam(track, source, value));
+// TS: if (source >= 0) withTrack(track, (track) => track.initParam(source, value));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_init_param(track: i32, source: i32, value: f32) {
-    if let (Some(track), Some(source)) = (index(track), index(source)) {
-        with_engine(|engine| engine.init_param(track, source, value));
+    if let Some(source) = index(source) {
+        with_track(track, |track| track.init_param(source, value));
     }
 }
 
 /// Start a note in a track's voice slot, `offset` samples into the coming block. `note` is its MIDI
 /// note number (60 is middle C), for definitions that key-track.
-// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOn(track, slot, offset, frequency, velocity, note));
+// TS: if (slot >= 0) withTrack(track, (track) => track.noteOn(slot, offset, frequency, velocity, note));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_note_on(track: i32, slot: i32, offset: i32, frequency: f32, velocity: f32, note: f32) {
-    if let (Some(track), Some(slot)) = (index(track), index(slot)) {
-        with_engine(|engine| engine.note_on(track, slot, offset, frequency, velocity, note));
+    if let Some(slot) = index(slot) {
+        with_track(track, |track| track.note_on(slot, offset, frequency, velocity, note));
     }
 }
 
 /// Set one of the zone signals (5 sample slot, 6 root note, 7 start, 8 end) of the note just started
 /// in a track's voice slot, for the coming block: the sample zone JS picked for it. Other signals,
 /// and slots not sounding, are ignored.
-// TS: if (track >= 0 && slot >= 0 && signal >= 0) withEngine((engine) => engine.setVoiceSignal(track, slot, signal, value));
+// TS: if (slot >= 0 && signal >= 0) withTrack(track, (track) => track.setVoiceSignal(slot, signal, value));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_voice_signal(track: i32, slot: i32, signal: i32, value: f32) {
-    if let (Some(track), Some(slot), Some(signal)) = (index(track), index(slot), index(signal)) {
-        with_engine(|engine| engine.set_voice_signal(track, slot, signal, value));
+    if let (Some(slot), Some(signal)) = (index(slot), index(signal)) {
+        with_track(track, |track| track.set_voice_signal(slot, signal, value));
     }
 }
 
 /// Release the note in a track's voice slot, `offset` samples into the coming block.
-// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.noteOff(track, slot, offset));
+// TS: if (slot >= 0) withTrack(track, (track) => track.noteOff(slot, offset));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_note_off(track: i32, slot: i32, offset: i32) {
-    if let (Some(track), Some(slot)) = (index(track), index(slot)) {
-        with_engine(|engine| engine.note_off(track, slot, offset));
+    if let Some(slot) = index(slot) {
+        with_track(track, |track| track.note_off(slot, offset));
     }
 }
 
 /// Fade the voice in a track's slot out over a block from `offset`, then free the slot: how JS steals
 /// a voice without a click.
-// TS: if (track >= 0 && slot >= 0) withEngine((engine) => engine.cut(track, slot, offset));
+// TS: if (slot >= 0) withTrack(track, (track) => track.cut(slot, offset));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_note_cut(track: i32, slot: i32, offset: i32) {
-    if let (Some(track), Some(slot)) = (index(track), index(slot)) {
-        with_engine(|engine| engine.cut(track, slot, offset));
+    if let Some(slot) = index(slot) {
+        with_track(track, |track| track.cut(slot, offset));
     }
 }
 
 /// How many voice slots a track has: its plan's voices and a few spares, which JS allocates from.
 /// -1 if there is no such track.
-// TS: return withEngine((engine) => engine.voiceSlots(track)) ?? -1
-// `.and_then(f)` chains a lookup that may come up empty; `.map_or(-1, f)` gives -1 for None.
+// TS: return withTrack(track, (track) => track.voiceSlots()) ?? -1
+// `.map_or(-1, f)` gives -1 for None (no such track).
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_voice_slots(track: i32) -> i32 {
-    index(track).and_then(|track| with_engine(|engine| engine.voice_slots(track))).map_or(-1, |slots| slots as i32)
+    with_track(track, |track| track.voice_slots()).map_or(-1, |slots| slots as i32)
 }
 
 /// 1 if the track's voice slot is sounding (including its release), 0 if it is free.
-// TS: return Number(track >= 0 && slot >= 0 && withEngine((engine) => engine.voiceActive(track, slot)))
+// TS: return Number(slot >= 0 && withTrack(track, (track) => track.voiceActive(slot)))
 // `.is_some_and(f)`: false if missing, else f(value). `as i32` turns a bool into 0 or 1.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_voice_active(track: i32, slot: i32) -> i32 {
-    let active = index(track).zip(index(slot)).is_some_and(|(track, slot)| with_engine(|engine| engine.voice_active(track, slot)));
-    active as i32
+    let active = index(slot).and_then(|slot| with_track(track, |track| track.voice_active(slot)));
+    active.unwrap_or(false) as i32
 }
 
 /// Where to write a track's audio input channel (128 samples) before the next eng_process, or 0 if
 /// there is no such track or channel. The address stays put, so JS views it once.
-// TS: return addressOf(withEngine((engine) => engine.inputMut(track, channel))) ?? 0
+// TS: return addressOf(withTrack(track, (track) => track.inputMut(channel))) ?? 0
 // `*mut f32` is a raw pointer, a plain address with no ownership: what JS needs to find the memory.
 // `.map_or(default, f)`: f(value) if there is one, else the default; `std::ptr::null_mut()` is 0.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_input(track: i32, channel: i32) -> *mut f32 {
-    let (Some(track), Some(channel)) = (index(track), index(channel)) else { return std::ptr::null_mut() };
-    with_engine(|engine| engine.input_mut(track, channel).map_or(std::ptr::null_mut(), |input| input.as_mut_ptr()))
+    let Some(channel) = index(channel) else { return std::ptr::null_mut() };
+    with_track(track, |track| track.input_mut(channel).map(|input| input.as_mut_ptr())).flatten().unwrap_or(std::ptr::null_mut())
 }
 
 /// Where a track's output channel (128 samples) is after eng_process, or 0 if there is no such
 /// track or channel. The address stays put, so JS views it once.
-// TS: return addressOf(withEngine((engine) => engine.output(track, channel))) ?? 0
+// TS: return addressOf(withTrack(track, (track) => track.output(channel))) ?? 0
 // `std::ptr::null()` is the read-only null; `.as_ptr()` is the array's address.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_output(track: i32, channel: i32) -> *const f32 {
-    let (Some(track), Some(channel)) = (index(track), index(channel)) else { return std::ptr::null() };
-    with_engine(|engine| engine.output(track, channel).map_or(std::ptr::null(), |output| output.as_ptr()))
+    let Some(channel) = index(channel) else { return std::ptr::null() };
+    with_track(track, |track| track.output(channel).map(|output| output.as_ptr())).flatten().unwrap_or(std::ptr::null())
 }
 
 /// Where the transport is at the start of the coming block: `beat` (counted from where it started),
@@ -346,40 +353,31 @@ pub extern "C" fn eng_block_meters(kind: i32) -> i32 {
 
 /// The loudest sample in a track's output channel last block, or -1 if there is no such track or
 /// channel. For level meters.
-// TS: return withEngine((engine) => engine.peak(track, channel)) ?? -1
-// `.zip(other)` on two Options: Some((a, b)) if both are there. `.and_then(f)` chains a lookup that
-// may come up empty.
+// TS: return withTrack(track, (track) => track.peak(channel)) ?? -1
+// `.and_then(f)` chains a lookup that may come up empty; `.flatten()` turns the Option (is there a
+// track?) of an Option (is there a channel?) into one.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_track_peak(track: i32, channel: i32) -> f32 {
-    let found = index(track).zip(index(channel)).and_then(|(track, channel)| with_engine(|engine| engine.peak(track, channel)));
+    let found = index(channel).and_then(|channel| with_track(track, |track| track.peak(channel)).flatten());
     found.unwrap_or(-1.0)
 }
 
 /// 1 if a track was silent last block (no voice sounding, nothing out), 0 if not, -1 if there is no
 /// such track.
-// TS: const silent = withEngine((engine) => engine.silent(track)); return silent === undefined ? -1 : Number(silent)
+// TS: const silent = withTrack(track, (track) => track.silent()); return silent === undefined ? -1 : Number(silent)
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_track_silent(track: i32) -> i32 {
-    index(track).and_then(|track| with_engine(|engine| engine.silent(track))).map_or(-1, |silent| silent as i32)
-}
-
-/// How many samples late a track's output is, from its plan, or -1 if there is no such track.
-// TS: return withEngine((engine) => engine.latency(track)) ?? -1
-#[unsafe(no_mangle)]
-pub extern "C" fn eng_track_latency(track: i32) -> i32 {
-    index(track).and_then(|track| with_engine(|engine| engine.latency(track))).map_or(-1, |latency| latency as i32)
+    with_track(track, |track| track.silent()).map_or(-1, |silent| silent as i32)
 }
 
 /// What a node's meter `meter` shows, in section 0 (pre), 1 (voice: the highest of the sounding
 /// voices) or 2 (post). NaN (not a number) if there is no such track, section, node or meter.
-// TS: return withEngine((engine) => engine.meter(track, section, node, meter)) ?? NaN
+// TS: return withTrack(track, (track) => track.meter(section, node, meter)) ?? NaN
 // `f32::NAN` is the float "not a number", which JS sees as NaN.
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_meter(track: i32, section: i32, node: i32, meter: i32) -> f32 {
-    let (Some(track), Some(section), Some(node), Some(meter)) = (index(track), index(section), index(node), index(meter)) else {
-        return f32::NAN;
-    };
-    with_engine(|engine| engine.meter(track, section, node, meter)).unwrap_or(f32::NAN)
+    let (Some(section), Some(node), Some(meter)) = (index(section), index(node), index(meter)) else { return f32::NAN };
+    with_track(track, |track| track.meter(section, node, meter)).flatten().unwrap_or(f32::NAN)
 }
 
 // TS: no equivalent. `#[cfg(test)]` includes the module only when building the tests, so tests/

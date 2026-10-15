@@ -13,7 +13,10 @@
 //! Rust notes, for reading this file:
 //! - `.log2()`, `.ceil()` and `.floor()` are methods on numbers, where JS has `Math.log2(x)` and so on.
 
-use super::render::{Render, Unit};
+use super::render::Chunk;
+use super::sources::Sources;
+use super::Slot;
+use crate::plan::Node;
 use super::sampler::Sample;
 
 /// Samples in one cycle of a table: the size wavetable WAV files use.
@@ -89,22 +92,17 @@ impl WavetableState {
     }
 }
 
-// The wavetable's methods on Render. The rest are in render.rs.
-impl Render<'_> {
-    /// Run a wavetable over [start, start + length), reading its control and choosing its level
-    /// first if `set_controls`.
-    pub(super) fn run_wavetable(&mut self, index: usize, start: usize, length: usize, set_controls: bool) {
-        let samples = self.context.samples;
-        self.with_node(index, start, |node, unit, outputs, sources| {
-            // TS: if (unit.type !== "wavetable") return; const state = unit.state;
-            let Unit::Wavetable(state) = unit else { return };
-            let frequencies = sources.samples(node.audio[0], start, length);
-            if set_controls {
-                state.table = sources.samples(node.control[0], start, 1)[0];
-                state.choose_level(frequencies[0]);
-            }
-            let positions = sources.samples(node.audio[1], start, length);
-            state.play(samples, frequencies, positions, &mut outputs[0][start + 1..start + 1 + length]);
-        });
+impl WavetableState {
+    /// Run over the chunk, reading its control and choosing its level first if it says.
+    // TS: run(node, outputs, sources, samples, { start, length, setControls }) { ... }
+    pub(super) fn run(&mut self, node: &Node, outputs: &mut [Slot], sources: &Sources, samples: &[Option<Sample>], chunk: Chunk) {
+        let Chunk { start, length, set_controls } = chunk;
+        let frequencies = sources.samples(node.audio[0], start, length);
+        if set_controls {
+            self.table = sources.samples(node.control[0], start, 1)[0];
+            self.choose_level(frequencies[0]);
+        }
+        let positions = sources.samples(node.audio[1], start, length);
+        self.play(samples, frequencies, positions, &mut outputs[0][start + 1..start + 1 + length]);
     }
 }

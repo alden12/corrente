@@ -192,7 +192,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
   // A zone's sample param is the bank's to read, so it's a param of the plan though no node reads it.
   zones?.forEach((zone) => paramIndex(zone.sample));
   // Params are numbered as the words are written, so the header, which counts them, goes on last.
-  const words = Int32Array.from([params.length, resolved.voices, definition.latency ?? 0, ...body]);
+  const words = Int32Array.from([params.length, resolved.voices, ...body]);
   return {
     words,
     params,

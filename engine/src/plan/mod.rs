@@ -12,8 +12,7 @@
 //! and the voice sum; nothing reads backwards.
 //!
 //! Layout (a float is its bit pattern):
-//!   header: paramCount, voiceCount, latency (samples the track's output runs late, for the mixer
-//!     to make up: a look-ahead limiter's look-ahead, say)
+//!   header: paramCount, voiceCount
 //!   each section, pre then voice then post: nodeCount, stepCount, then the nodes, then the steps
 //!     each node: kind, audioCount, controlCount, then each input as (type, index, extra)
 //!     each step: mode, memberCount, node ids
@@ -82,8 +81,13 @@ pub const SIGNAL_VELOCITY: usize = 2;
 pub const SIGNAL_NOTE: usize = 3;
 pub const SIGNAL_SEED: usize = 4;
 pub const SIGNAL_SAMPLE: usize = 5;
+// The sampler reads these three through its controls rather than by name, so only the tests name
+// them. `#[allow(dead_code)]` keeps them as the layout without a warning.
+#[allow(dead_code)]
 pub const SIGNAL_ROOT: usize = 6;
+#[allow(dead_code)]
 pub const SIGNAL_START: usize = 7;
+#[allow(dead_code)]
 pub const SIGNAL_END: usize = 8;
 /// Host signals, the same for every track: the tempo (beats a minute), the beat (counted from where
 /// the transport started, running on while it's stopped), whether it's playing (0 or 1), and how
@@ -217,8 +221,6 @@ pub struct Section {
 pub struct Plan {
     pub param_count: usize,
     pub voice_count: usize,
-    /// How many samples late the track's output is, for the mixer to compensate.
-    pub latency: usize,
     /// The literal each `Source::Const` points at.
     pub constants: Vec<f32>,
     pub pre: Section,
@@ -230,6 +232,32 @@ pub struct Plan {
     pub track_out: Vec<Source>,
 }
 
+/// How the words name what an input reads, as (type, index, extra): words.ts writes these numbers.
+/// A node in the same section, this block: (node, port).
+pub const INPUT_BUFFER: i32 = 0;
+/// A node in the same section, the sample before (a feedback edge): (node, port).
+pub const INPUT_PREVIOUS: i32 = 1;
+/// A param source: (index).
+pub const INPUT_PARAM: i32 = 2;
+/// A fixed number: (0, its f32 bits).
+pub const INPUT_CONSTANT: i32 = 3;
+/// A voice signal: (signal).
+pub const INPUT_VOICE: i32 = 4;
+/// A node in the pre section, read from a later one: (node, port).
+pub const INPUT_SHARED: i32 = 5;
+/// The voices summed: (channel).
+pub const INPUT_VOICE_SUM: i32 = 6;
+/// The track's audio input: (channel).
+pub const INPUT_INPUT: i32 = 7;
+/// A host signal: (signal).
+pub const INPUT_HOST: i32 = 8;
+
+/// How a step runs, as words.ts writes it: one node over the block, a loop a sample at a time, or a
+/// loop in chunks cut by delays.
+pub const STEP_NODE: i32 = 0;
+pub const STEP_SAMPLE_LOOP: i32 = 1;
+pub const STEP_CHUNK_LOOP: i32 = 2;
+
 /// Why a plan was rejected: -1 for a bad node, step or source, -2 for words left over or missing.
 pub const REJECTED: i32 = -1;
 pub const WRONG_LENGTH: i32 = -2;
@@ -239,7 +267,6 @@ pub fn parse(words: &[i32]) -> Result<Plan, i32> {
     let mut reader = Reader { words, at: 0, constants: Vec::new() };
     let param_count = reader.count()?;
     let voice_count = reader.count()?;
-    let latency = reader.count()?;
     // Each param is read by an input of at least one word, or is a zone's sample (which the bank
     // reads, not a node), so there can't be more than that: a bigger count is a bad plan, turned away
     // before a track makes room for it.
@@ -256,5 +283,5 @@ pub fn parse(words: &[i32]) -> Result<Plan, i32> {
         return Err(WRONG_LENGTH);
     }
     let constants = reader.constants;
-    Ok(Plan { param_count, voice_count, latency, constants, pre, voice, post, voice_out, track_out })
+    Ok(Plan { param_count, voice_count, constants, pre, voice, post, voice_out, track_out })
 }

@@ -1,6 +1,7 @@
 //! Reading a plan's words into sections, checking each source against the section it is read in.
 
 use super::order::runs_in_order;
+use super::{INPUT_BUFFER, INPUT_CONSTANT, INPUT_HOST, INPUT_INPUT, INPUT_PARAM, INPUT_PREVIOUS, INPUT_SHARED, INPUT_VOICE, INPUT_VOICE_SUM, STEP_CHUNK_LOOP, STEP_NODE, STEP_SAMPLE_LOOP};
 use super::{CHANNELS, HOST_SIGNALS, KIND_DELAY, KIND_SAMPLER, KIND_WAVETABLE, SAMPLER_CONTROLS, MAX_INPUTS, MAX_OUTPUTS, MAX_PORTS, Node, NodeKind, Place, REJECTED, Section, Source, Step, StepMode, VOICE_SIGNALS};
 use crate::faust;
 
@@ -49,7 +50,7 @@ impl Reader<'_> {
     }
 
     /// One input as written, before it is checked against the section it is in.
-    // TS: switch (type) { case 0: return { type: "buffer", node: index, port: extra }; ... default: throw REJECTED }
+    // TS: switch (type) { case INPUT_BUFFER: return { type: "buffer", node: index, port: extra }; ... default: throw REJECTED }
     // A `match` gives a value, and a `{ ... }` block's last expression is its value, so case 3
     // pushes the constant and then yields the Source. `f32::from_bits(word as u32)` reads the word's
     // bits as a float, like `new Float32Array(new Int32Array([word]).buffer)[0]`.
@@ -59,18 +60,18 @@ impl Reader<'_> {
         let extra = self.next();
         let port = || usize::try_from(extra).map_err(|_| REJECTED);
         Ok(match kind {
-            0 => Source::Buffer(index, port()?),
-            1 => Source::Previous(index, port()?),
-            2 => Source::Param(index),
-            3 => {
+            INPUT_BUFFER => Source::Buffer(index, port()?),
+            INPUT_PREVIOUS => Source::Previous(index, port()?),
+            INPUT_PARAM => Source::Param(index),
+            INPUT_CONSTANT => {
                 self.constants.push(f32::from_bits(extra as u32));
                 Source::Const(self.constants.len() - 1)
             }
-            4 => Source::Voice(index),
-            5 => Source::Shared(index, port()?),
-            6 => Source::VoiceSum(index),
-            7 => Source::Input(index),
-            8 => Source::Host(index),
+            INPUT_VOICE => Source::Voice(index),
+            INPUT_SHARED => Source::Shared(index, port()?),
+            INPUT_VOICE_SUM => Source::VoiceSum(index),
+            INPUT_INPUT => Source::Input(index),
+            INPUT_HOST => Source::Host(index),
             _ => return Err(REJECTED),
         })
     }
@@ -107,9 +108,9 @@ impl Reader<'_> {
     // of the reference it's given. `.ok_or(e)` turns None into Err(e).
     fn step(&mut self, node_count: usize) -> Result<Step, i32> {
         let mode = match self.next() {
-            0 => StepMode::Node,
-            1 => StepMode::SampleLoop,
-            2 => StepMode::ChunkLoop,
+            STEP_NODE => StepMode::Node,
+            STEP_SAMPLE_LOOP => StepMode::SampleLoop,
+            STEP_CHUNK_LOOP => StepMode::ChunkLoop,
             _ => return Err(REJECTED),
         };
         let count = self.count()?;

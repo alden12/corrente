@@ -41,7 +41,7 @@ fn a_cut_voice_fades_out_over_a_block_and_frees_its_slot() {
     let plan = PlanBuilder::new().node(kind("mul"), vec![voice(SIGNAL_GATE), constant(1.0)], vec![]).step(NODE, vec![0]).out(buffer(0));
     let mut engine = plan.playing(0);
     render(&mut engine, 1);
-    engine.cut(0, 0, 32);
+    engine.track_mut(0).unwrap().cut(0, 32);
     let cut = render(&mut engine, 2);
     assert!(cut[..32].iter().all(|&sample| sample == 1.0));
     // TS: each sample after the cut starts is a step lower, down to 0 a block later.
@@ -49,13 +49,13 @@ fn a_cut_voice_fades_out_over_a_block_and_frees_its_slot() {
         assert!((sample - (1.0 - (index + 1) as f32 / BLOCK as f32)).abs() < 1e-6);
     });
     assert!(cut[32 + BLOCK..].iter().all(|&sample| sample == 0.0));
-    assert!(!engine.voice_active(0, 0));
+    assert!(!engine.track(0).is_some_and(|track| track.voice_active(0)));
 }
 
 #[test]
 fn a_plan_has_spare_voice_slots_for_notes_that_start_while_others_fade() {
     let engine = PlanBuilder::new().voices(4).node(kind("mul"), vec![voice(SIGNAL_GATE), constant(1.0)], vec![]).step(NODE, vec![0]).out(buffer(0)).loaded();
-    assert_eq!(engine.voice_slots(0), Some(8));
+    assert_eq!(engine.track(0).map(|track| track.voice_slots()), Some(8));
 }
 
 /// Carry words for `eng_carry`: whether voices carry, then the pre and post sections' maps.
@@ -83,11 +83,11 @@ fn echo(extra: bool) -> PlanBuilder {
 // TS: returns [samples, carried]. `map.and_then(f)` is `map && f(map)`, keeping None as None.
 fn echo_across_a_load(map: Option<&[i32]>) -> (Vec<f32>, Option<usize>) {
     let mut engine = echo(false).loaded();
-    engine.input_mut(0, 0).expect("track 0")[0] = 1.0;
+    engine.track_mut(0).and_then(|track| track.input_mut(0)).expect("track 0")[0] = 1.0;
     let mut out = render(&mut engine, 1);
-    engine.input_mut(0, 0).expect("track 0")[0] = 0.0;
+    engine.track_mut(0).and_then(|track| track.input_mut(0)).expect("track 0")[0] = 0.0;
     assert!(engine.load(0, echo(true).plan()));
-    let carried = map.and_then(|map| engine.carry(0, &carry_words(false, &[], map)));
+    let carried = map.and_then(|map| engine.track_mut(0).and_then(|track| track.carry(&carry_words(false, &[], map))));
     out.extend(render(&mut engine, 2));
     (out, carried)
 }
@@ -119,7 +119,7 @@ fn a_carry_that_does_not_fit_changes_nothing() {
     let mut engine = echo(false).loaded();
     let resized = PlanBuilder::new().voices(0).node_in(POST, KIND_DELAY, vec![input(0), constant(200.0)], vec![constant(100_000.0)]).step_in(POST, NODE, vec![0]).track_out(vec![buffer(0)]);
     assert!(engine.load(0, resized.plan()));
-    assert_eq!(engine.carry(0, &carry_words(false, &[], &[0])), None);
+    assert_eq!(engine.track_mut(0).and_then(|track| track.carry(&carry_words(false, &[], &[0]))), None);
 }
 
 #[test]
@@ -129,8 +129,8 @@ fn carried_voices_keep_playing_across_a_load() {
     let mut engine = plan.playing(0);
     render(&mut engine, 1);
     assert!(engine.load(0, plan.plan()));
-    assert_eq!(engine.carry(0, &carry_words(true, &[], &[])), Some(1));
-    assert!(engine.voice_active(0, 0));
+    assert_eq!(engine.track_mut(0).and_then(|track| track.carry(&carry_words(true, &[], &[]))), Some(1));
+    assert!(engine.track(0).is_some_and(|track| track.voice_active(0)));
     // Held straight through: no fade, no restart.
     assert!(render(&mut engine, 2).iter().all(|&sample| sample == 1.0));
 }
@@ -140,9 +140,9 @@ fn a_param_ramps_over_its_own_length() {
     // The track plays param 0.
     let plan = PlanBuilder::new().voices(0).params(1).track_out(vec![param(0)]);
     let mut engine = plan.loaded();
-    engine.init_param(0, 0, 0.0);
-    engine.set_ramp(0, 0, 4 * BLOCK);
-    engine.set_param(0, 0, 1.0);
+    engine.track_mut(0).unwrap().init_param(0, 0.0);
+    engine.track_mut(0).unwrap().set_ramp(0, 4 * BLOCK);
+    engine.track_mut(0).unwrap().set_param(0, 1.0);
     let out = render(&mut engine, 5);
     // TS: out.forEach((sample, index) => expect(sample).toBeCloseTo(Math.min((index + 1) / (4 * BLOCK), 1)))
     out.iter().enumerate().for_each(|(index, &sample)| {
@@ -150,9 +150,9 @@ fn a_param_ramps_over_its_own_length() {
         assert!((sample - expected).abs() < 1e-6, "sample {index}: {sample}, expected {expected}");
     });
     // A change halfway through a ramp starts from where it had got to.
-    engine.set_param(0, 0, 0.0);
+    engine.track_mut(0).unwrap().set_param(0, 0.0);
     render(&mut engine, 2);
-    engine.set_param(0, 0, 1.0);
+    engine.track_mut(0).unwrap().set_param(0, 1.0);
     let turned = render(&mut engine, 1);
     assert!((turned[0] - (0.5 + 0.5 / (4 * BLOCK) as f32)).abs() < 1e-6);
 }

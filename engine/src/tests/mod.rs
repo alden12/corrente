@@ -33,40 +33,40 @@ const RATE: i32 = 48000;
 // TS: type Input = [type: number, index: number, extra: number]. `(i32, i32, i32)` is a tuple.
 type Input = (i32, i32, i32);
 
-// TS: const buffer = (node: number): Input => [0, node, 0]; and so on. A tuple is written `(a, b, c)`.
+// TS: const buffer = (node: number): Input => [INPUT_BUFFER, node, 0]; and so on. A tuple is written `(a, b, c)`.
 /// A node's first output, in the same section.
 fn buffer(node: i32) -> Input {
-    (0, node, 0)
+    (plan::INPUT_BUFFER, node, 0)
 }
 /// A node's output `port`, in the same section.
 fn port(node: i32, port: i32) -> Input {
-    (0, node, port)
+    (plan::INPUT_BUFFER, node, port)
 }
 fn previous(node: i32) -> Input {
-    (1, node, 0)
+    (plan::INPUT_PREVIOUS, node, 0)
 }
 // `.to_bits()` is the float's bit pattern, as the plan carries it.
 fn param(param: i32) -> Input {
-    (2, param, 0)
+    (plan::INPUT_PARAM, param, 0)
 }
 fn constant(value: f32) -> Input {
-    (3, 0, value.to_bits() as i32)
+    (plan::INPUT_CONSTANT, 0, value.to_bits() as i32)
 }
 fn voice(signal: usize) -> Input {
-    (4, signal as i32, 0)
+    (plan::INPUT_VOICE, signal as i32, 0)
 }
 /// A pre section node's first output.
 fn shared(node: i32) -> Input {
-    (5, node, 0)
+    (plan::INPUT_SHARED, node, 0)
 }
 fn voice_sum(channel: i32) -> Input {
-    (6, channel, 0)
+    (plan::INPUT_VOICE_SUM, channel, 0)
 }
 fn input(channel: i32) -> Input {
-    (7, channel, 0)
+    (plan::INPUT_INPUT, channel, 0)
 }
 fn host(signal: usize) -> Input {
-    (8, signal as i32, 0)
+    (plan::INPUT_HOST, signal as i32, 0)
 }
 
 /// A Faust block's kind number, by name.
@@ -76,9 +76,9 @@ fn kind(name: &str) -> i32 {
     faust::NAMES.iter().position(|candidate| *candidate == name).expect("a block with that name") as i32
 }
 
-const NODE: i32 = 0;
-const SAMPLE_LOOP: i32 = 1;
-const CHUNK_LOOP: i32 = 2;
+const NODE: i32 = plan::STEP_NODE;
+const SAMPLE_LOOP: i32 = plan::STEP_SAMPLE_LOOP;
+const CHUNK_LOOP: i32 = plan::STEP_CHUNK_LOOP;
 
 /// Which section a node or step goes in.
 // TS: const PRE = 0, VOICE = 1, POST = 2
@@ -96,7 +96,6 @@ struct SectionWords {
 struct PlanBuilder {
     params: i32,
     voices: i32,
-    latency: i32,
     sections: [SectionWords; 3],
     voice_out: Vec<Input>,
     track_out: Vec<Input>,
@@ -105,7 +104,7 @@ struct PlanBuilder {
 impl PlanBuilder {
     /// A plan with 4 voices, whose track plays the voices' sum.
     fn new() -> Self {
-        PlanBuilder { params: 0, voices: 4, latency: 0, sections: Default::default(), voice_out: vec![], track_out: vec![voice_sum(0), voice_sum(1)] }
+        PlanBuilder { params: 0, voices: 4, sections: Default::default(), voice_out: vec![], track_out: vec![voice_sum(0), voice_sum(1)] }
     }
 
     // TS: voices(count) { this.voices = count; return this }
@@ -118,11 +117,6 @@ impl PlanBuilder {
 
     fn params(mut self, count: i32) -> Self {
         self.params = count;
-        self
-    }
-
-    fn latency(mut self, samples: i32) -> Self {
-        self.latency = samples;
         self
     }
 
@@ -167,7 +161,7 @@ impl PlanBuilder {
     //   words(): number[] {
     //     const inputWords = (inputs: Input[]) => inputs.flat();
     //     const sections = this.sections.flatMap((section) => [section.nodes.length, section.steps.length, ...nodes, ...steps]);
-    //     return [this.params, this.voices, this.latency, ...sections, this.voiceOut.length, ...inputWords(this.voiceOut), this.trackOut.length, ...inputWords(this.trackOut)];
+    //     return [this.params, this.voices, ...sections, this.voiceOut.length, ...inputWords(this.voiceOut), this.trackOut.length, ...inputWords(this.trackOut)];
     //   }
     // `flat_map` is flatMap; `[a, b].concat()` joins lists. `|&(kind, index, extra)|` destructures a
     // tuple, copying it out of its reference.
@@ -181,7 +175,7 @@ impl PlanBuilder {
             let steps = section.steps.iter().flat_map(|(mode, members)| [vec![*mode, members.len() as i32], members.clone()].concat());
             [section.nodes.len() as i32, section.steps.len() as i32].into_iter().chain(nodes).chain(steps).collect::<Vec<i32>>()
         });
-        [self.params, self.voices, self.latency].into_iter().chain(sections).chain(outputs(&self.voice_out)).chain(outputs(&self.track_out)).collect()
+        [self.params, self.voices].into_iter().chain(sections).chain(outputs(&self.voice_out)).chain(outputs(&self.track_out)).collect()
     }
 
     /// The plan, parsed: the test fails here if the engine would refuse it.
@@ -199,7 +193,7 @@ impl PlanBuilder {
     // TS: const engine = loaded(this); engine.noteOn(0, 0, offset, 440, 1); return engine;
     fn playing(&self, offset: i32) -> Engine {
         let mut engine = self.loaded();
-        engine.note_on(0, 0, offset, 440.0, 1.0, 69.0);
+        engine.track_mut(0).unwrap().note_on(0, offset, 440.0, 1.0, 69.0);
         engine
     }
 
@@ -213,13 +207,13 @@ impl PlanBuilder {
 }
 
 /// Render `blocks` blocks and return a track's output channel, end to end.
-// TS: Array.from({ length: blocks }).flatMap(() => { engine.process(); return [...engine.output(track, channel)] })
+// TS: Array.from({ length: blocks }).flatMap(() => { engine.process(); return [...engine.track(track).and_then(|track| track.output(channel))] })
 // `.to_vec()` copies the engine's block into a new list we own.
 fn render_channel(engine: &mut Engine, track: usize, channel: usize, blocks: usize) -> Vec<f32> {
     (0..blocks)
         .flat_map(|_| {
             engine.process();
-            engine.output(track, channel).expect("a track and channel that exist").to_vec()
+            engine.track(track).and_then(|track| track.output(channel)).expect("a track and channel that exist").to_vec()
         })
         .collect()
 }
