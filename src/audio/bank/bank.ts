@@ -21,7 +21,7 @@
  *   views are re-made then (the addresses the engine gave stay put).
  */
 import type { CompiledPlan, PlanZone, ZoneValue } from "../definitions/compile";
-import { resolveNumber } from "../graph/table";
+import { resolveNumber } from "../params/table";
 import {
   BLOCK,
   EMPTY_SAMPLE,

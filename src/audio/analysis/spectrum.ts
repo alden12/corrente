@@ -1,8 +1,8 @@
 /**
  * Spectral balance (AGENT-4.1, "agent ears"): how a render's energy spreads across octaves, and its
  * centroid (the balance point of its spectrum: low for dark, high for bright). Pure Float32 math like
- * analyze.ts, so it runs anywhere: on the old engine's renders and the new one's alike (INST-36.8's
- * A/B), and later behind the agent's tools.
+ * analyze.ts, so it runs on any render: it A/B'd the old engine against the new (INST-36.8), and
+ * goes behind the agent's tools later.
  */
 import { fft } from "../dsp/fft";
 

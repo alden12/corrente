@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BlockSpec, Catalogue, Port } from "../engine/catalogue.ts";
 import { BLOCK, type EngineExports } from "../src/audio/bank/exports";
-import { SHAPER_CURVES } from "../src/audio/graph/nodes";
-import { SHAPER_SHAPES } from "../src/audio/graph/types";
+import { SHAPER_CURVES, SHAPER_SHAPES } from "./support/shaperCurves";
 import { engineOf, fillInput, loadWords, peakOf, RATE, renderBlocks } from "./support/engine";
 
 /**

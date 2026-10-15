@@ -6,7 +6,7 @@
  * from here) - so the persisted shape, the client types, and the server's zero-trust
  * boundary cannot drift.
  *
- * Pure zod, DOM/Node-free (like graph/zod.ts and params/zod.ts), so the Node server
+ * Pure zod, DOM/Node-free (like params/zod.ts), so the Node server
  * imports it under a DOM-less tsconfig. Embedded custom devices are checked apart, on load
  * (definitions/custom.ts).
  *

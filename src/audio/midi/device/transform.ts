@@ -1,7 +1,7 @@
 /**
  * The MIDI-device transform format: a device described as *data* - a param schema
- * plus a small note-event transform - rather than hand-written code, mirroring the
- * declarative instrument/effect graph (see graph/types.ts). A MIDI device processes
+ * plus a small note-event transform - rather than hand-written code, as instruments and
+ * effects are definitions (definitions/format.ts). A MIDI device processes
  * *note events* (not an audio signal), so this whole layer is DOM-free: the pure
  * transform here is interpreted by GraphMidiDevice at runtime, and the Node MCP
  * server can host the catalog directly.
@@ -13,8 +13,7 @@
  * slots into the same union when a project key exists.
  */
 import type { ParamSchema, ParamValue } from "../../params/types";
-import type { NumberField, ParamRef } from "../../graph/types";
-import { resolveNumber } from "../../graph/table";
+import { resolveNumber, type NumberField, type ParamRef } from "../../params/table";
 
 /** A boolean field: a fixed value, or bound to a (boolean) parameter. */
 export type BooleanField = boolean | ParamRef;

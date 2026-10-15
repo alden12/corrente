@@ -1,43 +1,12 @@
 /**
- * Effect factories (the audio side; uses Web Audio). The AudioEngine calls
- * createEffect to realize a track's chain. Pure catalog data (labels/schemas)
- * lives in catalog.ts so non-audio consumers (ProjectStore, MCP server) stay
- * DOM-free.
- *
- * Factories are registered, mirroring the data registry in catalog.ts:
- * `registerEffectFactory` is the audio half of the extension point.
+ * The effect a chain makes for a type that isn't on the engine (the audio side; uses Web Audio).
+ * Every built-in and every playable custom effect runs on the engine, made in its chain's run
+ * (ChainEffects, INST-36.7); what's left is a custom effect too old to play, or a type nothing
+ * registers. It passes its input through, so the rest of the chain still plays.
  */
-import type { ParamStore } from "../params/store";
 import type { Effect } from "./types";
-import { GraphEffect } from "../graph/GraphEffect";
-import { BUILTIN_GRAPH_EFFECTS } from "../graph/builtins";
-import { DEFAULT_EFFECT } from "./catalog";
 
-/**
- * Makes an effect. An effect on the new engine isn't made here but in its chain's run, which knows
- * where in the signal flow it sits (ChainEffects, INST-36.7).
- */
-type EffectFactory = (ctx: BaseAudioContext, store: ParamStore) => Effect;
-
-const FACTORIES = new Map<string, EffectFactory>();
-
-/** Register the audio factory for an effect type (pair with registerEffect). */
-export function registerEffectFactory(type: string, factory: EffectFactory): void {
-  FACTORIES.set(type, factory);
+export function passThroughEffect(context: BaseAudioContext): Effect {
+  const node = context.createGain();
+  return { input: node, output: node, dispose: () => node.disconnect() };
 }
-
-/** Make an effect of `type` (the default if unknown). */
-export function createEffect(type: string, ctx: BaseAudioContext, store: ParamStore): Effect {
-  const make = FACTORIES.get(type) ?? FACTORIES.get(DEFAULT_EFFECT)!;
-  return make(ctx, store);
-}
-
-// --- built-in factories (self-registered) ---------------------------------
-// Every effect is a declarative graph (data, not code); the Bitcrusher's is a custom-DSP block
-// (INST-15). They play on the new engine, converted (definitions/engineDevices.ts); these factories
-// go with the old engine (INST-36.8 part 6).
-BUILTIN_GRAPH_EFFECTS.forEach((def) =>
-  registerEffectFactory(def.type, (ctx, store) => new GraphEffect(ctx, store, def)),
-);
-
-export { effectInfos, effectSchema, effectCatalogEntry, hasEffect, DEFAULT_EFFECT } from "./catalog";

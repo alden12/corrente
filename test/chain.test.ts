@@ -166,7 +166,7 @@ describe("chain pieces", () => {
   // Register the test devices as engine devices, as devTools does.
   registerTestInstruments();
   const effect = (id: string, type: string, bypassed = false) => ({ id, type, bypassed, params: new ParamStore([]) });
-  /** An effect on the old engine: a custom one, until custom devices move over too. */
+  /** An effect not on the engine: a custom one too old to play, say. */
   const OLD = "custom-old-effect";
 
   it("groups consecutive engine effects into runs, the rest on their own", () => {

@@ -46,7 +46,7 @@
  *   a sampler. A drum kit is a zone per pad.
  */
 import { z } from "zod";
-import { tableProblem } from "../graph/table";
+import { tableProblem } from "../params/table";
 
 /** The format's version. A change that old definitions can't be read under bumps it, with an upcaster. */
 export const DEFINITION_FORMAT = 1;
@@ -99,7 +99,7 @@ export const DEFAULT_VOICES = 8;
 
 /**
  * A param read into an input: its value (looked up in `table` first, if there is one: straight
- * lines between the points) times `scale` plus `offset`. The same shape as today's graph format.
+ * lines between the points) times `scale` plus `offset` (params/table.ts).
  */
 export const paramBindingSchema = z
   .object({

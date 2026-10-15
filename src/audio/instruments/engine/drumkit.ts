@@ -15,7 +15,7 @@ import { BUILTIN_SAMPLES, builtinRef } from "../../samples/catalog";
 // Each pad is a `sample` ref + note + level + tune, so the whole kit is schema-driven (no
 // per-pad code) - the sectioned instrument panel renders one section per pad, and
 // MCP/persistence come for free. Defaults load the built-in CC0 kit into the first pads.
-// See Drumkit.ts (which resolves note -> pad from those params at play time).
+// The definition below turns each pad into a zone, which picks the pad by its note.
 // The schema declares the maximum pad slots; the drum panel shows only the pads in use
 // (loaded, plus one you're adding) so a fresh kit isn't a wall of blanks.
 export const DRUMKIT_PADS = 32;

@@ -1,17 +1,14 @@
 /**
  * The instrument catalog: pure data (labels + parameter schemas), no audio/DOM.
  * This is what the ProjectStore and the Node MCP server consume to build param
- * stores and describe instruments. The audio factories live in registry.ts
- * (DOM); keeping them apart lets the server type-check without Web Audio types.
+ * stores and describe instruments. What plays them is their definitions, on the
+ * engine (definitions/engineDevices.ts).
  *
- * Instruments are *registered*, not hardcoded: built-ins self-register at the
- * bottom of this file, and `registerInstrument` is the extension point an
- * add-on (eventually a plugin package) calls to contribute a new instrument
- * without editing the core. Because the parameter schema is the keystone, a
- * registered instrument appears in the UI, the MCP palette, automation, and
- * persistence automatically. (Runtime registration trades the old compile-time
- * "every cataloged type has a factory" check for external extensibility; the
- * factory half lives in registry.ts and is registered alongside.)
+ * Instruments are *registered*, not hardcoded: the built-ins (instruments/engine/)
+ * self-register at the bottom of this file, and `registerInstrument` is the
+ * extension point a custom device uses as its project loads. Because the parameter
+ * schema is the keystone, a registered instrument appears in the UI, the MCP
+ * palette, automation, and persistence automatically.
  */
 import type { ParamSchema } from "../params/types";
 import type { Tag } from "../tags";
@@ -40,8 +37,7 @@ export const EMPTY_INSTRUMENT = "none";
 /** The instrument data registry (insertion order = catalog/palette order). */
 const REGISTRY = new Map<string, InstrumentInfo>();
 
-/** Register an instrument's data (label + schema + family). The audio factory is
- *  registered separately in registry.ts, so this stays DOM-free for the server. */
+/** Register an instrument's data (label + schema + family). DOM-free, for the server. */
 export function registerInstrument(info: InstrumentInfo): void {
   REGISTRY.set(info.type, info);
 }
@@ -87,5 +83,5 @@ export function instrumentFamily(type: string): string {
 ENGINE_INSTRUMENTS.forEach(({ type, label, family = "Synths", tags, schema }) =>
   registerInstrument({ type, label, schema, family, tags }),
 );
-// The empty-track sentinel: no params, hidden from the palette, silent factory (registry.ts).
+// The empty-track sentinel: no params, hidden from the palette, silent (instruments/Silent.ts).
 registerInstrument({ type: EMPTY_INSTRUMENT, label: "No instrument", schema: [], family: "main", hidden: true });

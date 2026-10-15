@@ -24,13 +24,6 @@ export function installDevTools(): boolean {
     return true;
   }
 
-  // `?ab=engine` plays every built-in on the old engine and the new, to compare before they switch
-  // over (INST-36.8). Loaded on demand: it brings the whole old and new engine with it.
-  if (searchParam("ab") === "engine") {
-    void import("./ui/engineAbPage").then(({ renderEngineAb }) => renderEngineAb());
-    return true;
-  }
-
   // The offline-render e2e harness: the `window.__daw*` hooks the Playwright suite calls. See
   // `audio/engine/renderHarness.ts` and AGENT-4.1.
   void import("./audio/engine/renderHarness").then(({ installRenderHarness }) => installRenderHarness());
@@ -44,13 +37,4 @@ export function installDevTools(): boolean {
   });
 
   return false;
-}
-
-/** A query parameter of this page load, or null (and null where there's no location to read). */
-function searchParam(name: string): string | null {
-  try {
-    return new URLSearchParams(location.search).get(name);
-  } catch {
-    return null;
-  }
 }

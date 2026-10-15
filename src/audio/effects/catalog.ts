@@ -1,12 +1,13 @@
 /**
  * The effect catalog: pure data (labels + parameter schemas), no audio/DOM.
  * Mirrors instruments/catalog.ts so the ProjectStore and the Node MCP server can
- * consume effect schemas without Web Audio types. Audio factories live in
- * registry.ts (DOM). Every effect schema includes a uniform `mix` (wet/dry).
+ * consume effect schemas without Web Audio types. What plays them is their
+ * definitions, on the engine (definitions/engineDevices.ts). Every effect schema
+ * includes a uniform `mix` (wet/dry).
  *
- * Effects are registered, not hardcoded: built-ins self-register below and
- * `registerEffect` is the extension point for add-ons. The audio factory half is
- * registered in registry.ts.
+ * Effects are registered, not hardcoded: the built-ins (effects/engine/)
+ * self-register below and `registerEffect` is the extension point a custom
+ * device uses as its project loads.
  */
 import type { ParamSchema } from "../params/types";
 import type { Tag } from "../tags";
@@ -25,8 +26,7 @@ export interface EffectInfo {
 /** The effect data registry (insertion order = palette / add-button order). */
 const REGISTRY = new Map<string, EffectInfo>();
 
-/** Register an effect's data (label + schema). The audio factory is registered
- *  separately in registry.ts, so this stays DOM-free for the server. */
+/** Register an effect's data (label + schema). DOM-free, for the server. */
 export function registerEffect(info: EffectInfo): void {
   REGISTRY.set(info.type, info);
 }

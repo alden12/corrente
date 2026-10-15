@@ -1,9 +1,7 @@
 /**
- * Pure wavetable DSP (no DOM, so it is unit-testable on its own) shared by the
- * wavetable worklet processor. A wavetable synth stores a small bank of single-cycle
- * waveforms and morphs between them: `position` (0..1) crossfades across the bank,
- * `phase` (0..1) reads within a cycle. The brighter tables are built additively from
- * a bounded number of partials so a high note doesn't alias into harsh garbage.
+ * The built-in wavetables (no DOM, so unit-testable on their own): banks of single-cycle
+ * waveforms a `wavetable` block morphs through, dark to bright (bank/deviceSamples.ts loads
+ * them). The brighter tables are built additively from a bounded number of partials.
  */
 
 export const TABLE_SIZE = 2048;
@@ -38,8 +36,8 @@ export function buildTables(): Float32Array[] {
 }
 
 /**
- * The named banks a graph's `wavetableOsc` morphs through (INST-15.3), each dark to bright, in the
- * order of WAVETABLE_BANKS (graph/types.ts):
+ * The built-in wavetables a `wavetable` block morphs through, each dark to bright, in the order of
+ * BUILTIN_WAVETABLES (samples/catalog.ts):
  * - classic: sine, triangle, square, sawtooth - the Wavetable instrument's bank;
  * - harmonics: the fundamental, then 2, 4, 8 and 16 equal harmonics - an organ's drawbars pulled out;
  * - pulse: a square narrowing to a thin pulse (widths 0.5, 0.3, 0.15, 0.05), the nasal end of PWM.
@@ -51,31 +49,4 @@ export function buildBanks(): Float32Array[][] {
     [1, 2, 4, 8, 16].map((count) => additive((k) => (k <= count ? 1 : 0))),
     [0.5, 0.3, 0.15, 0.05].map((width) => additive(pulse(width))),
   ];
-}
-
-/** Read one table at a fractional phase (0..1), linearly interpolated and wrapping. */
-export function sampleOne(table: Float32Array, phase: number): number {
-  const n = table.length;
-  const pos = (phase - Math.floor(phase)) * n; // wrap phase into [0, 1)
-  const i0 = Math.floor(pos);
-  const frac = pos - i0;
-  const a = table[i0 % n];
-  const b = table[(i0 + 1) % n];
-  return a + (b - a) * frac;
-}
-
-/**
- * Sample the morph bank: crossfade the two tables adjacent to `position` (0..1),
- * each read at `phase` (0..1). An empty bank yields silence.
- */
-export function sampleTable(tables: Float32Array[], position: number, phase: number): number {
-  if (tables.length === 0) return 0;
-  if (tables.length === 1) return sampleOne(tables[0], phase);
-  const p = Math.min(1, Math.max(0, position)) * (tables.length - 1);
-  const t0 = Math.floor(p);
-  const t1 = Math.min(t0 + 1, tables.length - 1);
-  const frac = p - t0;
-  const a = sampleOne(tables[t0], phase);
-  const b = sampleOne(tables[t1], phase);
-  return a + (b - a) * frac;
 }

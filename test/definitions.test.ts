@@ -13,7 +13,7 @@ import type { ParamSchema } from "../src/audio/params/types";
 import { BLOCK } from "../src/audio/bank/exports";
 import { engineValueOf } from "../src/audio/definitions/values";
 import { beatsOf } from "../src/audio/definitions/references";
-import { resolveNumber } from "../src/audio/graph/table";
+import { resolveNumber } from "../src/audio/params/table";
 import { engineOf, fillInput, loadWords, peakOf, RATE, renderBlocks } from "./support/engine";
 
 /**

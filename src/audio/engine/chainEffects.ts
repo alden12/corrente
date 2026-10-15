@@ -13,7 +13,7 @@
  */
 import type { EffectInstance } from "../project/projectStore";
 import type { Effect } from "../effects/types";
-import { createEffect } from "../effects/registry";
+import { passThroughEffect } from "../effects/registry";
 import { trackEffectStage } from "../bank/stages";
 import { applyBypass, chainPlan, memberOf, pieceKey, piecesOf, runEffects, type ChainPiece } from "../bank/chainPlan";
 import type { EngineEffect } from "../bank/EngineEffect";
@@ -78,9 +78,7 @@ export class ChainEffects {
         continue;
       }
       const effects =
-        piece.kind === "run"
-          ? runEffects(context, piece.effects, stageOf, keys)
-          : [createEffect(piece.effect.type, context, piece.effect.params)];
+        piece.kind === "run" ? runEffects(context, piece.effects, stageOf, keys) : [passThroughEffect(context)];
       this.live.set(id, { piece, effects, ...(key ? { key } : {}) });
     }
     gone.forEach(({ effects }) => effects.forEach((effect) => effect.dispose()));

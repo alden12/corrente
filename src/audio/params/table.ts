@@ -1,11 +1,31 @@
 /**
- * Lookup tables on a parameter binding (INST-17): the one way a bound field can be a non-linear
- * function of its param. A table is `[input, output]` points sorted by input; a value between two
- * points is read off the straight line joining them, and one outside the table takes the nearest
- * end. Pure and DOM-free, so the interpreter, the note path, the validators and the Node server
+ * Params read as numbers through a lookup table (INST-17): the one way a bound value can be a
+ * non-linear function of its param. A table is `[input, output]` points sorted by input; a value
+ * between two points is read off the straight line joining them, and one outside the table takes
+ * the nearest end. Pure and DOM-free: the engine bank, the definition format and the note path
  * share it.
  */
-import type { NumberRef, TablePoint } from "./types";
+/** A parameter read as a number: its value, times `scale`, plus `offset`. */
+export interface ParamRef {
+  param: string;
+  scale?: number;
+  offset?: number;
+}
+
+/** One point of a lookup table: this param value in, this field value out. */
+export type TablePoint = [input: number, output: number];
+
+/**
+ * A numeric parameter reference. With a `table`, the param's value is first read off it (straight
+ * lines between points, the end values beyond them), then scaled and offset: the way to make a
+ * value a non-linear function of a knob (INST-17).
+ */
+export interface NumberRef extends ParamRef {
+  table?: TablePoint[];
+}
+
+/** A numeric field: a fixed value, or bound to a parameter. */
+export type NumberField = number | NumberRef;
 
 /** Read `input` off a table: piecewise-linear between points, clamped at both ends. */
 export function lookupTable(points: readonly TablePoint[], input: number): number {
@@ -24,13 +44,6 @@ export function tableProblem(points: readonly TablePoint[]): string | null {
   const ascending = points.every((point, index) => index === 0 || point[0] > points[index - 1][0]);
   return ascending ? null : "a table's inputs must be in ascending order, with no repeats";
 }
-
-/** Sample `curve` at `count` evenly spaced inputs across [from, to]: a table standing in for it. */
-export const tableOf = (curve: (input: number) => number, from: number, to: number, count: number): TablePoint[] =>
-  Array.from({ length: count }, (_unused, index) => {
-    const input = from + ((to - from) * index) / (count - 1);
-    return [input, curve(input)];
-  });
 
 /** A numeric parameter reference's value for a raw param value: read off its table if it has
  *  one, then raw*scale + offset (defaults 1, 0). */

@@ -1,14 +1,10 @@
 /**
  * Mellotron Flute: a warm, breathy tape flute (the Strawberry Fields sound). Two triangles spread
- * apart for the tape's chorus, a unison sine for body, a
- * vibrato on each note and a mellow low-pass.
+ * apart for the tape's chorus, a unison sine for body, a vibrato on each note and a mellow low-pass.
  */
 import type { EngineBuiltin } from "../../definitions/builtin";
 import type { ParamSchema } from "../../params/types";
 
-// Mellotron Flute: a warm, breathy tape-flute (the Strawberry Fields sound), built as a
-// declarative graph (graph/mellotronFlute.ts). Two triangle oscillators spread apart for
-// the tape chorus, a unison sine for body, a shared vibrato LFO, and a mellow lowpass.
 export const mellotronFluteSchema: ParamSchema = [
   {
     id: "tone.warmth",

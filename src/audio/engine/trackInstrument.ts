@@ -4,7 +4,7 @@
  * them). Shared by AudioEngine and offline renders, so both build tracks the same way.
  */
 import type { Instrument } from "../instruments/types";
-import { createInstrument } from "../instruments/registry";
+import { SilentInstrument } from "../instruments/Silent";
 import type { EffectInstance } from "../project/projectStore";
 import type { ParamStore } from "../params/store";
 import { engineDevice } from "../definitions/engineDevices";
@@ -49,7 +49,8 @@ export const trackInstrument = (
   effects: EffectInstance[],
 ): { instrument: Instrument; absorbed: EffectInstance[] } => {
   const chain = instrumentChain(type, store, effects);
-  if (!chain) return { instrument: createInstrument(type, context, store), absorbed: [] };
+  // Not on the engine: an empty track, or a custom instrument too old to play.
+  if (!chain) return { instrument: new SilentInstrument(context), absorbed: [] };
   const instrument = new EngineInstrument(context, chain.plan);
   applyBypass(instrument, chain.plan.bypass, chain.absorbed);
   return { instrument, absorbed: chain.absorbed };

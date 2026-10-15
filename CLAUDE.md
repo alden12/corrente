@@ -35,21 +35,20 @@ treat these as labels that tie related code together, not as links to follow.
 
 ## Extensibility: don't hardcode the catalog
 
-- Instruments, effects, and their parameters are declared once in the pure
-  catalogs (`src/audio/instruments/catalog.ts`, `src/audio/effects/catalog.ts`)
-  and realized by the registries (`registry.ts`). These are the single extension
-  points. Adding one should be: add a schema + catalog entry, add a factory, then
-  `yarn portraits` to draw its Explore card art (a unit test fails until you do).
-- The registries are typed `Record<InstrumentType, ...>` / `Record<EffectType, ...>`
-  off the catalog keys, so a cataloged type without a factory is a compile error.
+- Every built-in instrument and effect is one file of pure data in the engine's device format
+  (`src/audio/instruments/engine/`, `src/audio/effects/engine/`): its label, tags, param schema
+  and definition (an `EngineBuiltin`). The catalogs (`catalog.ts`) register their schemas and
+  `definitions/engineDevices.ts` plays their definitions. Adding one should be: write the file,
+  list it in its folder's `index.ts`, then `yarn portraits` to draw its Explore card art (a unit
+  test fails until you do).
 - UI and MCP must **iterate the catalogs**, never hardcode instrument/effect/param
   names or lists. New entries should appear in the library, the add menus, and the
   MCP palette automatically.
 - The parameter schema is the keystone: UI, MCP, automation, and persistence are
   projections of it. Don't add per-parameter or per-type UI/branching - map over
   the schema/catalog.
-- Keep the Node MCP server DOM-free: pure data (schemas/catalogs) stays in
-  `catalog.ts`; anything touching Web Audio stays in `registry.ts`/engine.
+- Keep the Node MCP server DOM-free: device files, schemas and catalogs are pure data;
+  anything touching Web Audio stays in `src/audio/engine/` and `src/audio/bank/`.
 - **Follow MIDI / General MIDI conventions** where a standard exists, so the app
   interoperates with other tools and matches what an LLM already knows. Notably: C4 = MIDI
   60; drum kits default their pad notes to the GM drum map (kick = 36, snare = 38, closed
