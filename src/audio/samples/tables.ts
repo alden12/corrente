@@ -11,6 +11,7 @@
  *   the ones above the level's limit dropped, and the cycle put back together.
  * - **Layout,** as the engine reads it: level 0's cycles one after another, then level 1's, and so on.
  */
+import { fft } from "../dsp/fft";
 
 /** Samples in a cycle; must match CYCLE in engine/src/router/wavetable.rs. */
 export const CYCLE = 2048;
@@ -18,37 +19,6 @@ export const CYCLE = 2048;
 export const LEVELS = 11;
 /** The most cycles a table keeps (a wavetable WAV file has up to 256). */
 export const MAX_CYCLES = 256;
-
-/**
- * An in-place FFT of `real` and `imaginary` (a power of two long), or its inverse (scaled by 1 / n).
- * Iterative radix-2: reorder by reversed bit index, then combine pairs, fours, eights and so on.
- */
-const fft = (real: Float64Array, imaginary: Float64Array, inverse: boolean): void => {
-  const n = real.length;
-  for (let index = 1, reversed = 0; index < n; index++) {
-    let bit = n >> 1;
-    for (; reversed & bit; bit >>= 1) reversed ^= bit;
-    reversed ^= bit;
-    if (index < reversed) {
-      [real[index], real[reversed]] = [real[reversed], real[index]];
-      [imaginary[index], imaginary[reversed]] = [imaginary[reversed], imaginary[index]];
-    }
-  }
-  for (let size = 2; size <= n; size <<= 1) {
-    const angle = ((inverse ? 2 : -2) * Math.PI) / size;
-    for (let start = 0; start < n; start += size) {
-      for (let offset = 0; offset < size / 2; offset++) {
-        const [cos, sin] = [Math.cos(angle * offset), Math.sin(angle * offset)];
-        const [even, odd] = [start + offset, start + offset + size / 2];
-        const oddReal = real[odd] * cos - imaginary[odd] * sin;
-        const oddImaginary = real[odd] * sin + imaginary[odd] * cos;
-        [real[odd], imaginary[odd]] = [real[even] - oddReal, imaginary[even] - oddImaginary];
-        [real[even], imaginary[even]] = [real[even] + oddReal, imaginary[even] + oddImaginary];
-      }
-    }
-  }
-  if (inverse) real.forEach((_, index) => ((real[index] /= n), (imaginary[index] /= n)));
-};
 
 /** One cycle at every level: the cycle with its harmonics above 1024 >> level dropped. */
 const levelsOf = (cycle: Float32Array): Float32Array[] => {

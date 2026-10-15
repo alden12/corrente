@@ -11,14 +11,8 @@
 import type { ParamStore } from "../params/store";
 import type { Instrument } from "./types";
 import { GraphInstrument } from "../graph/GraphInstrument";
-import { subtractive } from "./graph/subtractive";
-import { fm } from "./graph/fm";
-import { mellotronFlute } from "./graph/mellotronFlute";
-import { supersaw } from "./graph/supersaw";
-import { organ } from "./graph/organ";
+import { BUILTIN_GRAPH_INSTRUMENTS } from "../graph/builtins";
 import { WorkletInstrument } from "./WorkletInstrument";
-import { sampler } from "./graph/sampler";
-import { drumkit } from "./graph/drumkit";
 import { SilentInstrument } from "./Silent";
 import { DEFAULT_INSTRUMENT, EMPTY_INSTRUMENT } from "./catalog";
 
@@ -40,15 +34,11 @@ export function createInstrument(type: string, ctx: BaseAudioContext, store: Par
 // Every instrument but Wavetable and Nimbus is a declarative graph (data, not code). Those two are
 // whole polyphonic synths in one worklet each, and stay that way until a graph can run its voices
 // as cheaply (INST-15, INST-19). See src/audio/graph and INST-4.
-registerInstrumentFactory(subtractive.type, (ctx, store) => new GraphInstrument(ctx, store, subtractive));
-registerInstrumentFactory(fm.type, (ctx, store) => new GraphInstrument(ctx, store, fm));
-registerInstrumentFactory(mellotronFlute.type, (ctx, store) => new GraphInstrument(ctx, store, mellotronFlute));
-registerInstrumentFactory(supersaw.type, (ctx, store) => new GraphInstrument(ctx, store, supersaw));
-registerInstrumentFactory(organ.type, (ctx, store) => new GraphInstrument(ctx, store, organ));
+BUILTIN_GRAPH_INSTRUMENTS.forEach((def) =>
+  registerInstrumentFactory(def.type, (ctx, store) => new GraphInstrument(ctx, store, def)),
+);
 registerInstrumentFactory("wavetable", (ctx, store) => new WorkletInstrument(ctx, store, "wavetable-processor"));
 registerInstrumentFactory("nimbus", (ctx, store) => new WorkletInstrument(ctx, store, "nimbus-processor"));
-registerInstrumentFactory(sampler.type, (ctx, store) => new GraphInstrument(ctx, store, sampler));
-registerInstrumentFactory(drumkit.type, (ctx, store) => new GraphInstrument(ctx, store, drumkit));
 registerInstrumentFactory(EMPTY_INSTRUMENT, (ctx) => new SilentInstrument(ctx));
 
 export { instrumentInfos, instrumentSchema, catalogEntry, hasInstrument, DEFAULT_INSTRUMENT } from "./catalog";

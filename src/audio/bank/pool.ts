@@ -40,7 +40,7 @@ interface Bank {
 
 /** Kept once fetched; a failed fetch is forgotten, so the next device tries again. */
 let engineBytes: Promise<ArrayBuffer> | null = null;
-const fetchEngine = () =>
+export const fetchEngine = (): Promise<ArrayBuffer> =>
   (engineBytes ??= fetch(engineUrl)
     .then((response) => {
       if (!response.ok) throw new Error(`couldn't load the audio engine (${response.status})`);

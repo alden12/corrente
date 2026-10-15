@@ -10,13 +10,7 @@
 import type { ParamStore } from "../params/store";
 import type { Effect } from "./types";
 import { GraphEffect } from "../graph/GraphEffect";
-import { delay } from "./graph/delay";
-import { distortion } from "./graph/distortion";
-import { tremolo } from "./graph/tremolo";
-import { reverb } from "./graph/reverb";
-import { filter } from "./graph/filter";
-import { chorus } from "./graph/chorus";
-import { bitcrusher } from "./graph/bitcrusher";
+import { BUILTIN_GRAPH_EFFECTS } from "../graph/builtins";
 import { DEFAULT_EFFECT } from "./catalog";
 
 /**
@@ -41,12 +35,8 @@ export function createEffect(type: string, ctx: BaseAudioContext, store: ParamSt
 // --- built-in factories (self-registered) ---------------------------------
 // Every effect is a declarative graph (data, not code); the Bitcrusher's is a custom-DSP block
 // (INST-15). See src/audio/graph and INST-4.
-registerEffectFactory(delay.type, (ctx, store) => new GraphEffect(ctx, store, delay));
-registerEffectFactory(distortion.type, (ctx, store) => new GraphEffect(ctx, store, distortion));
-registerEffectFactory(reverb.type, (ctx, store) => new GraphEffect(ctx, store, reverb));
-registerEffectFactory(filter.type, (ctx, store) => new GraphEffect(ctx, store, filter));
-registerEffectFactory(chorus.type, (ctx, store) => new GraphEffect(ctx, store, chorus));
-registerEffectFactory(tremolo.type, (ctx, store) => new GraphEffect(ctx, store, tremolo));
-registerEffectFactory(bitcrusher.type, (ctx, store) => new GraphEffect(ctx, store, bitcrusher));
+BUILTIN_GRAPH_EFFECTS.forEach((def) =>
+  registerEffectFactory(def.type, (ctx, store) => new GraphEffect(ctx, store, def)),
+);
 
 export { effectInfos, effectSchema, effectCatalogEntry, hasEffect, DEFAULT_EFFECT } from "./catalog";

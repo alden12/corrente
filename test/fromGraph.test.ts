@@ -4,21 +4,8 @@ import { BLOCK } from "../src/audio/bank/exports";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import { effectFromGraph, instrumentFromGraph, type Converted } from "../src/audio/definitions/fromGraph";
 import { engineValueOf } from "../src/audio/definitions/values";
+import { BUILTIN_GRAPH_EFFECTS, BUILTIN_GRAPH_INSTRUMENTS } from "../src/audio/graph/builtins";
 import type { GraphEffectDef, GraphInstrumentDef } from "../src/audio/graph/types";
-import { fm } from "../src/audio/instruments/graph/fm";
-import { mellotronFlute } from "../src/audio/instruments/graph/mellotronFlute";
-import { organ } from "../src/audio/instruments/graph/organ";
-import { sampler } from "../src/audio/instruments/graph/sampler";
-import { subtractive } from "../src/audio/instruments/graph/subtractive";
-import { supersaw } from "../src/audio/instruments/graph/supersaw";
-import { drumkit } from "../src/audio/instruments/graph/drumkit";
-import { bitcrusher } from "../src/audio/effects/graph/bitcrusher";
-import { chorus } from "../src/audio/effects/graph/chorus";
-import { delay } from "../src/audio/effects/graph/delay";
-import { distortion } from "../src/audio/effects/graph/distortion";
-import { filter } from "../src/audio/effects/graph/filter";
-import { reverb } from "../src/audio/effects/graph/reverb";
-import { tremolo } from "../src/audio/effects/graph/tremolo";
 import type { ParamSchema } from "../src/audio/params/types";
 import { peakOf, RATE, wasm } from "./support/engine";
 
@@ -84,25 +71,27 @@ const healthy = (channels: number[][]) => {
   expect(peakOf(all)).toBeLessThan(4);
 };
 
-const INSTRUMENTS: GraphInstrumentDef[] = [fm, mellotronFlute, organ, sampler, subtractive, supersaw];
-const EFFECTS: GraphEffectDef[] = [bitcrusher, chorus, delay, distortion, filter, reverb, tremolo];
+/** The drum kit waits for zones that carry their own level and tune. */
+const INSTRUMENTS = BUILTIN_GRAPH_INSTRUMENTS.filter((def) => def.type !== "drumkit");
+const instrumentNamed = (type: string) => BUILTIN_GRAPH_INSTRUMENTS.find((def) => def.type === type)!;
+const effectNamed = (type: string) => BUILTIN_GRAPH_EFFECTS.find((def) => def.type === type)!;
 
 describe("converting the built-ins", () => {
   it.each(INSTRUMENTS.map((def) => [def.type, def] as const))("%s converts, compiles and plays", (_, def) => {
     healthy(played(instrumentFromGraph(def)));
   });
 
-  it.each(EFFECTS.map((def) => [def.type, def] as const))("%s converts, compiles and plays", (_, def) => {
+  it.each(BUILTIN_GRAPH_EFFECTS.map((def) => [def.type, def] as const))("%s converts, compiles and plays", (_, def) => {
     healthy(through(effectFromGraph(def)));
   });
 
   it("says what sounds different: the reverb's convolution", () => {
-    expect(effectFromGraph(reverb).notes).toEqual([expect.stringContaining("algorithmic reverb")]);
-    expect(instrumentFromGraph(subtractive).notes).toEqual([]);
+    expect(effectFromGraph(effectNamed("reverb")).notes).toEqual([expect.stringContaining("algorithmic reverb")]);
+    expect(instrumentFromGraph(instrumentNamed("subtractive")).notes).toEqual([]);
   });
 
   it("refuses a drum kit until zones carry their own level and tune", () => {
-    expect(() => instrumentFromGraph(drumkit)).toThrow(/drum kit/);
+    expect(() => instrumentFromGraph(instrumentNamed("drumkit"))).toThrow(/drum kit/);
   });
 });
 
@@ -155,7 +144,7 @@ describe("what the old engine did, carried over", () => {
 
   it("an effect runs a copy per channel, and its sources once", () => {
     // Tremolo-like: one LFO into two VCAs, left and right kept apart.
-    const converted = effectFromGraph(tremolo);
+    const converted = effectFromGraph(effectNamed("tremolo"));
     const blocks = Object.values(converted.definition.nodes).map((node) => node.block);
     expect(blocks.filter((block) => block === "sine")).toHaveLength(1);
     expect(blocks.filter((block) => block === "mul").length).toBeGreaterThanOrEqual(2);
@@ -199,7 +188,7 @@ describe("what the old engine did, carried over", () => {
   });
 
   it("a waveform chosen by a param picks between oscillators", () => {
-    const converted = instrumentFromGraph(subtractive);
+    const converted = instrumentFromGraph(instrumentNamed("subtractive"));
     const select = Object.values(converted.definition.nodes).find((node) => node.block === "select");
     expect(select?.inputs?.index).toEqual({ param: "osc.waveform" });
   });

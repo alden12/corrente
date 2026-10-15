@@ -104,8 +104,11 @@ const oscillatorFrequency = (spec: Oscillator, context: KindContext): InputValue
   );
 };
 
-/** A block for a waveform, given the frequency it plays at. */
-type Waveforms = Record<string, (frequency: InputValue) => [block: string, inputs: Record<string, InputValue>]>;
+/** A block for a waveform, given the frequency it plays at, and the level to play it at (1 if left out). */
+type Waveforms = Record<
+  string,
+  (frequency: InputValue) => [block: string, inputs: Record<string, InputValue>, level?: number]
+>;
 
 /**
  * An oscillator of the waveform `field` names: that block, or for a waveform chosen by a param, one of
@@ -118,18 +121,20 @@ const waveformNode = (
   waveforms: Waveforms,
   frequency: InputValue,
 ) => {
-  const make = (waveform: string) => (waveforms[waveform] ?? waveforms[fallback])(frequency);
-  if (field === undefined || typeof field === "string") {
-    const [block, inputs] = make(field ?? fallback);
-    context.add(context.name, block, inputs);
-    return;
-  }
+  // An oscillator named `name`, through a `mul` to its level when that isn't 1.
+  const make = (name: string, waveform: string) => {
+    const [block, inputs, level = 1] = (waveforms[waveform] ?? waveforms[fallback])(frequency);
+    if (level === 1) return context.add(name, block, inputs);
+    const raw = context.helper(`${waveform}_raw`);
+    context.add(raw, block, inputs);
+    context.add(name, "mul", { a: raw, b: level });
+  };
+  if (field === undefined || typeof field === "string") return make(context.name, field ?? fallback);
   const options = context.options(field.param);
   if (options.length > 4) context.note(`${field.param} offers more than four waveforms; the rest play the first`);
   const choices = options.slice(0, 4).map((option) => {
     const name = context.helper(option);
-    const [block, inputs] = make(option);
-    context.add(name, block, inputs);
+    make(name, option);
     return name;
   });
   const [a, b = a, c = a, d = a] = choices;
@@ -154,10 +159,17 @@ const stereoIn = (context: KindContext): [InputValue, InputValue] => [
 
 const stereoOutputs = (name: string) => [`${name}.left`, `${name}.right`];
 
+/**
+ * Web Audio's sawtooth and square are turned down to 0.849 of a full-scale one (measured in Chromium:
+ * RMS 0.488 against the engine saw's 0.575, 0.846 against its square's 0.996, the same from 110 Hz to
+ * 3.5 kHz), so their band-limited peaks stay inside -1..1. Its sine and triangle aren't.
+ */
+const WEB_AUDIO_LEVEL = 0.849;
+
 const OSC_WAVEFORMS: Waveforms = {
   sine: (frequency) => ["sine", { frequency }],
-  sawtooth: (frequency) => ["saw", { frequency }],
-  square: (frequency) => ["pulse", { frequency, width: 0.5 }],
+  sawtooth: (frequency) => ["saw", { frequency }, WEB_AUDIO_LEVEL],
+  square: (frequency) => ["pulse", { frequency, width: 0.5 }, WEB_AUDIO_LEVEL],
   triangle: (frequency) => ["triangle", { frequency }],
 };
 

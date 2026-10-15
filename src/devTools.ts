@@ -25,6 +25,13 @@ export function installDevTools(): boolean {
     return true;
   }
 
+  // `?ab=engine` plays every built-in on the old engine and the new, to compare before they switch
+  // over (INST-36.8). Loaded on demand: it brings the whole old and new engine with it.
+  if (searchParam("ab") === "engine") {
+    void import("./ui/engineAbPage").then(({ renderEngineAb }) => renderEngineAb());
+    return true;
+  }
+
   // Instruments on the new engine to try it with (INST-36.5), before any device moves over. Not in
   // the e2e run, whose tests count what the library holds. Synchronous, so they are registered
   // before a project that uses one opens.
@@ -43,4 +50,13 @@ export function installDevTools(): boolean {
   });
 
   return false;
+}
+
+/** A query parameter of this page load, or null (and null where there's no location to read). */
+function searchParam(name: string): string | null {
+  try {
+    return new URLSearchParams(location.search).get(name);
+  } catch {
+    return null;
+  }
 }
