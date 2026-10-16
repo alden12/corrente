@@ -692,7 +692,10 @@ test.describe("phone", () => {
     // The header and nothing else: the track, a glance at its clip, and the way back up.
     const box = (await sheet(page).boundingBox())!;
     expect(box.height, "minimised is just the header").toBeLessThan(80);
-    expect(Math.abs(box.y + box.height - (await keysTop(page))), "and it sits on the keys").toBeLessThan(2);
+    // Parked, you are arranging rather than playing, so the keys go too and it sits on the tabs.
+    await expect(pads(page)).toHaveCount(0);
+    const tabsTop = (await tabBar(page).boundingBox())!.y;
+    expect(Math.abs(box.y + box.height - tabsTop), "and it sits on the tab bar").toBeLessThan(2);
 
     await sheet(page).getByRole("button", { name: "Open the editor" }).tap();
     await expect.poll(() => detentOf(page)).toBe("half");

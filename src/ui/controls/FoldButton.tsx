@@ -14,7 +14,7 @@ export function FoldButton({ fold, label }: { fold: Fold; label: string }) {
       aria-expanded={fold.open}
       aria-label={`${fold.open ? "Fold" : "Open"} the ${label}`}
       onClick={fold.onToggle}
-      className="flex items-center justify-center w-7 h-7 shrink-0 text-[16px] leading-none text-muted hover:text-ink cursor-pointer"
+      className="flex items-center justify-center w-7 h-7 pointer-coarse:w-10 pointer-coarse:h-10 shrink-0 text-[16px] pointer-coarse:text-[22px] leading-none text-muted hover:text-ink cursor-pointer"
     >
       <span aria-hidden="true" className={fold.open ? "rotate-90" : ""}>
         ▸

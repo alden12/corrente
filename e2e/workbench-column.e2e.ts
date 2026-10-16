@@ -103,3 +103,26 @@ test("the clips line opens into every clip, and folds back to one line", async (
   await page.getByRole("button", { name: "Fold the clips" }).click();
   await expect(page.getByRole("button", { name: "Open the clips" })).toHaveAttribute("aria-expanded", "false");
 });
+
+test("clips are deleted in a delete mode of the open clips, not from a small × on every chip", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Add a new empty clip" }).click();
+  const removes = page.getByRole("button", { name: /^Remove / });
+  // Folded to a line, no chip can be deleted by a stray tap.
+  await expect(removes).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open the clips" }).click();
+  await expect(removes).toHaveCount(0);
+  await page.getByRole("button", { name: "Delete clips" }).click();
+  await expect(removes).toHaveCount(2);
+  await removes.last().click();
+  await expect(removes).toHaveCount(0);
+  // The last clip clears rather than goes, and still says so.
+  await expect(page.getByRole("button", { name: /^Clear / })).toHaveCount(1);
+
+  // Folding the clips ends the mode.
+  await page.getByRole("button", { name: "Fold the clips" }).click();
+  await page.getByRole("button", { name: "Open the clips" }).click();
+  await expect(page.getByRole("button", { name: "Delete clips" })).toHaveAttribute("aria-pressed", "false");
+});

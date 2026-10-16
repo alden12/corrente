@@ -88,7 +88,7 @@ export function DeviceSections({
               >
                 <span
                   aria-hidden="true"
-                  className={`flex items-center justify-center w-4 text-[14px] leading-none ${open ? "rotate-90" : ""}`}
+                  className={`flex items-center justify-center w-4 pointer-coarse:w-6 text-[14px] pointer-coarse:text-[19px] leading-none ${open ? "rotate-90" : ""}`}
                 >
                   ▸
                 </span>

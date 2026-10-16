@@ -113,7 +113,7 @@ function BarButton({
 function sheetPreview(track: Track, beatsPerBar: number): ReactNode {
   if (track.kind === "instrument") {
     const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
-    return active && <ClipPreview store={active.store} name={active.name} beatsPerBar={beatsPerBar} />;
+    return active && <ClipPreview store={active.store} name={active.name} beatsPerBar={beatsPerBar} empty={null} />;
   }
   const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
   return active && <span className="block px-2 truncate font-mono text-[10px] text-faint">{active.name}</span>;
@@ -449,7 +449,8 @@ export function MobileShell({
           </div>
           {/* The keys dock under the Studio as a phone's keyboard does, pushing it up rather than
               covering it: they play whatever the sheet is showing, and at any detent. */}
-          {selectedTrack?.kind === "instrument" && (
+          {/* Not while the sheet is minimised: parked, you are arranging rather than playing. */}
+          {selectedTrack?.kind === "instrument" && detent !== "peek" && (
             <section
               aria-label="Keys"
               data-testid="keys-dock"

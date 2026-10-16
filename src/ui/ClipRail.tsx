@@ -32,6 +32,7 @@ export function ClipRail({
   orientation = "horizontal",
   dense = false,
   chipsOnly = false,
+  deleting = false,
   footer,
 }: {
   projectStore: ProjectStore;
@@ -52,6 +53,11 @@ export function ClipRail({
    * desktop column puts them in its clips section, whose header carries the title, + and record.
    */
   chipsOnly?: boolean;
+  /**
+   * Delete mode: each chip shows a delete button big enough to aim at. Without it the chips in the
+   * column have none, so a tap meant to pick a clip never removes one.
+   */
+  deleting?: boolean;
   /** Bottom action below the clip list (e.g. a record button), for either kind. */
   footer?: ReactNode;
 }) {
@@ -200,10 +206,11 @@ export function ClipRail({
                 className="min-w-0 flex-1"
               />
               {/* Audio's last clip has no empty-clip fallback, so hide its no-op delete. */}
-              {!(track.kind === "audio" && clips.length <= 1) && (
+              {(deleting || !chipsOnly) && !(track.kind === "audio" && clips.length <= 1) && (
                 <button
                   type="button"
                   title={clips.length > 1 ? "Remove clip" : "Clear clip (replaces it with a fresh empty one)"}
+                  aria-label={`${clips.length > 1 ? "Remove" : "Clear"} ${clip.name}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     deleteClip(clip.id);
@@ -211,9 +218,17 @@ export function ClipRail({
                   // The grid shows it outright; the rail reveals it on hover, where there is hover. In the
                   // narrow vertical rail it floats over the end of the name rather than taking a column of
                   // its own, so a name like "Clip 1" fits without widening the rail.
-                  className={`font-mono text-[11px] w-4 h-4 rounded text-faint hover:text-ink cursor-pointer ${
-                    grid ? "" : vertical ? "reveal-on-hover absolute top-1 right-1 bg-[inherit]" : "reveal-on-hover"
-                  }`}
+                  className={
+                    deleting
+                      ? "shrink-0 flex items-center justify-center w-7 h-7 pointer-coarse:w-9 pointer-coarse:h-9 rounded-md bg-hot/15 text-hot text-[18px] leading-none cursor-pointer hover:bg-hot/25"
+                      : `font-mono text-[11px] w-4 h-4 rounded text-faint hover:text-ink cursor-pointer ${
+                          grid
+                            ? ""
+                            : vertical
+                              ? "reveal-on-hover absolute top-1 right-1 bg-[inherit]"
+                              : "reveal-on-hover"
+                        }`
+                  }
                 >
                   ×
                 </button>

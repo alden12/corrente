@@ -35,3 +35,21 @@ export function ShareIcon() {
     </svg>
   );
 }
+
+/** A bin: delete things (the clips line's delete mode). */
+export function BinIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+    >
+      <path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.75 8.5h6.5L12 4.5M6.75 7v3.5M9.25 7v3.5" />
+    </svg>
+  );
+}

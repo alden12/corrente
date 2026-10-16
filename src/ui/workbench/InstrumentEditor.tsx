@@ -90,13 +90,12 @@ export function InstrumentEditor({
   );
 
   return (
-    // Compact, it sits in the sheet's Roll section, whose header and the Pads header below already
-    // space it: padding above and below only took rows off the roll.
-    <div className={`flex-1 min-w-0 min-h-0 flex flex-col gap-2 ${compact ? "px-2" : ""}`}>
+    // No padding of its own: in the column, the roll's header lines up with the sections around it.
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
       {/* No clip name here: the clip rail beside this already names the active clip and is
           where you rename it, so a second copy only cost a row of vertical space. */}
       {isDrumkit && (
-        <div className={`shrink-0 flex items-center gap-2 ${compact ? "" : "px-3 pt-2"}`}>
+        <div className={`shrink-0 flex items-center gap-2 ${compact ? "px-2" : "px-3 pt-2"}`}>
           <DrumEditorToggle mode={mode} onChange={setMode} />
         </div>
       )}

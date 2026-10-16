@@ -28,6 +28,7 @@ import { DevicesBar } from "./DevicesBar";
 import { SectionHeader, SECTION_HEADER_HEIGHT, TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
 import { IconButton } from "../controls/IconButton";
 import { newClipId } from "../../audio/commands/ids";
+import { BinIcon } from "../shellIcons";
 
 /** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
 const DEVICES_PEEK = 56;
@@ -69,6 +70,9 @@ export function WorkbenchColumn({
   const [clipsOpen, setClipsOpen] = usePersistentBoolean("corrente:clips-open", false);
   const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:devices-open", true);
   const [rollOpen, setRollOpen] = usePersistentBoolean("corrente:roll-open", true);
+  // Deleting clips is a mode of the open clips, not a button on every chip: a chip's × was small
+  // enough to hit by accident while picking a clip. Folding the clips ends it.
+  const [deletingClips, setDeletingClips] = useState(false);
   const columnRef = useRef<HTMLDivElement>(null);
   const rollRef = useRef<HTMLDivElement>(null);
   const [columnH, setColumnH] = useState(0);
@@ -97,12 +101,16 @@ export function WorkbenchColumn({
     return () => observer.disconnect();
   }, []);
   const keysH = keys?.height ?? 0;
-  // The phone's sheet can be lower than the roll's floor: there the roll takes what is left, and
-  // the column scrolls to the rest.
-  const floor = compact ? 120 : 200;
   // The clips line (its header), which the roll leaves room for so the two always fit together.
   const clipsLine = compact ? TOUCH_SECTION_HEADER_HEIGHT : SECTION_HEADER_HEIGHT;
-  const effRollH = columnH ? Math.min(rollH, Math.max(floor, columnH - clipsLine - keysH - DEVICES_PEEK)) : rollH;
+  const roomForRoll = columnH - clipsLine - keysH - DEVICES_PEEK;
+  // On touch the roll is not dragged: it takes all the sheet gives it, raising the sheet is how you
+  // make it taller, and the column scrolls on to the devices. Never under a readable floor.
+  const effRollH = !columnH
+    ? rollH
+    : compact
+      ? Math.max(120, roomForRoll)
+      : Math.min(rollH, Math.max(200, roomForRoll));
   const scrollToRoll = () => columnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   const scrollToDevice = (key: string) => {
     const scroll = () =>
@@ -128,9 +136,26 @@ export function WorkbenchColumn({
       <section aria-label="Clips">
         <SectionHeader
           title="Clips"
-          fold={{ open: clipsOpen, onToggle: () => setClipsOpen(!clipsOpen) }}
+          fold={{
+            open: clipsOpen,
+            onToggle: () => {
+              setClipsOpen(!clipsOpen);
+              setDeletingClips(false);
+            },
+          }}
           actions={
             <>
+              {clipsOpen && (
+                <IconButton
+                  label={deletingClips ? "Done deleting clips" : "Delete clips"}
+                  size={compact ? "md" : "sm"}
+                  tone="hot"
+                  active={deletingClips}
+                  onClick={() => setDeletingClips(!deletingClips)}
+                >
+                  <BinIcon />
+                </IconButton>
+              )}
               {track.kind === "instrument" && (
                 <IconButton
                   label="Add a new empty clip"
@@ -165,6 +190,7 @@ export function WorkbenchColumn({
               orientation="grid"
               dense
               chipsOnly
+              deleting={deletingClips}
             />
           </div>
         )}
@@ -189,7 +215,7 @@ export function WorkbenchColumn({
           rollFooter={keys && <div style={{ height: keys.height }}>{keys.panel}</div>}
           fold={{ open: rollOpen, onToggle: () => setRollOpen(!rollOpen) }}
         />
-        {rollOpen && (
+        {rollOpen && !compact && (
           <>
             <ResizeHandle
               ariaLabel="Resize the roll"

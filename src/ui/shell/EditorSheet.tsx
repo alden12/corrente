@@ -119,7 +119,8 @@ export function EditorSheet({
                 event.preventDefault();
                 onDetentChange("half");
               }}
-              className="ml-auto min-w-0 flex-1 h-8 max-w-48 rounded-md bg-stage overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-you"
+              // Boxed only when there are notes to draw: an empty clip leaves the bar blank.
+              className="ml-auto min-w-0 flex-1 h-8 max-w-48 rounded-md has-[svg]:bg-stage overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-you"
             >
               {preview}
             </div>

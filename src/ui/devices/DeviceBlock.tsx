@@ -62,7 +62,7 @@ export function DeviceBlock({
           aria-expanded={open}
           aria-label={`${open ? "Fold" : "Unfold"} ${label}`}
           onClick={() => toggleFold(foldKey)}
-          className="flex items-center justify-center w-7 h-7 shrink-0 text-[16px] leading-none text-muted hover:text-ink cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 pointer-coarse:w-10 pointer-coarse:h-10 shrink-0 text-[16px] pointer-coarse:text-[22px] leading-none text-muted hover:text-ink cursor-pointer"
         >
           <span aria-hidden="true" className={open ? "rotate-90" : ""}>
             ▸
