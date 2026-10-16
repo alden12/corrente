@@ -5,13 +5,15 @@
  * It offers the rebuild rather than performing it silently, because the user is the one who knows
  * whether this project is worth waiting on - and then it shows a progress indicator rather than a
  * warning, because the measured answer is seconds (DAW-39 put 100k edits at ~129ms on a laptop).
- * The fork appears only once a rebuild has actually failed, so the safe option is never offered as
- * if it were the expected one.
+ * A rebuild is the expected way forward, so it is the one primary button; a new project and the
+ * other projects in the library are always there beside it (DAW-68), so no failure - of the rebuild,
+ * or of the new project itself - leaves someone with nothing to press.
  *
  * Modal with no dismiss, like `ConflictDialog`: there is nothing useful behind it, and closing it
  * would leave a live project the app is deliberately not saving.
  */
 import { useState } from "react";
+import type { ProjectMeta } from "../audio/projects/library";
 
 /** What the dialog is doing, which is also what it is offering. */
 type Stage = "offer" | "rebuilding" | "failed" | "forking";
@@ -29,6 +31,8 @@ export function RecoveryDialog({
   detail,
   onRebuild,
   onFork,
+  others,
+  onOpen,
 }: {
   /** One clause saying which part failed, from `UnreadableProjectError`. */
   detail: string;
@@ -36,8 +40,13 @@ export function RecoveryDialog({
   onRebuild: () => Promise<boolean>;
   /** Start a new project beside this one, leaving the damaged bundle alone. */
   onFork: () => Promise<void>;
+  /** The rest of the library, any of which can be opened instead. */
+  others: ProjectMeta[];
+  onOpen: (project: ProjectMeta) => void;
 }): React.ReactElement {
   const [stage, setStage] = useState<Stage>("offer");
+  // Why the new project could not be made, kept on screen for a bug report.
+  const [forkError, setForkError] = useState<string | null>(null);
   const busy = stage === "rebuilding" || stage === "forking";
 
   const rebuild = () => {
@@ -53,8 +62,15 @@ export function RecoveryDialog({
   };
 
   const fork = () => {
+    // Back to where it was asked from on a failure: "failed" says the rebuild could not be done,
+    // which is not what happened if the rebuild was never tried.
+    const from = stage;
     setStage("forking");
-    void onFork().catch(() => setStage("failed"));
+    setForkError(null);
+    void onFork().catch((error: unknown) => {
+      setForkError(error instanceof Error ? error.message : String(error));
+      setStage(from);
+    });
   };
 
   return (
@@ -72,9 +88,30 @@ export function RecoveryDialog({
           <p className="text-sm text-muted leading-relaxed">{BODY[stage]}</p>
         </div>
 
-        <div className="rounded-lg border border-line bg-ground/50 px-3.5 py-3 font-mono text-[12px] text-faint">
+        <div className="rounded-lg border border-line bg-ground/50 px-3.5 py-3 font-mono text-[12px] text-faint break-words">
           {detail}
+          {forkError && <p className="mt-1.5 text-hot">A new project could not be started: {forkError}</p>}
         </div>
+
+        {others.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wider text-faint">Or open another project</span>
+            <ul className="max-h-40 overflow-y-auto flex flex-col rounded-lg border border-line divide-y divide-line">
+              {others.map((project) => (
+                <li key={project.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(project)}
+                    disabled={busy}
+                    className="w-full text-left px-3.5 py-2 text-sm text-ink truncate hover:bg-control cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                  >
+                    {project.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2.5 mt-1">
           {busy && (
@@ -95,15 +132,25 @@ export function RecoveryDialog({
               Start a new project
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={rebuild}
-              disabled={busy}
-              autoFocus
-              className="font-mono text-[13px] font-semibold px-4 py-2 rounded-lg bg-you text-ground cursor-pointer disabled:opacity-50 disabled:cursor-default"
-            >
-              Rebuild project state
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={fork}
+                disabled={busy}
+                className="font-mono text-[13px] font-semibold px-4 py-2 rounded-lg border border-line text-ink hover:border-faint cursor-pointer disabled:opacity-50 disabled:cursor-default"
+              >
+                Start a new project
+              </button>
+              <button
+                type="button"
+                onClick={rebuild}
+                disabled={busy}
+                autoFocus
+                className="font-mono text-[13px] font-semibold px-4 py-2 rounded-lg bg-you text-ground cursor-pointer disabled:opacity-50 disabled:cursor-default"
+              >
+                Rebuild project state
+              </button>
+            </>
           )}
         </div>
       </div>

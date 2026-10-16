@@ -100,7 +100,11 @@ export async function initProjects(
     // This branch never loads: the live store was already seeded, so it *is* this project.
     // Marking it anyway is what lets the URL sync at all on a fresh install.
     markProjectLoaded(currentProjectId());
+    await refreshProjects(storage);
   } else {
+    // The library before the project: a project that cannot be read throws out of the load, and the
+    // recovery dialog offers the rest of the library as the way out (DAW-68).
+    await refreshProjects(storage);
     // Open the first candidate that is really there: the project a link asked for, else the
     // persisted current, else the newest. Both of the first two can name something gone (see
     // `preferId`, and a stale `localStorage` pointing at a deleted project), so both are checked.
@@ -108,7 +112,6 @@ export async function initProjects(
     setCurrentProject(ifPresent(preferId) ?? ifPresent(currentProjectId()) ?? ids[0]);
     await loadCurrentInto(deps);
   }
-  await refreshProjects(storage);
 }
 
 /** Switch to another saved project (flushes the current one first). No-op if already current. */

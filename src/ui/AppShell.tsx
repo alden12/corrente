@@ -50,7 +50,7 @@ import { RecoveryDialog } from "./RecoveryDialog";
 import { takeAuthReturnPath } from "../auth/session";
 import { VersionStore } from "../audio/commands/history";
 import { useProject } from "../audio/project/useProject";
-import { projectIdFromLocation, projectIdFromPath, syncProjectUrl } from "./projectUrl";
+import { projectIdFromLocation, projectIdFromPath, projectPath, syncProjectUrl } from "./projectUrl";
 import { useRememberedSelection } from "./rememberedSelection";
 import { EditLog } from "../audio/commands/editLog";
 import { setDragGestureScope } from "./dragGesture";
@@ -75,6 +75,13 @@ import { readOutputDeviceId } from "./outputDevice";
 import { isTypingTarget } from "./typingTarget";
 
 const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
+
+/**
+ * Start over on another project, by its address rather than a reload: the address names the project a
+ * boot opens, so reloading on a project that cannot be read opens it again, and that loop with no way
+ * out is DAW-68.
+ */
+const openInPlace = (id: string, name: string) => window.location.replace(projectPath(id, name));
 
 // Computer-keyboard -> MIDI note, one octave from C4 (the classic tracker layout).
 const KEY_MAP: Record<string, number> = {
@@ -478,8 +485,13 @@ export function AppShell() {
               // Named off the library listing rather than the live store: after a failed SWITCH the
               // store still holds the project we came from, and this is about the one we could not open.
               const damaged = projectList.find((meta) => meta.id === currentProjectId())?.name ?? "Untitled";
-              await startProjectBeside(`${damaged} (recovered)`);
-              window.location.reload();
+              const name = `${damaged} (recovered)`;
+              openInPlace(await startProjectBeside(name), name);
+            }}
+            others={projectList.filter((meta) => meta.id !== currentProjectId())}
+            onOpen={(meta) => {
+              setCurrentProject(meta.id);
+              openInPlace(meta.id, meta.name);
             }}
           />
         )}

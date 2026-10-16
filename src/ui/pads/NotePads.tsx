@@ -17,6 +17,7 @@ import { useEffect } from "react";
 import type { InstrumentTrack } from "../../audio/project/projectStore";
 import type { SampleAsset } from "../../audio/samples/catalog";
 import { SectionHeader } from "../controls/SectionHeader";
+import { KeysPreview } from "./KeysPreview";
 import type { Fold } from "../controls/FoldButton";
 import { usePersistentBoolean } from "../usePersistent";
 import { KitPads } from "./KitPads";
@@ -67,15 +68,7 @@ export function NotePads({
   const header = (
     <SectionHeader title="Keys" hideTitle={open && !isKit} fold={fold} actions={fold && <KeysToggle fold={fold} />}>
       {open && !isKit && rows > 0 && <ScalePadControls settings={settings} octavesPerRow={octavesPerRow} />}
-      {/* Folded, what they would play in, as a folded roll shows its clip. */}
-      {!open && !isKit && (
-        <span className="flex items-center gap-1.5 min-w-0 font-mono text-[11px] text-muted">
-          <span className="truncate">{settings.keyLabel}</span>
-          {settings.chords && (
-            <span className="shrink-0 px-1.5 rounded-full bg-control text-[10px] text-ink">chords</span>
-          )}
-        </span>
-      )}
+      {!open && !isKit && <KeysPreview settings={settings} />}
     </SectionHeader>
   );
 

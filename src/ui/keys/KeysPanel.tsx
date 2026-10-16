@@ -22,6 +22,7 @@ import { isAccidentalRow, isArrangeCode, qwertyLabel, type KeyCell, type KeyPad,
 import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardPlaying";
 import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
+import { KeysPreview } from "../pads/KeysPreview";
 
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
@@ -93,6 +94,7 @@ export function KeysPanel({
             </div>
           </>
         )}
+        {!open && <KeysPreview settings={settings} />}
       </SectionHeader>
       {open && (
         <div className="flex-1 min-h-0 flex" style={{ padding: BODY_PADDING, gap: BODY_PADDING }}>
