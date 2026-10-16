@@ -1,6 +1,6 @@
 /**
  * The selected track's device chain: MIDI devices, then the instrument, then effects -
- * the signal path, left to right, wrapping when there is no room. "Save as patch"
+ * the signal path, read like text: left to right, wrapping when there is no room. "Save as patch"
  * captures the whole chain as a reusable library entry.
  *
  * Fills whatever box it is given: a resizable band under the editor on desktop, a whole
@@ -16,7 +16,7 @@ import { EMPTY_INSTRUMENT, pickableInstrumentInfos } from "../../audio/instrumen
 import { MidiDeviceChain } from "../MidiDeviceChain";
 import { InstrumentPanel } from "../InstrumentPanel";
 import { DrumkitPanel } from "../DrumkitPanel";
-import { EffectChain, FlowArrow } from "../EffectChain";
+import { EffectChain } from "../EffectChain";
 import { Button } from "../controls/Button";
 
 /**
@@ -135,17 +135,15 @@ export function DeviceRack({
         )}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-wrap items-start content-start gap-x-1 gap-y-3 p-3">
+        <div className="flex flex-wrap items-start content-start gap-3 p-3">
           {/* MIDI devices transform notes before the instrument, so they lead the chain. */}
           <MidiDeviceChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
           {track.kind === "instrument" &&
             (track.instrumentType === EMPTY_INSTRUMENT ? (
               <InstrumentPicker trackId={track.id} dispatch={dispatch} />
             ) : (
-              // The instrument is the first device; its trailing arrow (into the first
-              // effect) stays glued to its right edge, so it wraps cleanly. A drum kit
-              // uses its own pad panel in place of the generic knob panel.
-              <div className="flex items-start shrink-0">
+              // A drum kit uses its own pad panel in place of the generic one.
+              <>
                 {track.instrumentType === "drumkit" ? (
                   <DrumkitPanel
                     params={track.params}
@@ -166,8 +164,7 @@ export function DeviceRack({
                     projectStore={projectStore}
                   />
                 )}
-                {track.effects.length > 0 ? <FlowArrow /> : null}
-              </div>
+              </>
             ))}
           <EffectChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
         </div>

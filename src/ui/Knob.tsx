@@ -3,7 +3,7 @@
  * control for the param's kind and reads/writes through the store. There is no
  * per-parameter UI code anywhere - panels are just this mapped over a schema.
  */
-import { useRef } from "react";
+import { useContext, useRef } from "react";
 import type { ReactElement } from "react";
 import type { EnumSpec, NumberSpec, ParamSpec, ParamValue } from "../audio/params/types";
 import type { ParamStore } from "../audio/params/store";
@@ -18,6 +18,8 @@ import { Select } from "./controls/Select";
 import { Fader } from "./controls/Fader";
 import { authorFillStyle, authorDotStyle, authorHex } from "./authorStyle";
 import { useAuthorPresence } from "./authorColorsContext";
+import { DeviceHue } from "./devices/deviceHue";
+import { hueAccent } from "./deviceColor";
 
 /** Extra context the `sample` control needs (the project library + import action);
  *  optional, since only instrument panels with a sample param supply it. */
@@ -84,6 +86,7 @@ function NumberHSlider({
 }) {
   const [value] = useParam(store, spec.id);
   const presence = useAuthorPresence();
+  const hue = useContext(DeviceHue);
 
   return (
     <div className="flex items-center gap-2 w-full">
@@ -94,7 +97,8 @@ function NumberHSlider({
         onPosition={(position) => onChange(spec.id, fromNormalized(spec, position))}
         display={formatNumber(spec, value as number)}
         aria={{ now: value as number, min: spec.min, max: spec.max }}
-        fillStyle={authorFillStyle(author ?? "you", presence)}
+        fillStyle={hue === null ? authorFillStyle(author ?? "you", presence) : { background: hueAccent(hue, 0.7) }}
+        thumbStyle={hue === null ? undefined : { borderColor: authorHex(author ?? "you", presence) }}
       />
     </div>
   );
@@ -135,7 +139,9 @@ function NumberKnob({
   // The value is the LENGTH of the arc, not just where a tick points: a filled sweep is
   // readable at 40px in a way a bare pointer is not. The travel is the same 270 degrees the
   // pointer used, starting at -135 (conic 225deg, since conic 0 is twelve o'clock).
-  const hex = authorHex(author ?? "you", presence);
+  // In a device, the arc is the device's colour and the tick its last editor's; alone, both are theirs.
+  const hue = useContext(DeviceHue);
+  const hex = hue === null ? authorHex(author ?? "you", presence) : hueAccent(hue);
   const sweep = norm * 270;
 
   return (
@@ -187,6 +193,11 @@ function NumberSlider({
   const presence = useAuthorPresence();
   const drag = useRef<{ startY: number; startNorm: number } | null>(null);
   const norm = toNormalized(spec, value as number);
+  // In a device, the fill is the device's colour and the cap its last editor's, as a knob's arc and
+  // tick are; alone, both are theirs.
+  const hue = useContext(DeviceHue);
+  const authorColor = authorHex(author ?? "you", presence);
+  const valueColor = hue === null ? authorColor : hueAccent(hue);
 
   const onPointerDown = (e: React.PointerEvent) => {
     capturePointerDrag(e);
@@ -223,13 +234,13 @@ function NumberSlider({
         <span className="absolute left-1/2 top-0 bottom-0 w-0.5 -translate-x-1/2 rounded-full bg-line" />
         <span
           className="absolute left-1/2 bottom-0 w-0.5 -translate-x-1/2 rounded-full"
-          style={{ ...authorFillStyle(author ?? "you", presence, 1), height: `${norm * 100}%` }}
+          style={{ background: valueColor, height: `${norm * 100}%` }}
         />
         {/* A fader cap, not a ring: wider than it is tall, so it reads as a thing that slides
             up and down. `translate-y-1/2` centres it on the value (bottom puts its edge there). */}
         <span
           className="absolute left-1/2 h-2 w-4 -translate-x-1/2 translate-y-1/2 rounded-[3px] border-2 bg-ground"
-          style={{ bottom: `${norm * 100}%`, borderColor: authorHex(author ?? "you", presence) }}
+          style={{ bottom: `${norm * 100}%`, borderColor: authorColor }}
         />
       </div>
       <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>

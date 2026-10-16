@@ -1,7 +1,7 @@
 /**
  * A device's controls as sections (DAW-61.3), for every kind of device: its params grouped by id
  * namespace (`paramSections.ts`), each section a box that sits beside the others and wraps when
- * there is no room. With more than one, each folds to its title and a line of its values; one alone
+ * there is no room. With more than one, each folds to its title and a count of its params; one alone
  * is the whole device, so it has no title to fold, and nor does one named for the device (a Delay's
  * `delay.` params), which would only repeat its name.
  *
@@ -13,8 +13,8 @@ import type { ParamSchema, ParamSpec, ParamValue } from "../../audio/params/type
 import type { ParamStore } from "../../audio/params/store";
 import { Knob, type SampleContext } from "../Knob";
 import { toSections, sectionTitle } from "../paramSections";
-import { DeviceSummary } from "./DeviceSummary";
 import { sectionFold, useDeviceFolds } from "./deviceFolds";
+import { paramCount } from "./paramCount";
 
 const stacks = (spec: ParamSpec) => spec.kind === "boolean" || spec.kind === "enum";
 
@@ -88,7 +88,9 @@ export function DeviceSections({
                   </span>
                   <span className="font-mono text-[9px] tracking-[0.16em] uppercase">{title}</span>
                 </button>
-                {!open && <DeviceSummary schema={section.specs} store={store} />}
+                {!open && (
+                  <span className="font-mono text-[10px] text-faint shrink-0">{paramCount(section.specs.length)}</span>
+                )}
               </div>
             )}
             {open && (

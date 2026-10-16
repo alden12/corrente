@@ -1,13 +1,15 @@
 /**
  * One device in the rack (DAW-61.3): an instrument, an effect or a MIDI device, all drawn the same
  * way. A header in the device's colour (DAW-61.2) with its name, its kind, its on switch and its
- * actions; open, its body; folded, one line of its main values in place of the body, so a closed
- * device still says what it is doing. Folding is view state (`deviceFolds.ts`), never an edit.
+ * actions; open, its body; folded, how many controls it holds in place of the body. Folding is
+ * view state (`deviceFolds.ts`), never an edit.
  */
 import type { ReactNode } from "react";
-import type { DeviceColor } from "../../audio/deviceColors";
+import { deviceHue, type DeviceColor } from "../../audio/deviceColors";
 import { deviceEdge } from "../deviceColor";
+import { DeviceHue } from "./deviceHue";
 import { useDeviceFolds } from "./deviceFolds";
+import { paramCount } from "./paramCount";
 
 export interface Bypass {
   bypassed: boolean;
@@ -21,7 +23,7 @@ export function DeviceBlock({
   foldKey,
   bypass,
   actions,
-  summary,
+  params,
   children,
 }: {
   /** Its catalog entry: the type and colour. */
@@ -35,8 +37,8 @@ export function DeviceBlock({
   bypass?: Bypass;
   /** Its other header buttons (move, remove). */
   actions?: ReactNode;
-  /** What shows folded: a `DeviceSummary`. */
-  summary: ReactNode;
+  /** How many params it has, which it says folded. */
+  params: number;
   children: ReactNode;
 }) {
   const [folded, toggleFold] = useDeviceFolds();
@@ -67,7 +69,7 @@ export function DeviceBlock({
           {label}
         </span>
         <span className="font-mono text-[9px] tracking-wider uppercase text-faint shrink-0">{kind}</span>
-        {!open && summary}
+        {!open && <span className="font-mono text-[10.5px] text-muted shrink-0">{paramCount(params)}</span>}
         <span className="ml-auto pl-2 flex items-center gap-1.5 shrink-0">
           {bypass && (
             <button
@@ -84,7 +86,7 @@ export function DeviceBlock({
           {actions}
         </span>
       </div>
-      {open && children}
+      {open && <DeviceHue.Provider value={deviceHue(device)}>{children}</DeviceHue.Provider>}
     </div>
   );
 }

@@ -15,7 +15,6 @@ import { importSampleFile } from "../audio/samples/importSample";
 import type { SampleContext } from "./Knob";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { DeviceSections } from "./devices/DeviceSections";
-import { DeviceSummary } from "./devices/DeviceSummary";
 import { instrumentFold } from "./devices/deviceFolds";
 
 export function InstrumentPanel({
@@ -46,13 +45,7 @@ export function InstrumentPanel({
     onReveal: onRevealSamples,
   };
   return (
-    <DeviceBlock
-      device={info}
-      label={info.label}
-      kind="instr"
-      foldKey={instrumentFold(trackId)}
-      summary={<DeviceSummary schema={schema} store={params} />}
-    >
+    <DeviceBlock device={info} label={info.label} kind="instr" foldKey={instrumentFold(trackId)} params={schema.length}>
       <DeviceSections
         label={info.label}
         schema={schema}

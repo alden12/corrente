@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { dismissStart, openExploreCategory } from "./support/app";
 
 /**
- * Devices in the rack fold (DAW-61.3): a folded device is its header and a line of its values, and
+ * Devices in the rack fold (DAW-61.3): a folded device is its header and a count of its params, and
  * a device's sections fold on their own. Folding is how you're looking, so it outlives a reload.
  */
 
@@ -24,7 +24,7 @@ test("a device and its sections fold, and stay folded after a reload", async ({ 
   await expect(reverb.getByText("Decay", { exact: true })).toBeVisible();
   await reverb.getByRole("button", { name: "Fold Reverb" }).click();
   await expect(reverb.getByText("Decay", { exact: true })).toHaveCount(0);
-  await expect(reverb.getByTitle("Decay")).toHaveText("2 s"); // the folded line says what it's doing
+  await expect(reverb.getByText("2 params")).toBeVisible(); // folded, it says what it holds
 
   const instrument = block(page, "Subtractive");
   await instrument.getByRole("button", { name: "Filter Env" }).click();

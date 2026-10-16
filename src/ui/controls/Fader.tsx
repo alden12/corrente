@@ -33,6 +33,7 @@ export function Fader({
   display,
   aria,
   fillStyle,
+  thumbStyle,
   className = "",
 }: {
   /** Names the control for assistive tech. The visible label, if any, is the caller's. */
@@ -46,6 +47,8 @@ export function Fader({
   aria: { now: number; min: number; max: number };
   /** Paints the filled part, so a parameter can carry its last editor's colour. */
   fillStyle?: CSSProperties;
+  /** Paints the thumb, for a fill in a device's colour with the last editor's on the thumb. */
+  thumbStyle?: CSSProperties;
   className?: string;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -110,7 +113,7 @@ export function Fader({
         />
         <span
           className="absolute top-1/2 h-3.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-line bg-card shadow pointer-events-none [@media(pointer:coarse)]:h-5 [@media(pointer:coarse)]:w-2"
-          style={{ left: `${position * 100}%` }}
+          style={{ ...thumbStyle, left: `${position * 100}%` }}
         />
       </div>
       {display !== undefined && (

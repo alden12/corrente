@@ -12,9 +12,7 @@ import type { Dispatch } from "../audio/commands/types";
 import { midiDeviceParamKey } from "../audio/commands/authorship";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { DeviceSections } from "./devices/DeviceSections";
-import { DeviceSummary } from "./devices/DeviceSummary";
 import { ChainActions } from "./devices/ChainActions";
-import { FlowArrow } from "./EffectChain";
 
 export function MidiDeviceChain({
   projectStore,
@@ -37,44 +35,40 @@ export function MidiDeviceChain({
         if (!store) return null;
         const info = midiDeviceCatalogEntry(device.type);
         const schema = midiDeviceSchema(device.type);
-        // Each device carries its own trailing arrow (into the next device / the instrument)
-        // in one flex group, so the arrow stays glued to its right edge on wrap.
         return (
-          <div key={device.id} className="flex items-start self-start shrink-0 min-w-0">
-            <DeviceBlock
-              device={info}
-              label={info.label}
-              kind="midi"
-              foldKey={device.id}
-              bypass={{
-                bypassed: device.bypassed,
-                onToggle: () =>
-                  dispatch({ type: "bypassMidiDevice", trackId, deviceId: device.id, bypassed: !device.bypassed }),
-              }}
-              actions={
-                <ChainActions
-                  index={i}
-                  count={devices.length}
-                  onMove={(toIndex) => dispatch({ type: "moveMidiDevice", trackId, deviceId: device.id, toIndex })}
-                  onRemove={() => dispatch({ type: "removeMidiDevice", trackId, deviceId: device.id })}
-                  removeTitle="Remove MIDI device"
-                />
-              }
-              summary={<DeviceSummary schema={schema} store={store} />}
-            >
-              <DeviceSections
-                label={info.label}
-                schema={schema}
-                store={store}
-                onChange={(id, value) =>
-                  dispatch({ type: "setMidiDeviceParam", trackId, deviceId: device.id, id, value })
-                }
-                authorOf={(paramId) => projectStore.authorOf(midiDeviceParamKey(trackId, device.id, paramId))}
-                foldKey={device.id}
+          <DeviceBlock
+            key={device.id}
+            device={info}
+            label={info.label}
+            kind="midi"
+            foldKey={device.id}
+            bypass={{
+              bypassed: device.bypassed,
+              onToggle: () =>
+                dispatch({ type: "bypassMidiDevice", trackId, deviceId: device.id, bypassed: !device.bypassed }),
+            }}
+            actions={
+              <ChainActions
+                index={i}
+                count={devices.length}
+                onMove={(toIndex) => dispatch({ type: "moveMidiDevice", trackId, deviceId: device.id, toIndex })}
+                onRemove={() => dispatch({ type: "removeMidiDevice", trackId, deviceId: device.id })}
+                removeTitle="Remove MIDI device"
               />
-            </DeviceBlock>
-            <FlowArrow />
-          </div>
+            }
+            params={schema.length}
+          >
+            <DeviceSections
+              label={info.label}
+              schema={schema}
+              store={store}
+              onChange={(id, value) =>
+                dispatch({ type: "setMidiDeviceParam", trackId, deviceId: device.id, id, value })
+              }
+              authorOf={(paramId) => projectStore.authorOf(midiDeviceParamKey(trackId, device.id, paramId))}
+              foldKey={device.id}
+            />
+          </DeviceBlock>
         );
       })}
     </>

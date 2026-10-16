@@ -17,7 +17,6 @@ import { paramKey } from "../audio/commands/authorship";
 import type { SampleAsset } from "../audio/samples/catalog";
 import { catalogEntry, instrumentSchema } from "../audio/instruments/catalog";
 import { DeviceBlock } from "./devices/DeviceBlock";
-import { DeviceSummary } from "./devices/DeviceSummary";
 import { instrumentFold } from "./devices/deviceFolds";
 import { importSampleFile } from "../audio/samples/importSample";
 import { Knob, type SampleContext } from "./Knob";
@@ -80,7 +79,7 @@ export function DrumkitPanel({
       label={info.label}
       kind="instr"
       foldKey={instrumentFold(trackId)}
-      summary={<DeviceSummary schema={otherSections.flatMap((section) => section.specs)} store={params} />}
+      params={instrumentSchema("drumkit").length}
     >
       <div className="flex flex-col gap-3 px-3 py-3">
         {/* Kit-wide controls (envelope, amp) as a horizontal strip above the pads. */}
