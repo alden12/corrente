@@ -153,7 +153,12 @@ export async function signInWithProvider(provider: "google" | "github"): Promise
   const onConsent = isConsentPath(window.location.pathname);
   const here = onConsent ? OAUTH_CONSENT_PATH + window.location.search : window.location.pathname;
   if (typeof sessionStorage !== "undefined") sessionStorage.setItem(RETURN_PATH_KEY, here);
-  await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+  // `select_account`: Google otherwise signs straight back into the account the browser last used,
+  // so someone refused for picking the wrong one (HOST-27) could never reach the right one.
+  await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: window.location.origin, queryParams: { prompt: "select_account" } },
+  });
 }
 
 /** Sign out (clears the persisted session). No-op if auth is off. */
