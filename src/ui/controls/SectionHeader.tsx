@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from "react";
 import { FoldButton, type Fold } from "./FoldButton";
+import { foldOnHeaderClick } from "./foldOnHeaderClick";
 
 /** Every section header's height, which layouts that size themselves around one (the keys) read. */
 export const SECTION_HEADER_HEIGHT = 36;
@@ -37,7 +38,9 @@ export function SectionHeader({
 }) {
   return (
     <div
-      className={`shrink-0 flex items-center gap-2 pl-1 pr-2.5 border-b border-line bg-panel ${className}`}
+      className={`shrink-0 flex items-center gap-2 pl-1 pr-2.5 border-b border-line bg-panel ${fold ? "cursor-pointer" : ""} ${className}`}
+      // A tap anywhere that is not a control folds it, not just on the arrow.
+      onClick={fold && foldOnHeaderClick(fold.onToggle)}
       style={{ height: `var(--section-header, ${SECTION_HEADER_HEIGHT}px)` }}
     >
       {fold ? <FoldButton fold={fold} label={title.toLowerCase()} /> : <span className="w-7 shrink-0" />}

@@ -126,3 +126,25 @@ test("clips are deleted in a delete mode of the open clips, not from a small × 
   await page.getByRole("button", { name: "Open the clips" }).click();
   await expect(page.getByRole("button", { name: "Delete clips" })).toHaveAttribute("aria-pressed", "false");
 });
+
+test("a tap anywhere on a section's header that is not a control folds it", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  // The title folds the roll, as the arrow does.
+  await page.getByText("Piano roll", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "Open the piano roll" })).toHaveAttribute("aria-expanded", "false");
+  await page.getByText("Piano roll", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "Fold the piano roll" })).toHaveAttribute("aria-expanded", "true");
+
+  // A control in the header does its own thing and folds nothing: the + adds a clip.
+  await page.getByRole("button", { name: "Add a new empty clip" }).click();
+  await expect(page.getByRole("button", { name: "Open the clips" })).toHaveAttribute("aria-expanded", "false");
+
+  // A device's header folds its device the same way.
+  const device = page.locator("[data-device][role=group]").first();
+  await device
+    .locator("> div")
+    .first()
+    .click({ position: { x: 200, y: 10 } });
+  await expect(device).toHaveAttribute("data-open", "false");
+});

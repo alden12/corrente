@@ -10,6 +10,7 @@ import { deviceEdge } from "../deviceColor";
 import { DeviceHue } from "./deviceHue";
 import { useDeviceFolds } from "./deviceFolds";
 import { paramCount } from "./paramCount";
+import { foldOnHeaderClick } from "../controls/foldOnHeaderClick";
 
 export interface Bypass {
   bypassed: boolean;
@@ -56,7 +57,11 @@ export function DeviceBlock({
       className={`scroll-mt-12 shrink-0 min-w-0 max-w-full border border-line rounded-xl bg-ground ${bypass?.bypassed ? "opacity-50" : ""}`}
       style={deviceEdge(device)}
     >
-      <div className={`flex items-center gap-1.5 pl-1 pr-2.5 py-1 ${open ? "border-b border-line" : ""}`}>
+      <div
+        className={`flex items-center gap-1.5 pl-1 pr-2.5 py-1 cursor-pointer ${open ? "border-b border-line" : ""}`}
+        // A tap anywhere that is not a control folds it, as on the column's section headers.
+        onClick={foldOnHeaderClick(() => toggleFold(foldKey))}
+      >
         <button
           type="button"
           aria-expanded={open}

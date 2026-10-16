@@ -37,6 +37,8 @@ export function PagedStrip({
       <div
         {...scrollerProps}
         ref={row}
+        // Swiped, so its gaps are not the header's to fold on.
+        data-no-fold
         className={`flex-1 min-w-0 flex items-center overflow-x-auto scrollbar-none ${className}`}
         style={{ maskImage: edgeFade(ends), WebkitMaskImage: edgeFade(ends) }}
       >
