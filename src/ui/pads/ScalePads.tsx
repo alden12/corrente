@@ -16,6 +16,7 @@
  * triad and the rows above are its variations (`chordRows`), so you play the triad and reach
  * up for the colour.
  */
+import { KeyRowsIcon, StepIcon } from "../shellIcons";
 import { Menu, type MenuItem } from "../Menu";
 import { pitchName } from "../noteNames";
 import { PITCH_CLASSES, SCALE_NAMES, accidentalWidth, padRows } from "../../audio/theory/scales";
@@ -112,7 +113,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           onClick={() => settings.moveRange(-1)}
           disabled={!settings.canMove(-1)}
         >
-          ◂
+          <StepIcon direction="down" />
         </IconButton>
         <span className="w-12 text-center font-mono text-[10px] text-muted tabular-nums">{settings.rangeLabel}</span>
         <IconButton
@@ -121,7 +122,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           onClick={() => settings.moveRange(1)}
           disabled={!settings.canMove(1)}
         >
-          ▸
+          <StepIcon direction="up" />
         </IconButton>
         <IconButton
           label={pairs ? "Fewer octaves (a row of two)" : `Fewer ${sizeWhat}`}
@@ -129,7 +130,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           onClick={() => settings.sizeRange(-1)}
           disabled={!settings.canSize(-1)}
         >
-          −
+          <KeyRowsIcon change="remove" />
         </IconButton>
         <IconButton
           label={pairs ? "More octaves (a row of two)" : `More ${sizeWhat}`}
@@ -137,7 +138,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           onClick={() => settings.sizeRange(1)}
           disabled={!settings.canSize(1)}
         >
-          +
+          <KeyRowsIcon change="add" />
         </IconButton>
       </div>
     </div>

@@ -72,3 +72,36 @@ export function KeyboardIcon() {
     </svg>
   );
 }
+
+/**
+ * A stack of key rows with a + or − at its corner: add or take away a row of pads (the keys'
+ * size buttons), saying *what* grows where a bare + did not.
+ */
+export function KeyRowsIcon({ change }: { change: "add" | "remove" }) {
+  return (
+    <svg
+      viewBox="0 0 20 16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-6 h-5"
+    >
+      <rect x="1.5" y="2" width="11" height="4.5" rx="1" />
+      <rect x="1.5" y="9.5" width="11" height="4.5" rx="1" />
+      <path d="M5.25 2v2.5M8.75 2v2.5M5.25 9.5V12M8.75 9.5V12" />
+      <path d={change === "add" ? "M14.5 8h4.5M16.75 5.75v4.5" : "M14.5 8h4.5"} strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+/** A solid triangle pointing left or right: step something down or up (the keys' octave). */
+export function StepIcon({ direction }: { direction: "down" | "up" }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" className="w-4 h-4">
+      <path d={direction === "down" ? "M11 2.5 4 8l7 5.5z" : "M5 2.5 12 8l-7 5.5z"} />
+    </svg>
+  );
+}
