@@ -461,7 +461,8 @@ export function MobileShell({
             <section
               aria-label="Keys"
               data-testid="keys-dock"
-              className="shrink-0 bg-panel border-t border-line"
+              // Under a minimised sheet its own header's rule is the divider: a second one doubled it.
+              className={`shrink-0 bg-panel ${detent === "peek" ? "" : "border-t border-line"}`}
               style={{ paddingLeft: SAFE_LEFT, paddingRight: SAFE_RIGHT }}
             >
               <NotePads
@@ -471,7 +472,7 @@ export function MobileShell({
                 // A tablet has the width for two octaves in a row; a phone does not, and
                 // below ~44px per pad the layout is wrong rather than merely tight.
                 octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-                room={keysRoom(studioHeight, detent)}
+                room={keysRoom(studioHeight)}
                 fold={keysFold}
               />
             </section>

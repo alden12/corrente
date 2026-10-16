@@ -20,8 +20,10 @@ export function SectionHeader({
   fold,
   children,
   actions,
+  hideTitle = false,
   className = "",
 }: {
+  /** Its name, which the fold's label says too. */
   title: string;
   /** The section's fold; a section that doesn't fold leaves the arrow's room empty, to line up. */
   fold?: Fold;
@@ -29,6 +31,8 @@ export function SectionHeader({
   children?: ReactNode;
   /** At the right, always in view. */
   actions?: ReactNode;
+  /** Leave the title unwritten where what is in the middle already says it (the open keys' controls). */
+  hideTitle?: boolean;
   className?: string;
 }) {
   return (
@@ -37,7 +41,9 @@ export function SectionHeader({
       style={{ height: `var(--section-header, ${SECTION_HEADER_HEIGHT}px)` }}
     >
       {fold ? <FoldButton fold={fold} label={title.toLowerCase()} /> : <span className="w-7 shrink-0" />}
-      <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">{title}</span>
+      {!hideTitle && (
+        <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">{title}</span>
+      )}
       <div className="flex-1 min-w-0 flex items-center gap-2">{children}</div>
       {actions && <div className="shrink-0 flex items-center gap-1.5">{actions}</div>}
     </div>

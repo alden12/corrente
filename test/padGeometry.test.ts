@@ -59,25 +59,18 @@ describe("fitPads", () => {
 });
 
 describe("keysRoom", () => {
-  it("gives the keys less at Half than at Full, so they never bury a half-open sheet", () => {
-    expect(KEYS_SHARE.half).toBeLessThan(KEYS_SHARE.full);
-    expect(fitPads(keysRoom(STUDIO.phone, "half"), true)).toBeLessThan(fitPads(keysRoom(STUDIO.phone, "full"), true));
+  it("gives a phone held upright more than one row", () => {
+    expect(fitPads(keysRoom(STUDIO.phone), true)).toBeGreaterThan(1);
   });
 
-  it("gives a phone held upright more than one row at Full", () => {
-    expect(fitPads(keysRoom(STUDIO.phone, "full"), true)).toBeGreaterThan(1);
-  });
-
-  it("never lets the keys take more than half the Studio", () => {
+  it("never lets the keys take more than their share of the Studio", () => {
     Object.values(STUDIO).forEach((studio) => {
-      (["peek", "half", "full"] as const).forEach((detent) => {
-        const rows = fitPads(keysRoom(studio, detent), true);
-        expect(keysHeight(rows, true)).toBeLessThanOrEqual(studio / 2);
-      });
+      const rows = fitPads(keysRoom(studio), true);
+      expect(keysHeight(rows, true)).toBeLessThanOrEqual(Math.max(studio * KEYS_SHARE, keysHeight(1, true)));
     });
   });
 
-  it("still gives a phone on its side one row at Half", () => {
-    expect(fitPads(keysRoom(STUDIO.landscape, "half"), true)).toBe(1);
+  it("still gives a phone on its side one row", () => {
+    expect(fitPads(keysRoom(STUDIO.landscape), true)).toBe(1);
   });
 });

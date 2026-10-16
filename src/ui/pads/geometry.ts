@@ -3,14 +3,13 @@
  *
  * **The octave count is a function of the space, not a constant.** A phone in landscape
  * can only really hold one row; a tablet in portrait can hold four. Picking a number for "the
- * mobile limit" would be wrong at both ends, so the limit is computed from the Studio's height,
- * and a share of it that depends on the sheet (`KEYS_SHARE`).
+ * mobile limit" would be wrong at both ends, so the limit is a share of the Studio's height
+ * (`KEYS_SHARE`).
  *
  * Pure, so the fitting is unit-testable without a browser: the numbers below are the pad
  * layout's own, and `fitPads` is the only place they are turned into a decision.
  */
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
-import type { Detent } from "../shell/detents";
 
 /** An in-scale pad. Comfortably over the 44px hit-target floor (MOBILE-2). */
 export const PAD_HEIGHT = 52;
@@ -50,15 +49,14 @@ export const SECTION_HEADER = TOUCH_SECTION_HEADER_HEIGHT;
 export const PADS_PADDING = 8;
 
 /**
- * How much of the Studio the keys may take, by where the sheet is (MOBILE-24). They dock under
- * it and push it up, so a share is what keeps the sheet worth having: at Half it is sharing the
- * screen with the arrangement already, so the keys get less there than at Full, where they
- * leave the sheet half. Minimised, the sheet is a bar, and the keys may have as much as at Full.
+ * The most of the Studio the keys may take (MOBILE-24): the limit `+` stops at. Not tied to the
+ * sheet: the keys are as tall as you make them, and the arrangement and the sheet split what is
+ * left at the sheet's detent. Tune it here.
  *
  * It bounds the *limit*, not the default - what is on show is the stored octave count, which
- * starts at one - so it decides where `+` stops.
+ * starts at one.
  */
-export const KEYS_SHARE: Record<Detent, number> = { peek: 0.5, half: 0.25, full: 0.5 };
+export const KEYS_SHARE = 0.5;
 
 /**
  * How much one more row of pads costs: the row (its accidental band and the gap under that
@@ -94,11 +92,10 @@ export function fitPads(room: number, accidentals: boolean): number {
 }
 
 /**
- * The room the keys may have in a Studio `studio` pixels tall, with the sheet at `detent`: their
- * share, and never less than one row of pads while the Studio has room for two, so a phone on its
- * side can still play at Half.
+ * The room the keys may have in a Studio `studio` pixels tall: their share, and never less than
+ * one row of pads while the Studio has room for two, so a phone on its side can still play.
  */
-export function keysRoom(studio: number, detent: Detent): number {
+export function keysRoom(studio: number): number {
   const oneRow = keysHeight(1, true);
-  return Math.max(studio * KEYS_SHARE[detent], studio >= 2 * oneRow ? oneRow : 0);
+  return Math.max(studio * KEYS_SHARE, studio >= 2 * oneRow ? oneRow : 0);
 }

@@ -65,7 +65,7 @@ export function NotePads({
   // Open, the header is the key and range controls, which say what these are better than a title.
   // The keyboard button sits at its right, where the minimised sheet's own one is.
   const header = (
-    <SectionHeader title={open && !isKit ? "" : "Keys"} actions={fold && <KeysToggle fold={fold} />}>
+    <SectionHeader title="Keys" hideTitle={open && !isKit} fold={fold} actions={fold && <KeysToggle fold={fold} />}>
       {open && !isKit && rows > 0 && <ScalePadControls settings={settings} octavesPerRow={octavesPerRow} />}
     </SectionHeader>
   );
