@@ -98,8 +98,9 @@ export function KeysPanel({
         <div className="flex-1 min-h-0 flex" style={{ padding: BODY_PADDING, gap: BODY_PADDING }}>
           <VelocityStrip velocity={velocity} onVelocity={onVelocity} />
           {/* Scrolls only while arranging chords, when every row the key offers is laid out above the
-              keys; column-reverse, so it opens at the bottom with the keys in view. */}
-          <div className="flex-1 min-w-0 overflow-y-auto overscroll-contain flex flex-col-reverse [scrollbar-width:thin]">
+              keys; column-reverse, so it opens at the bottom with the keys in view. Not contained: with
+              nothing left to scroll here, the wheel moves the workbench column on (DAW-61.1). */}
+          <div className="flex-1 min-w-0 overflow-y-auto flex flex-col-reverse [scrollbar-width:thin]">
             <div className="flex flex-col-reverse" style={{ gap: KEY_GAP }}>
               {(settings.editingChords ? rows : rows.slice(0, shownRows)).map((row, rowIndex) => (
                 <KeyRow

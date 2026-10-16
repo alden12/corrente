@@ -20,6 +20,12 @@ import { PianoRoll } from "../PianoRoll";
 import { DrumRoll } from "../DrumRoll";
 import { StepGrid } from "../StepGrid";
 import { Segmented } from "../controls/Segmented";
+import { ClipPreview } from "../shell/ClipPreview";
+import { useProject } from "../../audio/project/useProject";
+import { beatsPerBar } from "../../audio/project/schema";
+
+/** Bars a folded roll's glance at its clip spans: the header has room for far more than a chip. */
+const FOLDED_PREVIEW_BARS = 32;
 
 /** The two editor surfaces a drum-kit track offers over its one note clip. */
 export type DrumEditor = "pads" | "keys";
@@ -72,6 +78,16 @@ export function InstrumentEditor({
   const isDrumkit = track.instrumentType === "drumkit";
   const [mode, setMode] = usePersistentString<DrumEditor>(`corrente:drum-editor:${track.id}`, "keys", DRUM_EDITORS);
   const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
+  const { timeSignature } = useProject(projectStore);
+  const foldedPreview = (
+    <ClipPreview
+      store={active.store}
+      name={active.name}
+      beatsPerBar={beatsPerBar(timeSignature)}
+      bars={FOLDED_PREVIEW_BARS}
+      empty={null}
+    />
+  );
 
   return (
     // Compact, it sits in the sheet's Roll section, whose header and the Pads header below already
@@ -112,6 +128,7 @@ export function InstrumentEditor({
             compact={compact}
             footer={rollFooter}
             fold={fold}
+            foldedPreview={foldedPreview}
           />
         ) : (
           <PianoRoll
@@ -126,6 +143,7 @@ export function InstrumentEditor({
             compact={compact}
             footer={rollFooter}
             fold={fold}
+            foldedPreview={foldedPreview}
           />
         )}
       </div>

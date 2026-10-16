@@ -219,6 +219,7 @@ export function CenterWorkbench({
           resize handle, which straddles the column's left edge. */}
       <div
         ref={columnRef}
+        data-testid="workbench-column"
         className="relative isolate flex-1 min-h-0 min-w-0 overflow-y-auto"
         key={`${selectedTrack.id}:body`}
       >

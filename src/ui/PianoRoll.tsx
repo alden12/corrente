@@ -172,6 +172,7 @@ export function PianoRoll({
   compact = false,
   footer,
   fold,
+  foldedPreview,
 }: {
   clipStore: ClipStore;
   scheduler: Scheduler;
@@ -195,6 +196,8 @@ export function PianoRoll({
   footer?: ReactNode;
   /** Folds the grid away under the toolbar, keeping the footer (the keys): the desktop column. */
   fold?: Fold;
+  /** What the toolbar shows while the grid is folded away: a glance at the clip's notes. */
+  foldedPreview?: ReactNode;
 }) {
   const clip = useClip(clipStore);
   const presence = useAuthorPresence();
@@ -926,6 +929,7 @@ export function PianoRoll({
           >
             Quantize{selection.size ? " sel" : ""}
           </Button>
+          {fold && !fold.open && foldedPreview && <div className="flex-1 min-w-0 h-5 ml-2">{foldedPreview}</div>}
         </SectionHeader>
       )}
 

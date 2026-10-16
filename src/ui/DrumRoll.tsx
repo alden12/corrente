@@ -34,6 +34,7 @@ export function DrumRoll({
   compact,
   footer,
   fold,
+  foldedPreview,
 }: {
   clipStore: ClipStore;
   params: ParamStore;
@@ -50,6 +51,7 @@ export function DrumRoll({
   /** Under the roll, as on any other (the desktop keys panel). */
   footer?: ReactNode;
   fold?: Fold;
+  foldedPreview?: ReactNode;
 }) {
   const pads = usePads(params);
   const rows = useMemo<RollRows>(() => {
@@ -92,6 +94,7 @@ export function DrumRoll({
       compact={compact}
       footer={footer}
       fold={fold}
+      foldedPreview={foldedPreview}
     />
   );
 }

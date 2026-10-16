@@ -8,7 +8,11 @@
 export const PREVIEW_BARS = 8;
 
 /** How many beats a preview spans, and whether the clip runs on past them. */
-export function previewWindow(lengthBeats: number, beatsPerBar: number): { length: number; continues: boolean } {
-  const length = Math.min(lengthBeats, PREVIEW_BARS * beatsPerBar);
+export function previewWindow(
+  lengthBeats: number,
+  beatsPerBar: number,
+  bars = PREVIEW_BARS,
+): { length: number; continues: boolean } {
+  const length = Math.min(lengthBeats, bars * beatsPerBar);
   return { length, continues: lengthBeats > length };
 }
