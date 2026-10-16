@@ -1587,6 +1587,8 @@ test.describe("phone, landscape", () => {
 
     await pads(page).getByRole("button", { name: "Hide the keys" }).tap();
     await expect(pads(page).locator("[data-pad-row]")).toHaveCount(0);
+    // Folded, their header still says what they would play in.
+    await expect(pads(page)).toContainText("C major");
     await expect.poll(async () => (await sheet(page).boundingBox())!.height).toBeGreaterThan(before);
     const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
     expect(roll.width, "the roll has the full width").toBeGreaterThan(700);
