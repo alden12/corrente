@@ -1,40 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCIDENTAL_HEIGHT,
-  EDITOR_CHROME,
-  PADS_SHARE,
+  KEYS_SHARE,
   PAD_HEIGHT,
   ROW_GAP,
   BARE_ROW_GAP,
   rowGap,
   fitPads,
+  keysHeight,
+  keysRoom,
   padRowHeight,
-  padRowsHeight,
   PAD_GAP,
-  SECTION_HEADER,
 } from "../src/ui/pads/geometry";
 
 /**
- * The editor room each shape actually has, measured in the browser at the committed detent
- * (workspace height x the detent fraction, less the sheet's header). These are the numbers
- * the fitting has to be right about, so they are the numbers it is tested against.
+ * The Studio's height (between the top bar and the tabs, keys included) on each shape, measured in
+ * the browser. These are the numbers the fitting has to be right about.
  */
-const ROOM = {
-  phoneHalf: 372,
-  phoneFull: 619,
-  landscapeHalf: 133,
-  landscapeFull: 251,
-  tabletHalf: 295,
-  tabletFull: 568,
-  tabletPortraitFull: 815,
-};
-
-/** What the roll is left with, which is the number the fitting is really about. */
-const rollHeight = (room: number, accidentals: boolean) => {
-  const fit = fitPads(room, accidentals);
-  const chrome = 36 + 8 + (fit.inlineControls ? 0 : 38);
-  return room - EDITOR_CHROME - SECTION_HEADER - chrome - padRowsHeight(fit.rows, accidentals);
-};
+const STUDIO = { phone: 700, landscape: 284, tablet: 640, tabletPortrait: 900 };
 
 describe("padRowHeight", () => {
   it("counts the accidental band only when the accidentals are on", () => {
@@ -53,76 +36,48 @@ describe("padRowHeight", () => {
 });
 
 describe("fitPads", () => {
-  it("gives a phone at Half a row, with the controls in a row of their own", () => {
-    const fit = fitPads(ROOM.phoneHalf, true);
-    expect(fit.rows).toBeGreaterThanOrEqual(1);
-    expect(fit.inlineControls).toBe(false);
-  });
-
-  it("gives a landscape phone at Half nothing at all, rather than a clipped row", () => {
-    // ~133px of editor is not one row plus the controls to drive it, however it is shuffled.
-    expect(fitPads(ROOM.landscapeHalf, true)).toMatchObject({ rows: 0, inlineControls: true });
-  });
-
-  it("buys landscape a row at Full by folding the controls into the header", () => {
-    const fit = fitPads(ROOM.landscapeFull, true);
-    expect(fit.rows).toBe(1);
-    expect(fit.inlineControls).toBe(true);
-  });
-
-  it("only folds the controls away as a last resort", () => {
-    // Anywhere a row fits with the controls stacked, they stay stacked - the fold is what
-    // landscape needs, not a size the layout drifts into whenever things get tight.
-    [ROOM.phoneHalf, ROOM.phoneFull, ROOM.tabletPortraitFull].forEach((room) => {
-      expect(fitPads(room, true).inlineControls).toBe(false);
+  it("fits exactly the rows whose height it was given, and no more", () => {
+    [1, 2, 3].forEach((rows) => {
+      expect(fitPads(keysHeight(rows, true), true)).toBe(rows);
+      expect(fitPads(keysHeight(rows, true) - 1, true)).toBe(rows - 1);
     });
   });
 
-  it("gives the roll more room as the sheet grows, not just the pads", () => {
-    // The bug this replaced: a flat 40px reserve meant every pixel a taller sheet added went
-    // to the pads, so Half and Full left the roll the same sliver and raising it showed no
-    // more notes. Both surfaces have to grow, on both shapes.
-    [
-      [ROOM.phoneHalf, ROOM.phoneFull],
-      [ROOM.tabletHalf, ROOM.tabletFull],
-    ].forEach(([half, full]) => {
-      expect(fitPads(full, true).rows).toBeGreaterThan(fitPads(half, true).rows);
-      expect(rollHeight(full, true)).toBeGreaterThan(rollHeight(half, true) + 60);
-    });
-  });
-
-  it("never lets the pads take more than their share", () => {
-    // Except in the last resort, which is a single row on a landscape phone - there the roll
-    // is given up deliberately, and the disclosure hands it back.
-    [ROOM.phoneHalf, ROOM.phoneFull, ROOM.tabletHalf, ROOM.tabletFull, ROOM.tabletPortraitFull, 5000].forEach(
-      (room) => {
-        const editor = room - EDITOR_CHROME - SECTION_HEADER;
-        expect(rollHeight(room, true)).toBeGreaterThanOrEqual(editor * (1 - PADS_SHARE) - 1);
-      },
-    );
+  it("says zero rather than a clipped row when one does not fit", () => {
+    expect(fitPads(keysHeight(1, true) - 1, true)).toBe(0);
+    expect(fitPads(0, true)).toBe(0);
   });
 
   it("fits more rows with the accidentals off, in the same room", () => {
-    // Measured somewhere with the room to show it. A row without accidentals is 64px against
-    // 90px with them, but rows only come whole - at `phoneHalf` both round down to one, so
-    // asserting there would be asserting about the rounding rather than about the heights.
-    expect(fitPads(ROOM.phoneFull, false).rows).toBeGreaterThan(fitPads(ROOM.phoneFull, true).rows);
-  });
-
-  it("never asks for more than the room it was given", () => {
-    // The section is content-sized, so a row too many is a row clipped by the sheet.
-    const chrome = { stacked: 36 + 38 + 8, inline: 36 + 8 };
-    [100, 133, 200, 251, 372, 500, 666, 815].forEach((room) => {
-      const fit = fitPads(room, true);
-      if (!fit.rows) return;
-      const used = padRowsHeight(fit.rows, true) + (fit.inlineControls ? chrome.inline : chrome.stacked);
-      expect(used + EDITOR_CHROME + SECTION_HEADER).toBeLessThanOrEqual(room);
-    });
+    expect(fitPads(400, false)).toBeGreaterThan(fitPads(400, true));
   });
 
   it("grows monotonically with the room", () => {
-    const rooms = [100, 200, 300, 400, 600, 900];
-    const rows = rooms.map((room) => fitPads(room, true).rows);
+    const rows = [100, 200, 300, 400, 600, 900].map((room) => fitPads(room, true));
     expect([...rows].sort((a, b) => a - b)).toEqual(rows);
+  });
+});
+
+describe("keysRoom", () => {
+  it("gives the keys less at Half than at Full, so they never bury a half-open sheet", () => {
+    expect(KEYS_SHARE.half).toBeLessThan(KEYS_SHARE.full);
+    expect(fitPads(keysRoom(STUDIO.phone, "half"), true)).toBeLessThan(fitPads(keysRoom(STUDIO.phone, "full"), true));
+  });
+
+  it("gives a phone held upright more than one row at Full", () => {
+    expect(fitPads(keysRoom(STUDIO.phone, "full"), true)).toBeGreaterThan(1);
+  });
+
+  it("never lets the keys take more than half the Studio", () => {
+    Object.values(STUDIO).forEach((studio) => {
+      (["peek", "half", "full"] as const).forEach((detent) => {
+        const rows = fitPads(keysRoom(studio, detent), true);
+        expect(keysHeight(rows, true)).toBeLessThanOrEqual(studio / 2);
+      });
+    });
+  });
+
+  it("still gives a phone on its side one row at Half", () => {
+    expect(fitPads(keysRoom(STUDIO.landscape, "half"), true)).toBe(1);
   });
 });

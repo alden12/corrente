@@ -2,16 +2,15 @@
  * How much room the pads need, and how much of it they may have (MOBILE-6).
  *
  * **The octave count is a function of the space, not a constant.** A phone in landscape
- * leaves the sheet under 200px and can only really hold one row; a tablet in portrait can
- * hold four. Picking a number for "the mobile limit" would be wrong at both ends, so the
- * limit is computed from the room the editor actually has at the committed detent - and
- * from a *share* of it, so the surface the pads sit under grows with the sheet too
- * (`PADS_SHARE`).
+ * can only really hold one row; a tablet in portrait can hold four. Picking a number for "the
+ * mobile limit" would be wrong at both ends, so the limit is computed from the Studio's height,
+ * and a share of it that depends on the sheet (`KEYS_SHARE`).
  *
  * Pure, so the fitting is unit-testable without a browser: the numbers below are the pad
  * layout's own, and `fitPads` is the only place they are turned into a decision.
  */
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
+import type { Detent } from "../shell/detents";
 
 /** An in-scale pad. Comfortably over the 44px hit-target floor (MOBILE-2). */
 export const PAD_HEIGHT = 52;
@@ -45,69 +44,21 @@ export const rowGap = (accidentals: boolean) => (accidentals ? ROW_GAP : BARE_RO
  * width, since those are positioned rather than laid out and get no gap for free.
  */
 export const PAD_GAP = 4;
-/** The key/scale menu and the octave range, when they get a row of their own. */
-export const CONTROLS_HEIGHT = 38;
-/** The Keys section's header, a section header at its touch height. */
+/** The Keys section's header, which carries their controls when they are open (MOBILE-24). */
 export const SECTION_HEADER = TOUCH_SECTION_HEADER_HEIGHT;
-/** The padding under the pads, so the last row is not flush against the sheet's edge. */
+/** The padding under the pads, so the last row is not flush against the tab bar. */
 export const PADS_PADDING = 8;
 
 /**
- * What the surface above cannot give up, taken from the editor because it is the surface the
- * pads crowd hardest: `InstrumentEditor`'s padding and its clip-name row. The roll itself can
- * go to nothing, but this is there whether it does or not.
- */
-export const EDITOR_CHROME = 52;
-
-/**
- * How the pads and the surface above them divide the sheet: the pads may take this share of
- * it, and whatever they are under keeps the rest.
- *
- * **A share rather than a fixed reserve, and that is the whole of it.** Keeping a flat 40px
- * for the roll meant the pads absorbed everything a taller sheet gave you: throwing it from
- * Half to Full grew the pads and left the roll the same unreadable sliver, so the sheet's
- * range bought pads and nothing else. Dividing the room makes both grow together, and
- * dropping back to Half gives rows back before it gives back notes. You raise the sheet to
- * see more of what you are editing; more pads is what comes with it.
+ * How much of the Studio the keys may take, by where the sheet is (MOBILE-24). They dock under
+ * it and push it up, so a share is what keeps the sheet worth having: at Half it is sharing the
+ * screen with the arrangement already, so the keys get less there than at Full, where they
+ * leave the sheet half. Minimised, the sheet is a bar, and the keys may have as much as at Full.
  *
  * It bounds the *limit*, not the default - what is on show is the stored octave count, which
  * starts at one - so it decides where `+` stops.
  */
-export const PADS_SHARE = 0.65;
-
-export interface PadFit {
-  /**
-   * Rows of pads that fit. **Zero is a real answer** - a landscape phone at Half has under
-   * 140px of editor, which is not one row plus the controls to drive it however the numbers
-   * are shuffled. The section then says so, rather than showing half a pad.
-   *
-   * There is no constant ceiling: the room says how many rows there is space for and the
-   * pitch range (`OCTAVE_RANGE`, applied in `padSettings`) says how many there are notes
-   * for, and between them nothing arbitrary is left to pick.
-   */
-  rows: number;
-  /**
-   * Whether the key/scale and octave controls have to share the section's header row. True
-   * where a row of their own would cost the last row of pads - which is landscape on a
-   * phone, and landscape is short *and* wide, so the header has the width to take them.
-   */
-  inlineControls: boolean;
-}
-
-/**
- * What the fitting will give up, in the order it is willing to give it up, to fit a row at
- * all. The first arrangement that fits one wins.
- *
- * The controls' own row goes first: folded into the section header they cost a little width,
- * where the roll's share costs the thing you are playing along to. Handing that share over
- * is the last resort, and it buys a single row - it is there so a landscape phone can be
- * played at all, not so any short editor fills itself with pads.
- */
-const ARRANGEMENTS: readonly { inlineControls: boolean; padsShare: number; limit: number }[] = [
-  { inlineControls: false, padsShare: PADS_SHARE, limit: Infinity },
-  { inlineControls: true, padsShare: PADS_SHARE, limit: Infinity },
-  { inlineControls: true, padsShare: 1, limit: 1 },
-];
+export const KEYS_SHARE: Record<Detent, number> = { peek: 0.5, half: 0.25, full: 0.5 };
 
 /**
  * How much one more row of pads costs: the row (its accidental band and the gap under that
@@ -124,24 +75,30 @@ export const padRowHeight = (accidentals: boolean) =>
 export const padRowsHeight = (rows: number, accidentals: boolean) =>
   rows > 0 ? rows * padRowHeight(accidentals) - rowGap(accidentals) : 0;
 
+/** How tall the keys are with `rows` rows showing: their header, the rows and the padding under them. */
+export const keysHeight = (rows: number, accidentals: boolean) =>
+  SECTION_HEADER + padRowsHeight(rows, accidentals) + PADS_PADDING;
+
 /**
- * What fits in `room` pixels: the Studio's height, the docked keys included (MOBILE-24).
+ * Rows of pads that fit in `room` pixels of keys, their header included. **Zero is a real
+ * answer**: the section then says so, rather than showing half a pad.
  *
- * `EDITOR_CHROME` and the keys' own section header come off the top because they belong to
- * neither; what is left is what the pads and the rest of the Studio divide, and every
- * arrangement divides the same number.
+ * There is no constant ceiling: the room says how many rows there is space for and the pitch
+ * range (`OCTAVE_RANGE`, applied in `padSettings`) says how many there are notes for, and
+ * between them nothing arbitrary is left to pick.
  */
-export function fitPads(room: number, accidentals: boolean): PadFit {
-  const rowHeight = padRowHeight(accidentals);
-  const editor = Math.max(0, room - SECTION_HEADER - EDITOR_CHROME);
-  const fits = ARRANGEMENTS.map(({ inlineControls, padsShare, limit }) => {
-    const chrome = SECTION_HEADER + PADS_PADDING + (inlineControls ? 0 : CONTROLS_HEIGHT);
-    const space = editor * padsShare - chrome;
-    // The last row has no gap after it, so the room gets that gap back before dividing.
-    const rows = Math.max(0, Math.min(limit, Math.floor((space + rowGap(accidentals)) / rowHeight)));
-    return { rows, inlineControls };
-  });
-  // Nothing fits anywhere: the last arrangement is the one that gave up the most, so its
-  // zero is the honest answer and its `inlineControls` the one the empty section renders.
-  return fits.find((fit) => fit.rows >= 1) ?? fits[fits.length - 1];
+export function fitPads(room: number, accidentals: boolean): number {
+  const space = room - SECTION_HEADER - PADS_PADDING;
+  // The last row has no gap after it, so the room gets that gap back before dividing.
+  return Math.max(0, Math.floor((space + rowGap(accidentals)) / padRowHeight(accidentals)));
+}
+
+/**
+ * The room the keys may have in a Studio `studio` pixels tall, with the sheet at `detent`: their
+ * share, and never less than one row of pads while the Studio has room for two, so a phone on its
+ * side can still play at Half.
+ */
+export function keysRoom(studio: number, detent: Detent): number {
+  const oneRow = keysHeight(1, true);
+  return Math.max(studio * KEYS_SHARE[detent], studio >= 2 * oneRow ? oneRow : 0);
 }

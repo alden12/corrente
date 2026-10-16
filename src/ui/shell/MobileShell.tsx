@@ -47,11 +47,12 @@ import type { LibraryView } from "../libraryViews";
 import { WorkbenchColumn } from "../workbench/WorkbenchColumn";
 import { NotePads } from "../pads/NotePads";
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
-import { ClipPreview } from "./ClipPreview";
-import { beatsPerBar as beatsPerBarOf } from "../../audio/project/schema";
+import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
+import { keysHeight, keysRoom } from "../pads/geometry";
+import { KeysToggle } from "../pads/KeysToggle";
 import { useProject } from "../../audio/project/useProject";
 import { useEditLog } from "../../audio/commands/useEditLog";
-import { usePersistentString } from "../usePersistent";
+import { usePersistentBoolean, usePersistentString } from "../usePersistent";
 import { useElementHeight } from "../useElementHeight";
 import { arrangementAddItems } from "../arrangement/addItems";
 import { detentsFor, type Detent } from "./detents";
@@ -109,15 +110,14 @@ function BarButton({
   );
 }
 
-/** The minimised sheet's glance: an instrument track's active clip, drawn; an audio clip by name. */
-function sheetPreview(track: Track, beatsPerBar: number): ReactNode {
-  if (track.kind === "instrument") {
-    const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
-    return active && <ClipPreview store={active.store} name={active.name} beatsPerBar={beatsPerBar} empty={null} />;
-  }
-  const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
-  return active && <span className="block px-2 truncate font-mono text-[10px] text-faint">{active.name}</span>;
+/** What the sheet's header says under the track's name: its kind, and how many devices it runs. */
+function sheetSubtitle(track: Track): string {
+  if (track.kind === "audio") return `audio · ${devicesLabel(track.effects.length)}`;
+  const instrument = track.instrumentType === EMPTY_INSTRUMENT ? 0 : 1;
+  return `${track.instrumentType} · ${devicesLabel(track.midiDevices.length + instrument + track.effects.length)}`;
 }
+
+const devicesLabel = (count: number) => `${count} ${count === 1 ? "device" : "devices"}`;
 
 /** A docked side column on a tablet (the agent): the same contents a phone gets in a sheet. */
 function DockedPanel({ side, label, children }: { side: "left" | "right"; label: string; children: ReactNode }) {
@@ -133,8 +133,8 @@ function DockedPanel({ side, label, children }: { side: "left" | "right"; label:
   );
 }
 
-/** The height the try panel's pads are fitted to: two rows of scale pads. */
-const TRY_PADS_ROOM = 240;
+/** The height the try panel's pads are fitted to: one row of scale pads, with their header. */
+const TRY_PADS_ROOM = keysHeight(1, true);
 
 export function MobileShell({
   shape,
@@ -171,6 +171,12 @@ export function MobileShell({
    * not ask for. Keep the reasoning attached to the constraint, not to the number.
    */
   const [detent, setDetent] = useState<Detent>("half");
+  /**
+   * Whether the keys show. Shell state, since two buttons share it: the one at the keys' header,
+   * and the minimised sheet's, which stands in for that header while the keys are hidden.
+   */
+  const [keysOpen, setKeysOpen] = usePersistentBoolean("corrente:pads-open", true);
+  const keysFold = { open: keysOpen, onToggle: () => setKeysOpen(!keysOpen) };
   // Which place is in front. Kept across reloads: you come back to where you were.
   const [tab, setTab] = usePersistentString<MobileTab>("corrente:mobile-tab", "studio", MOBILE_TABS);
   // "home" is the list of projects (MOBILE-19.3); "inside" is the open project's own views.
@@ -431,8 +437,8 @@ export function MobileShell({
                 detents={detents}
                 onDetentChange={setDetent}
                 title={selectedTrack.name}
-                subtitle={selectedTrack.kind === "audio" ? "audio" : selectedTrack.instrumentType}
-                preview={sheetPreview(selectedTrack, beatsPerBarOf(project.timeSignature))}
+                subtitle={sheetSubtitle(selectedTrack)}
+                minimisedActions={selectedTrack.kind === "instrument" && !keysOpen && <KeysToggle fold={keysFold} />}
               >
                 <WorkbenchColumn
                   key={selectedTrack.id}
@@ -449,8 +455,9 @@ export function MobileShell({
           </div>
           {/* The keys dock under the Studio as a phone's keyboard does, pushing it up rather than
               covering it: they play whatever the sheet is showing, and at any detent. */}
-          {/* Not while the sheet is minimised: parked, you are arranging rather than playing. */}
-          {selectedTrack?.kind === "instrument" && detent !== "peek" && (
+          {/* Hidden, the keys keep their header, except under a minimised sheet, whose bar has the
+              keyboard button instead and saves the row. */}
+          {selectedTrack?.kind === "instrument" && (keysOpen || detent !== "peek") && (
             <section
               aria-label="Keys"
               data-testid="keys-dock"
@@ -464,7 +471,8 @@ export function MobileShell({
                 // A tablet has the width for two octaves in a row; a phone does not, and
                 // below ~44px per pad the layout is wrong rather than merely tight.
                 octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-                room={studioHeight}
+                room={keysRoom(studioHeight, detent)}
+                fold={keysFold}
               />
             </section>
           )}

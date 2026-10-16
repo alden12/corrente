@@ -684,20 +684,39 @@ test.describe("phone", () => {
     expect(Math.abs(box.y + box.height - (await keysTop(page))), "and sits on the keys").toBeLessThan(2);
   });
 
-  test("minimised is the preview bar, and a tap on it opens the sheet (MOBILE-19.1)", async ({ page }) => {
+  test("minimised is the bar, with the keyboard button while the keys are hidden, and a tap on it opens the sheet (MOBILE-24)", async ({
+    page,
+  }) => {
     await page.goto("/");
     await dismissStart(page);
     await setDetent(page, "peek");
 
-    // The header and nothing else: the track, a glance at its clip, and the way back up.
+    // The header and nothing else: the track, what it runs, and the way back up. The keys stay
+    // while they are showing, so it sits on them.
     const box = (await sheet(page).boundingBox())!;
     expect(box.height, "minimised is just the header").toBeLessThan(80);
-    // Parked, you are arranging rather than playing, so the keys go too and it sits on the tabs.
+    await expect(sheet(page).getByText(/^subtractive · \d+ devices?$/)).toBeVisible();
+    expect(Math.abs(box.y + box.height - (await keysTop(page))), "and it sits on the keys").toBeLessThan(2);
+
+    // Hidden, the keys give up their header row too, and the bar's keyboard button stands in for it.
+    await pads(page).getByRole("button", { name: "Hide the keys" }).tap();
     await expect(pads(page)).toHaveCount(0);
     const tabsTop = (await tabBar(page).boundingBox())!.y;
-    expect(Math.abs(box.y + box.height - tabsTop), "and it sits on the tab bar").toBeLessThan(2);
+    // Polled: the workspace grows into the keys' room, and the bar follows it down once laid out.
+    await expect
+      .poll(
+        async () => {
+          const parked = (await sheet(page).boundingBox())!;
+          return Math.abs(parked.y + parked.height - tabsTop);
+        },
+        { message: "then it sits on the tab bar" },
+      )
+      .toBeLessThan(2);
+    await sheet(page).getByRole("button", { name: "Show the keys" }).tap();
+    await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
+    await expect(sheet(page).getByRole("button", { name: "Show the keys" })).toHaveCount(0);
 
-    await sheet(page).getByRole("button", { name: "Open the editor" }).tap();
+    await grabber(page).tap();
     await expect.poll(() => detentOf(page)).toBe("half");
   });
 
@@ -726,7 +745,7 @@ test.describe("phone", () => {
     await tab(page, "Explore").tap();
     await openExploreCategory(page, "Instruments");
     await page.getByRole("button", { name: 'Add "Sampler" as a new track', exact: true }).tap();
-    await expect(sheet(page).getByText("sampler", { exact: true })).toBeVisible();
+    await expect(sheet(page).getByText(/^sampler · /)).toBeVisible();
     expect(await detentOf(page)).toBe("peek");
   });
 
@@ -785,7 +804,7 @@ test.describe("phone", () => {
     await dismissStart(page);
     await setDetent(page, "peek");
 
-    await sheet(page).getByRole("button", { name: "Open the editor", exact: true }).tap();
+    await grabber(page).tap();
     await expect.poll(() => detentOf(page)).toBe("half");
 
     const height = sheet(page).getByRole("slider", { name: "Editor height" });
@@ -1000,22 +1019,6 @@ test.describe("phone", () => {
     await page.waitForTimeout(500);
     const box = (await sheet(page).boundingBox())!;
     expect(Math.abs(box.y + box.height - (await keysTop(page))), "still anchored to the keys").toBeLessThan(2);
-  });
-
-  test("a drag that starts on the minimised clip preview moves the sheet too (DAW-58)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
-    await setDetent(page, "peek");
-
-    // It was a button, and the drag skips buttons, so a swipe started on it went nowhere.
-    const preview = (await sheet(page).getByRole("button", { name: "Open the editor" }).boundingBox())!;
-    const startX = preview.x + preview.width / 2;
-    const startY = preview.y + preview.height / 2;
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    for (let step = 1; step <= 8; step++) await page.mouse.move(startX, startY - step * 40);
-    await page.mouse.up();
-    await expect.poll(() => detentOf(page)).not.toBe("peek");
   });
 
   test("full covers the whole workspace (MOBILE-19.1)", async ({ page }) => {
@@ -1271,13 +1274,13 @@ test.describe("phone", () => {
     await expect(tracks.getByTestId("tree-track")).toHaveCount(2);
     await tracks.getByTestId("tree-track").first().tap();
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
-    await expect(sheet(page).getByText("subtractive", { exact: true })).toBeVisible();
+    await expect(sheet(page).getByText(/^subtractive · /)).toBeVisible();
   });
 
   test("swapping a sound from Explore goes back to the Studio, so you can see what it just did", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await expect(sheet(page).getByText("subtractive", { exact: true })).toBeVisible();
+    await expect(sheet(page).getByText(/^subtractive · /)).toBeVisible();
 
     await tab(page, "Explore").tap();
     await openExploreCategory(page, "Instruments");
@@ -1286,7 +1289,7 @@ test.describe("phone", () => {
     // The track it changed is in the Studio, so that is where you land; staying on a
     // full-screen tab would show nothing happening.
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
-    await expect(sheet(page).getByText("fm", { exact: true })).toBeVisible();
+    await expect(sheet(page).getByText(/^fm · /)).toBeVisible();
   });
 
   test("the pads sit under the roll, in the key they say they are in", async ({ page }) => {
@@ -1400,7 +1403,7 @@ test.describe("phone", () => {
     await page.screenshot({ path: "test-results/chord-edit.png" });
 
     // Hidden, it is gone once editing is done.
-    await pads(page).getByRole("button", { name: "Hide" }).tap();
+    await pads(page).getByRole("button", { name: "Hide", exact: true }).tap();
     await pads(page).getByRole("button", { name: "Done" }).tap();
     await expect(pad(page, "Dsus4")).toHaveCount(0);
     // Editing switched it to Custom, and the arrangement is kept across a reload.
@@ -1582,7 +1585,7 @@ test.describe("phone, landscape", () => {
     await setDetent(page, "full");
     const before = (await sheet(page).boundingBox())!.height;
 
-    await pads(page).getByRole("button", { name: "Fold the keys" }).tap();
+    await pads(page).getByRole("button", { name: "Hide the keys" }).tap();
     await expect(pads(page).locator("[data-pad-row]")).toHaveCount(0);
     await expect.poll(async () => (await sheet(page).boundingBox())!.height).toBeGreaterThan(before);
     const roll = (await page.getByTestId("roll-scroll").boundingBox())!;

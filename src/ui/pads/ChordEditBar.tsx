@@ -16,7 +16,7 @@ import { Button } from "../controls/Button";
 import { IconButton } from "../controls/IconButton";
 import type { PadSettings } from "./padSettings";
 
-export function ChordEditBar({ settings, inline }: { settings: PadSettings; inline: boolean }) {
+export function ChordEditBar({ settings }: { settings: PadSettings }) {
   const [scope, setScope] = useState<ChordScope>("column");
   const { tonic, scale, lowOctave, chordPrefs: prefs, chordSelection: selection, setChordPrefs } = settings;
   const rows = chordRows({ tonic, scale, lowOctave, prefs, editing: true });
@@ -39,9 +39,7 @@ export function ChordEditBar({ settings, inline }: { settings: PadSettings; inli
     </Button>
   );
   const bar = (children: ReactNode) => (
-    <div className={`shrink-0 flex items-center gap-1 h-8 ${inline ? "flex-1 min-w-0" : "px-2 mb-1.5"}`}>
-      {children}
-    </div>
+    <div className="flex-1 min-w-0 shrink-0 flex items-center gap-1 h-8">{children}</div>
   );
 
   if (!chord || !selection)

@@ -37,21 +37,12 @@ const ARRANGE_MODES: { mode: ChordArrangeMode; label: string }[] = [
 ];
 
 /**
- * The key and the octave range. A row of its own where there is height for one, and folded
- * into the section's header where there is not - which is landscape, and landscape has the
- * width to take them.
+ * The key and the octave range, in the keys' section header: a row of their own cost a row of
+ * pads on a phone (MOBILE-24). Sized to fit a 390px header with the keyboard toggle beside them.
  */
-export function ScalePadControls({
-  settings,
-  octavesPerRow,
-  inline,
-}: {
-  settings: PadSettings;
-  octavesPerRow: number;
-  inline: boolean;
-}) {
+export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSettings; octavesPerRow: number }) {
   const { scale, tonic, accidentals, chords } = settings;
-  if (settings.editingChords) return <ChordEditBar settings={settings} inline={inline} />;
+  if (settings.editingChords) return <ChordEditBar settings={settings} />;
   const pairs = octavesPerRow > 1 && !chords;
   const sizeWhat = chords ? "chord rows" : "octaves";
 
@@ -98,7 +89,7 @@ export function ScalePadControls({
   ];
 
   return (
-    <div className={`shrink-0 flex items-center gap-1 ${inline ? "flex-1 min-w-0" : "px-2 pb-1.5"}`}>
+    <div className="flex-1 min-w-0 shrink-0 flex items-center gap-1">
       <Menu
         items={keyItems}
         label="Key and scale"
@@ -106,7 +97,7 @@ export function ScalePadControls({
         // A word, so it keeps the grey pill a word needs. `Menu` renders its own trigger, so
         // it borrows the class rather than being a `Button`. Inline in a section header, a shorter
         // pill, so it sits in the header rather than filling it.
-        triggerClassName={`${CONTROL_BASE} shrink-0 ${inline ? "h-6 px-2.5" : "h-8 px-3"} rounded-full bg-control text-ink hover:bg-control-hover font-mono text-[11px]`}
+        triggerClassName={`${CONTROL_BASE} shrink-0 h-6 px-2.5 rounded-full bg-control text-ink hover:bg-control-hover font-mono text-[11px]`}
         trigger={
           <>
             {settings.keyLabel}
@@ -117,16 +108,16 @@ export function ScalePadControls({
       <div className="ml-auto shrink-0 flex items-center">
         <IconButton
           label="Lower octave"
-          size="lg"
+          size="md"
           onClick={() => settings.moveRange(-1)}
           disabled={!settings.canMove(-1)}
         >
           ◂
         </IconButton>
-        <span className="w-16 text-center font-mono text-[10px] text-muted tabular-nums">{settings.rangeLabel}</span>
+        <span className="w-12 text-center font-mono text-[10px] text-muted tabular-nums">{settings.rangeLabel}</span>
         <IconButton
           label="Higher octave"
-          size="lg"
+          size="md"
           onClick={() => settings.moveRange(1)}
           disabled={!settings.canMove(1)}
         >
@@ -134,7 +125,7 @@ export function ScalePadControls({
         </IconButton>
         <IconButton
           label={pairs ? "Fewer octaves (a row of two)" : `Fewer ${sizeWhat}`}
-          size="lg"
+          size="md"
           onClick={() => settings.sizeRange(-1)}
           disabled={!settings.canSize(-1)}
         >
@@ -142,7 +133,7 @@ export function ScalePadControls({
         </IconButton>
         <IconButton
           label={pairs ? "More octaves (a row of two)" : `More ${sizeWhat}`}
-          size="lg"
+          size="md"
           onClick={() => settings.sizeRange(1)}
           disabled={!settings.canSize(1)}
         >

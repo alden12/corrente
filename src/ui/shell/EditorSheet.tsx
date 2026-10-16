@@ -34,8 +34,7 @@ export function EditorSheet({
   onDetentChange,
   title,
   subtitle,
-  controls,
-  preview,
+  minimisedActions,
   children,
 }: {
   detent: Detent;
@@ -45,13 +44,8 @@ export function EditorSheet({
   title: string;
   /** Its kind, in the slot the desktop editor tab uses for the same thing. */
   subtitle?: string;
-  /** The Edit / Rack switch, which opts out of the drag by being buttons. */
-  controls?: ReactNode;
-  /**
-   * What the minimised bar shows in place of the controls: a glance at the clip, since at peek
-   * the header is all there is. Tapping it opens the sheet to half.
-   */
-  preview?: ReactNode;
+  /** At the bar's right while it is minimised: the keyboard button, when the keys are hidden. */
+  minimisedActions?: ReactNode;
   children: ReactNode;
 }) {
   const minimised = detent === "peek";
@@ -107,25 +101,10 @@ export function EditorSheet({
             <span className="truncate text-[13px] font-semibold text-strong">{title}</span>
             {subtitle && <span className="font-mono text-[9px] tracking-wider uppercase text-faint">{subtitle}</span>}
           </div>
-          {minimised ? (
-            // Not a `<button>`: the drag skips buttons, so a swipe that started on the preview went
-            // nowhere. The bar's tap opens the editor (`onTap` above); this keeps the keyboard route.
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label="Open the editor"
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                onDetentChange("half");
-              }}
-              // Boxed only when there are notes to draw: an empty clip leaves the bar blank.
-              className="ml-auto min-w-0 flex-1 h-8 max-w-48 rounded-md has-[svg]:bg-stage overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-you"
-            >
-              {preview}
-            </div>
-          ) : (
-            controls
+          {/* Minimised, the bar's own buttons (the keys' toggle). The drag skips buttons, and a tap
+              anywhere else on the bar opens the editor (`onTap` above). */}
+          {minimised && minimisedActions && (
+            <div className="ml-auto shrink-0 flex items-center">{minimisedActions}</div>
           )}
         </div>
       </div>

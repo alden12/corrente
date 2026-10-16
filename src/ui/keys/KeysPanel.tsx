@@ -89,7 +89,7 @@ export function KeysPanel({
           <>
             <span className="font-mono text-[10px] text-faint shrink-0">{hint}</span>
             <div className="flex-1 min-w-0 flex">
-              <ScalePadControls settings={settings} octavesPerRow={1} inline />
+              <ScalePadControls settings={settings} octavesPerRow={1} />
             </div>
           </>
         )}
