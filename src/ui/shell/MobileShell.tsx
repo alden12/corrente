@@ -34,7 +34,7 @@
  * only arrange - and so what makes it able to record, since they go out through the same
  * `LiveNotes` seam a MIDI keyboard does.
  */
-import { useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { LibraryPanel } from "../LibraryPanel";
 import { AgentPanel } from "../AgentPanel";
 import { ArrangementTimeline } from "../ArrangementTimeline";
@@ -48,7 +48,7 @@ import { WorkbenchColumn } from "../workbench/WorkbenchColumn";
 import { NotePads } from "../pads/NotePads";
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
-import { keysHeight, keysRoom } from "../pads/geometry";
+import { keysRoom } from "../pads/geometry";
 import { KeysToggle } from "../pads/KeysToggle";
 import { useProject } from "../../audio/project/useProject";
 import { useEditLog } from "../../audio/commands/useEditLog";
@@ -133,9 +133,6 @@ function DockedPanel({ side, label, children }: { side: "left" | "right"; label:
   );
 }
 
-/** The height the try panel's pads are fitted to: one row of scale pads, with their header. */
-const TRY_PADS_ROOM = keysHeight(1, true);
-
 export function MobileShell({
   shape,
   projectStore,
@@ -177,6 +174,13 @@ export function MobileShell({
    */
   const [keysOpen, setKeysOpen] = usePersistentBoolean("corrente:pads-open", true);
   const keysFold = { open: keysOpen, onToggle: () => setKeysOpen(!keysOpen) };
+  // Explore's try panel keys fold and grow as the Studio's do, by the same half-the-screen rule, but
+  // on their own: hiding them to browse is not hiding them to play.
+  const [tryKeysOpen, setTryKeysOpen] = usePersistentBoolean("corrente:try-pads-open", true);
+  const tryKeysFold = { open: tryKeysOpen, onToggle: () => setTryKeysOpen(!tryKeysOpen) };
+  // A callback ref, since Explore mounts only while its tab shows and the hook measures on mount.
+  const [browseElement, setBrowseElement] = useState<HTMLDivElement | null>(null);
+  const browseHeight = useElementHeight(useMemo(() => ({ current: browseElement }), [browseElement]));
   // Which place is in front. Kept across reloads: you come back to where you were.
   const [tab, setTab] = usePersistentString<MobileTab>("corrente:mobile-tab", "studio", MOBILE_TABS);
   // "home" is the list of projects (MOBILE-19.3); "inside" is the open project's own views.
@@ -283,7 +287,7 @@ export function MobileShell({
    * there and a full-screen tab in front of it would show nothing happening (MOBILE-9).
    */
   const browse = (browseTab: BrowseTab, view: LibraryView, onView: (view: LibraryView) => void) => (
-    <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
+    <div ref={setBrowseElement} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
       <ViewRail tab={browseTab} current={view} onSelect={onView} />
       <LibraryPanel
         projectStore={projectStore}
@@ -303,7 +307,8 @@ export function MobileShell({
             samples={project.samples}
             notes={liveNotes}
             octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-            room={TRY_PADS_ROOM}
+            room={keysRoom(browseHeight)}
+            fold={tryKeysFold}
           />
         )}
       />

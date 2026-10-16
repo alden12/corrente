@@ -94,6 +94,16 @@ test.describe("phone", () => {
     await expect(
       page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }),
     ).toHaveAttribute("aria-current", "page");
+
+    // They grow and fold as the Studio's do: a row more, then out of the way of the list.
+    const rows = panel.locator("[data-pad-row]");
+    await expect(rows).toHaveCount(1);
+    await panel.getByRole("button", { name: "More octaves" }).tap();
+    await expect(rows).toHaveCount(2);
+    await panel.getByRole("button", { name: "Hide the keys" }).tap();
+    await expect(panel.locator("[data-pitches]")).toHaveCount(0);
+    await panel.getByRole("button", { name: "Show the keys" }).tap();
+    await expect(rows).toHaveCount(2);
   });
 });
 
