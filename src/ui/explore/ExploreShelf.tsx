@@ -6,43 +6,13 @@
  * A finger swipes it. A mouse wheel cannot scroll sideways, so with a fine pointer the title row
  * carries previous / next arrows that page it, shown only when there is more to see that way.
  */
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
+import { edgeFade, useScrollEnds } from "../scrollFade";
 import type { ExploreItem } from "./exploreItems";
 import type { ItemTaps } from "./itemTaps";
 import { ExploreThumb } from "./ExploreThumb";
 
 const CARD = 92;
-
-/** How far a shelf's edge fades out when there are more cards beyond it. */
-const FADE = 28;
-
-/** A mask that fades whichever edges have more beyond them, rather than cutting a card off hard. */
-const edgeFade = ({ back, on }: { back: boolean; on: boolean }): string =>
-  `linear-gradient(to right, ${back ? "transparent" : "black"} 0, black ${back ? FADE : 0}px, ` +
-  `black calc(100% - ${on ? FADE : 0}px), ${on ? "transparent" : "black"} 100%)`;
-
-/** Whether the row can scroll further back and further on, kept current as it scrolls or resizes. */
-function useScrollEnds(row: React.RefObject<HTMLUListElement | null>, count: number) {
-  const [ends, setEnds] = useState({ back: false, on: false });
-  useEffect(() => {
-    const element = row.current;
-    if (!element) return;
-    const measure = () =>
-      setEnds({
-        back: element.scrollLeft > 1,
-        on: element.scrollLeft + element.clientWidth < element.scrollWidth - 1,
-      });
-    // The observer reports the row's size as soon as it starts watching, which is the first measure.
-    const resize = new ResizeObserver(measure);
-    resize.observe(element);
-    element.addEventListener("scroll", measure, { passive: true });
-    return () => {
-      resize.disconnect();
-      element.removeEventListener("scroll", measure);
-    };
-  }, [row, count]);
-  return ends;
-}
 
 function PageArrow({
   label,

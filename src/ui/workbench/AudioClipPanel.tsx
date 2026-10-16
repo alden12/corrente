@@ -7,6 +7,7 @@
  * Extracted from CenterWorkbench when the touch shell gave the editor its own tab
  * (MOBILE-1); the behaviour is unchanged.
  */
+import { FoldButton, type Fold } from "../controls/FoldButton";
 import { useEffect, useRef, useState } from "react";
 import type { AudioTrack } from "../../audio/project/projectStore";
 import type { Scheduler } from "../../audio/sequencer/scheduler";
@@ -34,6 +35,7 @@ export function AudioClipPanel({
   loopLength,
   samples,
   dispatch,
+  fold,
 }: {
   track: AudioTrack;
   scheduler: Scheduler;
@@ -46,6 +48,8 @@ export function AudioClipPanel({
   /** The project's sample library, so "Use as sample" reuses an entry for the same audio. */
   samples: SampleAsset[];
   dispatch: Dispatch;
+  /** Folds the waveform away under the header (the desktop column, DAW-61.1). */
+  fold?: Fold;
 }) {
   const clip = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
   const bps = beatsPerSecond(tempoBpm);
@@ -149,9 +153,10 @@ export function AudioClipPanel({
   };
 
   return (
-    <div className="flex-1 min-h-0 p-3">
-      <div className="h-full flex flex-col rounded-lg border border-line bg-card overflow-hidden">
+    <div className="flex-1 min-h-0">
+      <div className="h-full flex flex-col bg-card overflow-hidden">
         <div className="flex items-center gap-2.5 px-3 py-2 border-b border-line">
+          {fold && <FoldButton fold={fold} label="clip" />}
           <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint">Audio clip</span>
           <span className="font-mono text-[12.5px] text-strong truncate">{clip.name}</span>
           {dur > 0 && <span className="ml-auto font-mono text-[10.5px] text-faint">{dur.toFixed(2)}s</span>}
@@ -159,7 +164,7 @@ export function AudioClipPanel({
             Use as sample
           </Button>
         </div>
-        <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
+        <div hidden={fold && !fold.open} className="flex-1 min-h-0 p-3 flex flex-col gap-3">
           {/* Beat-grid ruler (drag the two handles to set the loop region) over the
               waveform; the area outside the loop is dimmed; the playhead sweeps the
               region during playback. */}
@@ -179,7 +184,7 @@ export function AudioClipPanel({
               onPointerDown={onSlideDown}
               onDoubleClick={() => setClip({ gridOffsetSec: 0 })}
               title="Drag to slide the audio under the grid (double-click to reset)"
-              className="relative flex-1 min-h-0 rounded-b bg-ground border border-line border-t-0 overflow-hidden cursor-ew-resize touch-none"
+              className="relative flex-1 min-h-0 bg-ground overflow-hidden cursor-ew-resize touch-none"
             >
               {/* The waveform pans under the fixed grid; its left edge is buffer
                   time 0, shifted right by the slide. A canvas is a replaced element,

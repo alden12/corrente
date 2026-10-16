@@ -104,20 +104,19 @@ test.describe("effects", () => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "Effects");
-    const named = page.getByText("Reverb", { exact: true });
-    const before = await named.count(); // its row
+    const inRack = page.locator('[data-device][aria-label="Reverb"]');
 
     await page.getByRole("button", { name: "Reverb", exact: true }).click();
     const panel = page.getByRole("region", { name: "Reverb" });
     await expect(panel).toBeVisible();
-    await expect(named).toHaveCount(before + 1); // the panel; nothing added to the track yet
+    await expect(inRack).toHaveCount(0); // trying it adds nothing to the track
 
     await panel.getByRole("button", { name: /^Add to / }).click();
     await expect(panel).toHaveCount(0);
-    await expect(named).toHaveCount(before + 1); // the panel went, and the device rack shows it
+    await expect(inRack).toHaveCount(1); // the panel went, and the device rack shows it
 
     // Trying a sound takes the panel's place, one at a time.
-    await page.getByRole("button", { name: "Reverb", exact: true }).click();
+    await page.getByTestId("explore-row").getByRole("button", { name: "Reverb", exact: true }).click();
     await expect(panel).toBeVisible();
     await openExploreCategory(page, "Instruments");
     await page.getByRole("button", { name: "FM", exact: true }).click();
@@ -129,12 +128,9 @@ test.describe("effects", () => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "Effects");
-    const named = page.getByText("Reverb", { exact: true });
-    const before = await named.count();
-
     await page.getByRole("button", { name: 'Add "Reverb" to the selected track' }).click();
     await expect(page.getByRole("region", { name: "Reverb" })).toHaveCount(0);
-    await expect(named).toHaveCount(before + 1); // the device rack shows it
+    await expect(page.locator('[data-device][aria-label="Reverb"]')).toHaveCount(1); // the device rack shows it
   });
 
   test("a MIDI device shows its panel too, and adds to the selected instrument track", async ({ page }) => {

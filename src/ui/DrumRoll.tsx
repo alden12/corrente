@@ -6,6 +6,7 @@
  * at the pad's pitch), so a pattern drawn here and one drawn in the grid are identical
  * data - the two are just different editors over the same clip.
  */
+import type { Fold } from "./controls/FoldButton";
 import { useMemo, type ReactNode } from "react";
 import type { ClipStore } from "../audio/sequencer/clipStore";
 import type { ParamStore } from "../audio/params/store";
@@ -32,6 +33,7 @@ export function DrumRoll({
   projectStore,
   compact,
   footer,
+  fold,
 }: {
   clipStore: ClipStore;
   params: ParamStore;
@@ -47,6 +49,7 @@ export function DrumRoll({
   compact?: boolean;
   /** Under the roll, as on any other (the desktop keys panel). */
   footer?: ReactNode;
+  fold?: Fold;
 }) {
   const pads = usePads(params);
   const rows = useMemo<RollRows>(() => {
@@ -88,6 +91,7 @@ export function DrumRoll({
       rows={rows}
       compact={compact}
       footer={footer}
+      fold={fold}
     />
   );
 }

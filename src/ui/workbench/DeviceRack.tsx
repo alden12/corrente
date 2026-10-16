@@ -3,9 +3,9 @@
  * the signal path, read like text: left to right, wrapping when there is no room. "Save as patch"
  * captures the whole chain as a reusable library entry.
  *
- * Fills whatever box it is given: a resizable band under the editor on desktop, a whole
- * tab on touch (MOBILE-1), where narrow width makes the wrap into a vertical stack of
- * one card per device on its own.
+ * On touch it fills a whole tab with its own heading (MOBILE-1), where narrow width makes the
+ * wrap into a vertical stack of one block per device on its own. On desktop it is `bare`: the
+ * workbench column draws the heading (`DevicesBar`, with Save as patch) and does the scrolling.
  */
 import { useState } from "react";
 import type { InstrumentTrack, ProjectStore, Track } from "../../audio/project/projectStore";
@@ -24,7 +24,7 @@ import { Button } from "../controls/Button";
  * reusable library entry. Clicking reveals an inline name field (defaulting to the
  * track name); Enter or Save writes it to the global patch library.
  */
-function SavePatchControl({ track }: { track: InstrumentTrack }) {
+export function SavePatchControl({ track }: { track: InstrumentTrack }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
 
@@ -116,6 +116,7 @@ export function DeviceRack({
   dispatch,
   projectStore,
   onRevealSamples,
+  bare = false,
 }: {
   track: Track;
   samples: SampleAsset[];
@@ -123,7 +124,41 @@ export function DeviceRack({
   projectStore: ProjectStore;
   /** Reveal the Samples library view (threaded to an empty Sampler's picker). */
   onRevealSamples?: () => void;
+  /** Just the devices: the desktop column draws its own heading and scrolls itself (DAW-61.1). */
+  bare?: boolean;
 }) {
+  const devices = (
+    <div className="flex flex-wrap items-start content-start gap-3 p-3">
+      {/* MIDI devices transform notes before the instrument, so they lead the chain. */}
+      <MidiDeviceChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
+      {track.kind === "instrument" &&
+        (track.instrumentType === EMPTY_INSTRUMENT ? (
+          <InstrumentPicker trackId={track.id} dispatch={dispatch} />
+        ) : track.instrumentType === "drumkit" ? (
+          // A drum kit uses its own pad panel in place of the generic one.
+          <DrumkitPanel
+            params={track.params}
+            trackId={track.id}
+            dispatch={dispatch}
+            samples={samples}
+            onRevealSamples={onRevealSamples}
+            projectStore={projectStore}
+          />
+        ) : (
+          <InstrumentPanel
+            params={track.params}
+            instrumentType={track.instrumentType}
+            trackId={track.id}
+            dispatch={dispatch}
+            samples={samples}
+            onRevealSamples={onRevealSamples}
+            projectStore={projectStore}
+          />
+        ))}
+      <EffectChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
+    </div>
+  );
+  if (bare) return devices;
   return (
     <>
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-line bg-panel shrink-0">
@@ -134,41 +169,7 @@ export function DeviceRack({
           </span>
         )}
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-wrap items-start content-start gap-3 p-3">
-          {/* MIDI devices transform notes before the instrument, so they lead the chain. */}
-          <MidiDeviceChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
-          {track.kind === "instrument" &&
-            (track.instrumentType === EMPTY_INSTRUMENT ? (
-              <InstrumentPicker trackId={track.id} dispatch={dispatch} />
-            ) : (
-              // A drum kit uses its own pad panel in place of the generic one.
-              <>
-                {track.instrumentType === "drumkit" ? (
-                  <DrumkitPanel
-                    params={track.params}
-                    trackId={track.id}
-                    dispatch={dispatch}
-                    samples={samples}
-                    onRevealSamples={onRevealSamples}
-                    projectStore={projectStore}
-                  />
-                ) : (
-                  <InstrumentPanel
-                    params={track.params}
-                    instrumentType={track.instrumentType}
-                    trackId={track.id}
-                    dispatch={dispatch}
-                    samples={samples}
-                    onRevealSamples={onRevealSamples}
-                    projectStore={projectStore}
-                  />
-                )}
-              </>
-            ))}
-          <EffectChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
-        </div>
-      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto">{devices}</div>
     </>
   );
 }

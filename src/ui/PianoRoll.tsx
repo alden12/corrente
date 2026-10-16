@@ -26,6 +26,7 @@
  * arrangement loop region lives in the timeline). The grid is drawn past the clip
  * end so you can scroll there and drag the end out.
  */
+import { FoldButton, type Fold } from "./controls/FoldButton";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { noteKey } from "../audio/commands/authorship";
@@ -169,6 +170,7 @@ export function PianoRoll({
   rows = CHROMATIC_ROWS,
   compact = false,
   footer,
+  fold,
 }: {
   clipStore: ClipStore;
   scheduler: Scheduler;
@@ -190,6 +192,8 @@ export function PianoRoll({
   compact?: boolean;
   /** Under the velocity lane, outside the scroll: the computer-keyboard panel (DAW-12.1). */
   footer?: ReactNode;
+  /** Folds the grid away under the toolbar, keeping the footer (the keys): the desktop column. */
+  fold?: Fold;
 }) {
   const clip = useClip(clipStore);
   const presence = useAuthorPresence();
@@ -856,12 +860,14 @@ export function PianoRoll({
   // note's own menu, where the note it acts on is.
 
   return (
-    <div ref={rootRef} className="h-full flex flex-col border border-line rounded-lg bg-stage overflow-hidden">
+    // No frame of its own: the workbench column divides it from the clips and devices with rules.
+    <div ref={rootRef} className="h-full flex flex-col bg-stage overflow-hidden">
       {/* toolbar - replaced by the sheet header's tools menu when compact (see the publish above) */}
       <div
         hidden={compact}
         className="flex items-center gap-3 px-2.5 py-1.5 border-b border-line bg-panel shrink-0 text-muted"
       >
+        {fold && <FoldButton fold={fold} label="roll" />}
         <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint">Piano roll</span>
         <Menu
           items={rollControls}
@@ -922,6 +928,7 @@ export function PianoRoll({
       <div
         ref={scrollRef}
         data-testid="roll-scroll"
+        hidden={fold && !fold.open}
         className="flex-1 min-h-0 overflow-auto [touch-action:pan-x_pan-y]"
       >
         <div className={gutter ? "flex" : "contents"} style={gutter ? { width: gutter + width } : undefined}>

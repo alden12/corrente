@@ -2,11 +2,13 @@ import { test, expect, type Page } from "@playwright/test";
 import { dismissStart, openExploreCategory } from "./support/app";
 
 /**
- * The workbench is one scrolling column (DAW-61.1): the clips line, the roll, then the devices.
- * Once the roll has scrolled away a slim bar brings it back, or jumps to any device.
+ * The workbench is one scrolling column (DAW-61.1): the clips line, the roll, then the devices
+ * under their bar, which jumps to any device and, once the roll has scrolled away, back to it.
  */
 
 test.use({ viewport: { width: 1320, height: 800 } });
+
+const devicesBar = (page: Page) => page.getByRole("region", { name: "Devices" });
 
 async function addEffect(page: Page, name: string) {
   await openExploreCategory(page, "Effects");
@@ -17,7 +19,7 @@ async function addEffect(page: Page, name: string) {
     .click();
 }
 
-test("the roll scrolls away to the devices, and the return bar brings it back", async ({ page }) => {
+test("the devices' bar jumps to a device, and back to the roll once it has scrolled away", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   for (const name of ["Reverb", "Tape Echo", "Chorus"]) await addEffect(page, name);
@@ -25,18 +27,42 @@ test("the roll scrolls away to the devices, and the return bar brings it back", 
   const returnToRoll = page.getByRole("button", { name: /^Roll/ });
   await expect(returnToRoll).toHaveCount(0); // the roll is on screen
 
+  // The devices' bar jumps to a device from the top, roll and all.
+  await devicesBar(page).getByRole("button", { name: "Chorus", exact: true }).click();
+  await expect(page.locator('[data-device][aria-label="Chorus"]')).toBeInViewport();
+  await page.getByTestId("roll-scroll").evaluate((element) => element.closest(".overflow-y-auto")?.scrollTo(0, 0));
+
   // Jumping to the last device scrolls the roll off the top, and the bar takes its place.
   await page.locator('[data-device][aria-label="Chorus"]').scrollIntoViewIfNeeded();
   await expect(returnToRoll).toBeVisible();
   await expect(returnToRoll).toContainText("Clip 1"); // it names the clip open in the roll
 
   // A device's chip scrolls to it.
-  await page.getByRole("button", { name: "Subtractive", exact: true }).click();
+  await devicesBar(page).getByRole("button", { name: "Subtractive", exact: true }).click();
   await expect(page.locator('[data-device][aria-label="Subtractive"]')).toBeInViewport();
 
   await returnToRoll.click();
   await expect(page.getByTestId("roll-scroll")).toBeInViewport();
   await expect(returnToRoll).toHaveCount(0);
+});
+
+test("the devices fold away under their bar, and a jump opens them again", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Fold the devices" }).click();
+  await expect(page.locator('[data-device][aria-label="Subtractive"]')).toHaveCount(0);
+  await devicesBar(page).getByRole("button", { name: "Subtractive", exact: true }).click();
+  await expect(page.locator('[data-device][aria-label="Subtractive"]')).toBeInViewport();
+});
+
+test("the roll folds away under its toolbar, keeping the keys", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Fold the roll" }).click();
+  await expect(page.getByTestId("roll-scroll")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Hide keys" })).toBeVisible();
+  await page.getByRole("button", { name: "Open the roll" }).click();
+  await expect(page.getByTestId("roll-scroll")).toBeVisible();
 });
 
 test("the clips line opens into every clip, and folds back to one line", async ({ page }) => {

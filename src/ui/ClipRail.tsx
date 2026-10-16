@@ -29,6 +29,7 @@ export function ClipRail({
   trackId,
   dispatch,
   orientation = "horizontal",
+  dense = false,
   footer,
 }: {
   projectStore: ProjectStore;
@@ -42,6 +43,8 @@ export function ClipRail({
    * targets should be big.
    */
   orientation?: "horizontal" | "vertical" | "grid";
+  /** A grid of narrow chips, as many to a row as fit: the desktop's open clips line (DAW-61.1). */
+  dense?: boolean;
   /** Bottom action below the clip list (e.g. a record button), for either kind. */
   footer?: ReactNode;
 }) {
@@ -109,8 +112,15 @@ export function ClipRail({
       : "flex items-center gap-2 px-3 py-2.5 border-b border-line overflow-x-auto shrink-0";
   // Padding lives here (not in the chip's own class) so the orientations can differ
   // without two conflicting Tailwind padding utilities on one element.
-  // Two per row in the grid, so a chip is a comfortable target and the names have room.
-  const chipClass = vertical ? "w-full py-1" : grid ? "grow basis-[calc(50%-0.25rem)] py-2.5" : "shrink-0 py-1.5";
+  // Two per row in the touch grid, so a chip is a comfortable target and the names have room;
+  // dense, as many narrow ones as fit, for a mouse.
+  const chipClass = vertical
+    ? "w-full py-1"
+    : grid
+      ? dense
+        ? "w-36 py-2"
+        : "grow basis-[calc(50%-0.25rem)] py-2.5"
+      : "shrink-0 py-1.5";
   // The rail and the grid stack a glance at the clip's notes under its name, at the chip's full
   // width; the horizontal strip is one line, so the glance sits inline there.
   const stacked = vertical || grid;

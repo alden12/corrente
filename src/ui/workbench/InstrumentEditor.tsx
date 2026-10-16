@@ -8,6 +8,7 @@
  * Extracted from CenterWorkbench when the touch shell gave the editor its own tab
  * (MOBILE-1); the behaviour is unchanged.
  */
+import type { Fold } from "../controls/FoldButton";
 import type { ReactNode } from "react";
 import type { InstrumentTrack, ProjectStore } from "../../audio/project/projectStore";
 import type { Scheduler } from "../../audio/sequencer/scheduler";
@@ -53,6 +54,7 @@ export function InstrumentEditor({
   projectStore,
   compact = false,
   rollFooter,
+  fold,
 }: {
   track: InstrumentTrack;
   samples: SampleAsset[];
@@ -64,6 +66,8 @@ export function InstrumentEditor({
   compact?: boolean;
   /** Under the roll's velocity lane, the drum roll's too (not the step grid, which is its own pads). */
   rollFooter?: ReactNode;
+  /** Folds the roll away under its toolbar (the desktop column, DAW-61.1). */
+  fold?: Fold;
 }) {
   const isDrumkit = track.instrumentType === "drumkit";
   const [mode, setMode] = usePersistentString<DrumEditor>(`corrente:drum-editor:${track.id}`, "keys", DRUM_EDITORS);
@@ -72,11 +76,11 @@ export function InstrumentEditor({
   return (
     // Compact, it sits in the sheet's Roll section, whose header and the Pads header below already
     // space it: padding above and below only took rows off the roll.
-    <div className={`flex-1 min-w-0 min-h-0 flex flex-col gap-2 ${compact ? "px-2" : "p-3"}`}>
+    <div className={`flex-1 min-w-0 min-h-0 flex flex-col gap-2 ${compact ? "px-2" : ""}`}>
       {/* No clip name here: the clip rail beside this already names the active clip and is
           where you rename it, so a second copy only cost a row of vertical space. */}
       {isDrumkit && (
-        <div className="shrink-0 flex items-center gap-2">
+        <div className={`shrink-0 flex items-center gap-2 ${compact ? "" : "px-3 pt-2"}`}>
           <DrumEditorToggle mode={mode} onChange={setMode} />
         </div>
       )}
@@ -107,6 +111,7 @@ export function InstrumentEditor({
             projectStore={projectStore}
             compact={compact}
             footer={rollFooter}
+            fold={fold}
           />
         ) : (
           <PianoRoll
@@ -120,6 +125,7 @@ export function InstrumentEditor({
             projectStore={projectStore}
             compact={compact}
             footer={rollFooter}
+            fold={fold}
           />
         )}
       </div>

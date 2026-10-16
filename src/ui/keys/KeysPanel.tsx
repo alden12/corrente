@@ -88,7 +88,7 @@ export function KeysPanel({
         <IconButton label={open ? "Hide keys" : "Show keys"} size="lg" onClick={onToggle}>
           {open ? "▾" : "▸"}
         </IconButton>
-        <span className="font-mono text-[11px] text-muted shrink-0">Keys</span>
+        <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">Keys</span>
         {open && (
           <>
             <span className="font-mono text-[10px] text-faint shrink-0">{hint}</span>
