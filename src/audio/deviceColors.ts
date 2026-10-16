@@ -26,7 +26,7 @@ export const DEVICE_COLORS = {
 
 export type DeviceColor = keyof typeof DEVICE_COLORS;
 
-export const DEVICE_COLOR_NAMES = Object.keys(DEVICE_COLORS) as [DeviceColor, ...DeviceColor[]];
+export const DEVICE_COLOR_NAMES = Object.keys(DEVICE_COLORS) as DeviceColor[];
 
 const hashed = (type: string): DeviceColor =>
   DEVICE_COLOR_NAMES[

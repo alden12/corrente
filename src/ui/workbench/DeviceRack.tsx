@@ -135,7 +135,7 @@ export function DeviceRack({
         )}
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-wrap items-stretch gap-x-1 gap-y-3 p-3">
+        <div className="flex flex-wrap items-start content-start gap-x-1 gap-y-3 p-3">
           {/* MIDI devices transform notes before the instrument, so they lead the chain. */}
           <MidiDeviceChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
           {track.kind === "instrument" &&
@@ -145,7 +145,7 @@ export function DeviceRack({
               // The instrument is the first device; its trailing arrow (into the first
               // effect) stays glued to its right edge, so it wraps cleanly. A drum kit
               // uses its own pad panel in place of the generic knob panel.
-              <div className="flex items-stretch shrink-0">
+              <div className="flex items-start shrink-0">
                 {track.instrumentType === "drumkit" ? (
                   <DrumkitPanel
                     params={track.params}

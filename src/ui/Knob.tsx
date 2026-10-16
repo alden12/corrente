@@ -13,6 +13,7 @@ import type { SampleAsset } from "../audio/samples/catalog";
 import { SamplePicker } from "./SamplePicker";
 import { capturePointerDrag, releasePointerDrag } from "./dragGesture";
 import { pitchName } from "./noteNames";
+import { formatNumber } from "./paramFormat";
 import { Select } from "./controls/Select";
 import { Fader } from "./controls/Fader";
 import { authorFillStyle, authorDotStyle, authorHex } from "./authorStyle";
@@ -32,13 +33,6 @@ const DRAG_SENSITIVITY = 1 / 200; // normalized units per pixel dragged
 /** Writes go through an injected callback so every edit becomes a logged command;
  *  reads stay live via useParam (the value updates after the command applies). */
 type OnChange = (id: string, value: ParamValue) => void;
-
-function formatValue(spec: NumberSpec, value: number): string {
-  if (spec.format === "note") return pitchName(value);
-  const decimals = Math.abs(value) < 10 && !Number.isInteger(value) ? 2 : 0;
-  const text = value.toFixed(decimals);
-  return spec.unit ? `${text} ${spec.unit}` : text;
-}
 
 /** A note-name dropdown for a `format: "note"` number param - the value stays a MIDI
  *  note number, but it reads as C2/C#2/... to match the piano roll. */
@@ -98,7 +92,7 @@ function NumberHSlider({
         label={spec.label}
         position={toNormalized(spec, value as number)}
         onPosition={(position) => onChange(spec.id, fromNormalized(spec, position))}
-        display={formatValue(spec, value as number)}
+        display={formatNumber(spec, value as number)}
         aria={{ now: value as number, min: spec.min, max: spec.max }}
         fillStyle={authorFillStyle(author ?? "you", presence)}
       />
@@ -171,7 +165,7 @@ function NumberKnob({
         />
       </div>
       <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>
-      <span className="font-mono text-[10px] text-ink">{formatValue(spec, value as number)}</span>
+      <span className="font-mono text-[10px] text-ink">{formatNumber(spec, value as number)}</span>
     </div>
   );
 }
@@ -239,7 +233,7 @@ function NumberSlider({
         />
       </div>
       <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>
-      <span className="font-mono text-[10px] text-ink">{formatValue(spec, value as number)}</span>
+      <span className="font-mono text-[10px] text-ink">{formatNumber(spec, value as number)}</span>
     </div>
   );
 }

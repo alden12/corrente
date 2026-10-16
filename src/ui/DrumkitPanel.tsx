@@ -16,7 +16,9 @@ import type { ProjectStore } from "../audio/project/projectStore";
 import { paramKey } from "../audio/commands/authorship";
 import type { SampleAsset } from "../audio/samples/catalog";
 import { catalogEntry, instrumentSchema } from "../audio/instruments/catalog";
-import { deviceEdge } from "./deviceColor";
+import { DeviceBlock } from "./devices/DeviceBlock";
+import { DeviceSummary } from "./devices/DeviceSummary";
+import { instrumentFold } from "./devices/deviceFolds";
 import { importSampleFile } from "../audio/samples/importSample";
 import { Knob, type SampleContext } from "./Knob";
 import { SamplePicker } from "./SamplePicker";
@@ -40,6 +42,7 @@ export function DrumkitPanel({
   projectStore: ProjectStore;
 }) {
   const pads = usePads(params);
+  const info = catalogEntry("drumkit");
   const sections = toSections(instrumentSchema("drumkit"));
   const padSections = sections.filter((section) => padNumber(section.namespace));
   const otherSections = sections.filter((section) => !padNumber(section.namespace));
@@ -72,13 +75,13 @@ export function DrumkitPanel({
   );
 
   return (
-    <div className="shrink-0 border border-line rounded-xl bg-ground" style={deviceEdge(catalogEntry("drumkit"))}>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-line text-[12px] font-semibold text-strong">
-        <span className="truncate" title="Drum Kit">
-          Drum Kit
-        </span>
-        <span className="ml-auto font-mono text-[9px] tracking-wider uppercase text-faint shrink-0">instr</span>
-      </div>
+    <DeviceBlock
+      device={info}
+      label={info.label}
+      kind="instr"
+      foldKey={instrumentFold(trackId)}
+      summary={<DeviceSummary schema={otherSections.flatMap((section) => section.specs)} store={params} />}
+    >
       <div className="flex flex-col gap-3 px-3 py-3">
         {/* Kit-wide controls (envelope, amp) as a horizontal strip above the pads. */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -148,6 +151,6 @@ export function DrumkitPanel({
           )}
         </div>
       </div>
-    </div>
+    </DeviceBlock>
   );
 }

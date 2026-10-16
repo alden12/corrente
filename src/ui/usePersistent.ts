@@ -43,6 +43,32 @@ export function usePersistentString<T extends string>(key: string, fallback: T, 
   return [value, set] as const;
 }
 
+/**
+ * A set of strings persisted under `key`, and a toggle for one of them. `cap` keeps it from
+ * growing for ever with the ids of things long gone: past it, the oldest entries drop.
+ */
+export function usePersistentSet(key: string, cap = Infinity) {
+  const members = new Set(parseList(useRaw(key)));
+  const toggle = useCallback(
+    (member: string) => {
+      const current = parseList(readPersistent(key));
+      const next = current.includes(member) ? current.filter((entry) => entry !== member) : [...current, member];
+      writePersistent(key, JSON.stringify(next.slice(-cap)));
+    },
+    [key, cap],
+  );
+  return [members, toggle] as const;
+}
+
+function parseList(raw: string | null): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /** A boolean persisted under `key`. */
 export function usePersistentBoolean(key: string, fallback: boolean) {
   const raw = useRaw(key);

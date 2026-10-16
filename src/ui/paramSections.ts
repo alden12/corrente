@@ -1,8 +1,9 @@
 /**
  * Grouping a param schema into labeled sections by id namespace (the part before the
- * dot: `osc.` / `filter.` / `pad3.` / ...), shared by the instrument panel and the drum
- * panel. Numbered pad sections sort first (in pad order), then the known synth sections
- * in signal-flow order, then any unknown namespace (title-cased).
+ * dot: `osc.` / `filter.` / `pad3.` / ...), shared by every device's panel. Numbered pad
+ * sections sort first (in pad order), then the known synth sections in signal-flow order,
+ * then any unknown namespace (title-cased). Params with no namespace (an effect's `mix`, or
+ * a device that names its params plainly) share one untitled section, last.
  */
 import type { ParamSpec } from "../audio/params/types";
 
@@ -19,23 +20,27 @@ export const SECTION_LABELS: Record<string, string> = {
   fenv: "Filter Env",
   env: "Envelope",
   amp: "Amp",
+  dist: "Drive",
 };
 const SECTION_ORDER = Object.keys(SECTION_LABELS);
 
-export const namespaceOf = (id: string) => (id.includes(".") ? id.slice(0, id.indexOf(".")) : id);
+/** An id's namespace: the part before the dot, or "" (the untitled section) for one with none. */
+export const namespaceOf = (id: string) => (id.includes(".") ? id.slice(0, id.indexOf(".")) : "");
 export const padNumber = (namespace: string) => /^pad(\d+)$/.exec(namespace)?.[1];
 
 export const sectionTitle = (namespace: string) => {
   const pad = padNumber(namespace);
   if (pad) return `Pad ${pad}`;
+  if (namespace === "") return "";
   return SECTION_LABELS[namespace] ?? namespace.charAt(0).toUpperCase() + namespace.slice(1);
 };
 
 /** Sort key: numbered pad sections first (in pad order), then the known synth sections
- *  (lfo -> ... -> amp), then any other namespace. */
+ *  (lfo -> ... -> amp), then any other namespace, then the untitled one. */
 export function sectionRank(namespace: string): number {
   const pad = padNumber(namespace);
   if (pad) return Number(pad); // 1..N, before everything else
+  if (namespace === "") return 2000;
   const known = SECTION_ORDER.indexOf(namespace);
   return known === -1 ? 1000 : 100 + known;
 }
