@@ -104,8 +104,9 @@ export function ScalePadControls({
         label="Key and scale"
         align="left"
         // A word, so it keeps the grey pill a word needs. `Menu` renders its own trigger, so
-        // it borrows the class rather than being a `Button`.
-        triggerClassName={`${CONTROL_BASE} shrink-0 h-8 px-3 rounded-full bg-control text-ink hover:bg-control-hover font-mono text-[11px]`}
+        // it borrows the class rather than being a `Button`. Inline in a section header, a shorter
+        // pill, so it sits in the header rather than filling it.
+        triggerClassName={`${CONTROL_BASE} shrink-0 ${inline ? "h-6 px-2.5" : "h-8 px-3"} rounded-full bg-control text-ink hover:bg-control-hover font-mono text-[11px]`}
         trigger={
           <>
             {settings.keyLabel}

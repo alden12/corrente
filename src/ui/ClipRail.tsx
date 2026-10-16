@@ -131,9 +131,10 @@ export function ClipRail({
       ? dense
         ? "w-36 py-2"
         : "grow basis-[calc(50%-0.25rem)] py-2.5"
-      : chipsOnly
-        ? "shrink-0 py-1"
-        : "shrink-0 py-1.5";
+      : // A long name truncates rather than stretching its chip across the strip.
+        chipsOnly
+        ? "shrink-0 max-w-44 py-1"
+        : "shrink-0 max-w-44 py-1.5";
   // The rail and the grid stack a glance at the clip's notes under its name, at the chip's full
   // width; the horizontal strip is one line, so the glance sits inline there.
   const stacked = vertical || grid;
@@ -168,7 +169,8 @@ export function ClipRail({
               active ? "border-you/60 bg-you/15 text-strong" : "border-line bg-card text-muted hover:bg-ground"
             }`}
             onClick={() => projectStore.selectClip(trackId, clip.id)}
-            title={`${authorLabel(clip.author, presence.self)} - drag onto the lane to place`}
+            // The full name too: a long one is truncated on the chip.
+            title={`${clip.name} · ${authorLabel(clip.author, presence.self)} - drag onto the lane to place`}
           >
             <div className={stacked ? "flex items-center gap-1.5 min-w-0" : "contents"}>
               <button
