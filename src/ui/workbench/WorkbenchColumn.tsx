@@ -1,0 +1,237 @@
+/**
+ * Everything about the selected track in one scrolling column (DAW-61.1), reading top to bottom
+ * as the signal path - the clips as a line, the notes (or the audio clip) under them, then the
+ * devices, wrapping as blocks. The roll scrolls away to give the devices the room; their bar,
+ * sticky at the top, then brings it back or jumps to any device.
+ *
+ * Both shells host it (MOBILE-24): the desktop under its editor tab, the phone in the editor sheet,
+ * where it replaced a switch between the roll, the clips and the rack. Only the keys differ: the
+ * desktop's sit in the roll, the phone's pads dock outside the sheet.
+ *
+ * The wheel needs no rule of its own: the roll takes it while the pointer is over it, and
+ * the browser keeps a scroll that is already moving the column going past the roll.
+ */
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { ProjectStore, Track } from "../../audio/project/projectStore";
+import type { Scheduler } from "../../audio/sequencer/scheduler";
+import type { Recorder } from "../../audio/recording/recorder";
+import type { Dispatch } from "../../audio/commands/types";
+import { useProject } from "../../audio/project/useProject";
+import { useRecorder } from "../useRecorder";
+import { ClipRail } from "../ClipRail";
+import { ResizeHandle } from "../ResizeHandle";
+import { usePersistentBoolean, usePersistentNumber } from "../usePersistent";
+import { TrackEditor } from "./TrackEditor";
+import { DeviceRack } from "./DeviceRack";
+import { TrackRecordButton } from "./TrackRecordButton";
+import { DevicesBar } from "./DevicesBar";
+import { SectionHeader, SECTION_HEADER_HEIGHT, TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
+import { IconButton } from "../controls/IconButton";
+import { newClipId } from "../../audio/commands/ids";
+
+/** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
+const DEVICES_PEEK = 56;
+/**
+ * How little of the roll is left on screen when the return bar shows: once it's mostly off the top,
+ * not the moment its first row leaves.
+ */
+const ROLL_LEFT = 0.25;
+
+export function WorkbenchColumn({
+  track,
+  projectStore,
+  scheduler,
+  recorder,
+  dispatch,
+  onRevealSamples,
+  keys,
+  compact = false,
+}: {
+  track: Track;
+  projectStore: ProjectStore;
+  scheduler: Scheduler;
+  recorder: Recorder;
+  dispatch: Dispatch;
+  /** Reveal the Samples library view (threaded to an empty Sampler's picker). */
+  onRevealSamples?: () => void;
+  /** The computer-keyboard panel (DAW-12.1), shown in the piano roll under its velocity lane. */
+  keys?: { panel: ReactNode; height: number };
+  /** Touch: the roll's header keeps its fold and drops its tools (MOBILE-1). */
+  compact?: boolean;
+}) {
+  const project = useProject(projectStore);
+  const rec = useRecorder(recorder);
+  const recording = rec.status === "recording" || rec.status === "counting";
+  // The roll's height is yours to drag, but never more than the column shows with the clips line
+  // above it and the devices' heading below: a height saved on a big window would otherwise leave a
+  // roll you can't see all of. It is the grid's height; the keys add theirs rather than eat into it.
+  const [rollH, setRollH] = usePersistentNumber("corrente:roll-height", 380, 200, 1200);
+  const [clipsOpen, setClipsOpen] = usePersistentBoolean("corrente:clips-open", false);
+  const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:devices-open", true);
+  const [rollOpen, setRollOpen] = usePersistentBoolean("corrente:roll-open", true);
+  const columnRef = useRef<HTMLDivElement>(null);
+  const rollRef = useRef<HTMLDivElement>(null);
+  const [columnH, setColumnH] = useState(0);
+  const [rollGone, setRollGone] = useState(false);
+  useLayoutEffect(() => {
+    const column = columnRef.current;
+    if (!column) return;
+    const measure = () => setColumnH(column.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const column = columnRef.current;
+    const roll = rollRef.current;
+    if (!column || !roll) return;
+    setRollGone(false);
+    const observer = new IntersectionObserver(
+      // Gone means scrolled off the top: a roll below the fold (a short window) isn't "gone".
+      ([entry]) =>
+        setRollGone(entry.intersectionRatio < ROLL_LEFT && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0)),
+      { root: column, threshold: [0, ROLL_LEFT, 1] },
+    );
+    observer.observe(roll);
+    return () => observer.disconnect();
+  }, []);
+  const keysH = keys?.height ?? 0;
+  // The phone's sheet can be lower than the roll's floor: there the roll takes what is left, and
+  // the column scrolls to the rest.
+  const floor = compact ? 120 : 200;
+  // The clips line (its header), which the roll leaves room for so the two always fit together.
+  const clipsLine = compact ? TOUCH_SECTION_HEADER_HEIGHT : SECTION_HEADER_HEIGHT;
+  const effRollH = columnH ? Math.min(rollH, Math.max(floor, columnH - clipsLine - keysH - DEVICES_PEEK)) : rollH;
+  const scrollToRoll = () => columnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToDevice = (key: string) => {
+    const scroll = () =>
+      columnRef.current
+        ?.querySelector(`[data-device="${CSS.escape(key)}"]`)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    if (devicesOpen) return scroll();
+    // Folded away: open them, and scroll once they have drawn.
+    setDevicesOpen(true);
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+  };
+
+  return (
+    // `isolate`: the roll's sticky layers stack within the column, and never over the library's
+    // resize handle, which straddles the column's left edge.
+    <div
+      ref={columnRef}
+      data-testid="workbench-column"
+      className="relative isolate flex-1 min-h-0 min-w-0 overflow-y-auto"
+    >
+      {/* Clips: folded, the chips scroll in the header; open, every clip as a chip below it. The
+          + and record stay at the header's right either way. */}
+      <section aria-label="Clips">
+        <SectionHeader
+          title="Clips"
+          fold={{ open: clipsOpen, onToggle: () => setClipsOpen(!clipsOpen) }}
+          actions={
+            <>
+              {track.kind === "instrument" && (
+                <IconButton
+                  label="Add a new empty clip"
+                  size={compact ? "md" : "sm"}
+                  onClick={() => dispatch({ type: "addClip", trackId: track.id, id: newClipId(), empty: true })}
+                >
+                  +
+                </IconButton>
+              )}
+              <TrackRecordButton trackId={track.id} recorder={recorder} recording={recording} round />
+            </>
+          }
+        >
+          {!clipsOpen && (
+            <ClipRail
+              projectStore={projectStore}
+              scheduler={scheduler}
+              trackId={track.id}
+              dispatch={dispatch}
+              orientation="horizontal"
+              chipsOnly
+            />
+          )}
+        </SectionHeader>
+        {clipsOpen && (
+          <div className="border-b border-line bg-ground">
+            <ClipRail
+              projectStore={projectStore}
+              scheduler={scheduler}
+              trackId={track.id}
+              dispatch={dispatch}
+              orientation="grid"
+              dense
+              chipsOnly
+            />
+          </div>
+        )}
+      </section>
+
+      {/* The roll (or the audio clip), at a height dragged from its bottom edge. */}
+      {/* Folded, it is its toolbar and the keys, at their own height. */}
+      <div
+        ref={rollRef}
+        className="relative flex flex-col border-b border-line"
+        style={rollOpen ? { height: effRollH + keysH } : undefined}
+      >
+        <TrackEditor
+          track={track}
+          scheduler={scheduler}
+          recorder={recorder}
+          dispatch={dispatch}
+          projectStore={projectStore}
+          compact={compact}
+          // The keys sit in the roll under the velocity lane, as the pads sit under the roll on
+          // mobile (MOBILE-6): play, and watch it land.
+          rollFooter={keys && <div style={{ height: keys.height }}>{keys.panel}</div>}
+          fold={{ open: rollOpen, onToggle: () => setRollOpen(!rollOpen) }}
+        />
+        {rollOpen && (
+          <>
+            <ResizeHandle
+              ariaLabel="Resize the roll"
+              orientation="horizontal"
+              onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0) - keysH)}
+              style={{ left: 0, right: 0, bottom: 0 }}
+            />
+            {/* The keys' top edge is the roll's bottom too, and the more natural one to grab. */}
+            {keysH > 0 && (
+              <ResizeHandle
+                ariaLabel="Resize the roll from the keys"
+                orientation="horizontal"
+                onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0))}
+                style={{ left: 0, right: 0, bottom: keysH }}
+              />
+            )}
+          </>
+        )}
+      </div>
+
+      {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
+          sticks to the top once they reach it, and leads with the way back to the roll. */}
+      <section aria-label="Devices" className="pb-6">
+        <DevicesBar
+          track={track}
+          open={devicesOpen}
+          onToggle={() => setDevicesOpen(!devicesOpen)}
+          rollGone={rollGone}
+          onRoll={scrollToRoll}
+          onDevice={scrollToDevice}
+        />
+        {devicesOpen && (
+          <DeviceRack
+            track={track}
+            samples={project.samples}
+            dispatch={dispatch}
+            projectStore={projectStore}
+            onRevealSamples={onRevealSamples}
+            bare
+          />
+        )}
+      </section>
+    </div>
+  );
+}

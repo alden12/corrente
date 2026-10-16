@@ -11,6 +11,7 @@
  * Pure, so the fitting is unit-testable without a browser: the numbers below are the pad
  * layout's own, and `fitPads` is the only place they are turned into a decision.
  */
+import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
 
 /** An in-scale pad. Comfortably over the 44px hit-target floor (MOBILE-2). */
 export const PAD_HEIGHT = 52;
@@ -46,8 +47,8 @@ export const rowGap = (accidentals: boolean) => (accidentals ? ROW_GAP : BARE_RO
 export const PAD_GAP = 4;
 /** The key/scale menu and the octave range, when they get a row of their own. */
 export const CONTROLS_HEIGHT = 38;
-/** `EditorSection`'s disclosure row (`h-9`). */
-export const SECTION_HEADER = 36;
+/** The Keys section's header, a section header at its touch height. */
+export const SECTION_HEADER = TOUCH_SECTION_HEADER_HEIGHT;
 /** The padding under the pads, so the last row is not flush against the sheet's edge. */
 export const PADS_PADDING = 8;
 
@@ -91,12 +92,6 @@ export interface PadFit {
    * phone, and landscape is short *and* wide, so the header has the width to take them.
    */
   inlineControls: boolean;
-  /**
-   * The room left under those rows, short of another one: up to a row's worth, since rows only
-   * come whole. With the roll folded it would sit as a gap, so the rows stretch into it
-   * (`stretchedPadHeight`).
-   */
-  spare: number;
 }
 
 /**
@@ -130,43 +125,23 @@ export const padRowsHeight = (rows: number, accidentals: boolean) =>
   rows > 0 ? rows * padRowHeight(accidentals) - rowGap(accidentals) : 0;
 
 /**
- * What fits in `room` pixels of editor - the sheet's content box at the committed detent.
+ * What fits in `room` pixels: the Studio's height, the docked keys included (MOBILE-24).
  *
- * `EDITOR_CHROME` and the surface's own section header come off the top because they belong to
- * neither; what is left is what the pads and the roll divide, and every arrangement divides the
- * same number.
- *
- * `filling` is the pads with the surface's section folded away: then there is nothing to share
- * with and only that section's header to leave, so they take the rest of the room.
+ * `EDITOR_CHROME` and the keys' own section header come off the top because they belong to
+ * neither; what is left is what the pads and the rest of the Studio divide, and every
+ * arrangement divides the same number.
  */
-export function fitPads(room: number, accidentals: boolean, filling = false): PadFit {
+export function fitPads(room: number, accidentals: boolean): PadFit {
   const rowHeight = padRowHeight(accidentals);
-  const editor = Math.max(0, room - SECTION_HEADER - (filling ? 0 : EDITOR_CHROME));
-  const arrangements = filling ? ARRANGEMENTS.map((arrangement) => ({ ...arrangement, padsShare: 1 })) : ARRANGEMENTS;
-  const fits = arrangements.map(({ inlineControls, padsShare, limit }) => {
+  const editor = Math.max(0, room - SECTION_HEADER - EDITOR_CHROME);
+  const fits = ARRANGEMENTS.map(({ inlineControls, padsShare, limit }) => {
     const chrome = SECTION_HEADER + PADS_PADDING + (inlineControls ? 0 : CONTROLS_HEIGHT);
     const space = editor * padsShare - chrome;
     // The last row has no gap after it, so the room gets that gap back before dividing.
     const rows = Math.max(0, Math.min(limit, Math.floor((space + rowGap(accidentals)) / rowHeight)));
-    return { rows, inlineControls, spare: Math.max(0, Math.floor(space - padRowsHeight(rows, accidentals))) };
+    return { rows, inlineControls };
   });
   // Nothing fits anywhere: the last arrangement is the one that gave up the most, so its
   // zero is the honest answer and its `inlineControls` the one the empty section renders.
   return fits.find((fit) => fit.rows >= 1) ?? fits[fits.length - 1];
 }
-
-/** The most a stretched pad grows: past this a spare sliver reads as oversized pads, not a fit. */
-const MAX_STRETCH = 16;
-/** Kept back from the stretch: the room is derived rather than measured (`fitPads`), and a few
- *  pixels short is a hairline of slack where a few over clips the last row's padding. */
-const STRETCH_MARGIN = 6;
-
-/**
- * How tall a pad is drawn when the pads fill the sheet: `PAD_HEIGHT`, plus the spare room shared
- * between the rows on show - only when they are all the rows that fit, since fewer is a choice
- * (the `-` button) and the room above them is then the point.
- */
-export const stretchedPadHeight = (fit: PadFit, shownRows: number): number =>
-  shownRows === fit.rows && shownRows > 0
-    ? PAD_HEIGHT + Math.min(MAX_STRETCH, Math.floor(Math.max(0, fit.spare - STRETCH_MARGIN) / shownRows))
-    : PAD_HEIGHT;

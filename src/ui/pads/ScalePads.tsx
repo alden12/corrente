@@ -167,7 +167,7 @@ export function ScalePads({
    * is the thing that knows what it is running on.
    */
   octavesPerRow: number;
-  /** `PAD_HEIGHT`, or a little more when the pads fill the sheet (`stretchedPadHeight`). */
+  /** How tall a pad is drawn: `PAD_HEIGHT`. */
   padHeight: number;
 }) {
   if (settings.chords) return <ChordPads settings={settings} touch={touch} padHeight={padHeight} />;

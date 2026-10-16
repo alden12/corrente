@@ -28,37 +28,30 @@
  * The top bar keeps what you reach for mid-idea - record, play, undo, redo - plus the agent and
  * your account, and everything else is behind ⋮, above the project's tempo, meter and metronome.
  *
- * Under the roll sit collapsible sections (MOBILE-6). The pads are the first, and they are
- * what makes a phone able to *play* rather than only arrange - and so what makes it able to
- * record, since they go out through the same `LiveNotes` seam a MIDI keyboard does.
- *
- * Deliberately not here yet: pinch-zoom and long-press menus (MOBILE-2), the clip rail as
- * the second section (it is still the Clips segment above), and the select-then-handles
- * editing model (MOBILE-7).
+ * The sheet holds the desktop's own column (MOBILE-24): the clips line, the roll and the devices,
+ * each a section that folds, scrolling as one. The keys dock under the Studio, above the tabs, as
+ * a phone's own keyboard does (`NotePads`): they are what makes a phone able to *play* rather than
+ * only arrange - and so what makes it able to record, since they go out through the same
+ * `LiveNotes` seam a MIDI keyboard does.
  */
 import { useRef, useState, type ReactNode } from "react";
 import { LibraryPanel } from "../LibraryPanel";
 import { AgentPanel } from "../AgentPanel";
 import { ArrangementTimeline } from "../ArrangementTimeline";
-import { ClipRail } from "../ClipRail";
 import { TransportBar } from "../TransportBar";
 import { AccountAvatar } from "../AccountAvatar";
 import { Menu } from "../Menu";
 import { IconButton } from "../controls/IconButton";
 import { iconButtonClass } from "../controls/iconButtonStyle";
-import { Segmented } from "../controls/Segmented";
 import type { LibraryView } from "../libraryViews";
-import { TrackEditor } from "../workbench/TrackEditor";
-import { DeviceRack } from "../workbench/DeviceRack";
-import { TrackRecordButton } from "../workbench/TrackRecordButton";
+import { WorkbenchColumn } from "../workbench/WorkbenchColumn";
 import { NotePads } from "../pads/NotePads";
-import { EditorSection } from "./EditorSection";
+import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
 import { ClipPreview } from "./ClipPreview";
 import { beatsPerBar as beatsPerBarOf } from "../../audio/project/schema";
 import { useProject } from "../../audio/project/useProject";
 import { useEditLog } from "../../audio/commands/useEditLog";
-import { useRecorder } from "../useRecorder";
-import { usePersistentBoolean, usePersistentString } from "../usePersistent";
+import { usePersistentString } from "../usePersistent";
 import { useElementHeight } from "../useElementHeight";
 import { arrangementAddItems } from "../arrangement/addItems";
 import { detentsFor, type Detent } from "./detents";
@@ -77,28 +70,6 @@ import type { DeviceShape } from "./useDeviceShape";
 import { UndoIcon } from "../shellIcons";
 import { ProjectOverview } from "../projects/ProjectOverview";
 import { ActivityView } from "../ActivityView";
-
-/**
- * What the editor sheet is showing. Clips is here rather than a section under the roll for
- * now - that is MOBILE-6, and dropping the tab before building the section would leave a
- * phone with no way to switch take.
- */
-type EditorSurface = "edit" | "clips" | "devices";
-
-interface SurfaceItem {
-  surface: EditorSurface;
-  label: string;
-}
-
-const SURFACE_ITEMS: SurfaceItem[] = [
-  { surface: "edit", label: "Edit" },
-  { surface: "clips", label: "Clips" },
-  { surface: "devices", label: "Rack" },
-];
-
-/** Each surface's collapsible section title, above the pads: what it is, where the switch says what
- *  to do. A map, so a surface without one is a type error rather than a runtime `find` miss. */
-const SURFACE_SECTIONS: Record<EditorSurface, string> = { edit: "Roll", clips: "Clips", devices: "Rack" };
 
 /**
  * A top-bar icon button, sized for a finger rather than a cursor.
@@ -186,9 +157,8 @@ export function MobileShell({
   onOpenTiming,
 }: ShellProps & { shape: DeviceShape }) {
   /**
-   * Detent and surface are **shell state, not the sheet's** (ARCH-3): they decide which
-   * surface owns the ⋮, and MOBILE-6's sections will read the detent too. The sheet is
-   * handed them and reports changes back.
+   * The detent is **shell state, not the sheet's** (ARCH-3): the arrangement above the sheet
+   * reads it too. The sheet is handed it and reports changes back.
    *
    * It opens at **Half**, and that follows from a property of the app rather than a taste:
    * there is always a track and a clip selected, so there is always something to edit and
@@ -201,11 +171,6 @@ export function MobileShell({
    * not ask for. Keep the reasoning attached to the constraint, not to the number.
    */
   const [detent, setDetent] = useState<Detent>("half");
-  // The surface above the pads is a collapsible section like the pads themselves, so folding it
-  // away gives the pads the sheet - more rows of chords when you are only playing. Kept across
-  // reloads like the pads' own open state.
-  const [surfaceOpen, setSurfaceOpen] = usePersistentBoolean("corrente:surface-open", true);
-  const [surface, setSurface] = useState<EditorSurface>("edit");
   // Which place is in front. Kept across reloads: you come back to where you were.
   const [tab, setTab] = usePersistentString<MobileTab>("corrente:mobile-tab", "studio", MOBILE_TABS);
   // "home" is the list of projects (MOBILE-19.3); "inside" is the open project's own views.
@@ -234,8 +199,6 @@ export function MobileShell({
    * around kept throwing the editor over the arrangement you were looking at. The sheet stays at
    * the detent you left it, and its minimised bar names the selected track, so a tap there opens it.
    */
-  const rec = useRecorder(recorder);
-  const recording = rec.status === "recording" || rec.status === "counting";
   const { canUndo, canRedo } = useEditLog(editLog);
 
   /**
@@ -249,64 +212,22 @@ export function MobileShell({
   const docked = shape.tier === "tablet" && !shape.short;
 
   /**
-   * How much editor there is at the committed detent, for the pads to size themselves
-   * against (MOBILE-6). **Derived from the workspace, not measured on the sheet**: the
-   * workspace is a stable box, where a sheet mid-throw is held at full height and
-   * translated, so measuring that would add a pad row during the gesture and take it back
-   * on settle - the same trap the roll's re-centring fell into.
+   * The workspace's height, for the detents. The pads size themselves against the Studio as a
+   * whole, the keys included (`studioRef`): a box that holds still as they grow, where the
+   * workspace above them gives way.
    */
   const workspaceRef = useRef<HTMLDivElement>(null);
   const workspaceHeight = useElementHeight(workspaceRef);
+  const studioRef = useRef<HTMLDivElement>(null);
+  const studioHeight = useElementHeight(studioRef);
   // Minimised is the header and nothing else. The home indicator's inset is the tab bar's to
-  // carry now, below the workspace, so neither this nor the pads' room need to allow for it.
+  // carry now, below the workspace.
   const detents = detentsFor(shape, { workspaceHeight, peekPixels: SHEET_HEADER_HEIGHT });
-  const editorRoom = Math.max(0, workspaceHeight * detents[detent] - SHEET_HEADER_HEIGHT);
-
-  // Surface -> the panel it hosts, as an object map so adding one is an entry here plus
-  // one in SURFACE_ITEMS, and a missing case is a type error.
-  const surfacesFor = (track: Track): Record<EditorSurface, ReactNode> => ({
-    edit: (
-      <div className="flex-1 min-h-0 flex flex-col">
-        <TrackEditor
-          track={track}
-          scheduler={scheduler}
-          recorder={recorder}
-          dispatch={dispatch}
-          projectStore={projectStore}
-          compact
-        />
-      </div>
-    ),
-    clips: (
-      <div className="flex-1 min-h-0 flex flex-col">
-        <ClipRail
-          projectStore={projectStore}
-          scheduler={scheduler}
-          trackId={track.id}
-          dispatch={dispatch}
-          orientation="grid"
-        />
-        <div className="mt-auto shrink-0 p-3 border-t border-line">
-          <TrackRecordButton trackId={track.id} recorder={recorder} recording={recording} />
-        </div>
-      </div>
-    ),
-    devices: (
-      <div className="flex-1 min-h-0 flex flex-col">
-        <DeviceRack
-          track={track}
-          samples={project.samples}
-          dispatch={dispatch}
-          projectStore={projectStore}
-          onRevealSamples={() => {
-            openExplorePage("samples");
-            onSelectView("explore");
-            setTab("explore");
-          }}
-        />
-      </div>
-    ),
-  });
+  const revealSamples = () => {
+    openExplorePage("samples");
+    onSelectView("explore");
+    setTab("explore");
+  };
 
   /**
    * The "+" in the top bar: what the arrangement's own "+" offers on desktop - a group, a MIDI or
@@ -377,8 +298,6 @@ export function MobileShell({
             notes={liveNotes}
             octavesPerRow={shape.tier === "tablet" ? 2 : 1}
             room={TRY_PADS_ROOM}
-            filling={false}
-            onClosed={() => undefined}
           />
         )}
       />
@@ -388,6 +307,8 @@ export function MobileShell({
   return (
     <div
       className="flex-1 min-h-0 flex flex-col relative overflow-hidden"
+      // Section headers at a finger's height, all the way down (MOBILE-24).
+      style={{ ["--section-header" as string]: `${TOUCH_SECTION_HEADER_HEIGHT}px` }}
       data-device-tier={shape.tier}
       data-viewport-short={shape.short || undefined}
     >
@@ -469,103 +390,82 @@ export function MobileShell({
           ))}
         {tab === "explore" && browse("explore", "explore", onSelectView)}
         {/* The Studio. Hidden rather than unmounted behind the other tabs, so the arrangement's
-            scroll, the editor and an in-progress recording all survive a trip to Explore.
-            `relative` because the sheet is absolutely positioned against this column, not the
-            shell: on a tablet it must not run under the docked agent, which owns its height. */}
-        <div
-          ref={workspaceRef}
-          hidden={tab !== "studio"}
-          className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
-          // For the arrangement, which is an ordinary flex child. The editor sheet is
-          // absolutely positioned against this box and so is *not* inset by this padding -
-          // it carries its own. See `safeArea.ts`.
-          style={{ paddingLeft: SAFE_LEFT, paddingRight: SAFE_RIGHT }}
-        >
+            scroll, the editor and an in-progress recording all survive a trip to Explore. */}
+        <div ref={studioRef} hidden={tab !== "studio"} className="flex-1 min-w-0 min-h-0 flex flex-col">
+          {/* `relative` because the sheet is absolutely positioned against this column, not the
+              shell: on a tablet it must not run under the docked agent, which owns its height. */}
           <div
-            className="min-h-0 flex flex-col"
-            // The band above the sheet, so the timeline's own horizontal scroller stays on
-            // screen instead of sitting under it. Committed detents only - during a drag
-            // the sheet slides over this rather than resizing it every frame.
-            style={{ height: selectedTrack ? `${(1 - detents[detent]) * 100}%` : "100%" }}
+            ref={workspaceRef}
+            className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
+            // For the arrangement, which is an ordinary flex child. The editor sheet is
+            // absolutely positioned against this box and so is *not* inset by this padding -
+            // it carries its own. See `safeArea.ts`.
+            style={{ paddingLeft: SAFE_LEFT, paddingRight: SAFE_RIGHT }}
           >
-            <ArrangementTimeline
-              projectStore={projectStore}
-              scheduler={scheduler}
-              recorder={recorder}
-              dispatch={dispatch}
-              isPlaying={isPlaying}
-              started={started}
-              // One transport is pinned above the workspace, so the timeline must not render
-              // a second copy, and its own options move into the shell's ⋮.
-              showTransport={false}
-              compact
-            />
-          </div>
-          {/* No sheet without a track: there is nothing to edit, and an empty sheet over
-              the arrangement would just be a lid. Selecting a track brings it back at
-              whatever detent it was left at. */}
-          {selectedTrack && (
-            <EditorSheet
-              detent={detent}
-              detents={detents}
-              onDetentChange={setDetent}
-              title={selectedTrack.name}
-              subtitle={selectedTrack.kind === "audio" ? "audio" : selectedTrack.instrumentType}
-              preview={sheetPreview(selectedTrack, beatsPerBarOf(project.timeSignature))}
-              controls={
-                // Three short options, exactly one chosen: a segmented control, and now an
-                // actual radiogroup rather than a `tablist` of buttons that each carried
-                // their own corners - so it announces as one choice and takes arrow keys.
-                <Segmented
-                  label="Editor surface"
-                  options={SURFACE_ITEMS.map((item) => ({ value: item.surface, label: item.label }))}
-                  value={surface}
-                  onChange={(next) => {
-                    setSurface(next);
-                    // So is asking for one while it is folded away.
-                    setSurfaceOpen(true);
-                  }}
-                  className="ml-auto shrink-0 font-mono uppercase tracking-wide"
-                />
-              }
+            <div
+              className="min-h-0 flex flex-col"
+              // The band above the sheet, so the timeline's own horizontal scroller stays on
+              // screen instead of sitting under it. Committed detents only - during a drag
+              // the sheet slides over this rather than resizing it every frame.
+              style={{ height: selectedTrack ? `${(1 - detents[detent]) * 100}%` : "100%" }}
             >
-              {/* A section of its own only where there are pads to give the room to. Folded, an
-                  empty box keeps its place, so the pads stay at the foot of the sheet where the
-                  thumbs are rather than jumping up under its header. */}
-              {selectedTrack.kind === "instrument" ? (
-                <>
-                  <EditorSection
-                    title={SURFACE_SECTIONS[surface]}
-                    open={surfaceOpen}
-                    onToggle={() => setSurfaceOpen(!surfaceOpen)}
-                    grow
-                  >
-                    {surfacesFor(selectedTrack)[surface]}
-                  </EditorSection>
-                  {!surfaceOpen && <div className="flex-1 min-h-0" />}
-                </>
-              ) : (
-                surfacesFor(selectedTrack)[surface]
-              )}
-              {/* The pads sit under whichever surface is showing, not inside one and not in
-                  the switch beside them: they are how you play, and you want to play while
-                  you tweak a device as much as while you edit notes. The surface above is
-                  the flexible box, so opening the pads takes exactly their height from it
-                  and nothing else moves (MOBILE-6). */}
-              {selectedTrack.kind === "instrument" && (
-                <NotePads
+              <ArrangementTimeline
+                projectStore={projectStore}
+                scheduler={scheduler}
+                recorder={recorder}
+                dispatch={dispatch}
+                isPlaying={isPlaying}
+                started={started}
+                // One transport is pinned above the workspace, so the timeline must not render
+                // a second copy, and its own options move into the shell's ⋮.
+                showTransport={false}
+                compact
+              />
+            </div>
+            {/* No sheet without a track: there is nothing to edit, and an empty sheet over
+                the arrangement would just be a lid. Selecting a track brings it back at
+                whatever detent it was left at. */}
+            {selectedTrack && (
+              <EditorSheet
+                detent={detent}
+                detents={detents}
+                onDetentChange={setDetent}
+                title={selectedTrack.name}
+                subtitle={selectedTrack.kind === "audio" ? "audio" : selectedTrack.instrumentType}
+                preview={sheetPreview(selectedTrack, beatsPerBarOf(project.timeSignature))}
+              >
+                <WorkbenchColumn
+                  key={selectedTrack.id}
                   track={selectedTrack}
-                  samples={project.samples}
-                  notes={liveNotes}
-                  // A tablet has the width for two octaves in a row; a phone does not, and
-                  // below ~44px per pad the layout is wrong rather than merely tight.
-                  octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-                  room={editorRoom}
-                  filling={!surfaceOpen}
-                  onClosed={() => setSurfaceOpen(true)}
+                  projectStore={projectStore}
+                  scheduler={scheduler}
+                  recorder={recorder}
+                  dispatch={dispatch}
+                  onRevealSamples={revealSamples}
+                  compact
                 />
-              )}
-            </EditorSheet>
+              </EditorSheet>
+            )}
+          </div>
+          {/* The keys dock under the Studio as a phone's keyboard does, pushing it up rather than
+              covering it: they play whatever the sheet is showing, and at any detent. */}
+          {selectedTrack?.kind === "instrument" && (
+            <section
+              aria-label="Keys"
+              data-testid="keys-dock"
+              className="shrink-0 bg-panel border-t border-line"
+              style={{ paddingLeft: SAFE_LEFT, paddingRight: SAFE_RIGHT }}
+            >
+              <NotePads
+                track={selectedTrack}
+                samples={project.samples}
+                notes={liveNotes}
+                // A tablet has the width for two octaves in a row; a phone does not, and
+                // below ~44px per pad the layout is wrong rather than merely tight.
+                octavesPerRow={shape.tier === "tablet" ? 2 : 1}
+                room={studioHeight}
+              />
+            </section>
           )}
         </div>
         {docked && agentOpen && (

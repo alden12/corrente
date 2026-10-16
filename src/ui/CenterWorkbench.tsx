@@ -1,19 +1,9 @@
 /**
- * The center workbench: everything about the selected track in one scrolling column
- * (DAW-61.1), reading top to bottom as the signal path - the clips as a line, the notes (or
- * the audio clip) under them, then the devices, wrapping as blocks. The roll scrolls away to
- * give the devices the room; their bar, sticky at the top, then brings it back or jumps to any
- * device.
- *
- * The wheel needs no rule of its own: the roll takes it while the pointer is over it, and
- * the browser keeps a scroll that is already moving the column going past the roll.
- *
- * This is the *desktop* composition of three pieces that the touch shell splits across
- * tabs instead (MOBILE-1): the clip rail, the editor (`workbench/TrackEditor`) and the
- * device chain (`workbench/DeviceRack`). Only the arrangement lives here; each piece
- * owns its own behaviour.
+ * The center workbench: the selected track's editor tab, and under it everything about the
+ * track in one scrolling column (`workbench/WorkbenchColumn`, DAW-61.1), which the touch shell
+ * hosts in its editor sheet too.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { ProjectStore, Track } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { Recorder } from "../audio/recording/recorder";
@@ -21,30 +11,9 @@ import type { Dispatch } from "../audio/commands/types";
 import type { McpStatus } from "../audio/mcp/bridge";
 import type { WsStatus } from "../contract/client";
 import { SyncChip } from "./ConnectionStatus";
-import { useProject } from "../audio/project/useProject";
-import { useRecorder } from "./useRecorder";
 import { EMPTY_INSTRUMENT } from "../audio/instruments/catalog";
-import { ClipRail } from "./ClipRail";
 import { InlineRename } from "./InlineRename";
-import { ResizeHandle } from "./ResizeHandle";
-import { usePersistentBoolean, usePersistentNumber } from "./usePersistent";
-import { TrackEditor } from "./workbench/TrackEditor";
-import { DeviceRack } from "./workbench/DeviceRack";
-import { TrackRecordButton } from "./workbench/TrackRecordButton";
-import { DevicesBar } from "./workbench/DevicesBar";
-import { SectionHeader, SECTION_HEADER_HEIGHT } from "./controls/SectionHeader";
-import { IconButton } from "./controls/IconButton";
-import { newClipId } from "../audio/commands/ids";
-
-/** The clips line's height (its header), which the roll leaves room for so the two always fit together. */
-const CLIPS_LINE = SECTION_HEADER_HEIGHT;
-/** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
-const DEVICES_PEEK = 56;
-/**
- * How little of the roll is left on screen when the return bar shows: once it's mostly off the top,
- * not the moment its first row leaves.
- */
-const ROLL_LEFT = 0.25;
+import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
 
 // The built-in agent does not need MCP, so a missing connection is not a warning:
 // only "connected" is called out (green + label); otherwise it is a quiet grey dot
@@ -90,58 +59,6 @@ export function CenterWorkbench({
   /** The computer-keyboard panel (DAW-12.1), shown in the piano roll under its velocity lane. */
   keys?: { panel: ReactNode; height: number };
 }) {
-  const project = useProject(projectStore);
-  const rec = useRecorder(recorder);
-  const recording = rec.status === "recording" || rec.status === "counting";
-  // The roll's height is yours to drag, but never more than the column shows with the clips line
-  // above it and the devices' heading below: a height saved on a big window would otherwise leave a
-  // roll you can't see all of. It is the grid's height; the keys add theirs rather than eat into it.
-  const [rollH, setRollH] = usePersistentNumber("corrente:roll-height", 380, 200, 1200);
-  const [clipsOpen, setClipsOpen] = usePersistentBoolean("corrente:clips-open", false);
-  const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:devices-open", true);
-  const [rollOpen, setRollOpen] = usePersistentBoolean("corrente:roll-open", true);
-  const columnRef = useRef<HTMLDivElement>(null);
-  const rollRef = useRef<HTMLDivElement>(null);
-  const [columnH, setColumnH] = useState(0);
-  const [rollGone, setRollGone] = useState(false);
-  const trackId = selectedTrack?.id;
-  useLayoutEffect(() => {
-    const column = columnRef.current;
-    if (!column) return;
-    const measure = () => setColumnH(column.clientHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(column);
-    return () => observer.disconnect();
-  }, [trackId]);
-  useEffect(() => {
-    const column = columnRef.current;
-    const roll = rollRef.current;
-    if (!column || !roll) return;
-    setRollGone(false);
-    const observer = new IntersectionObserver(
-      // Gone means scrolled off the top: a roll below the fold (a short window) isn't "gone".
-      ([entry]) =>
-        setRollGone(entry.intersectionRatio < ROLL_LEFT && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0)),
-      { root: column, threshold: [0, ROLL_LEFT, 1] },
-    );
-    observer.observe(roll);
-    return () => observer.disconnect();
-  }, [trackId]);
-  const keysH = keys?.height ?? 0;
-  const effRollH = columnH ? Math.min(rollH, Math.max(200, columnH - CLIPS_LINE - keysH - DEVICES_PEEK)) : rollH;
-  const scrollToRoll = () => columnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  const scrollToDevice = (key: string) => {
-    const scroll = () =>
-      columnRef.current
-        ?.querySelector(`[data-device="${CSS.escape(key)}"]`)
-        ?.scrollIntoView({ block: "start", behavior: "smooth" });
-    if (devicesOpen) return scroll();
-    // Folded away: open them, and scroll once they have drawn.
-    setDevicesOpen(true);
-    requestAnimationFrame(() => requestAnimationFrame(scroll));
-  };
-
   // The tab bar's right-hand indicator area: the MCP status dot, then (when the
   // agent pane is collapsed away) its expand control - there is no idle rail.
   const indicators = (
@@ -215,125 +132,16 @@ export function CenterWorkbench({
         {indicators}
       </div>
 
-      {/* `isolate`: the roll's sticky layers stack within the column, and never over the library's
-          resize handle, which straddles the column's left edge. */}
-      <div
-        ref={columnRef}
-        data-testid="workbench-column"
-        className="relative isolate flex-1 min-h-0 min-w-0 overflow-y-auto"
-        key={`${selectedTrack.id}:body`}
-      >
-        {/* Clips: folded, the chips scroll in the header; open, every clip as a chip below it. The
-            + and record stay at the header's right either way. */}
-        <section aria-label="Clips">
-          <SectionHeader
-            title="Clips"
-            fold={{ open: clipsOpen, onToggle: () => setClipsOpen(!clipsOpen) }}
-            actions={
-              <>
-                {selectedTrack.kind === "instrument" && (
-                  <IconButton
-                    label="Add a new empty clip"
-                    size="sm"
-                    onClick={() =>
-                      dispatch({ type: "addClip", trackId: selectedTrack.id, id: newClipId(), empty: true })
-                    }
-                  >
-                    +
-                  </IconButton>
-                )}
-                <TrackRecordButton trackId={selectedTrack.id} recorder={recorder} recording={recording} round />
-              </>
-            }
-          >
-            {!clipsOpen && (
-              <ClipRail
-                projectStore={projectStore}
-                scheduler={scheduler}
-                trackId={selectedTrack.id}
-                dispatch={dispatch}
-                orientation="horizontal"
-                chipsOnly
-              />
-            )}
-          </SectionHeader>
-          {clipsOpen && (
-            <div className="border-b border-line bg-ground">
-              <ClipRail
-                projectStore={projectStore}
-                scheduler={scheduler}
-                trackId={selectedTrack.id}
-                dispatch={dispatch}
-                orientation="grid"
-                dense
-                chipsOnly
-              />
-            </div>
-          )}
-        </section>
-
-        {/* The roll (or the audio clip), at a height dragged from its bottom edge. */}
-        {/* Folded, it is its toolbar and the keys, at their own height. */}
-        <div
-          ref={rollRef}
-          className="relative flex flex-col border-b border-line"
-          style={rollOpen ? { height: effRollH + keysH } : undefined}
-        >
-          <TrackEditor
-            track={selectedTrack}
-            scheduler={scheduler}
-            recorder={recorder}
-            dispatch={dispatch}
-            projectStore={projectStore}
-            // The keys sit in the roll under the velocity lane, as the pads sit under the roll on
-            // mobile (MOBILE-6): play, and watch it land.
-            rollFooter={keys && <div style={{ height: keys.height }}>{keys.panel}</div>}
-            fold={{ open: rollOpen, onToggle: () => setRollOpen(!rollOpen) }}
-          />
-          {rollOpen && (
-            <>
-              <ResizeHandle
-                ariaLabel="Resize the roll"
-                orientation="horizontal"
-                onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0) - keysH)}
-                style={{ left: 0, right: 0, bottom: 0 }}
-              />
-              {/* The keys' top edge is the roll's bottom too, and the more natural one to grab. */}
-              {keysH > 0 && (
-                <ResizeHandle
-                  ariaLabel="Resize the roll from the keys"
-                  orientation="horizontal"
-                  onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0))}
-                  style={{ left: 0, right: 0, bottom: keysH }}
-                />
-              )}
-            </>
-          )}
-        </div>
-
-        {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
-            sticks to the top once they reach it, and leads with the way back to the roll. */}
-        <section aria-label="Devices" className="pb-6">
-          <DevicesBar
-            track={selectedTrack}
-            open={devicesOpen}
-            onToggle={() => setDevicesOpen(!devicesOpen)}
-            rollGone={rollGone}
-            onRoll={scrollToRoll}
-            onDevice={scrollToDevice}
-          />
-          {devicesOpen && (
-            <DeviceRack
-              track={selectedTrack}
-              samples={project.samples}
-              dispatch={dispatch}
-              projectStore={projectStore}
-              onRevealSamples={onRevealSamples}
-              bare
-            />
-          )}
-        </section>
-      </div>
+      <WorkbenchColumn
+        key={selectedTrack.id}
+        track={selectedTrack}
+        projectStore={projectStore}
+        scheduler={scheduler}
+        recorder={recorder}
+        dispatch={dispatch}
+        onRevealSamples={onRevealSamples}
+        keys={keys}
+      />
     </div>
   );
 }

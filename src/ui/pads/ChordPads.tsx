@@ -31,7 +31,7 @@ export function ChordPads({
 }: {
   settings: PadSettings;
   touch: PadTouch;
-  /** `PAD_HEIGHT`, or a little more when the pads fill the sheet (`stretchedPadHeight`). */
+  /** How tall a pad is drawn: `PAD_HEIGHT`. */
   padHeight: number;
 }) {
   const { tonic, scale, lowOctave, chordRows: shown, chordPrefs: prefs, editingChords: editing } = settings;

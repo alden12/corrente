@@ -26,7 +26,7 @@ export function TrackRecordButton({
         onClick={() => recorder.recordInto(trackId)}
         aria-label={recording ? "Stop recording" : "Record a new take into this track"}
         title={recording ? "Stop recording" : "Record a new take into this track"}
-        className={`flex items-center justify-center w-7 h-7 rounded-full cursor-pointer ${
+        className={`flex items-center justify-center w-7 h-7 pointer-coarse:w-9 pointer-coarse:h-9 rounded-full cursor-pointer ${
           recording ? "bg-hot/15" : "hover:bg-hot/10"
         }`}
       >

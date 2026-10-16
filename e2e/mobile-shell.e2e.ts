@@ -16,8 +16,8 @@ import {
  *
  * The throw maths itself (velocity fitting, projection, snapping) is pure and covered by
  * unit tests in `test/detents.test.ts`; what is worth a browser is the wiring - that the
- * arrangement stays live behind the sheet, that each detent leaves the surfaces a usable
- * and *reachable* box, and that exactly one surface owns the shell's ⋮.
+ * arrangement stays live behind the sheet, that each detent leaves the column a usable
+ * and *reachable* box, and that the keys dock under it.
  *
  * The gesture layer (pinch, long-press) is MOBILE-2 and not covered here.
  */
@@ -43,28 +43,25 @@ async function setVisibility(page: Page, state: "hidden" | "visible") {
 const shell = (page: Page) => page.locator("[data-device-tier]");
 const desktopRail = (page: Page) => page.locator('[class*="grid-area:rail"]');
 const sheet = (page: Page) => page.getByTestId("editor-sheet");
-/**
- * One of the sheet's Edit / Clips / Rack segments. Scoped, so it cannot match the desktop's
- * editor tabs. A `radio` rather than a `tab`: the switch is a `Segmented` now, which says
- * "these are the options and this is the one you are on" instead of three separate buttons.
- */
-const segment = (page: Page, name: string) => sheet(page).getByRole("radio", { name });
 const grabber = (page: Page) => page.getByRole("slider", { name: "Editor height" });
 const trackHeader = (page: Page) => page.locator("[data-track-id]").first().locator("> div").first();
 const detentOf = (page: Page) => sheet(page).getAttribute("data-detent");
 /** The bottom tab bar (MOBILE-19), which the editor sheet now sits on rather than the screen edge. */
 const tabBar = (page: Page) => page.getByRole("navigation", { name: "Places" });
 const tab = (page: Page, name: string) => tabBar(page).getByRole("button", { name, exact: true });
-const tabBarTop = async (page: Page) => (await tabBar(page).boundingBox())!.y;
-const pads = (page: Page) => page.locator('[data-section="pads"]');
+/** The keys, docked above the tabs (MOBILE-24). */
+const pads = (page: Page) => page.getByTestId("keys-dock");
 const pad = (page: Page, name: string) => pads(page).getByRole("button", { name, exact: true });
 
-/** How far the pads hang below the sheet's own bottom edge. Anything over 0 is a clipped pad. */
+/** The top of the keys, which the sheet sits on now that they dock under it. */
+const keysTop = async (page: Page) => (await pads(page).boundingBox())!.y;
+
+/** How far the keys hang into the tab bar below them. Anything over 0 is a clipped pad. */
 const padsOverflow = (page: Page) =>
   page.evaluate(() => {
-    const section = document.querySelector('[data-section="pads"]')!.getBoundingClientRect();
-    const sheetBox = document.querySelector('[data-testid="editor-sheet"]')!.getBoundingClientRect();
-    return Math.round(section.bottom - sheetBox.bottom);
+    const dock = document.querySelector('[data-testid="keys-dock"]')!.getBoundingClientRect();
+    const tabs = document.querySelector('nav[aria-label="Places"]')!.getBoundingClientRect();
+    return Math.round(dock.bottom - tabs.top);
   });
 
 /** Press a pad and hold it, so the note has a length to record. */
@@ -118,7 +115,6 @@ async function openRoll(page: Page) {
   await page.goto("/");
   await dismissStart(page);
   await setDetent(page, "full");
-  await segment(page, "Edit").tap();
   await expect(page.getByTestId("roll-scroll")).toBeVisible();
   await settleRollScroll(page);
 }
@@ -332,7 +328,6 @@ test.describe("phone", () => {
     await page.goto("/");
     await dismissStart(page);
     await setDetent(page, "full");
-    await segment(page, "Edit").tap();
 
     const box = (await page.getByTestId("roll-scroll").boundingBox())!;
     const stored = (key: string) => page.evaluate((k) => Number(localStorage.getItem(k)), key);
@@ -364,7 +359,6 @@ test.describe("phone", () => {
     await page.goto("/");
     await dismissStart(page);
     await setDetent(page, "full");
-    await segment(page, "Edit").tap();
 
     const box = (await page.getByTestId("roll-scroll").boundingBox())!;
     const cdp = await page.context().newCDPSession(page);
@@ -397,7 +391,6 @@ test.describe("phone", () => {
     await page.goto("/");
     await dismissStart(page);
     await setDetent(page, "full");
-    await segment(page, "Edit").tap();
 
     const scroller = page.getByTestId("roll-scroll");
     const box = (await scroller.boundingBox())!;
@@ -670,8 +663,8 @@ test.describe("phone", () => {
     // The tab bar it replaced is gone, and with it the "which surface am I on" question.
     await expect(page.getByRole("tablist", { name: "Views" })).toHaveCount(0);
 
-    // One transport, above everything, and only one.
-    await expect(page.getByRole("button", { name: "Record" })).toHaveCount(1);
+    // One transport, above everything, and only one (the clips line's record is a take, not the transport).
+    await expect(page.getByRole("button", { name: "Record", exact: true })).toHaveCount(1);
     await expect(page.getByRole("button", { name: /play|stop/i }).first()).toBeVisible();
   });
 
@@ -682,13 +675,13 @@ test.describe("phone", () => {
     // There is always a track and a clip selected, so there is always something to edit and
     // showing it presumes nothing. Opening parked read as the editor having failed to open.
     await expect.poll(() => detentOf(page)).toBe("half");
-    await expect(segment(page, "Edit")).toBeVisible();
+    await expect(sheet(page).getByTestId("workbench-column")).toBeVisible();
     await expect(page.getByTestId("roll-scroll")).toBeVisible();
 
     // Still a sheet over a live arrangement, not a full-screen editor.
     const box = (await sheet(page).boundingBox())!;
     expect(box.height, "leaves the arrangement half the screen").toBeLessThan(PHONE.height * 0.7);
-    expect(Math.abs(box.y + box.height - (await tabBarTop(page))), "and sits on the tab bar").toBeLessThan(2);
+    expect(Math.abs(box.y + box.height - (await keysTop(page))), "and sits on the keys").toBeLessThan(2);
   });
 
   test("minimised is the preview bar, and a tap on it opens the sheet (MOBILE-19.1)", async ({ page }) => {
@@ -699,8 +692,7 @@ test.describe("phone", () => {
     // The header and nothing else: the track, a glance at its clip, and the way back up.
     const box = (await sheet(page).boundingBox())!;
     expect(box.height, "minimised is just the header").toBeLessThan(80);
-    expect(Math.abs(box.y + box.height - (await tabBarTop(page))), "and it sits on the tab bar").toBeLessThan(2);
-    await expect(segment(page, "Edit")).toHaveCount(0);
+    expect(Math.abs(box.y + box.height - (await keysTop(page))), "and it sits on the keys").toBeLessThan(2);
 
     await sheet(page).getByRole("button", { name: "Open the editor" }).tap();
     await expect.poll(() => detentOf(page)).toBe("half");
@@ -801,35 +793,31 @@ test.describe("phone", () => {
     await expect.poll(() => detentOf(page)).toBe("peek");
   });
 
-  test("each segment hosts one surface, and the transport survives switching", async ({ page }) => {
+  test("the sheet is the desktop's column: clips, roll and devices in one scroll (MOBILE-24)", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
+    await setDetent(page, "full");
 
-    await segment(page, "Edit").tap();
+    const column = sheet(page).getByTestId("workbench-column");
+    await expect(column.getByRole("button", { name: "Add a new empty clip" })).toBeVisible();
     await expect(page.getByTestId("roll-scroll")).toBeVisible();
+    // The devices are further down the same column, under a bar that sticks once they reach the top.
+    await column.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect(column.getByRole("button", { name: "Device chain actions" })).toBeVisible();
+    await expect(column.getByRole("button", { name: /^Roll/ })).toBeVisible();
 
-    await segment(page, "Clips").tap();
-    await expect(page.getByRole("button", { name: /^\+ Clip$/ })).toBeVisible();
-
-    await segment(page, "Rack").tap();
-    await expect(page.getByRole("button", { name: "Device chain actions" })).toBeVisible();
-
-    await expect(page.getByRole("button", { name: "Record" })).toHaveCount(1);
+    // Every section header is a finger's height, not the desktop's.
+    const header = await column
+      .getByRole("button", { name: "Open the clips" })
+      .evaluate((button) => button.parentElement!.getBoundingClientRect().height);
+    expect(header).toBe(44);
   });
-
-  /**
-   * The bug that made the sheet unusable on a device: it was laid out at the full workspace
-   * height and merely translated down, so at Half the roll's scroller was ~800px tall inside
-   * a ~400px window. It never overflowed, so it never scrolled, and every row below the fold
-   * was unreachable. "Transform while moving, commit layout on settle" is what fixes it.
-   */
   test("every detent leaves the editor a box that fits on screen and scrolls", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
 
     for (const detent of ["half", "full"] as const) {
       await setDetent(page, detent);
-      await segment(page, "Edit").tap();
       // Wait on the surface itself rather than measuring into a re-render.
       await expect(page.getByTestId("roll-scroll")).toBeVisible();
 
@@ -1008,7 +996,7 @@ test.describe("phone", () => {
     await expect.poll(() => detentOf(page)).not.toBe("peek");
     await page.waitForTimeout(500);
     const box = (await sheet(page).boundingBox())!;
-    expect(Math.abs(box.y + box.height - (await tabBarTop(page))), "still anchored to the tab bar").toBeLessThan(2);
+    expect(Math.abs(box.y + box.height - (await keysTop(page))), "still anchored to the keys").toBeLessThan(2);
   });
 
   test("a drag that starts on the minimised clip preview moves the sheet too (DAW-58)", async ({ page }) => {
@@ -1073,7 +1061,6 @@ test.describe("phone", () => {
   test("adding is the top bar's +, and the project's settings are in settings", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await segment(page, "Edit").tap();
     await setDetent(page, "half");
 
     const tracks = page.locator("[data-track-id]");
@@ -1111,11 +1098,11 @@ test.describe("phone", () => {
   test("the roll has no toolbar or menu of its own on touch", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await segment(page, "Edit").tap();
     await expect(page.getByTestId("roll-scroll")).toBeVisible();
 
-    // The toolbar row is hidden, so its label is not shown...
-    await expect(page.getByText("Piano roll", { exact: true })).toBeHidden();
+    // The header stays, for its fold (MOBILE-24), but without the desktop's zoom buttons...
+    await expect(page.getByRole("button", { name: "Fold the piano roll" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Zoom in (time)" })).toHaveCount(0);
 
     // ...and nor is a tools menu in its place (MOBILE-19.4): its settings are the settings panel's
     // Piano roll page, zoom is the pinch, and Quantize is on a selected note's own menu.
@@ -1138,7 +1125,6 @@ test.describe("phone", () => {
   test("the editors' settings are settings pages on touch, and what they set reaches the surface", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await segment(page, "Edit").tap();
 
     await openSettingsPage(page, "Arrangement");
     await page.getByRole("radiogroup", { name: "Arrangement snap" }).getByRole("radio", { name: "Bar" }).click();
@@ -1422,42 +1408,19 @@ test.describe("phone", () => {
     await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Em7" })).toBeVisible();
   });
 
-  test("the roll folds away like the pads do, giving the pads the sheet for more rows of chords", async ({ page }) => {
+  test("the roll folds away under its header, and the keys stay where they are", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await page.getByRole("button", { name: "Key and scale" }).tap();
-    await page.getByRole("menuitemradio", { name: "Chords" }).click();
-    const rows = () => pads(page).locator("[data-chord-row]").count();
-    const more = pads(page).getByRole("button", { name: "More chord rows" });
-    while (await more.isEnabled()) await more.tap();
-    const shared = await pads(page).evaluate((section) => section.getBoundingClientRect().height);
+    await setDetent(page, "full");
+    const keysAt = await keysTop(page);
 
-    // Two sections, one style: the roll's header folds it exactly as the pads' header folds them.
-    const roll = page.locator('[data-section="roll"]');
-    await roll.getByRole("button", { expanded: true }).tap();
-    await expect(page.getByTestId("roll-scroll")).toHaveCount(0);
-    while (await more.isEnabled()) await more.tap();
-    expect(await pads(page).evaluate((section) => section.getBoundingClientRect().height)).toBeGreaterThan(shared);
-    expect(await rows()).toBeGreaterThan(1);
-    // Every row that fits, stretched into the rest: no gap under the folded roll worth a row, and
-    // nothing pushed past the foot of the sheet.
-    const layout = await page.evaluate(() => {
-      const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-      return {
-        gap: box('[data-section="pads"]').top - box('[data-section="roll"]').bottom,
-        overflow: box('[data-chord-row="0"]').bottom - innerHeight,
-      };
-    });
-    expect(layout.gap).toBeLessThan(16);
-    expect(layout.overflow).toBeLessThanOrEqual(0);
-
-    // Asking for a surface unfolds it.
-    await page.getByRole("radio", { name: "Clips" }).click();
-    await expect(page.locator('[data-section="clips"]')).toHaveAttribute("data-open", "true");
-    await page.getByRole("radio", { name: "Edit" }).click();
-    await expect(page.getByTestId("roll-scroll")).toBeVisible();
+    await sheet(page).getByRole("button", { name: "Fold the piano roll" }).tap();
+    await expect(page.getByTestId("roll-scroll")).toBeHidden();
+    // Its header stays, showing the clip, and the devices move up under it.
+    await expect(sheet(page).getByRole("button", { name: "Open the piano roll" })).toBeVisible();
+    await expect(sheet(page).getByRole("button", { name: "Device chain actions" })).toBeVisible();
+    expect(await keysTop(page)).toBe(keysAt);
   });
-
   test("a long chord name shrinks to fit its pad rather than overflowing it", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
@@ -1507,15 +1470,18 @@ test.describe("phone", () => {
     await expect(pad(page, "E3")).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("the pads stay under whichever surface is showing, so you can play while you tweak", async ({ page }) => {
+  test("the keys stay docked while the sheet scrolls to the devices, so you can play while you tweak", async ({
+    page,
+  }) => {
     await page.goto("/");
     await dismissStart(page);
+    await setDetent(page, "full");
 
-    for (const name of ["Clips", "Rack"]) {
-      await segment(page, name).tap();
-      await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
-      expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
-    }
+    const column = sheet(page).getByTestId("workbench-column");
+    await column.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect(column.getByRole("button", { name: "Device chain actions" })).toBeVisible();
+    await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
+    expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
 
     // And they still play from there, which is the point: hearing what a device does to a
     // note without leaving the device to play one.
@@ -1526,7 +1492,6 @@ test.describe("phone", () => {
     await page.mouse.up();
     await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "false");
   });
-
   test("dragging down off a pad latches it, and the next note lets it go", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
@@ -1545,50 +1510,22 @@ test.describe("phone", () => {
     await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("the octave range grows in whole rows, and the roll grows with the sheet too", async ({ page }) => {
+  test("the octave range grows in whole rows, up to a share of the screen", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await setDetent(page, "half");
+    await setDetent(page, "full");
 
     const grow = page.getByRole("button", { name: /More octaves/ });
     const rows = () => pads(page).locator("[data-pad-row]").count();
-    const rollHeight = async () => (await page.getByTestId("roll-scroll").boundingBox())!.height;
     expect(await rows()).toBe(1);
+    for (let press = 0; press < 10 && !(await grow.isDisabled()); press++) await grow.tap();
 
-    /** Ask for octaves until the sheet stops giving them, and report what it settled on. */
-    const fill = async () => {
-      for (let press = 0; press < 10 && !(await grow.isDisabled()); press++) await grow.tap();
-      // The part only a browser can tell you: what it stopped at still fits inside the
-      // sheet rather than under its bottom edge.
-      expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
-      return { rows: await rows(), roll: await rollHeight() };
-    };
-
-    const half = await fill();
-    await setDetent(page, "full");
-    const full = await fill();
-
-    // Both surfaces grow, which is the point: the pads take a *share* of the editor, so
-    // raising the sheet buys rows and notes rather than spending it all on pads. A flat
-    // reserve for the roll left it the same sliver at every detent, and a ratio is what says
-    // "materially more" - the bug this guards is a roll that comes back the same size.
-    //
-    // Deliberately not an absolute pixel figure. Rows fit in whole steps, so how much room is
-    // left over for the roll depends on the pad row height, and an absolute threshold silently
-    // encodes that: shortening the accidentals by 4px packs one more row into the same share
-    // and takes the difference out of exactly this number.
-    expect(full.rows).toBeGreaterThan(half.rows);
-    expect(full.roll).toBeGreaterThan(half.roll * 1.1);
-    expect(half.roll, "the roll is readable even at Half, with the pads filled").toBeGreaterThan(120);
-
-    // The count is a request, not a promise: dropping back gives the rows away and raising
-    // the sheet again honours what was asked for, without asking again.
-    await setDetent(page, "half");
-    expect(await rows()).toBe(half.rows);
-    await setDetent(page, "full");
-    expect(await rows()).toBe(full.rows);
+    // More than one row on a phone held upright, and what it stopped at still fits above the
+    // tabs. The keys push the Studio up rather than cover it, so the roll is still there.
+    expect(await rows()).toBeGreaterThan(1);
+    expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
+    await expect(page.getByTestId("roll-scroll")).toBeVisible();
   });
-
   test("a long submenu stays on screen instead of running off the bottom", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
@@ -1636,28 +1573,22 @@ test.describe("phone, landscape", () => {
     expect(share).toBeGreaterThan(0.9);
   });
 
-  test("needs no special case: the editor has the sheet to itself", async ({ page }) => {
-    // A rack taller than the viewport used to squeeze the roll to nothing when the two
-    // shared a surface. They no longer do.
-    await page.addInitScript(() => localStorage.setItem("corrente:devices-height", "600"));
+  test("folding the keys hands their height to the sheet", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await setDetent(page, "full");
-    await segment(page, "Edit").tap();
+    const before = (await sheet(page).boundingBox())!.height;
 
-    // The pads do share it, and at ~390px tall they take most of what the roll had. That is
-    // what their disclosure is for: collapsing them hands the height straight back.
-    await pads(page).getByRole("button", { expanded: true }).tap();
+    await pads(page).getByRole("button", { name: "Fold the keys" }).tap();
+    await expect(pads(page).locator("[data-pad-row]")).toHaveCount(0);
+    await expect.poll(async () => (await sheet(page).boundingBox())!.height).toBeGreaterThan(before);
     const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
-    expect(roll.height, "the roll has the sheet to itself").toBeGreaterThan(120);
-    expect(roll.width, "and the full width").toBeGreaterThan(700);
+    expect(roll.width, "the roll has the full width").toBeGreaterThan(700);
   });
-
   test("the velocity lane starts folded away on touch, and its setting brings it back", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await setDetent(page, "full");
-    await segment(page, "Edit").tap();
 
     // 56px of lane is a whole row of pads, and velocity still reads as note fill strength -
     // so on touch the lane is off until it is asked for.
@@ -1669,20 +1600,14 @@ test.describe("phone, landscape", () => {
     await expect(lane).toBeVisible();
   });
 
-  test("says there is no room to play rather than showing half a pad", async ({ page }) => {
+  test("still gets a row of pads, the controls folded into the header", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
 
-    // ~133px of editor at Half is not one row of pads plus the controls to drive it, however
-    // the numbers are shuffled. Full is, once the controls fold into the section's header.
-    await setDetent(page, "half");
-    await expect(pads(page)).toContainText("Raise the sheet to play");
-    await expect(pads(page).locator("[data-pitches]")).toHaveCount(0);
-
-    await setDetent(page, "full");
+    // Short but wide: a row of pads is worth more than the controls' own row, and the header
+    // has the width to take them.
     await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
     expect(await padsOverflow(page)).toBeLessThanOrEqual(0);
-    // Landscape is short but wide, so the header has the width to take the controls.
     await expect(pads(page).getByRole("button", { name: "Key and scale" })).toBeVisible();
   });
 });

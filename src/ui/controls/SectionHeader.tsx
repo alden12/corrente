@@ -9,6 +9,11 @@ import { FoldButton, type Fold } from "./FoldButton";
 
 /** Every section header's height, which layouts that size themselves around one (the keys) read. */
 export const SECTION_HEADER_HEIGHT = 36;
+/**
+ * The same on touch, tall enough for a finger (MOBILE-24). The touch shell sets it as
+ * `--section-header` on its root, so the headers inside follow without a prop each.
+ */
+export const TOUCH_SECTION_HEADER_HEIGHT = 44;
 
 export function SectionHeader({
   title,
@@ -29,7 +34,7 @@ export function SectionHeader({
   return (
     <div
       className={`shrink-0 flex items-center gap-2 pl-1 pr-2.5 border-b border-line bg-panel ${className}`}
-      style={{ height: SECTION_HEADER_HEIGHT }}
+      style={{ height: `var(--section-header, ${SECTION_HEADER_HEIGHT}px)` }}
     >
       {fold ? <FoldButton fold={fold} label={title.toLowerCase()} /> : <span className="w-7 shrink-0" />}
       <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">{title}</span>
