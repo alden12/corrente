@@ -10,7 +10,7 @@
  */
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
-import { authEnabled, readAuthState, subscribeAuth, signInWithProvider } from "../auth/session";
+import { authEnabled, readAuthState, subscribeAuth, signInWithProvider, signOut, type AuthUser } from "../auth/session";
 import { writeCurrentUser, DEFAULT_USER } from "./currentUser";
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -38,6 +38,7 @@ function GatedApp({ children }: { children: ReactNode }) {
 
   if (state.status === "loading") return <GateCard>{<p className="text-sm text-muted">Signing in...</p>}</GateCard>;
   if (state.status === "signed-out") return <LoginScreen />;
+  if (state.status === "refused") return <RefusedScreen user={state.user} />;
   return <>{children}</>;
 }
 
@@ -81,6 +82,32 @@ function LoginScreen() {
           Sign-in is invite-only during development. Ask to have your Google account added to the test list.
         </p>
       </div>
+    </GateCard>
+  );
+}
+
+/**
+ * Signed in, and turned away: the server does not have this account (HOST-20). Most often the phone's
+ * Google account is not the one that was invited, so the way out is another account.
+ */
+function RefusedScreen({ user }: { user: AuthUser }) {
+  return (
+    <GateCard>
+      <h2 id="auth-title" className="text-lg font-semibold text-strong">
+        This account isn't invited yet
+      </h2>
+      <p className="text-sm text-muted leading-relaxed">
+        You're signed in as <span className="text-ink break-all">{user.email ?? user.name}</span>, but Corrente doesn't
+        have that account on its invite list. If you were invited with a different Google account, sign in with that
+        one.
+      </p>
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        className="mt-1 w-full font-mono text-sm font-semibold px-5 py-2.5 rounded-lg border border-line bg-card text-ink hover:border-faint cursor-pointer"
+      >
+        Use another account
+      </button>
     </GateCard>
   );
 }

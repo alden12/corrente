@@ -60,12 +60,37 @@ export interface ApiClient {
   syncFavourites(changes: { add: string[]; remove: string[] }): Promise<FavouriteEntry[]>;
 }
 
-export function createApiClient(config: { baseUrl: string; token?: TokenSource }): ApiClient {
+/**
+ * What to do about a 401. `renew` gets a fresh credential (resolving whether it did), so a token that
+ * only went stale - a phone asleep past its expiry - costs one retry; `refused` is told when even a
+ * fresh one is turned away, which is someone the server will not have (HOST-20), not a broken request.
+ */
+export interface UnauthorizedHandler {
+  renew(): Promise<boolean>;
+  refused(): void;
+}
+
+export function createApiClient(config: {
+  baseUrl: string;
+  token?: TokenSource;
+  onUnauthorized?: UnauthorizedHandler;
+}): ApiClient {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
   // Re-evaluated per request, so a refreshed token is used without rebuilding the client.
   const authHeaders = (): Record<string, string> => {
     const token = resolveToken(config.token);
     return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  /** `fetch` with the credential, retried once on a 401 when the token can be renewed. */
+  const send = async (url: string, init: RequestInit & { headers?: Record<string, string> } = {}) => {
+    const attempt = () => fetch(url, { ...init, headers: { ...authHeaders(), ...init.headers } });
+    const res = await attempt();
+    const handler = config.onUnauthorized;
+    if (res.status !== 401 || !handler) return res;
+    const retried = (await handler.renew()) ? await attempt() : res;
+    if (retried.status === 401) handler.refused();
+    return retried;
   };
 
   // Path with each segment encoded but the separators preserved (matches the `:path{.+}` route).
@@ -78,7 +103,7 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
   };
 
   const getFile = async (id: string, path: string): Promise<Response | null> => {
-    const res = await fetch(fileUrl(id, path), { headers: authHeaders() });
+    const res = await send(fileUrl(id, path));
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`sync: read ${path} failed (${res.status})`);
     return res;
@@ -86,7 +111,7 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
 
   return {
     async listProjects() {
-      const res = await fetch(`${baseUrl}${routes.listProjects.path}`, { headers: authHeaders() });
+      const res = await send(`${baseUrl}${routes.listProjects.path}`);
       if (!res.ok) throw new Error(`sync: list projects failed (${res.status})`);
       const body = (await res.json()) as ProjectList;
       return body.projects;
@@ -94,7 +119,7 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
 
     async deleteProject(id) {
       const url = `${baseUrl}${routes.deleteProject.path.replace(":id", encodeURIComponent(id))}`;
-      const res = await fetch(url, { method: "DELETE", headers: authHeaders() });
+      const res = await send(url, { method: "DELETE" });
       if (!res.ok) throw new Error(`sync: delete ${id} failed (${res.status})`);
     },
 
@@ -109,8 +134,8 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
     },
 
     async writeFile(id, path, body, contentType) {
-      const headers = { ...authHeaders(), "Content-Type": contentType };
-      const res = await fetch(fileUrl(id, path), { method: "PUT", headers, body });
+      const headers = { "Content-Type": contentType };
+      const res = await send(fileUrl(id, path), { method: "PUT", headers, body });
       if (res.ok) return { ok: true };
       let error = res.statusText;
       try {
@@ -122,15 +147,15 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
     },
 
     async fileExists(id, path) {
-      const res = await fetch(fileUrl(id, path), { method: "HEAD", headers: authHeaders() });
+      const res = await send(fileUrl(id, path), { method: "HEAD" });
       return res.ok;
     },
 
     async appendEdits(id, entries) {
       const url = `${baseUrl}${routes.appendEdits.path.replace(":id", encodeURIComponent(id))}`;
-      const res = await fetch(url, {
+      const res = await send(url, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entries }),
       });
       if (!res.ok) throw new Error(`sync: append edits to ${id} failed (${res.status})`);
@@ -145,7 +170,7 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
       if (limit != null) params.set("limit", String(limit));
       const query = params.toString();
       const url = query ? `${baseUrl}${path}?${query}` : `${baseUrl}${path}`;
-      const res = await fetch(url, { headers: authHeaders() });
+      const res = await send(url);
       if (!res.ok) throw new Error(`sync: get edits for ${id} failed (${res.status})`);
       const body = (await res.json()) as z.infer<(typeof routes.getEdits)["response"]>;
       return body.entries;
@@ -153,7 +178,7 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
 
     async getMembers(id) {
       const url = `${baseUrl}/projects/${encodeURIComponent(id)}/members`;
-      const res = await fetch(url, { headers: authHeaders() });
+      const res = await send(url);
       if (!res.ok) throw new Error(`sync: list members of ${id} failed (${res.status})`);
       const body = (await res.json()) as z.infer<(typeof routes.listMembers)["response"]>;
       return body.members;
@@ -161,9 +186,9 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
 
     async addMember(id, email, role) {
       const url = `${baseUrl}/projects/${encodeURIComponent(id)}/members`;
-      const res = await fetch(url, {
+      const res = await send(url, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(role ? { email, role } : { email }),
       });
       if (!res.ok) {
@@ -179,14 +204,14 @@ export function createApiClient(config: { baseUrl: string; token?: TokenSource }
 
     async removeMember(id, email) {
       const url = `${baseUrl}/projects/${encodeURIComponent(id)}/members/${encodeURIComponent(email)}`;
-      const res = await fetch(url, { method: "DELETE", headers: authHeaders() });
+      const res = await send(url, { method: "DELETE" });
       if (!res.ok) throw new Error(`sync: remove ${email} from ${id} failed (${res.status})`);
     },
 
     async syncFavourites(changes) {
-      const res = await fetch(`${baseUrl}${routes.syncFavourites.path}`, {
+      const res = await send(`${baseUrl}${routes.syncFavourites.path}`, {
         method: "POST",
-        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(changes),
       });
       if (!res.ok) throw new Error(`sync: favourites failed (${res.status})`);

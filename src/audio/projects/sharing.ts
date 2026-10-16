@@ -6,13 +6,15 @@
  * and the panel is never offered there.
  */
 import { createApiClient, type ApiClient, type MemberEntry } from "../../contract/client";
-import { getAccessToken } from "../../auth/session";
+import { getAccessToken, onUnauthorized } from "../../auth/session";
 
 export type { MemberEntry };
 
 const apiUrl = import.meta.env?.VITE_DAW_API_URL;
 // One client, token read per request via the getter (a refreshed session token takes effect).
-const client: ApiClient | null = apiUrl ? createApiClient({ baseUrl: apiUrl, token: getAccessToken }) : null;
+const client: ApiClient | null = apiUrl
+  ? createApiClient({ baseUrl: apiUrl, token: getAccessToken, onUnauthorized })
+  : null;
 
 /** Whether project sharing is available (a remote backend is configured). */
 export const sharingAvailable = Boolean(client);

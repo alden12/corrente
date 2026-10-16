@@ -84,3 +84,61 @@ describe("createApiClient sharing (member) methods", () => {
     await expect(createApiClient({ baseUrl: "http://x" }).addMember("p1", "bad")).rejects.toThrow("400");
   });
 });
+
+describe("createApiClient on a 401", () => {
+  /** A server that refuses every token but `accepted`, recording the token each call carried. */
+  function stubAuthServer(accepted: string | null): string[] {
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const auth = authOf(init ?? {}) ?? "";
+        seen.push(auth);
+        return auth === `Bearer ${accepted}`
+          ? new Response(JSON.stringify({ projects: [] }), { status: 200 })
+          : new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+      }),
+    );
+    return seen;
+  }
+
+  it("renews a stale token and retries once, without calling it refused", async () => {
+    const seen = stubAuthServer("fresh");
+    let token = "stale";
+    const refused = vi.fn();
+    const renew = vi.fn(async () => {
+      token = "fresh";
+      return true;
+    });
+    const client = createApiClient({ baseUrl: "http://x", token: () => token, onUnauthorized: { renew, refused } });
+    await expect(client.listProjects()).resolves.toEqual([]);
+    expect(seen).toEqual(["Bearer stale", "Bearer fresh"]);
+    expect(refused).not.toHaveBeenCalled();
+  });
+
+  it("calls the account refused when a fresh token is turned away too", async () => {
+    const seen = stubAuthServer(null);
+    const refused = vi.fn();
+    const client = createApiClient({
+      baseUrl: "http://x",
+      token: "uninvited",
+      onUnauthorized: { renew: async () => true, refused },
+    });
+    await expect(client.readText("p1", "project.json")).rejects.toThrow("401");
+    expect(seen).toHaveLength(2);
+    expect(refused).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry when the token cannot be renewed", async () => {
+    const seen = stubAuthServer(null);
+    const refused = vi.fn();
+    const client = createApiClient({
+      baseUrl: "http://x",
+      token: "t",
+      onUnauthorized: { renew: async () => false, refused },
+    });
+    await expect(client.listProjects()).rejects.toThrow("401");
+    expect(seen).toHaveLength(1);
+    expect(refused).toHaveBeenCalledOnce();
+  });
+});

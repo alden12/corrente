@@ -12,7 +12,7 @@
  */
 import { createApiClient, type ApiClient } from "../../../contract/client";
 import { MAX_FAVOURITE_CHANGES } from "../../../contract/http";
-import { authEnabled, getAccessToken, readAuthState, subscribeAuth } from "../../../auth/session";
+import { authEnabled, getAccessToken, onUnauthorized, readAuthState, subscribeAuth } from "../../../auth/session";
 import { readPersistent, writePersistent } from "../../persistentStore";
 import {
   applyServerList,
@@ -24,7 +24,9 @@ import {
 } from "./state";
 
 const apiUrl = import.meta.env?.VITE_DAW_API_URL;
-const client: ApiClient | null = apiUrl ? createApiClient({ baseUrl: apiUrl, token: getAccessToken }) : null;
+const client: ApiClient | null = apiUrl
+  ? createApiClient({ baseUrl: apiUrl, token: getAccessToken, onUnauthorized })
+  : null;
 
 const SIGNED_OUT = "local";
 const storageKey = (owner: string) => `corrente:favourites:v1:${owner}`;

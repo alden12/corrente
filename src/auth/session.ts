@@ -26,8 +26,16 @@ export interface AuthUser {
   name: string;
 }
 
-/** `loading` until the first auth event resolves; then `signed-in` (with the user) or `signed-out`. */
-export type AuthState = { status: "loading" } | { status: "signed-out" } | { status: "signed-in"; user: AuthUser };
+/**
+ * `loading` until the first auth event resolves; then `signed-in` (with the user) or `signed-out`.
+ * `refused` is signed in with the provider but turned away by the server, even with a fresh token:
+ * an account nobody invited (HOST-20). Google vouches for anyone, so this is not rare.
+ */
+export type AuthState =
+  | { status: "loading" }
+  | { status: "signed-out" }
+  | { status: "signed-in"; user: AuthUser }
+  | { status: "refused"; user: AuthUser };
 
 const listeners = new Set<() => void>();
 const supabase: SupabaseClient | null = authEnabled ? createClient(url as string, anonKey as string) : null;
@@ -45,16 +53,22 @@ function displayName(session: Session): string {
   return named ?? session.user.email ?? session.user.id;
 }
 
+const notify = (): void => listeners.forEach((listener) => listener());
+
 function apply(session: Session | null): void {
   if (session) resumeConsent();
   token = session?.access_token;
+  // A refresh of a refused account's token is still that account, and still refused: only signing
+  // out (or in as someone else) leaves the refusal, or every hourly refresh would remount the app
+  // into the same wall of 401s.
+  if (session && state.status === "refused" && state.user.id === session.user.id) return;
   state = session
     ? {
         status: "signed-in",
         user: { id: session.user.id, email: session.user.email ?? undefined, name: displayName(session) },
       }
     : { status: "signed-out" };
-  for (const listener of listeners) listener();
+  notify();
 }
 
 // One handler keeps the token + state current. `onAuthStateChange` fires an INITIAL_SESSION event on
@@ -66,6 +80,31 @@ if (supabase) supabase.auth.onAuthStateChange((_event, session) => apply(session
 export function getAccessToken(): string | undefined {
   return authEnabled ? token : undefined;
 }
+
+/** One refresh at a time: a refused boot sends several requests at once, and they share it. */
+let renewing: Promise<boolean> | null = null;
+
+/**
+ * What the API clients do about a 401 (see `UnauthorizedHandler`). A stored session can hold a token
+ * the server will not take - expired while a phone slept, say - so the first answer is a fresh one;
+ * a 401 on that is the server refusing the account, and the gate says so rather than leaving the app
+ * to read every failed request as a damaged project.
+ */
+export const onUnauthorized = {
+  renew(): Promise<boolean> {
+    if (!supabase || state.status !== "signed-in") return Promise.resolve(false);
+    renewing ??= supabase.auth
+      .refreshSession()
+      .then(({ error }) => !error)
+      .finally(() => (renewing = null));
+    return renewing;
+  },
+  refused(): void {
+    if (state.status !== "signed-in") return;
+    state = { status: "refused", user: state.user };
+    notify();
+  },
+};
 
 /** Current auth state (a stable snapshot; changes only alongside a `subscribeAuth` notification). */
 export function readAuthState(): AuthState {

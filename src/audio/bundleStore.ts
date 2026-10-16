@@ -13,7 +13,7 @@
 import { projectSummarySchema, type ProjectSummary } from "./projects/summary";
 import { RemoteProjectStorage } from "./remoteStore";
 import { CachedProjectStorage } from "./cachedStore";
-import { getAccessToken } from "../auth/session";
+import { getAccessToken, onUnauthorized } from "../auth/session";
 import type { EditEntry } from "./commands/types";
 
 export interface BundleStore {
@@ -376,7 +376,7 @@ export function getProjectStorage(): ProjectStorage {
     if (apiUrl) {
       // Pass the token *getter* (not a snapshot) so a live Supabase session token is read per request;
       // it yields undefined when auth is off (the dev-stub server is open).
-      const remote = new RemoteProjectStorage(apiUrl, getAccessToken);
+      const remote = new RemoteProjectStorage(apiUrl, getAccessToken, onUnauthorized);
       // Front the remote with an OPFS read-through cache so a seen project loads / renders offline. With
       // no OPFS (old browser) fall back to remote-only, exactly as before.
       storageSingleton = hasOpfs ? new CachedProjectStorage(remote, new OpfsProjectStorage(REMOTE_CACHE_DIR)) : remote;
