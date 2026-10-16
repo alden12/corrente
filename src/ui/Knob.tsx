@@ -16,8 +16,8 @@ import { pitchName } from "./noteNames";
 import { formatNumber } from "./paramFormat";
 import { Select } from "./controls/Select";
 import { Fader } from "./controls/Fader";
-import { authorFillStyle, authorDotStyle, authorHex } from "./authorStyle";
-import { useAuthorPresence } from "./authorColorsContext";
+import { authorFillStyle, authorHex } from "./authorStyle";
+import { useAuthorPresence, type AuthorPresence } from "./authorColorsContext";
 import { DeviceHue } from "./devices/deviceHue";
 import { hueAccent } from "./deviceColor";
 
@@ -73,6 +73,15 @@ function NoteSelect({
 /** A horizontal fader for a number param - label on the left, value on the right, track
  *  stretching between. Used in the compact drum-pad layout. The taper is applied here and the
  *  track itself is a plain 0..1 `Fader`; `spec.step` is snapped by the store's coercion. */
+/**
+ * The colour of a control's handle (a knob's tick, a fader's cap): whoever last moved it. In a
+ * device, one nobody has moved yet takes the device's colour instead, so an author colour on a
+ * handle always means someone touched it.
+ */
+function handleColor(hue: number | null, author: string | undefined, presence: AuthorPresence): string {
+  return hue !== null && author === undefined ? hueAccent(hue) : authorHex(author ?? "you", presence);
+}
+
 function NumberHSlider({
   spec,
   store,
@@ -98,7 +107,7 @@ function NumberHSlider({
         display={formatNumber(spec, value as number)}
         aria={{ now: value as number, min: spec.min, max: spec.max }}
         fillStyle={hue === null ? authorFillStyle(author ?? "you", presence) : { background: hueAccent(hue, 0.7) }}
-        thumbStyle={hue === null ? undefined : { borderColor: authorHex(author ?? "you", presence) }}
+        thumbStyle={hue === null ? undefined : { borderColor: handleColor(hue, author, presence) }}
       />
     </div>
   );
@@ -167,7 +176,7 @@ function NumberKnob({
         {/* A short tick still marks the exact position; the arc alone is coarse to read precisely. */}
         <span
           className="absolute left-1/2 top-1.25 w-0.5 h-2 rounded-full origin-[50%_15px]"
-          style={{ ...authorDotStyle(author ?? "you", presence), transform: `translateX(-50%) rotate(${angle}deg)` }}
+          style={{ background: handleColor(hue, author, presence), transform: `translateX(-50%) rotate(${angle}deg)` }}
         />
       </div>
       <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>
@@ -196,8 +205,8 @@ function NumberSlider({
   // In a device, the fill is the device's colour and the cap its last editor's, as a knob's arc and
   // tick are; alone, both are theirs.
   const hue = useContext(DeviceHue);
-  const authorColor = authorHex(author ?? "you", presence);
-  const valueColor = hue === null ? authorColor : hueAccent(hue);
+  const capColor = handleColor(hue, author, presence);
+  const valueColor = hue === null ? capColor : hueAccent(hue);
 
   const onPointerDown = (e: React.PointerEvent) => {
     capturePointerDrag(e);
@@ -240,7 +249,7 @@ function NumberSlider({
             up and down. `translate-y-1/2` centres it on the value (bottom puts its edge there). */}
         <span
           className="absolute left-1/2 h-2 w-4 -translate-x-1/2 translate-y-1/2 rounded-[3px] border-2 bg-ground"
-          style={{ bottom: `${norm * 100}%`, borderColor: authorColor }}
+          style={{ bottom: `${norm * 100}%`, borderColor: capColor }}
         />
       </div>
       <span className="text-[9px] uppercase tracking-wide text-muted text-center leading-tight">{spec.label}</span>

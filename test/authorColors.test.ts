@@ -17,6 +17,12 @@ describe("colorForAuthor (perspective-relative)", () => {
     expect(colorForAuthor("you", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.you);
   });
 
+  it("paints the 'you' stamp in the colour the viewer picked, as their own edits are", () => {
+    // The pick is kept under the viewer's id; the stamp used to miss it and stay teal.
+    expect(colorForAuthor("you", { bob: "#e06f9a" }, "bob")).toBe("#e06f9a");
+    expect(colorForAuthor("bob", { bob: "#e06f9a" }, "bob")).toBe("#e06f9a");
+  });
+
   it("keeps the agent voice absolute (same colour for everyone)", () => {
     expect(colorForAuthor("agent:alice", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.agent);
     expect(colorForAuthor("agent", {}, "bob")).toBe(DEFAULT_VOICE_COLORS.agent);

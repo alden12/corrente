@@ -128,7 +128,9 @@ export function colorForAuthor(author: string, config: AuthorColorConfig = cache
   // people are driving one - the settings panel offers one agent row, not one per collaborator.
   const override = config[isAgentAuthor(author) ? "agent" : author];
   if (override) return override;
-  if (isViewer(author, self)) return DEFAULT_VOICE_COLORS.you; // my own edits: the "you" hue, whoever I am
+  // My own edits, including the unattributed "you" stamp: the colour I picked (kept under my id), else
+  // the "you" hue. Checking only the stamp's own key left untouched controls teal after a pick.
+  if (isViewer(author, self)) return config[self] ?? DEFAULT_VOICE_COLORS.you;
   if (isAgentAuthor(author)) return DEFAULT_VOICE_COLORS.agent;
   return SWATCHES[hashString(author) % SWATCHES.length].hex;
 }
