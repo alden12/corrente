@@ -9,6 +9,7 @@ export const sidechainCompressor: EngineBuiltin = {
   type: "sidechain-compressor",
   label: "Sidechain Compressor",
   tags: ["fx"],
+  color: "amber",
   schema: [
     { id: "threshold", label: "Threshold", kind: "number", min: -60, max: 0, default: -24, unit: "dB" },
     { id: "ratio", label: "Ratio", kind: "number", min: 1, max: 20, default: 8 },

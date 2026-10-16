@@ -92,6 +92,7 @@ export const supersaw: EngineBuiltin = {
   label: "Supersaw",
   family: "Synths",
   tags: ["lead", "pad", "bright", "lush"],
+  color: "violet",
   schema: supersawSchema,
   definition: {
     format: 1,

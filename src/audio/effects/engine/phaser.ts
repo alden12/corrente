@@ -15,6 +15,7 @@ export const phaser: EngineBuiltin = {
   type: "phaser",
   label: "Phaser",
   tags: ["fx", "retro"],
+  color: "lime",
   schema: [
     { id: "rate", label: "Rate", kind: "number", min: 0.05, max: 5, default: 0.4, unit: "Hz", taper: "exponential" },
     { id: "depth", label: "Depth", kind: "number", min: 0, max: 48, default: 30, unit: "st" },

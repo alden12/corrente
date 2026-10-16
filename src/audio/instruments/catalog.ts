@@ -12,6 +12,7 @@
  */
 import type { ParamSchema } from "../params/types";
 import type { Tag } from "../tags";
+import type { DeviceColor } from "../deviceColors";
 import { ENGINE_INSTRUMENTS } from "./engine";
 
 export interface InstrumentInfo {
@@ -27,7 +28,10 @@ export interface InstrumentInfo {
    */
   hidden?: boolean;
   /** Tags from the vocabulary (`tags.ts`), for Explore's chips and search. */
-  tags?: readonly Tag[]; /** Authored in a project (by you or the agent), not shipped with the app: registered on load. */
+  tags?: readonly Tag[];
+  /** Its colour (DAW-61.2); read it through `deviceColor`, which fills in one that is missing. */
+  color?: DeviceColor;
+  /** Authored in a project (by you or the agent), not shipped with the app: registered on load. */
   custom?: boolean;
 }
 
@@ -80,8 +84,8 @@ export function instrumentFamily(type: string): string {
 
 // --- built-in instruments (self-registered) -------------------------------
 // Every built-in is written in the engine's own format; engineDevices.ts plays their definitions.
-ENGINE_INSTRUMENTS.forEach(({ type, label, family = "Synths", tags, schema }) =>
-  registerInstrument({ type, label, schema, family, tags }),
+ENGINE_INSTRUMENTS.forEach(({ type, label, family = "Synths", tags, color, schema }) =>
+  registerInstrument({ type, label, schema, family, tags, color }),
 );
 // The empty-track sentinel: no params, hidden from the palette, silent (instruments/Silent.ts).
 registerInstrument({ type: EMPTY_INSTRUMENT, label: "No instrument", schema: [], family: "main", hidden: true });

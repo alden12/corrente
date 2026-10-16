@@ -11,6 +11,7 @@
 import type { ParamSchema } from "../../params/types";
 import { RATE_OPTIONS } from "./devices/rate";
 import type { Tag } from "../../tags";
+import type { DeviceColor } from "../../deviceColors";
 
 export const octavatorSchema: ParamSchema = [
   { id: "octaveUp", label: "Octave up", kind: "boolean", default: true },
@@ -54,6 +55,8 @@ export interface MidiDeviceInfo {
   schema: ParamSchema;
   /** Tags from the vocabulary (`tags.ts`), for Explore's chips and search. */
   tags?: readonly Tag[];
+  /** Its colour (DAW-61.2); read it through `deviceColor`, which fills in one that is missing. */
+  color?: DeviceColor;
 }
 
 /** The MIDI-device data registry (insertion order = palette / add-button order). */
@@ -86,6 +89,24 @@ export function midiDeviceSchema(type: string): ParamSchema {
 }
 
 // --- built-in MIDI devices (self-registered) ------------------------------
-registerMidiDevice({ type: "octavator", label: "Octavator", schema: octavatorSchema, tags: ["bass", "lead"] });
-registerMidiDevice({ type: "arpeggiator", label: "Arpeggiator", schema: arpeggiatorSchema, tags: ["arp"] });
-registerMidiDevice({ type: "euclidean", label: "Euclidean", schema: euclideanSchema, tags: ["rhythm", "percussion"] });
+registerMidiDevice({
+  type: "octavator",
+  label: "Octavator",
+  schema: octavatorSchema,
+  tags: ["bass", "lead"],
+  color: "pink",
+});
+registerMidiDevice({
+  type: "arpeggiator",
+  label: "Arpeggiator",
+  schema: arpeggiatorSchema,
+  tags: ["arp"],
+  color: "violet",
+});
+registerMidiDevice({
+  type: "euclidean",
+  label: "Euclidean",
+  schema: euclideanSchema,
+  tags: ["rhythm", "percussion"],
+  color: "amber",
+});

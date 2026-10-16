@@ -12,6 +12,7 @@ export const nimbus: EngineBuiltin = {
   label: "Nimbus",
   family: "Synths",
   tags: ["pad", "bass", "warm", "lush", "retro"],
+  color: "amber",
   schema: [
     { id: "osc.saw", label: "Saw", kind: "number", min: 0, max: 1, default: 0.8, taper: "linear", smoothMs: 15 },
     { id: "osc.pulse", label: "Pulse", kind: "number", min: 0, max: 1, default: 0, taper: "linear", smoothMs: 15 },

@@ -13,6 +13,7 @@ import { compileDefinition, DefinitionError } from "./compile";
 import type { AuthoredDefinition } from "./format";
 import { hasVoiceNodes } from "./references";
 import { issueLines } from "../../util";
+import { DEVICE_COLOR_NAMES, type DeviceColor } from "../deviceColors";
 
 /**
  * The version of the custom-device shape a project stores. 1 was the graph format the old engine
@@ -23,6 +24,8 @@ export const DEVICE_FORMAT_VERSION = 2;
 export interface CustomDevice {
   type: string;
   label?: string;
+  /** Its colour (DAW-61.2); without one, it gets one hashed from its type. */
+  color?: DeviceColor;
   schema: ParamSchema;
   definition: AuthoredDefinition;
 }
@@ -33,6 +36,7 @@ export type CustomKind = "instrument" | "effect";
 const customDeviceSchema = z.strictObject({
   type: z.string().min(1),
   label: z.string().optional(),
+  color: z.enum(DEVICE_COLOR_NAMES).optional(),
   schema: paramSchemaSchema,
   definition: z.unknown(),
 });

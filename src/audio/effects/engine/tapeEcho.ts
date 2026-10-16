@@ -8,6 +8,7 @@ export const tapeEcho: EngineBuiltin = {
   type: "tape-echo",
   label: "Tape Echo",
   tags: ["space", "retro", "warm"],
+  color: "blue",
   schema: [
     { id: "time", label: "Time", kind: "number", min: 40, max: 1200, default: 330, unit: "ms", taper: "exponential" },
     { id: "feedback", label: "Feedback", kind: "number", min: 0, max: 1.1, default: 0.55 },

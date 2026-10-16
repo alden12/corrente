@@ -9,6 +9,7 @@ export const pluckBass: EngineBuiltin = {
   label: "Pluck Bass",
   family: "Bass",
   tags: ["bass", "pluck", "warm"],
+  color: "red",
   schema: [
     { id: "tone", label: "Tone", kind: "number", min: 200, max: 6000, default: 1200, unit: "Hz", taper: "exponential" },
     { id: "decay", label: "Decay", kind: "number", min: 0.2, max: 6, default: 1.5, unit: "s", taper: "exponential" },

@@ -28,7 +28,9 @@ export function PanelHeader({
 }) {
   return (
     <div className="flex items-center gap-2.5">
-      {item && <ExploreThumb category={item.category} seed={item.name} portrait={item.portrait} size={40} />}
+      {item && (
+        <ExploreThumb category={item.category} seed={item.name} portrait={item.portrait} hue={item.hue} size={40} />
+      )}
       {/* The name wraps rather than truncates in a narrow column; a chip follows it, on its line or the
           next, with room either way. */}
       <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1.5">

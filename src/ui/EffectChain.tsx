@@ -11,6 +11,7 @@ import { effectCatalogEntry, effectSchema } from "../audio/effects/catalog";
 import type { Dispatch } from "../audio/commands/types";
 import { effectParamKey } from "../audio/commands/authorship";
 import { DeviceParams } from "./DeviceParams";
+import { deviceEdge } from "./deviceColor";
 
 /** The signal-flow arrow. Placed to the RIGHT of an outputting device (and kept in the
  *  same flex group as that device) so it trails cleanly instead of leading a wrapped row. */
@@ -42,7 +43,10 @@ export function EffectChain({
         // flex group, so the arrow stays glued to the device's right edge on wrap.
         return (
           <div key={fx.id} className="flex items-stretch shrink-0">
-            <div className={`shrink-0 border border-line rounded-xl bg-ground ${fx.bypassed ? "opacity-50" : ""}`}>
+            <div
+              className={`shrink-0 border border-line rounded-xl bg-ground ${fx.bypassed ? "opacity-50" : ""}`}
+              style={deviceEdge(effectCatalogEntry(fx.type))}
+            >
               <div className="flex items-center gap-1.5 px-3 py-2 border-b border-line">
                 <span
                   className="font-mono text-[12px] font-semibold text-strong mr-1 truncate"

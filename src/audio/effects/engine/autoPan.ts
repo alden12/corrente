@@ -8,6 +8,7 @@ export const autoPan: EngineBuiltin = {
   type: "auto-pan",
   label: "Auto-Pan",
   tags: ["fx", "rhythm"],
+  color: "cyan",
   schema: [
     { id: "sync", label: "Sync", kind: "boolean", default: true },
     {

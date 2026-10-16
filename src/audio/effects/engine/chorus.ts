@@ -24,6 +24,7 @@ export const chorus: EngineBuiltin = {
   type: "chorus",
   label: "Chorus",
   tags: ["lush", "warm"],
+  color: "green",
   schema: chorusSchema,
   definition: {
     format: 1,

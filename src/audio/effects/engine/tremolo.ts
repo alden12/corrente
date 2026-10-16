@@ -24,6 +24,7 @@ export const tremolo: EngineBuiltin = {
   type: "tremolo",
   label: "Tremolo",
   tags: ["retro"],
+  color: "lime",
   schema: tremoloSchema,
   definition: {
     format: 1,

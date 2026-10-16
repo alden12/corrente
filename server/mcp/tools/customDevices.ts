@@ -1,6 +1,7 @@
 /** MCP tools: Custom devices (author instruments and effects for the engine, stored in the project). */
 import { z } from "zod";
 import { parseCustomDevice, type CustomKind } from "../../../src/audio/definitions/custom";
+import { DEVICE_COLOR_NAMES, type DeviceColor } from "../../../src/audio/deviceColors";
 import { makeCustomInstrumentId, makeCustomEffectId, deviceFormatDoc, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 
@@ -12,6 +13,12 @@ import type { ToolContext } from "../context";
  */
 const deviceInput = {
   label: z.string().optional(),
+  color: z
+    .enum(DEVICE_COLOR_NAMES)
+    .optional()
+    .describe(
+      "Its colour in the rack and on Explore. Pick one unlike the devices it usually sits beside; omitted, one is picked from its type.",
+    ),
   schema: z
     .array(z.record(z.string(), z.unknown()))
     .describe("Param declarations, each { id, label, kind, ... } - see describe_device_format."),
@@ -19,6 +26,8 @@ const deviceInput = {
     .record(z.string(), z.unknown())
     .describe("The engine definition, { format, nodes, voice?, output?, ... } - see describe_device_format."),
 };
+
+type DeviceInput = { label?: string; color?: DeviceColor; schema: unknown; definition: unknown };
 
 export function registerCustomDevicesTools({ server, target, trackArg, resolveTrack }: ToolContext): void {
   /** The project's devices of a kind, and how to store one. */
@@ -54,7 +63,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
   const invalid = (kind: CustomKind, errors: string[]) =>
     fail(`Invalid ${kind}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
 
-  const create = (kind: CustomKind, type: string, input: { label?: string; schema: unknown; definition: unknown }) => {
+  const create = (kind: CustomKind, type: string, input: DeviceInput) => {
     const result = parseCustomDevice({ type, ...input }, kind);
     if (!result.ok) return invalid(kind, result.errors);
     if (!target.send({ type: KINDS[kind].add, def: result.device })) return fail("No DAW tab connected.");
@@ -62,14 +71,13 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     return ok(`Created ${kind} "${input.label ?? type}" (type ${type}). Use ${KINDS[kind].use} "${type}".`);
   };
 
-  const update = (
-    kind: CustomKind,
-    deviceType: string,
-    input: { label?: string; schema: unknown; definition: unknown },
-  ) => {
+  const update = (kind: CustomKind, deviceType: string, input: DeviceInput) => {
     const current = KINDS[kind].list().find((device) => device.type === deviceType);
     if (!current) return fail(`No custom ${kind} with type "${deviceType}". Use list_custom_devices.`);
-    const result = parseCustomDevice({ ...input, type: deviceType, label: input.label ?? current.label }, kind);
+    const result = parseCustomDevice(
+      { ...input, type: deviceType, label: input.label ?? current.label, color: input.color ?? current.color },
+      kind,
+    );
     if (!result.ok) return invalid(kind, result.errors);
     if (!target.send({ type: KINDS[kind].update, def: result.device })) return fail("No DAW tab connected.");
     KINDS[kind].store(result.device);
@@ -103,7 +111,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Edit custom instrument",
       description:
-        "Replace a custom instrument's definition, keeping its type id, so every track playing it picks up the change (params it still has keep their values). Pass the whole new device: read the current one with get_custom_device, change it, send it back. Omit label to keep the current one.",
+        "Replace a custom instrument's definition, keeping its type id, so every track playing it picks up the change (params it still has keep their values). Pass the whole new device: read the current one with get_custom_device, change it, send it back. Omit label or color to keep the current ones.",
       inputSchema: { deviceType: z.string(), ...deviceInput },
     },
     async ({ deviceType, ...input }) => update("instrument", deviceType, input),
@@ -114,7 +122,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Edit custom effect",
       description:
-        "Replace a custom effect's definition, keeping its type id, so every slot holding it picks up the change (params it still has keep their values). Pass the whole new device: read the current one with get_custom_device, change it, send it back. Omit label to keep the current one.",
+        "Replace a custom effect's definition, keeping its type id, so every slot holding it picks up the change (params it still has keep their values). Pass the whole new device: read the current one with get_custom_device, change it, send it back. Omit label or color to keep the current ones.",
       inputSchema: { deviceType: z.string(), ...deviceInput },
     },
     async ({ deviceType, ...input }) => update("effect", deviceType, input),

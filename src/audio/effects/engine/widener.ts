@@ -9,6 +9,7 @@ export const widener: EngineBuiltin = {
   type: "widener",
   label: "Widener",
   tags: ["space", "airy"],
+  color: "indigo",
   schema: [
     { id: "width", label: "Width", kind: "number", min: 0, max: 2, default: 1.4 },
     { id: "spread", label: "Spread", kind: "number", min: 0, max: 1, default: 0.5 },

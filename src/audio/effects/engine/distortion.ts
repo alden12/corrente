@@ -33,6 +33,7 @@ export const distortion: EngineBuiltin = {
   type: "distortion",
   label: "Distortion",
   tags: ["gritty", "aggressive"],
+  color: "red",
   schema: distortionSchema,
   definition: {
     format: 1,

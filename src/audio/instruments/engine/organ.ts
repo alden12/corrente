@@ -51,6 +51,7 @@ export const organ: EngineBuiltin = {
   label: "Organ",
   family: "Keys",
   tags: ["keys", "retro", "warm"],
+  color: "red",
   schema: organSchema,
   definition: {
     format: 1,

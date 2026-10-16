@@ -11,6 +11,7 @@
  */
 import type { ParamSchema } from "../params/types";
 import type { Tag } from "../tags";
+import type { DeviceColor } from "../deviceColors";
 import { ENGINE_EFFECTS } from "./engine";
 
 export interface EffectInfo {
@@ -19,7 +20,10 @@ export interface EffectInfo {
   label: string;
   schema: ParamSchema;
   /** Tags from the vocabulary (`tags.ts`), for Explore's chips and search. */
-  tags?: readonly Tag[]; /** Authored in a project (by you or the agent), not shipped with the app: registered on load. */
+  tags?: readonly Tag[];
+  /** Its colour (DAW-61.2); read it through `deviceColor`, which fills in one that is missing. */
+  color?: DeviceColor;
+  /** Authored in a project (by you or the agent), not shipped with the app: registered on load. */
   custom?: boolean;
 }
 
@@ -58,4 +62,4 @@ export function effectSchema(type: string): ParamSchema {
 
 // --- built-in effects (self-registered) -----------------------------------
 // Every built-in is written in the engine's own format; engineDevices.ts plays their definitions.
-ENGINE_EFFECTS.forEach(({ type, label, tags, schema }) => registerEffect({ type, label, schema, tags }));
+ENGINE_EFFECTS.forEach(({ type, label, tags, color, schema }) => registerEffect({ type, label, schema, tags, color }));

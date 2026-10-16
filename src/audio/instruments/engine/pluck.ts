@@ -12,6 +12,7 @@ export const pluck: EngineBuiltin = {
   label: "Pluck",
   family: "Synths",
   tags: ["pluck", "keys", "bright"],
+  color: "lime",
   schema: [
     {
       id: "brightness",

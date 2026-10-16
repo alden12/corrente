@@ -2,6 +2,7 @@
  * What every group of MCP tools shares: id minters, the device-format document, and the text
  * result shapes. Pure data and helpers, with no project or transport in sight.
  */
+import { DEVICE_COLOR_NAMES } from "../../src/audio/deviceColors";
 import { z } from "zod";
 import { definitionFormatDoc } from "../../src/audio/definitions/describe";
 import { paramSpecSchema } from "../../src/audio/params/declaration";
@@ -23,10 +24,11 @@ export const makeCustomEffectId = () => `ce-${randomId().slice(0, 8)}`;
 /** The custom-device format, as data the AI can read before authoring one: the engine's, in a wrapper. */
 export const deviceFormatDoc = () => ({
   device:
-    "A custom instrument or effect is { label?, schema, definition }. `schema` is its params (the keystone: they " +
+    "A custom instrument or effect is { label?, color?, schema, definition }. `schema` is its params (the keystone: they " +
     "drive the panel, automation and saving), `definition` the engine definition described below, which reads " +
     "them as { param: id }. An instrument's definition has voice nodes; an effect's has none and reads " +
     "input.left and input.right. It's checked by compiling it, and every problem comes back at once.",
+  color: `Its colour in the rack and on Explore, one of ${DEVICE_COLOR_NAMES.join(", ")}. Pick one unlike the devices it usually sits beside (built-in delays are blue, reverbs indigo, choruses green, drives red); omitted, one is picked from its type.`,
   params:
     "`schema` is a list of params, each one of `paramKinds`. A sample param's default is a sample ref; " +
     "`wavetable: true` offers the built-in wavetables in its picker. A level is a number param into a mul; " +

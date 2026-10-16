@@ -46,6 +46,7 @@ export const filter: EngineBuiltin = {
   type: "filter",
   label: "Filter",
   tags: ["fx", "dark"],
+  color: "violet",
   schema: filterSchema,
   definition: {
     format: 1,

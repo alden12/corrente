@@ -34,6 +34,7 @@ export const bitcrusher: EngineBuiltin = {
   type: "bitcrusher",
   label: "Bitcrusher",
   tags: ["gritty", "retro"],
+  color: "orange",
   schema: bitcrusherSchema,
   definition: {
     format: 1,

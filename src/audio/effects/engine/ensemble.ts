@@ -8,6 +8,7 @@ export const ensemble: EngineBuiltin = {
   type: "ensemble",
   label: "Ensemble",
   tags: ["lush", "warm", "retro"],
+  color: "green",
   schema: [
     { id: "depth", label: "Depth", kind: "number", min: 0, max: 1, default: 0.6 },
     { ...MIX, default: 0.6 },

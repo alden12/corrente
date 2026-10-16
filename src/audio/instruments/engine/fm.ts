@@ -36,6 +36,7 @@ export const fm: EngineBuiltin = {
   label: "FM",
   family: "Bass",
   tags: ["bass", "keys", "bright", "glassy"],
+  color: "cyan",
   schema: fmSchema,
   definition: {
     format: 1,

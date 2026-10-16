@@ -9,6 +9,7 @@ export const bell: EngineBuiltin = {
   label: "Bell",
   family: "Keys",
   tags: ["keys", "glassy", "bright"],
+  color: "cyan",
   schema: [
     { id: "ratio", label: "Ratio", kind: "number", min: 0.5, max: 8, default: 3.5, step: 0.01 },
     { id: "index", label: "Brightness", kind: "number", min: 0, max: 8, default: 3 },

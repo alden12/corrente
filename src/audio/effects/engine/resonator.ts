@@ -9,6 +9,7 @@ export const resonator: EngineBuiltin = {
   type: "resonator",
   label: "Resonator",
   tags: ["fx", "glassy"],
+  color: "pink",
   schema: [
     { id: "pitch", label: "Pitch", kind: "number", min: 40, max: 2000, default: 220, unit: "Hz", taper: "exponential" },
     { id: "decay", label: "Decay", kind: "number", min: 0.05, max: 10, default: 1.5, unit: "s", taper: "exponential" },

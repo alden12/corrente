@@ -9,6 +9,7 @@ export const pad: EngineBuiltin = {
   label: "Pad",
   family: "Synths",
   tags: ["pad", "lush", "warm"],
+  color: "blue",
   schema: [
     { id: "detune", label: "Detune", kind: "number", min: 0, max: 50, default: 14, unit: "ct" },
     {

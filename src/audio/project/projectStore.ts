@@ -1511,6 +1511,7 @@ export class ProjectStore {
     registerInstrument({
       type: def.type,
       label: def.label ?? def.type,
+      color: def.color,
       schema: def.schema,
       family: "Custom",
       custom: true,
@@ -1518,7 +1519,13 @@ export class ProjectStore {
     registerEngineDevice(def.type, def);
   }
   private registerEffectDef(def: CustomDevice): void {
-    registerEffect({ type: def.type, label: def.label ?? def.type, schema: def.schema, custom: true });
+    registerEffect({
+      type: def.type,
+      label: def.label ?? def.type,
+      color: def.color,
+      schema: def.schema,
+      custom: true,
+    });
     registerEngineDevice(def.type, def);
   }
   private unregisterInstrumentDef(type: string): void {

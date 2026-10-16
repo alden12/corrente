@@ -1,8 +1,9 @@
 /**
- * The artwork for an Explore item or category: the category's hue as a gradient, and on it the
- * item's sound portrait (COMM-1.9.2) - or, for what has none yet (your patches, samples), the
- * category's glyph. A nudge of hue per name keeps a list of one category from reading as a single
- * repeated tile.
+ * The artwork for an Explore item or category: a gradient in the device's own colour (DAW-61.2), so
+ * it looks the same here as in the rack, and on it the item's sound portrait (COMM-1.9.2) - or, for
+ * what has none yet (your patches, samples), the category's glyph. What isn't a device (a sample, a
+ * category's tile) takes its category's hue, nudged per name so a list of one category doesn't read
+ * as a single repeated tile.
  */
 import type { ReactNode } from "react";
 import { CATEGORIES, type ExploreCategory } from "./exploreItems";
@@ -42,15 +43,18 @@ export function ExploreThumb({
   category,
   seed = "",
   portrait,
+  hue: ownHue,
   size,
 }: {
   category: ExploreCategory;
   seed?: string;
   /** The item's sound portrait, drawn in place of the glyph when there is one (COMM-1.9.2). */
   portrait?: Portrait;
+  /** A device's own colour, in place of the category's. */
+  hue?: number;
   size: number;
 }) {
-  const hue = CATEGORIES[category].hue + hueShift(seed);
+  const hue = ownHue ?? CATEGORIES[category].hue + hueShift(seed);
   return (
     <span
       aria-hidden="true"

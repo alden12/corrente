@@ -67,6 +67,7 @@ export const mellotronFlute: EngineBuiltin = {
   label: "Mellotron Flute",
   family: "Keys",
   tags: ["keys", "retro", "airy"],
+  color: "lime",
   schema: mellotronFluteSchema,
   definition: {
     format: 1,

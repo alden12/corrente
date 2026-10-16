@@ -12,6 +12,7 @@ export const wavetable: EngineBuiltin = {
   label: "Wavetable",
   family: "Synths",
   tags: ["pad", "lead", "glassy"],
+  color: "indigo",
   schema: [
     { id: "wt.position", label: "Position", kind: "number", min: 0, max: 1, default: 0, taper: "linear", smoothMs: 20 },
     { id: "wt.tone", label: "Tone", kind: "number", min: 0, max: 1, default: 0.6, taper: "linear", smoothMs: 20 },

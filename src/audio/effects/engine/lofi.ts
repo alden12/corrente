@@ -8,6 +8,7 @@ export const lofi: EngineBuiltin = {
   type: "lofi",
   label: "Lo-Fi",
   tags: ["gritty", "retro", "warm"],
+  color: "orange",
   schema: [
     { id: "bits", label: "Bits", kind: "number", min: 3, max: 16, default: 10, step: 1 },
     { id: "downsample", label: "Downsample", kind: "number", min: 1, max: 20, default: 3, step: 1 },

@@ -128,6 +128,7 @@ export const subtractive: EngineBuiltin = {
   label: "Subtractive",
   family: "Synths",
   tags: ["bass", "lead", "warm"],
+  color: "orange",
   schema: subtractiveSchema,
   definition: {
     format: 1,

@@ -9,6 +9,7 @@ export const pump: EngineBuiltin = {
   type: "pump",
   label: "Pump",
   tags: ["rhythm", "fx"],
+  color: "amber",
   schema: [
     { id: "shape", label: "Shape", kind: "enum", options: ["Duck", "Gate", "Swell"], default: "Duck" },
     { id: "division", label: "Division", kind: "enum", options: ["1/16", "1/8", "1/4", "1/2", "1/1"], default: "1/4" },

@@ -16,6 +16,7 @@ import { byTagOrder, type Tag } from "../../audio/tags";
 import { PORTRAIT_KEYS } from "../../audio/portraits/keys";
 import type { Portrait } from "../../audio/portraits/draw";
 import PORTRAITS from "./portraits.json";
+import { deviceHue } from "../../audio/deviceColors";
 
 export type ExploreCategory = "favourites" | "instruments" | "patches" | "effects" | "midi" | "samples";
 export type ItemCategory = Exclude<ExploreCategory, "favourites">;
@@ -64,6 +65,8 @@ export interface ExploreItem {
    * category's glyph instead.
    */
   portrait?: Portrait;
+  /** A device's colour as a hue (DAW-61.2), for a device or a patch of one; samples go by category. */
+  hue?: number;
   source: ItemSource;
 }
 
@@ -78,7 +81,8 @@ export function exploreItems({
   samples: { id: string; name: string }[];
 }): ExploreItem[] {
   const instruments = pickableInstrumentInfos();
-  const instrumentLabel = (type: string) => instruments.find((info) => info.type === type)?.label ?? type;
+  const instrumentOf = (type: string) => instruments.find((info) => info.type === type);
+  const instrumentLabel = (type: string) => instrumentOf(type)?.label ?? type;
   const items: Unrated[] = [
     ...instruments.map(
       (info): Unrated => ({
@@ -88,6 +92,7 @@ export function exploreItems({
         meta: info.custom ? "Instrument · custom" : "Instrument",
         tags: info.tags ?? [],
         builtin: !info.custom,
+        hue: deviceHue(info),
         source: { kind: "instrument", type: info.type },
       }),
     ),
@@ -101,6 +106,7 @@ export function exploreItems({
           : `${instrumentLabel(patch.instrumentType)} · yours`,
         tags: patch.tags ?? [],
         builtin: !!patch.builtin,
+        hue: deviceHue(instrumentOf(patch.instrumentType) ?? { type: patch.instrumentType }),
         source: { kind: "patch", patch },
       }),
     ),
@@ -112,6 +118,7 @@ export function exploreItems({
         meta: info.custom ? "Audio effect · custom" : "Audio effect",
         tags: info.tags ?? [],
         builtin: !info.custom,
+        hue: deviceHue(info),
         source: { kind: "effect", type: info.type },
       }),
     ),
@@ -123,6 +130,7 @@ export function exploreItems({
         meta: "MIDI device",
         tags: info.tags ?? [],
         builtin: true,
+        hue: deviceHue(info),
         source: { kind: "midi", type: info.type },
       }),
     ),

@@ -132,7 +132,13 @@ export function ExploreShelf({
               <span
                 className={`rounded-md ${item.key === trying ? "ring-2 ring-you" : "group-hover:ring-1 group-hover:ring-line"}`}
               >
-                <ExploreThumb category={item.category} seed={item.name} portrait={item.portrait} size={CARD} />
+                <ExploreThumb
+                  category={item.category}
+                  seed={item.name}
+                  portrait={item.portrait}
+                  hue={item.hue}
+                  size={CARD}
+                />
               </span>
               <span className="truncate text-[12px] text-strong">{item.name}</span>
               <span className="-mt-1 truncate text-[10.5px] text-muted">{item.meta}</span>

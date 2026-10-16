@@ -99,6 +99,7 @@ export const drumkit: EngineBuiltin = {
   label: "Drum Kit",
   family: "Percussion",
   tags: ["percussion"],
+  color: "pink",
   schema: drumkitSchema,
   definition: {
     format: 1,

@@ -33,6 +33,7 @@ export const delay: EngineBuiltin = {
   type: "delay",
   label: "Delay",
   tags: ["space"],
+  color: "blue",
   schema: delaySchema,
   definition: {
     format: 1,

@@ -9,6 +9,7 @@ export const acid: EngineBuiltin = {
   label: "Acid",
   family: "Bass",
   tags: ["bass", "lead", "gritty", "retro"],
+  color: "green",
   schema: [
     { id: "wave", label: "Wave", kind: "enum", options: ["Saw", "Square"], default: "Saw" },
     {

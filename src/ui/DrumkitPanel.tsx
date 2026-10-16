@@ -15,7 +15,8 @@ import type { Dispatch } from "../audio/commands/types";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { paramKey } from "../audio/commands/authorship";
 import type { SampleAsset } from "../audio/samples/catalog";
-import { instrumentSchema } from "../audio/instruments/catalog";
+import { catalogEntry, instrumentSchema } from "../audio/instruments/catalog";
+import { deviceEdge } from "./deviceColor";
 import { importSampleFile } from "../audio/samples/importSample";
 import { Knob, type SampleContext } from "./Knob";
 import { SamplePicker } from "./SamplePicker";
@@ -71,7 +72,7 @@ export function DrumkitPanel({
   );
 
   return (
-    <div className="shrink-0 border border-line rounded-xl bg-ground">
+    <div className="shrink-0 border border-line rounded-xl bg-ground" style={deviceEdge(catalogEntry("drumkit"))}>
       <div className="flex items-center gap-2 px-3 py-2 border-b border-line text-[12px] font-semibold text-strong">
         <span className="truncate" title="Drum Kit">
           Drum Kit

@@ -9,6 +9,7 @@ export const flanger: EngineBuiltin = {
   type: "flanger",
   label: "Flanger",
   tags: ["fx", "retro"],
+  color: "pink",
   schema: [
     { id: "rate", label: "Rate", kind: "number", min: 0.05, max: 5, default: 0.25, unit: "Hz", taper: "exponential" },
     { id: "delay", label: "Delay", kind: "number", min: 0.5, max: 10, default: 1.5, unit: "ms" },

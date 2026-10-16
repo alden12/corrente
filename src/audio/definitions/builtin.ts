@@ -2,6 +2,7 @@
  * A built-in written in the engine's own format (INST-42): its catalog entry and its definition
  * together, as pure data. The catalogs register its schema; engineDevices.ts plays its definition.
  */
+import type { DeviceColor } from "../deviceColors";
 import type { NumberSpec, ParamSchema } from "../params/types";
 import type { Tag } from "../tags";
 import type { AuthoredDefinition } from "./format";
@@ -12,6 +13,8 @@ export interface EngineBuiltin {
   /** An instrument's default group (InstrumentInfo.family). */
   family?: string;
   tags: readonly Tag[];
+  /** Its colour in the rack and on Explore (DAW-61.2), picked so common chains contrast. */
+  color: DeviceColor;
   schema: ParamSchema;
   definition: AuthoredDefinition;
 }

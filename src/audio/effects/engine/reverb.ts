@@ -14,6 +14,7 @@ export const reverb: EngineBuiltin = {
   type: "reverb",
   label: "Reverb",
   tags: ["space", "lush", "airy"],
+  color: "indigo",
   schema: reverbSchema,
   definition: {
     format: 1,

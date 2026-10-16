@@ -9,6 +9,7 @@ export const pingPong: EngineBuiltin = {
   type: "ping-pong",
   label: "Ping-Pong Delay",
   tags: ["space", "rhythm"],
+  color: "cyan",
   schema: [
     { id: "division", label: "Time", kind: "enum", options: DIVISIONS, default: "1/8." },
     { id: "feedback", label: "Feedback", kind: "number", min: 0, max: 0.95, default: 0.5 },

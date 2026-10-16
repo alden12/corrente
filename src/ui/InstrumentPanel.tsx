@@ -15,6 +15,7 @@ import { paramKey } from "../audio/commands/authorship";
 import type { SampleAsset } from "../audio/samples/catalog";
 import { importSampleFile } from "../audio/samples/importSample";
 import { Knob, type SampleContext } from "./Knob";
+import { deviceEdge } from "./deviceColor";
 import { toSections, sectionTitle } from "./paramSections";
 
 export function InstrumentPanel({
@@ -38,14 +39,15 @@ export function InstrumentPanel({
   projectStore: ProjectStore;
 }) {
   const sections = toSections(instrumentSchema(instrumentType));
-  const label = catalogEntry(instrumentType).label;
+  const info = catalogEntry(instrumentType);
+  const label = info.label;
   const sampleContext: SampleContext = {
     assets: samples,
     onImportFile: (file: File) => importSampleFile(file, samples, dispatch),
     onReveal: onRevealSamples,
   };
   return (
-    <div className="shrink-0 border border-line rounded-xl bg-ground">
+    <div className="shrink-0 border border-line rounded-xl bg-ground" style={deviceEdge(info)}>
       <div className="flex items-center gap-2 px-3 py-2 border-b border-line text-[12px] font-semibold text-strong">
         <span className="truncate" title={label}>
           {label}

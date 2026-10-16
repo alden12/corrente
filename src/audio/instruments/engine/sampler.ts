@@ -64,6 +64,7 @@ export const sampler: EngineBuiltin = {
   label: "Sampler",
   family: "Percussion",
   tags: ["percussion", "keys"],
+  color: "green",
   schema: samplerSchema,
   definition: {
     format: 1,

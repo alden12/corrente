@@ -10,6 +10,7 @@ export const wobble: EngineBuiltin = {
   label: "Wobble",
   family: "Bass",
   tags: ["bass", "aggressive", "rhythm"],
+  color: "violet",
   schema: [
     { id: "wave", label: "Wave", kind: "enum", options: ["Saw", "Square", "Sine"], default: "Saw" },
     {
