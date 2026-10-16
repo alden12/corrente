@@ -98,6 +98,13 @@ test.describe("phone", () => {
     // They grow and fold as the Studio's do: a row more, then out of the way of the list.
     const rows = panel.locator("[data-pad-row]");
     await expect(rows).toHaveCount(1);
+    // A disabled button takes no pointer events, so a tap on one lands on the header behind it,
+    // which must not read it as a tap meant for the header.
+    const fewer = panel.getByRole("button", { name: "Fewer octaves" });
+    await expect(fewer).toBeDisabled();
+    const box = await fewer.boundingBox();
+    await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await expect(rows).toHaveCount(1);
     await panel.getByRole("button", { name: "More octaves" }).tap();
     await expect(rows).toHaveCount(2);
     await panel.getByRole("button", { name: "Hide the keys" }).tap();

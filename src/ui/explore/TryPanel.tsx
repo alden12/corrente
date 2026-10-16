@@ -154,7 +154,8 @@ export function TryPanel({
         </Button>
       </div>
 
-      {pads?.(trying.track)}
+      {/* Edge to edge, out of the panel's padding, as the Studio's keys dock is. */}
+      {pads && <div className="-mx-3 -mb-3">{pads(trying.track)}</div>}
     </section>
   );
 }

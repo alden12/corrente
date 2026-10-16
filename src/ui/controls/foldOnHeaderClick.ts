@@ -20,5 +20,17 @@ const OWN_CONTROLS = [
  */
 export const foldOnHeaderClick = (onToggle: () => void) => (event: MouseEvent) => {
   if (event.target instanceof Element && event.target.closest(OWN_CONTROLS)) return;
+  if (onDisabledControl(event)) return;
   onToggle();
 };
+
+/**
+ * Whether the tap landed on a disabled control. Those take no pointer events (`CONTROL_BASE`), so the
+ * header is the tap's target, and only where it landed says it was meant for the control - an octave
+ * arrow at the end of its range, say, which folded the keys away.
+ */
+const onDisabledControl = ({ currentTarget, clientX, clientY }: MouseEvent): boolean =>
+  [...currentTarget.querySelectorAll(":disabled")].some((control) => {
+    const box = control.getBoundingClientRect();
+    return clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom;
+  });
