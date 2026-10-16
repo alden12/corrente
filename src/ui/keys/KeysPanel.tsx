@@ -14,14 +14,14 @@
  * key does, and a key that plays nothing is not drawn at all.
  */
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { IconButton } from "../controls/IconButton";
 import { PadButton } from "../pads/PadButton";
 import type { PadSettings } from "../pads/padSettings";
 import { ScalePadControls } from "../pads/ScalePads";
 import type { PadTouch } from "../pads/usePadTouch";
 import { isAccidentalRow, isArrangeCode, qwertyLabel, type KeyCell, type KeyPad, type KeyRowMode } from "./keyLayout";
 import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardPlaying";
-import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, KEYS_HEADER_HEIGHT, rowUnits } from "./panelGeometry";
+import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
+import { SectionHeader } from "../controls/SectionHeader";
 
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
@@ -84,11 +84,7 @@ export function KeysPanel({
 
   return (
     <div className="h-full bg-ground flex flex-col min-h-0 overflow-hidden">
-      <div className="shrink-0 flex items-center gap-2 px-2.5 bg-rail" style={{ height: KEYS_HEADER_HEIGHT }}>
-        <IconButton label={open ? "Hide keys" : "Show keys"} size="lg" onClick={onToggle}>
-          {open ? "▾" : "▸"}
-        </IconButton>
-        <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">Keys</span>
+      <SectionHeader title="Keys" fold={{ open, onToggle }}>
         {open && (
           <>
             <span className="font-mono text-[10px] text-faint shrink-0">{hint}</span>
@@ -97,7 +93,7 @@ export function KeysPanel({
             </div>
           </>
         )}
-      </div>
+      </SectionHeader>
       {open && (
         <div className="flex-1 min-h-0 flex" style={{ padding: BODY_PADDING, gap: BODY_PADDING }}>
           <VelocityStrip velocity={velocity} onVelocity={onVelocity} />

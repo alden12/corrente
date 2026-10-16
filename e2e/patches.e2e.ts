@@ -23,7 +23,8 @@ test("save an instrument as a patch, then add a track from it", async ({ page })
   await expect(patchEntry).toHaveCount(0);
 
   // Save the selected (seed) track as a patch.
-  await page.getByRole("button", { name: "Save as patch" }).click();
+  await page.getByRole("button", { name: "Device chain actions" }).click();
+  await page.getByRole("menuitem", { name: "Save as patch…" }).click();
   await page.getByPlaceholder("Patch name…").fill("Brass Pluck");
   await page.getByPlaceholder("Patch name…").press("Enter");
 

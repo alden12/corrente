@@ -22,6 +22,7 @@ import { CLIP_DND_TYPE, clipDndKindType, clearDraggedClip, setDraggedClip } from
 import { getClipClipboard, setClipClipboard } from "./clipClipboard";
 import { authorDotStyle, authorLabel } from "./authorStyle";
 import { useAuthorPresence } from "./authorColorsContext";
+import { PagedStrip } from "./controls/PagedStrip";
 
 export function ClipRail({
   projectStore,
@@ -30,6 +31,7 @@ export function ClipRail({
   dispatch,
   orientation = "horizontal",
   dense = false,
+  chipsOnly = false,
   footer,
 }: {
   projectStore: ProjectStore;
@@ -45,6 +47,11 @@ export function ClipRail({
   orientation?: "horizontal" | "vertical" | "grid";
   /** A grid of narrow chips, as many to a row as fit: the desktop's open clips line (DAW-61.1). */
   dense?: boolean;
+  /**
+   * The chips and nothing else: no title, no "+ Clip", no footer, no padding of its own. The
+   * desktop column puts them in its clips section, whose header carries the title, + and record.
+   */
+  chipsOnly?: boolean;
   /** Bottom action below the clip list (e.g. a record button), for either kind. */
   footer?: ReactNode;
 }) {
@@ -105,11 +112,15 @@ export function ClipRail({
 
   // The horizontal and grid layouts are the touch ones (MOBILE-1): roomier padding on
   // both axes so the chips are comfortable tap targets rather than a squashed strip.
-  const containerClass = vertical
-    ? "flex flex-col gap-1.5 p-2 w-full min-h-0 border-r border-line bg-panel overflow-y-auto"
-    : grid
-      ? "flex flex-wrap content-start gap-2 p-3 flex-1 min-h-0 overflow-y-auto"
-      : "flex items-center gap-2 px-3 py-2.5 border-b border-line overflow-x-auto shrink-0";
+  const containerClass = chipsOnly
+    ? grid
+      ? "flex flex-wrap content-start gap-2 p-2.5"
+      : "gap-1.5"
+    : vertical
+      ? "flex flex-col gap-1.5 p-2 w-full min-h-0 border-r border-line bg-panel overflow-y-auto"
+      : grid
+        ? "flex flex-wrap content-start gap-2 p-3 flex-1 min-h-0 overflow-y-auto"
+        : "flex items-center gap-2 px-3 py-2.5 border-b border-line overflow-x-auto shrink-0";
   // Padding lives here (not in the chip's own class) so the orientations can differ
   // without two conflicting Tailwind padding utilities on one element.
   // Two per row in the touch grid, so a chip is a comfortable target and the names have room;
@@ -120,18 +131,22 @@ export function ClipRail({
       ? dense
         ? "w-36 py-2"
         : "grow basis-[calc(50%-0.25rem)] py-2.5"
-      : "shrink-0 py-1.5";
+      : chipsOnly
+        ? "shrink-0 py-1"
+        : "shrink-0 py-1.5";
   // The rail and the grid stack a glance at the clip's notes under its name, at the chip's full
   // width; the horizontal strip is one line, so the glance sits inline there.
   const stacked = vertical || grid;
 
-  return (
-    <div className={`${containerClass} outline-none`} data-clip-rail tabIndex={0} onKeyDown={onKeyDown}>
-      <span
-        className={`font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0 mr-1 ${grid ? "w-full" : ""}`}
-      >
-        Clips
-      </span>
+  const content = (
+    <>
+      {!chipsOnly && (
+        <span
+          className={`font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0 mr-1 ${grid ? "w-full" : ""}`}
+        >
+          Clips
+        </span>
+      )}
       {clips.map((clip) => {
         const active = clip.id === activeClipId;
         return (
@@ -222,7 +237,7 @@ export function ClipRail({
       })}
       {/* Instrument tracks keep "+ Clip"; audio clips only ever arrive by recording
           or import. Both kinds get the record button below (passed as `footer`). */}
-      {track.kind === "instrument" && (
+      {track.kind === "instrument" && !chipsOnly && (
         <button
           type="button"
           title="Add a new empty clip"
@@ -236,7 +251,20 @@ export function ClipRail({
       )}
       {/* Vertical: the rail is full-height, so the record button belongs at its foot rather
           than trailing the last clip. Other orientations keep it inline (`contents`). */}
-      {footer && <div className={vertical ? "mt-auto shrink-0 pt-2" : "contents"}>{footer}</div>}
+      {footer && !chipsOnly && <div className={vertical ? "mt-auto shrink-0 pt-2" : "contents"}>{footer}</div>}
+    </>
+  );
+  const keys = { "data-clip-rail": true, tabIndex: 0, onKeyDown };
+  // In a header, a strip that pages; elsewhere, its own scroller.
+  if (chipsOnly && !grid)
+    return (
+      <PagedStrip label="clips" count={clips.length} className={`${containerClass} outline-none`} scrollerProps={keys}>
+        {content}
+      </PagedStrip>
+    );
+  return (
+    <div className={`${containerClass} outline-none`} {...keys}>
+      {content}
     </div>
   );
 }

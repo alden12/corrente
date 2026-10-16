@@ -7,46 +7,13 @@
  * carries previous / next arrows that page it, shown only when there is more to see that way.
  */
 import { useRef } from "react";
-import { edgeFade, useScrollEnds } from "../scrollFade";
+import { edgeFade, pageRow, useScrollEnds } from "../scrollFade";
+import { PageArrow } from "../controls/PageArrow";
 import type { ExploreItem } from "./exploreItems";
 import type { ItemTaps } from "./itemTaps";
 import { ExploreThumb } from "./ExploreThumb";
 
 const CARD = 92;
-
-function PageArrow({
-  label,
-  flip,
-  shown,
-  onClick,
-}: {
-  label: string;
-  flip?: boolean;
-  shown: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={!shown}
-      className="w-7 h-7 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-control cursor-pointer disabled:opacity-0 disabled:pointer-events-none transition-opacity"
-    >
-      <svg
-        viewBox="0 0 16 16"
-        aria-hidden="true"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        className={`w-4 h-4 ${flip ? "rotate-180" : ""}`}
-      >
-        <path d="M6 3l5 5-5 5" />
-      </svg>
-    </button>
-  );
-}
 
 export function ExploreShelf({
   title,
@@ -63,10 +30,7 @@ export function ExploreShelf({
   const row = useRef<HTMLUListElement>(null);
   const ends = useScrollEnds(row, items.length);
   /** Page by most of what is in view, so the last card seen stays as a landmark. */
-  const page = (direction: 1 | -1) => {
-    const element = row.current;
-    if (element) element.scrollBy({ left: direction * element.clientWidth * 0.85, behavior: "smooth" });
-  };
+  const page = (direction: 1 | -1) => pageRow(row, direction);
   if (items.length === 0) return null;
   return (
     <section aria-label={title} className="flex flex-col gap-0.5 pt-2">

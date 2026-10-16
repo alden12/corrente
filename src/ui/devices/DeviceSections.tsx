@@ -1,9 +1,10 @@
 /**
  * A device's controls as sections (DAW-61.3), for every kind of device: its params grouped by id
- * namespace (`paramSections.ts`), each section a box that sits beside the others and wraps when
- * there is no room. With more than one, each folds to its title and a count of its params; one alone
- * is the whole device, so it has no title to fold, and nor does one named for the device (a Delay's
- * `delay.` params), which would only repeat its name.
+ * namespace (`paramSections.ts`), side by side with a hairline between them, wrapping when there is
+ * no room; a section wider than its device wraps its controls too. With more than one, each folds to
+ * a narrow column, its title running down it. One alone is the whole device, so it has no title to
+ * fold, and nor does one named for the device (a Delay's `delay.` params), which would only repeat
+ * its name.
  *
  * Within a section the switches and choices stack in a column on the left, so a device with several
  * (the Arpeggiator's rate and pattern) reads as a tidy list rather than a wide row. Schema-driven: it
@@ -56,8 +57,10 @@ export function DeviceSections({
   );
 
   return (
-    <div className="flex flex-wrap items-start gap-2 p-2.5">
-      {sections.map((section) => {
+    // Sections sit side by side with a hairline between them, and wrap with room beneath, rather
+    // than each in a box of its own.
+    <div className="flex flex-wrap items-start gap-y-3 px-1 py-2.5">
+      {sections.map((section, index) => {
         const named = sectionTitle(section.namespace);
         const title = titled && named.toLowerCase() !== label.toLowerCase() ? named : "";
         const key = sectionFold(foldKey, section.namespace);
@@ -69,32 +72,37 @@ export function DeviceSections({
             key={section.namespace}
             role="group"
             aria-label={title || undefined}
-            // One section alone is the whole device: no box inside the device's own.
-            className={`flex flex-col gap-1.5 min-w-0 ${titled ? "rounded-lg border border-line/60 px-2 py-1.5" : ""}`}
+            className={`flex flex-col gap-1.5 min-w-0 max-w-full px-2.5 ${index > 0 ? "border-l border-line/60" : ""}`}
           >
             {title && (
-              <div className="flex items-center gap-1 min-w-0">
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  onClick={() => toggleFold(key)}
-                  className="flex items-center gap-1 h-6 shrink-0 text-left cursor-pointer text-faint hover:text-ink"
+              // Folded, the section is a narrow column, its title running down it: a folded section
+              // that kept its title across would take nearly the room it had open.
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => toggleFold(key)}
+                title={open ? undefined : paramCount(section.specs.length)}
+                className={`flex items-center gap-1 shrink-0 text-left cursor-pointer text-faint hover:text-ink ${
+                  open ? "h-6" : "flex-col py-1"
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`flex items-center justify-center w-4 text-[14px] leading-none ${open ? "rotate-90" : ""}`}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={`flex items-center justify-center w-4 text-[14px] leading-none ${open ? "rotate-90" : ""}`}
-                  >
-                    ▸
-                  </span>
-                  <span className="font-mono text-[9px] tracking-[0.16em] uppercase">{title}</span>
-                </button>
-                {!open && (
-                  <span className="font-mono text-[10px] text-faint shrink-0">{paramCount(section.specs.length)}</span>
-                )}
-              </div>
+                  ▸
+                </span>
+                <span
+                  className="font-mono text-[9px] tracking-[0.16em] uppercase whitespace-nowrap"
+                  style={open ? undefined : { writingMode: "vertical-rl" }}
+                >
+                  {title}
+                </span>
+              </button>
             )}
             {open && (
-              <div className="flex items-end gap-2.5 px-1 pb-1">
+              // Wider than the device, a section wraps its own controls rather than overflowing.
+              <div className="flex flex-wrap items-end gap-2.5 px-1 pb-1">
                 {stacked.length > 0 && <div className="flex flex-col justify-center gap-2">{stacked.map(control)}</div>}
                 {rest.map(control)}
               </div>

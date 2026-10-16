@@ -18,13 +18,21 @@ import { InstrumentPanel } from "../InstrumentPanel";
 import { DrumkitPanel } from "../DrumkitPanel";
 import { EffectChain } from "../EffectChain";
 import { Button } from "../controls/Button";
+import { Menu, type MenuItem } from "../Menu";
 
 /**
  * "Save as patch": capture the instrument + its params + effect chain as a named,
- * reusable library entry. Clicking reveals an inline name field (defaulting to the
- * track name); Enter or Save writes it to the global patch library.
+ * reusable library entry. Picking it from the ⋮ reveals an inline name field (defaulting
+ * to the track name); Enter or Save writes it to the global patch library.
  */
-export function SavePatchControl({ track }: { track: InstrumentTrack }) {
+export function SavePatchControl({
+  track,
+  moreItems = [],
+}: {
+  track: InstrumentTrack;
+  /** Other actions on the chain, after Save as patch in the same menu. */
+  moreItems?: MenuItem[];
+}) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
 
@@ -53,18 +61,19 @@ export function SavePatchControl({ track }: { track: InstrumentTrack }) {
 
   if (!naming)
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        title="Save this instrument + effects as a reusable patch"
-        onClick={() => {
-          setName(track.name);
-          setNaming(true);
-        }}
-        className="font-mono text-[10.5px]"
-      >
-        Save as patch
-      </Button>
+      <Menu
+        label="Device chain actions"
+        items={[
+          {
+            label: "Save as patch…",
+            onClick: () => {
+              setName(track.name);
+              setNaming(true);
+            },
+          },
+          ...moreItems,
+        ]}
+      />
     );
 
   return (

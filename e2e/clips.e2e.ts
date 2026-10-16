@@ -3,18 +3,18 @@ import { dismissStart } from "./support/app";
 
 /**
  * Clip pool rail: the default project seeds one instrument track (selected), so its
- * clip rail is visible on load. Guards adding a clip ("+ Clip"), that it appears as
+ * clip rail is visible on load. Guards adding a clip (the clips header's +), that it appears as
  * a chip, and that the pool persists across reload (it lives in the project snapshot).
  */
 
-/** The clip rail = the container holding the "+ Clip" button. */
-const rail = (page: Page) => page.getByRole("button", { name: "+ Clip" }).locator("..");
+/** The clips section of the workbench column (DAW-61.1). */
+const rail = (page: Page) => page.getByRole("region", { name: "Clips" });
 
 test("adding a clip adds a chip and persists across reload", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
 
-  const addClip = page.getByRole("button", { name: "+ Clip" });
+  const addClip = page.getByRole("button", { name: "Add a new empty clip" });
   await expect(addClip).toBeVisible();
   await expect(rail(page).getByText("Clip 1", { exact: true })).toBeVisible();
 
@@ -39,8 +39,8 @@ test("a clip's chip shows a glance at its notes, and an empty one shows none (DA
   await page.mouse.click(roll.x + 200, roll.y + 90);
   await expect(chipNotes).toHaveCount(2);
 
-  // "+ Clip" makes an empty clip: its chip has no notes to show.
-  await page.getByRole("button", { name: "+ Clip" }).click();
+  // + makes an empty clip: its chip has no notes to show.
+  await page.getByRole("button", { name: "Add a new empty clip" }).click();
   await expect(rail(page).getByText("Clip 2", { exact: true })).toBeVisible();
   await expect(chipNotes).toHaveCount(2);
 });

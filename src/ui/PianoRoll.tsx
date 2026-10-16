@@ -26,7 +26,8 @@
  * arrangement loop region lives in the timeline). The grid is drawn past the clip
  * end so you can scroll there and drag the end out.
  */
-import { FoldButton, type Fold } from "./controls/FoldButton";
+import type { Fold } from "./controls/FoldButton";
+import { SectionHeader } from "./controls/SectionHeader";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { noteKey } from "../audio/commands/authorship";
@@ -863,62 +864,70 @@ export function PianoRoll({
     // No frame of its own: the workbench column divides it from the clips and devices with rules.
     <div ref={rootRef} className="h-full flex flex-col bg-stage overflow-hidden">
       {/* toolbar - replaced by the sheet header's tools menu when compact (see the publish above) */}
-      <div
-        hidden={compact}
-        className="flex items-center gap-3 px-2.5 py-1.5 border-b border-line bg-panel shrink-0 text-muted"
-      >
-        {fold && <FoldButton fold={fold} label="roll" />}
-        <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint">Piano roll</span>
-        <Menu
-          items={rollControls}
-          label="Notes tools"
-          align="left"
-          triggerClassName={iconButtonClass({ size: "sm", className: "shrink-0" })}
-          trigger={<ToolsIcon className="w-4 h-4" />}
-        />
-        {/* Quantize keeps a button as well as its menu entry: it is the one action here
-            you repeat, and it reads the selection, so its label is worth seeing. */}
-        <Button
-          variant="ghost"
-          size="sm"
-          title={selection.size ? "Quantize selected notes to the grid" : "Quantize all notes to the grid"}
-          className="font-mono"
-          disabled={!targets.length}
-          onClick={quantize}
+      {!compact && (
+        <SectionHeader
+          title="Piano roll"
+          fold={fold}
+          className="text-muted"
+          actions={
+            <>
+              <span className="font-mono text-[10px] text-faint mr-1">zoom</span>
+              <IconButton
+                label="Zoom out (time)"
+                size="sm"
+                className="font-mono"
+                onClick={() => setPxPerBeat(Math.round(pxPerBeat / 1.25))}
+              >
+                −
+              </IconButton>
+              <IconButton
+                label="Zoom in (time)"
+                size="sm"
+                className="font-mono"
+                onClick={() => setPxPerBeat(Math.round(pxPerBeat * 1.25))}
+              >
+                +
+              </IconButton>
+              <IconButton
+                label="Shorter rows"
+                size="sm"
+                className="font-mono text-[11px]"
+                onClick={() => setRowH(rowH - 2)}
+              >
+                ↕−
+              </IconButton>
+              <IconButton
+                label="Taller rows"
+                size="sm"
+                className="font-mono text-[11px]"
+                onClick={() => setRowH(rowH + 2)}
+              >
+                ↕+
+              </IconButton>
+            </>
+          }
         >
-          Quantize{selection.size ? " sel" : ""}
-        </Button>
-        <div className="ml-auto flex items-center gap-0.5">
-          <span className="font-mono text-[10px] text-faint mr-1">zoom</span>
-          <IconButton
-            label="Zoom out (time)"
+          <Menu
+            items={rollControls}
+            label="Notes tools"
+            align="left"
+            triggerClassName={iconButtonClass({ size: "sm", className: "shrink-0" })}
+            trigger={<ToolsIcon className="w-4 h-4" />}
+          />
+          {/* Quantize keeps a button as well as its menu entry: it is the one action here
+            you repeat, and it reads the selection, so its label is worth seeing. */}
+          <Button
+            variant="ghost"
             size="sm"
+            title={selection.size ? "Quantize selected notes to the grid" : "Quantize all notes to the grid"}
             className="font-mono"
-            onClick={() => setPxPerBeat(Math.round(pxPerBeat / 1.25))}
+            disabled={!targets.length}
+            onClick={quantize}
           >
-            −
-          </IconButton>
-          <IconButton
-            label="Zoom in (time)"
-            size="sm"
-            className="font-mono"
-            onClick={() => setPxPerBeat(Math.round(pxPerBeat * 1.25))}
-          >
-            +
-          </IconButton>
-          <IconButton
-            label="Shorter rows"
-            size="sm"
-            className="font-mono text-[11px]"
-            onClick={() => setRowH(rowH - 2)}
-          >
-            ↕−
-          </IconButton>
-          <IconButton label="Taller rows" size="sm" className="font-mono text-[11px]" onClick={() => setRowH(rowH + 2)}>
-            ↕+
-          </IconButton>
-        </div>
-      </div>
+            Quantize{selection.size ? " sel" : ""}
+          </Button>
+        </SectionHeader>
+      )}
 
       {/* scroll area: ruler (sticky top) + grid + velocity lane (sticky bottom). When a
           label gutter is reserved (drum kits), a sticky-left column holds the row labels

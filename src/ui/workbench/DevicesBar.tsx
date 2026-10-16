@@ -4,16 +4,16 @@
  * Once the roll has scrolled off the top, a button back to it leads the bar, naming the clip open
  * in it, so moving between the notes and a device three rows down is one click either way.
  */
-import { useRef } from "react";
 import type { Track } from "../../audio/project/projectStore";
 import { SavePatchControl } from "./DeviceRack";
 import { catalogEntry, EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { effectCatalogEntry } from "../../audio/effects/catalog";
 import { midiDeviceCatalogEntry } from "../../audio/midi/device/catalog";
 import { deviceAccent } from "../deviceColor";
-import { instrumentFold } from "../devices/deviceFolds";
-import { edgeFade, useScrollEnds } from "../scrollFade";
-import { FoldButton } from "../controls/FoldButton";
+import { instrumentFold, useDeviceFolds } from "../devices/deviceFolds";
+import { Menu, type MenuItem } from "../Menu";
+import { PagedStrip } from "../controls/PagedStrip";
+import { SectionHeader } from "../controls/SectionHeader";
 
 interface Jump {
   /** The device's fold key, which its block carries as `data-device`. */
@@ -61,11 +61,25 @@ export function DevicesBar({
 }) {
   const clip = track.clips.find((each) => each.id === track.activeClipId);
   const jumps = jumpsFor(track);
-  const chips = useRef<HTMLDivElement>(null);
-  const ends = useScrollEnds(chips, jumps.length);
+  const [, , putFolds] = useDeviceFolds();
+  const keys = jumps.map((jump) => jump.key);
+  const foldItems: MenuItem[] = [
+    { label: "Fold all devices", onClick: () => putFolds(keys, true) },
+    { label: "Open all devices", onClick: () => putFolds(keys, false) },
+  ];
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-1.5 h-11 pl-1.5 pr-3 border-b border-line bg-frame">
-      <FoldButton fold={{ open, onToggle }} label="devices" />
+    <SectionHeader
+      title="Devices"
+      fold={{ open, onToggle }}
+      className="sticky top-0 z-20"
+      actions={
+        track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT ? (
+          <SavePatchControl track={track} moreItems={[{ separator: true }, ...foldItems]} />
+        ) : (
+          <Menu label="Device chain actions" items={foldItems} />
+        )
+      }
+    >
       {rollGone && (
         <button
           type="button"
@@ -79,13 +93,7 @@ export function DevicesBar({
           {clip && <span className="font-mono text-[11px] text-you truncate max-w-40">{clip.name}</span>}
         </button>
       )}
-      <span className="px-1.5 font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">Devices</span>
-      {/* Faded where there are more chips to scroll to, as Explore's shelves are. */}
-      <div
-        ref={chips}
-        className="flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-none"
-        style={{ maskImage: edgeFade(ends), WebkitMaskImage: edgeFade(ends) }}
-      >
+      <PagedStrip label="devices" count={jumps.length} className="gap-1">
         {jumps.map((jump) => (
           <button
             key={jump.key}
@@ -97,12 +105,7 @@ export function DevicesBar({
             {jump.label}
           </button>
         ))}
-      </div>
-      {track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT && (
-        <span className="ml-auto pl-2 shrink-0">
-          <SavePatchControl track={track} />
-        </span>
-      )}
-    </div>
+      </PagedStrip>
+    </SectionHeader>
   );
 }

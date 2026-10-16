@@ -32,10 +32,12 @@ import { TrackEditor } from "./workbench/TrackEditor";
 import { DeviceRack } from "./workbench/DeviceRack";
 import { TrackRecordButton } from "./workbench/TrackRecordButton";
 import { DevicesBar } from "./workbench/DevicesBar";
-import { FoldButton } from "./controls/FoldButton";
+import { SectionHeader, SECTION_HEADER_HEIGHT } from "./controls/SectionHeader";
+import { IconButton } from "./controls/IconButton";
+import { newClipId } from "../audio/commands/ids";
 
-/** The clips line's height, which the roll leaves room for so the two always fit together. */
-const CLIPS_LINE = 48;
+/** The clips line's height (its header), which the roll leaves room for so the two always fit together. */
+const CLIPS_LINE = SECTION_HEADER_HEIGHT;
 /** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
 const DEVICES_PEEK = 56;
 /**
@@ -220,31 +222,53 @@ export function CenterWorkbench({
         className="relative isolate flex-1 min-h-0 min-w-0 overflow-y-auto"
         key={`${selectedTrack.id}:body`}
       >
-        {/* Clips: one line that scrolls sideways, or open, every clip as a bigger chip. */}
-        <section
-          aria-label="Clips"
-          className={`flex gap-1 px-1.5 border-b border-line ${clipsOpen ? "items-start py-1.5" : "items-center"}`}
-          style={{ minHeight: CLIPS_LINE }}
-        >
-          <span className="flex items-center h-9 shrink-0">
-            <FoldButton fold={{ open: clipsOpen, onToggle: () => setClipsOpen(!clipsOpen) }} label="clips" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <ClipRail
-              projectStore={projectStore}
-              scheduler={scheduler}
-              trackId={selectedTrack.id}
-              dispatch={dispatch}
-              orientation={clipsOpen ? "grid" : "horizontal"}
-              dense
-              footer={
-                // At the line's end, at its own size: the button fills whatever holds it.
-                <div className="ml-auto shrink-0 w-20">
-                  <TrackRecordButton trackId={selectedTrack.id} recorder={recorder} recording={recording} />
-                </div>
-              }
-            />
-          </div>
+        {/* Clips: folded, the chips scroll in the header; open, every clip as a chip below it. The
+            + and record stay at the header's right either way. */}
+        <section aria-label="Clips">
+          <SectionHeader
+            title="Clips"
+            fold={{ open: clipsOpen, onToggle: () => setClipsOpen(!clipsOpen) }}
+            actions={
+              <>
+                {selectedTrack.kind === "instrument" && (
+                  <IconButton
+                    label="Add a new empty clip"
+                    size="sm"
+                    onClick={() =>
+                      dispatch({ type: "addClip", trackId: selectedTrack.id, id: newClipId(), empty: true })
+                    }
+                  >
+                    +
+                  </IconButton>
+                )}
+                <TrackRecordButton trackId={selectedTrack.id} recorder={recorder} recording={recording} round />
+              </>
+            }
+          >
+            {!clipsOpen && (
+              <ClipRail
+                projectStore={projectStore}
+                scheduler={scheduler}
+                trackId={selectedTrack.id}
+                dispatch={dispatch}
+                orientation="horizontal"
+                chipsOnly
+              />
+            )}
+          </SectionHeader>
+          {clipsOpen && (
+            <div className="border-b border-line bg-ground">
+              <ClipRail
+                projectStore={projectStore}
+                scheduler={scheduler}
+                trackId={selectedTrack.id}
+                dispatch={dispatch}
+                orientation="grid"
+                dense
+                chipsOnly
+              />
+            </div>
+          )}
         </section>
 
         {/* The roll (or the audio clip), at a height dragged from its bottom edge. */}

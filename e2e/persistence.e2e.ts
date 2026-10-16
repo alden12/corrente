@@ -13,7 +13,7 @@ test("the activity feed records an edit and survives a reload", async ({ page })
   await page.getByRole("button", { name: "Activity", exact: true }).click(); // open the Activity rail view
 
   // Add a clip -> one authored "New clip" entry in the feed.
-  await page.getByRole("button", { name: "+ Clip" }).click();
+  await page.getByRole("button", { name: "Add a new empty clip" }).click();
   await expect(page.getByText(/New clip/)).toBeVisible();
 
   await page.waitForTimeout(400); // let the debounced autosave (project + log) flush

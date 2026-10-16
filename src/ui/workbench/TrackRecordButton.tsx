@@ -11,11 +11,31 @@ export function TrackRecordButton({
   trackId,
   recorder,
   recording,
+  round = false,
 }: {
   trackId: string;
   recorder: Recorder;
   recording: boolean;
+  /** Just the record circle, for a section header's actions (the desktop clips, DAW-61.1). */
+  round?: boolean;
 }) {
+  if (round)
+    return (
+      <button
+        type="button"
+        onClick={() => recorder.recordInto(trackId)}
+        aria-label={recording ? "Stop recording" : "Record a new take into this track"}
+        title={recording ? "Stop recording" : "Record a new take into this track"}
+        className={`flex items-center justify-center w-7 h-7 rounded-full cursor-pointer ${
+          recording ? "bg-hot/15" : "hover:bg-hot/10"
+        }`}
+      >
+        <span
+          className={`w-3 h-3 bg-hot ${recording ? "rounded-[2px] animate-pulse" : "rounded-full"}`}
+          aria-hidden="true"
+        />
+      </button>
+    );
   return (
     <button
       type="button"

@@ -55,13 +55,26 @@ test("the devices fold away under their bar, and a jump opens them again", async
   await expect(page.locator('[data-device][aria-label="Subtractive"]')).toBeInViewport();
 });
 
+test("the devices' menu folds every device, and opens them all again", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await addEffect(page, "Reverb");
+  const blocks = page.locator("[data-device]");
+  await page.getByRole("button", { name: "Device chain actions" }).click();
+  await page.getByRole("menuitem", { name: "Fold all devices" }).click();
+  await expect(blocks.and(page.locator('[data-open="true"]'))).toHaveCount(0);
+  await page.getByRole("button", { name: "Device chain actions" }).click();
+  await page.getByRole("menuitem", { name: "Open all devices" }).click();
+  await expect(blocks.and(page.locator('[data-open="false"]'))).toHaveCount(0);
+});
+
 test("the roll folds away under its toolbar, keeping the keys", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
-  await page.getByRole("button", { name: "Fold the roll" }).click();
+  await page.getByRole("button", { name: "Fold the piano roll" }).click();
   await expect(page.getByTestId("roll-scroll")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Hide keys" })).toBeVisible();
-  await page.getByRole("button", { name: "Open the roll" }).click();
+  await expect(page.getByRole("button", { name: "Fold the keys" })).toBeVisible();
+  await page.getByRole("button", { name: "Open the piano roll" }).click();
   await expect(page.getByTestId("roll-scroll")).toBeVisible();
 });
 

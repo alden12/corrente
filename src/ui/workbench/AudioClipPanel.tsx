@@ -7,7 +7,8 @@
  * Extracted from CenterWorkbench when the touch shell gave the editor its own tab
  * (MOBILE-1); the behaviour is unchanged.
  */
-import { FoldButton, type Fold } from "../controls/FoldButton";
+import type { Fold } from "../controls/FoldButton";
+import { SectionHeader } from "../controls/SectionHeader";
 import { useEffect, useRef, useState } from "react";
 import type { AudioTrack } from "../../audio/project/projectStore";
 import type { Scheduler } from "../../audio/sequencer/scheduler";
@@ -155,15 +156,20 @@ export function AudioClipPanel({
   return (
     <div className="flex-1 min-h-0">
       <div className="h-full flex flex-col bg-card overflow-hidden">
-        <div className="flex items-center gap-2.5 px-3 py-2 border-b border-line">
-          {fold && <FoldButton fold={fold} label="clip" />}
-          <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint">Audio clip</span>
+        <SectionHeader
+          title="Audio clip"
+          fold={fold}
+          actions={
+            <>
+              {dur > 0 && <span className="font-mono text-[10.5px] text-faint">{dur.toFixed(2)}s</span>}
+              <Button size="sm" onClick={sampleThisClip}>
+                Use as sample
+              </Button>
+            </>
+          }
+        >
           <span className="font-mono text-[12.5px] text-strong truncate">{clip.name}</span>
-          {dur > 0 && <span className="ml-auto font-mono text-[10.5px] text-faint">{dur.toFixed(2)}s</span>}
-          <Button size="sm" className={dur > 0 ? "" : "ml-auto"} onClick={sampleThisClip}>
-            Use as sample
-          </Button>
-        </div>
+        </SectionHeader>
         <div hidden={fold && !fold.open} className="flex-1 min-h-0 p-3 flex flex-col gap-3">
           {/* Beat-grid ruler (drag the two handles to set the loop region) over the
               waveform; the area outside the loop is dimmed; the playhead sweeps the

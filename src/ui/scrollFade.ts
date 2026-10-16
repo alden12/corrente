@@ -1,6 +1,7 @@
 /**
  * A sideways scroller whose edges fade out where there is more beyond them, rather than cutting
- * the last item off hard: Explore's shelves, and the workbench's device chips.
+ * the last item off hard, and pages by its arrows (`PageArrow`): Explore's shelves, and the
+ * workbench's clip and device chips.
  */
 import { useEffect, useState } from "react";
 
@@ -34,3 +35,7 @@ export function useScrollEnds(row: React.RefObject<HTMLElement | null>, count: n
   }, [row, count]);
   return ends;
 }
+
+/** Scroll the row most of its width back or on. */
+export const pageRow = (row: React.RefObject<HTMLElement | null>, direction: 1 | -1) =>
+  row.current?.scrollBy({ left: direction * row.current.clientWidth * 0.85, behavior: "smooth" });

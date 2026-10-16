@@ -114,7 +114,7 @@ test("clips sit in a line above the roll (DAW-61.1)", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
 
-  const addClip = page.getByRole("button", { name: "+ Clip" });
+  const addClip = page.getByRole("button", { name: "Add a new empty clip" });
   const tb = (await addClip.boundingBox())!;
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
   expect(tb.y + tb.height).toBeLessThanOrEqual(roll.y); // the clips line is above the roll

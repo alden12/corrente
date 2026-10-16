@@ -44,8 +44,9 @@ export function usePersistentString<T extends string>(key: string, fallback: T, 
 }
 
 /**
- * A set of strings persisted under `key`, and a toggle for one of them. `cap` keeps it from
- * growing for ever with the ids of things long gone: past it, the oldest entries drop.
+ * A set of strings persisted under `key`, a toggle for one of them, and a way to put several in or
+ * take them out at once. `cap` keeps it from growing for ever with the ids of things long gone:
+ * past it, the oldest entries drop.
  */
 export function usePersistentSet(key: string, cap = Infinity) {
   const members = new Set(parseList(useRaw(key)));
@@ -57,7 +58,14 @@ export function usePersistentSet(key: string, cap = Infinity) {
     },
     [key, cap],
   );
-  return [members, toggle] as const;
+  const putAll = useCallback(
+    (some: readonly string[], present: boolean) => {
+      const rest = parseList(readPersistent(key)).filter((entry) => !some.includes(entry));
+      writePersistent(key, JSON.stringify((present ? [...rest, ...some] : rest).slice(-cap)));
+    },
+    [key, cap],
+  );
+  return [members, toggle, putAll] as const;
 }
 
 function parseList(raw: string | null): string[] {

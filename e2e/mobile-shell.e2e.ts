@@ -812,7 +812,7 @@ test.describe("phone", () => {
     await expect(page.getByRole("button", { name: /^\+ Clip$/ })).toBeVisible();
 
     await segment(page, "Rack").tap();
-    await expect(page.getByRole("button", { name: "Save as patch" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Device chain actions" })).toBeVisible();
 
     await expect(page.getByRole("button", { name: "Record" })).toHaveCount(1);
   });
