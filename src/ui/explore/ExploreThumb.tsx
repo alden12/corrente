@@ -4,6 +4,9 @@
  * what has none yet (your patches, samples), the category's glyph. What isn't a device (a sample, a
  * category's tile) takes its category's hue, nudged per name so a list of one category doesn't read
  * as a single repeated tile.
+ *
+ * A card with a portrait also carries its category's glyph as a small badge in its corner: colour
+ * now says which device, not which kind, so the badge is what tells a delay from a synth at a glance.
  */
 import type { ReactNode } from "react";
 import { CATEGORIES, type ExploreCategory } from "./exploreItems";
@@ -35,6 +38,26 @@ const GLYPHS: Record<ExploreCategory, ReactNode> = {
   samples: <path d="M2 8h1.5M4.5 5v6M6.5 3v10M8.5 5.5v5M10.5 4v8M12.5 6.5v3M14 8h.5" />,
 };
 
+/** The category's glyph, `size` px square. */
+function Glyph({ category, size }: { category: ExploreCategory; size: number }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ width: size, height: size }}
+    >
+      {GLYPHS[category]}
+    </svg>
+  );
+}
+
+/** The badge's size against the card's: big enough to read on a 40px row, not to cover the portrait. */
+const BADGE = 0.34;
+
 /** A small, stable spread of hue per name: enough to tell neighbours apart, not enough to recolour. */
 const hueShift = (seed: string) =>
   ([...seed].reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 7) % 41) - 20;
@@ -58,7 +81,7 @@ export function ExploreThumb({
   return (
     <span
       aria-hidden="true"
-      className="shrink-0 flex items-center justify-center rounded-md text-white/85"
+      className="relative shrink-0 flex items-center justify-center rounded-md text-white/85"
       style={{
         width: size,
         height: size,
@@ -82,17 +105,15 @@ export function ExploreThumb({
           )}
         </svg>
       ) : (
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ width: size * 0.48, height: size * 0.48 }}
+        <Glyph category={category} size={size * 0.48} />
+      )}
+      {portrait && (
+        <span
+          className="absolute top-0.5 left-0.5 flex items-center justify-center rounded-full bg-black/45 text-white"
+          style={{ width: size * BADGE, height: size * BADGE }}
         >
-          {GLYPHS[category]}
-        </svg>
+          <Glyph category={category} size={size * BADGE * 0.7} />
+        </span>
       )}
     </span>
   );
