@@ -110,14 +110,14 @@ test("Escape and click-outside deselect (then Delete is a no-op)", async ({ page
   await expect(page.getByTestId("note")).toHaveCount(1);
 });
 
-test("clips sit in a rail to the left of the roll", async ({ page }) => {
+test("clips sit in a line above the roll (DAW-61.1)", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
 
   const addClip = page.getByRole("button", { name: "+ Clip" });
   const tb = (await addClip.boundingBox())!;
-  const gb = (await page.getByTestId("piano-grid").boundingBox())!;
-  expect(tb.x).toBeLessThan(gb.x); // the clip rail is left of the grid
+  const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
+  expect(tb.y + tb.height).toBeLessThanOrEqual(roll.y); // the clips line is above the roll
 });
 
 test("the roll toolbar fits when the panel is narrow, keeping zoom reachable", async ({ page }) => {

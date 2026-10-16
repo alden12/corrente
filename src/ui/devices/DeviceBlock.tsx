@@ -50,7 +50,9 @@ export function DeviceBlock({
       role="group"
       aria-label={label}
       data-open={open}
-      className={`shrink-0 min-w-0 border border-line rounded-xl bg-ground ${bypass?.bypassed ? "opacity-50" : ""}`}
+      // The workbench's return bar scrolls to a device by this, clear of the bar itself.
+      data-device={foldKey}
+      className={`scroll-mt-12 shrink-0 min-w-0 border border-line rounded-xl bg-ground ${bypass?.bypassed ? "opacity-50" : ""}`}
       style={deviceEdge(device)}
     >
       <div className={`flex items-center gap-1.5 pl-1 pr-2.5 py-1 ${open ? "border-b border-line" : ""}`}>
