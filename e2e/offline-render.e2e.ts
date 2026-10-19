@@ -1,27 +1,6 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * AGENT-4.1 spike: the single biggest unknown for the "agent ears" epic is whether our custom
- * AudioWorklet instruments render under an OfflineAudioContext. jsdom (the unit-test env) has no
- * AudioWorklet, so this can only be proven in a real browser - here. The app installs a dev/test
- * hook (main.tsx) that builds a wavetable instrument through the normal factory on a fresh offline
- * context, plays a note, renders, and returns the peak amplitude. Non-silent => the factory +
- * worklet reuse thesis holds and the full renderProjectOffline is mechanical from here.
- */
-test("a worklet instrument renders to a non-silent buffer offline (AGENT-4.1 spike)", async ({ page }) => {
-  await page.goto("/");
-  await page.waitForFunction(
-    () => typeof (window as unknown as { __dawRenderWorkletSmoke?: unknown }).__dawRenderWorkletSmoke === "function",
-  );
-
-  const peak = await page.evaluate(async () =>
-    (window as unknown as { __dawRenderWorkletSmoke: () => Promise<number> }).__dawRenderWorkletSmoke(),
-  );
-
-  expect(peak).toBeGreaterThan(0.001);
-});
-
-/**
  * The real path: renderProjectOffline consumes a ProjectStore (a seeded synth track + a wavetable
  * worklet track, each with a note), builds the instrument -> effects -> group -> master graph, and
  * schedules the flattened arrangement. Non-silent proves the project-consuming render works end to
@@ -118,30 +97,6 @@ test("render + analyze produces a sane mix report (analyze_mix chain)", async ({
   expect(report.peakDbfs).toBeLessThanOrEqual(0.5); // under (or at) full scale
   expect(report.headroomDb).toBeGreaterThan(0);
   expect(typeof report.note).toBe("string");
-});
-
-/**
- * COMM-1.9.2: the portrait renderer `yarn portraits` runs. Every built-in renders alone and draws
- * something, so a device that renders silent, or a drawing that comes out empty, fails here rather
- * than landing as a blank card.
- */
-test("every built-in renders a non-empty sound portrait", async ({ page }) => {
-  await page.goto("/");
-  await page.waitForFunction(
-    () => typeof (window as unknown as { __dawRenderPortraits?: unknown }).__dawRenderPortraits === "function",
-  );
-
-  const portraits = await page.evaluate(async () =>
-    (
-      window as unknown as { __dawRenderPortraits: () => Promise<Record<string, { line?: string; fill?: string }>> }
-    ).__dawRenderPortraits(),
-  );
-
-  const empty = Object.entries(portraits)
-    .filter(([, portrait]) => (portrait.line ?? portrait.fill ?? "").length < 20)
-    .map(([key]) => key);
-  expect(Object.keys(portraits).length).toBeGreaterThan(20);
-  expect(empty).toEqual([]);
 });
 
 /**

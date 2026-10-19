@@ -11,30 +11,21 @@
  * `installRenderHarness` is invoked from `main.tsx` behind an `import.meta.env` guard, so the whole
  * module is dead-code-eliminated from production builds and never ships.
  */
-import {
-  renderWorkletSmokeTest,
-  renderProjectOffline,
-  analyzeProjectMix,
-  peakAmplitude,
-} from "../audio/engine/renderOffline";
+import { renderProjectOffline, analyzeProjectMix, peakAmplitude } from "../audio/engine/renderOffline";
 import { ProjectStore, type Track } from "../audio/project/projectStore";
 import { encodeWav } from "../audio/recording/wav";
 import { putAudio } from "../audio/audioStore";
-import { renderPortraits } from "../audio/portraits/renderPortraits";
-import type { Portrait } from "../audio/portraits/draw";
 import { renderProject } from "../audio/render/renderProject";
 import { fetchEngine } from "../audio/bank/pool";
 import { browserAudio, browserSample } from "../audio/bank/deviceSamples";
 import { spectrumOf } from "../audio/analysis/spectrum";
 
 interface RenderHarness {
-  __dawRenderWorkletSmoke?: () => Promise<number>;
   __dawRenderProjectSmoke?: () => Promise<number>;
   __dawRenderSamplerSmoke?: () => Promise<number>;
   __dawRenderAudioTrackSmoke?: () => Promise<number>;
   __dawRenderMidiDeviceSmoke?: () => Promise<number>;
   __dawAnalyzeMix?: () => Promise<unknown>;
-  __dawRenderPortraits?: () => Promise<Record<string, Portrait>>;
   __dawRenderBothWays?: (name: string) => Promise<{ offline: BandLevels; core: BandLevels }>;
 }
 
@@ -152,7 +143,6 @@ const levelsOf = (samples: Float32Array, sampleRate: number): BandLevels => {
 /** Install the offline-render e2e hooks onto `window`. Called from main.tsx in dev/test only. */
 export function installRenderHarness(): void {
   const harness = window as unknown as RenderHarness;
-  harness.__dawRenderWorkletSmoke = async () => peakAmplitude(await renderWorkletSmokeTest());
   harness.__dawRenderProjectSmoke = async () => peakAmplitude(await renderProjectOffline(buildSmokeProject()));
   harness.__dawRenderSamplerSmoke = async () => peakAmplitude(await renderProjectOffline(buildSamplerProject()));
   harness.__dawRenderAudioTrackSmoke = async () =>
@@ -160,8 +150,6 @@ export function installRenderHarness(): void {
   harness.__dawRenderMidiDeviceSmoke = async () => peakAmplitude(await renderProjectOffline(buildMidiDeviceProject()));
   // The full "agent ears" chain: render offline -> analyze -> model-friendly report.
   harness.__dawAnalyzeMix = async () => analyzeProjectMix(buildSmokeProject());
-  // Every built-in's Explore portrait (COMM-1.9.2): what `yarn portraits` collects and commits.
-  harness.__dawRenderPortraits = renderPortraits;
   // The same project through the browser's offline render and through the engine render core.
   harness.__dawRenderBothWays = async (name) => {
     const sampleRate = 48000;

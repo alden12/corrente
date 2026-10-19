@@ -3,6 +3,9 @@ import { capturePhrase } from "../src/audio/portraits/capturePhrase";
 import { envelope, isSustained, phaseScope, phrase } from "../src/audio/portraits/draw";
 import { midiDeviceInfos } from "../src/audio/midi/device/catalog";
 import { exploreItems } from "../src/ui/explore/exploreItems";
+import { renderPortraits } from "../src/audio/portraits/renderPortraits";
+import { nodeRenderSetup } from "../server/render/nodeRender";
+import PORTRAITS from "../src/ui/explore/portraits.json";
 
 const sine = (frequency: number, seconds: number, sampleRate = 8000, shape = (value: number) => value) =>
   Float32Array.from({ length: Math.round(seconds * sampleRate) }, (_, index) =>
@@ -75,5 +78,15 @@ describe("portraits.json", () => {
       .filter((item) => item.builtin && !item.portrait?.line && !item.portrait?.fill)
       .map((item) => item.key);
     expect(missing).toEqual([]);
+  });
+
+  it("is what the built-ins sound like now (run `yarn portraits` after retuning one)", async () => {
+    // A render on the engine core is the same every time, so a drawing that differs is a device that changed.
+    const portraits = await renderPortraits(nodeRenderSetup());
+    const empty = Object.entries(portraits)
+      .filter(([, portrait]) => (portrait.line ?? portrait.fill ?? "").length < 20)
+      .map(([key]) => key);
+    expect(empty).toEqual([]);
+    expect(portraits).toEqual(PORTRAITS);
   });
 });

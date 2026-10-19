@@ -6,10 +6,8 @@
  * the mix (LUFS / spectral / clipping) without a second engine to keep in sync. The factories
  * take a `BaseAudioContext`, so an `OfflineAudioContext` is passed directly (no cast).
  *
- * `renderProjectOffline` is the real renderer; `renderWorkletSmokeTest` is the retained
- * de-risking probe that proved the crux - custom AudioWorklet instruments DO produce sound
- * offline - and doubles as the minimal regression guard. Both can only be exercised in a real
- * browser (jsdom has no AudioWorklet), so their coverage is the offline-render e2e.
+ * It can only be exercised in a real browser (jsdom has no AudioWorklet), so its coverage is the
+ * offline-render e2e. The engine render core (AGENT-4.9, `render/`) is replacing it.
  */
 import { groupDepth, groupEffectStage, trackEffectStage } from "../bank/stages";
 import type { MixNode } from "./latency";
@@ -18,7 +16,6 @@ import { ChainEffects } from "./chainEffects";
 import { trackInstrument } from "./trackInstrument";
 import { loadWorklets } from "../worklets";
 import { setTransport as setEngineTransport } from "../bank/pool";
-import { renderIsolated } from "./renderIsolated";
 import { setSampleAssets } from "../samples/sampleRegistry";
 import { soloMutedTrackIds } from "./mix";
 import { beatsToSeconds } from "../sequencer/scheduler";
@@ -262,16 +259,4 @@ export function peakAmplitude(buffer: AudioBuffer): number {
     }
   }
   return peak;
-}
-
-/**
- * Render a single wavetable (worklet) note: the probe that proved worklet instruments render
- * offline, kept as the minimal regression guard. Now one case of `renderIsolated`.
- */
-export function renderWorkletSmokeTest(sampleRate = 44100): Promise<AudioBuffer> {
-  return renderIsolated(
-    { instrument: { type: "wavetable" } },
-    { kind: "note", pitch: 60, holdSec: 0.8, velocity: 0.9 },
-    { durationSec: 1, sampleRate },
-  );
 }
