@@ -3,6 +3,8 @@ import { renderProject, type ProjectRender } from "../src/audio/render/renderPro
 import { renderDevice, type Rendered } from "../src/audio/render/renderDevice";
 import { nodeRenderSetup } from "../server/render/nodeRender";
 import { ProjectStore, type InstrumentTrack } from "../src/audio/project/projectStore";
+import { resampled } from "../src/audio/render/audioTape";
+import type { LoadAudio } from "../src/audio/render/sampleAudio";
 
 /** A project of one bar at 120 bpm (a beat is half a second), with no tracks yet. */
 const project = () => {
@@ -27,7 +29,26 @@ const peakOf = ({ channels }: Rendered, from = 0, to = Infinity) =>
         .reduce((peak, sample) => Math.max(peak, Math.abs(sample)), most),
     0,
   );
-const render = (store: ProjectStore) => renderProject(store, nodeRenderSetup(), { tailSec: 1 });
+const render = (store: ProjectStore, loadAudio?: LoadAudio) =>
+  renderProject(store, { ...nodeRenderSetup(), loadAudio }, { tailSec: 1 });
+
+/** A recorded take: a quarter second of a 220 Hz sine at half scale, at `rate`. */
+const take = (rate = 48000) => ({
+  channels: [Float32Array.from({ length: rate / 4 }, (_, frame) => 0.5 * Math.sin((2 * Math.PI * 220 * frame) / rate))],
+  rate,
+});
+const loadTake =
+  (rate?: number): LoadAudio =>
+  async (fileId) =>
+    fileId === "take" ? take(rate) : null;
+
+/** Where a render is louder than `floor`: its first and last frames. */
+const soundingSpan = ({ channels }: Rendered, floor = 1e-4) => {
+  const loud = Array.from(channels[0], (sample, frame) => (Math.abs(sample) > floor ? frame : -1)).filter(
+    (frame) => frame >= 0,
+  );
+  return [loud[0], loud[loud.length - 1]];
+};
 
 describe("renderProject (AGENT-4.9 part 2): the song, on the engine, in Node", () => {
   it("plays a track exactly as the device plays alone", async () => {
@@ -129,6 +150,50 @@ describe("renderProject (AGENT-4.9 part 2): the song, on the engine, in Node", (
     );
     const expected = await render(written);
     arpeggiated.channels[0].forEach((sample, index) => expect(sample).toBeCloseTo(expected.channels[0][index], 5));
+  });
+
+  it("plays an audio clip where it's placed, at the track's volume", async () => {
+    const store = project();
+    store.addAudioTrack({ fileId: "take", durationSec: 0.25, startBeat: 1, length: 0.5 });
+    const song = await render(store, loadTake());
+    const at = 0.5 * song.sampleRate;
+    const { channels } = take();
+    expect(song.omitted).toEqual([]);
+    channels[0].forEach((sample, frame) => expect(song.channels[1][at + frame]).toBeCloseTo(sample * 0.8 * 0.8, 6));
+    expect(soundingSpan(song)).toEqual([at + 1, at + channels[0].length - 1]);
+  });
+
+  it("brings a file at another rate to the render's", async () => {
+    const store = project();
+    store.addAudioTrack({ fileId: "take", durationSec: 0.25, startBeat: 0, length: 0.5 });
+    const [first, last] = soundingSpan(await render(store, loadTake(24000)));
+    expect(first).toBeLessThan(4);
+    expect(last).toBeGreaterThan(0.25 * 48000 - 8);
+    expect(last).toBeLessThan(0.25 * 48000);
+    expect(resampled(new Float32Array([0, 1, 0]), 1, 2)).toEqual(new Float32Array([0, 0.5, 1, 0.5, 0, 0]));
+  });
+
+  it("repeats a clip's loop region to fill its placement, and runs the track's effects on it", async () => {
+    const store = project();
+    const track = store.addAudioTrack({ fileId: "take", durationSec: 0.25, startBeat: 0, length: 2 });
+    store.setAudioClip(track.id, track.clips[0].id, { loopEndSec: 0.125 });
+    const looped = await render(store, loadTake());
+    // An eighth of a second, a quarter beat at 120, played every quarter beat for two beats.
+    expect(soundingSpan(looped)[1]).toBeGreaterThan(0.99 * 48000);
+    expect(soundingSpan(looped)[1]).toBeLessThan(1.0 * 48000);
+
+    store.addEffect(track.id, "reverb");
+    const wet = await render(store, loadTake());
+    expect(peakOf(wet, 1.5 * 48000)).toBeGreaterThan(1e-3);
+  });
+
+  it("names audio clips it has no way to load, or whose file won't load", async () => {
+    const store = project();
+    store.addAudioTrack({ fileId: "gone", durationSec: 0.25 }, { name: "Vox" });
+    expect((await render(store)).omitted).toEqual([expect.stringContaining("can't be loaded here")]);
+    const missing = await render(store, loadTake());
+    expect(missing.omitted).toEqual([expect.stringContaining("file gone wouldn't load")]);
+    expect(peakOf(missing)).toBe(0);
   });
 
   it("reports the level going into the master, past the soft clip", async () => {

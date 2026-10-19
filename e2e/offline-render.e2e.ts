@@ -149,7 +149,7 @@ test("every built-in renders a non-empty sound portrait", async ({ page }) => {
  * piece of the mix at a time. The core is what the agent hears in Node, so it has to sound like the
  * app: the same level and the same shape across the octave bands.
  */
-for (const name of ["synth", "bass", "track effect", "group effect"])
+for (const name of ["synth", "bass", "track effect", "group effect", "audio clip"])
   test(`the engine render core sounds like the browser's offline render: ${name}`, async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(

@@ -14,8 +14,10 @@
  *   master, then the soft clip. `masterPeak` reports the level going into the master, which is
  *   what to judge clipping by.
  *
- * Not yet (each named in `omitted` when a project has it, never silently left out): audio tracks and
- * sidechains (part 2c).
+ * An audio track's clips are laid onto a tape (audioTape.ts) its effects hear. What a render can't
+ * play is named in `omitted` rather than silently left out: an effect that isn't an engine device,
+ * audio clips where there's no way to load them. (Sidechain sources can't be set yet, DAW-63; the
+ * core will need the same wiring as AudioEngine when they can.)
  */
 import { EngineBank } from "../bank/bank";
 import { BLOCK } from "../bank/exports";
@@ -26,11 +28,12 @@ import { compensate, type MixNode } from "../engine/latency";
 import { soloMutedTrackIds } from "../engine/mix";
 import { softClip } from "../engine/softClip";
 import { beatsToSeconds } from "../sequencer/scheduler";
-import type { EffectInstance, Group, InstrumentTrack, ProjectStore, Track } from "../project/projectStore";
+import type { AudioTrack, EffectInstance, Group, InstrumentTrack, ProjectStore, Track } from "../project/projectStore";
 import { sampleAudioFor } from "./sampleAudio";
 import type { Rendered, RenderSetup } from "./renderDevice";
 import { trackNotes, type ScheduledNote } from "./trackNotes";
 import { midiChain } from "../midi/device/registry";
+import { audioTape } from "./audioTape";
 import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 
 export interface ProjectRender extends Rendered {
@@ -127,7 +130,7 @@ function delayed(block: Stereo, history: Stereo, delay: number): Stereo {
 
 export async function renderProject(
   project: ProjectStore,
-  { engine, loadSample, sampleRate = DEFAULT_RATE }: RenderSetup,
+  { engine, loadSample, loadAudio, sampleRate = DEFAULT_RATE }: RenderSetup,
   { tailSec = DEFAULT_TAIL_SEC }: ProjectRenderOptions = {},
 ): Promise<ProjectRender> {
   const timeline = {
@@ -144,8 +147,15 @@ export async function renderProject(
   // --- the chains ---------------------------------------------------------------------------
   const slotsOfTrack = (track: Track): Omit<Slot, "track" | "out">[] => {
     if (track.kind === "audio") {
-      if (track.placements.length > 0) omitted.push(`audio track "${track.name}": audio clips aren't rendered yet`);
-      return [];
+      if (track.placements.length > 0 && !loadAudio)
+        omitted.push(`audio track "${track.name}": audio clips can't be loaded here, so it's silent`);
+      return effectSlots(
+        track.effects,
+        track.effects,
+        (index) => trackEffectStage(index),
+        omitted,
+        `track "${track.name}"`,
+      );
     }
     const chain = instrumentChain(track.instrumentType, track.params, track.effects);
     if (!chain) return [];
@@ -164,7 +174,11 @@ export async function renderProject(
       `group "${group.name}"`,
     );
 
-  const strips: (Strip & { pending: Omit<Slot, "track" | "out">[]; track?: InstrumentTrack })[] = [
+  const strips: (Strip & {
+    pending: Omit<Slot, "track" | "out">[];
+    track?: InstrumentTrack;
+    audio?: AudioTrack;
+  })[] = [
     ...tracks.map((track) => ({
       id: track.id,
       parentId: track.parentId,
@@ -172,6 +186,7 @@ export async function renderProject(
       pending: slotsOfTrack(track),
       gain: silenced.has(track.id) ? 0 : track.volume,
       track: track.kind === "instrument" ? track : undefined,
+      audio: track.kind === "audio" ? track : undefined,
     })),
     ...groups.map((group) => ({
       id: group.id,
@@ -276,6 +291,19 @@ export async function renderProject(
   );
   const blocks = Math.ceil((frames + total) / BLOCK);
   const master: Stereo = [new Float32Array(blocks * BLOCK), new Float32Array(blocks * BLOCK)];
+  const tapes = new Map(
+    await Promise.all(
+      strips.flatMap(({ id, audio }) => {
+        if (!audio || !loadAudio) return [];
+        return [
+          audioTape(audio, timeline, blocks * BLOCK, sampleRate, loadAudio).then(({ tape, missing }) => {
+            missing.forEach((fileId) => omitted.push(`audio track "${audio.name}": file ${fileId} wouldn't load`));
+            return [id, tape] as const;
+          }),
+        ];
+      }),
+    ),
+  );
   let masterPeak = 0;
 
   for (let block = 0; block < blocks; block++) {
@@ -287,12 +315,18 @@ export async function renderProject(
     );
     generators.forEach((generator) => generator.scheduleWindow(from, to));
     const outputs = new Map<string, Stereo>();
-    /** A strip's output this block: its last slot (or, a group without effects, its bus), at its volume, delayed. */
+    /** What a strip's chain starts from this block: a group's bus, an audio track's tape (an instrument plays its own). */
+    const feedOf = (strip: Strip): Stereo | undefined => {
+      if (strip.isGroup) return busOf(strip.id);
+      const tape = tapes.get(strip.id);
+      return tape && [tape[0].subarray(start, start + BLOCK), tape[1].subarray(start, start + BLOCK)];
+    };
+    /** A strip's output this block: its last slot (or, without effects, what feeds it), at its volume, delayed. */
     const outputOf = (strip: Strip): Stereo => {
       const done = outputs.get(strip.id);
       if (done) return done;
       const last = strip.slots[strip.slots.length - 1];
-      const raw = last ? last.out : strip.isGroup ? busOf(strip.id) : silence();
+      const raw = last ? last.out : (feedOf(strip) ?? silence());
       const out = delayed(
         raw.map((channel) => channel.map((sample) => sample * strip.gain)) as Stereo,
         strip.history,
@@ -314,8 +348,9 @@ export async function renderProject(
       // Each slot's input: the slot before it in its chain, or for a group's first, its bus.
       strips.forEach((strip) =>
         strip.slots.forEach((slot, index) => {
-          if (slot.stage !== stage || (index === 0 && !strip.isGroup)) return;
-          const input = index > 0 ? strip.slots[index - 1].out : busOf(strip.id);
+          if (slot.stage !== stage) return;
+          const input = index > 0 ? strip.slots[index - 1].out : feedOf(strip);
+          if (!input) return;
           [0, 1].forEach((channel) => bank.input(slot.track, channel).set(input[channel]));
         }),
       );

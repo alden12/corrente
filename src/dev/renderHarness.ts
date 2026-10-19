@@ -24,7 +24,7 @@ import { renderPortraits } from "../audio/portraits/renderPortraits";
 import type { Portrait } from "../audio/portraits/draw";
 import { renderProject } from "../audio/render/renderProject";
 import { fetchEngine } from "../audio/bank/pool";
-import { browserSample } from "../audio/bank/deviceSamples";
+import { browserAudio, browserSample } from "../audio/bank/deviceSamples";
 import { spectrumOf } from "../audio/analysis/spectrum";
 
 interface RenderHarness {
@@ -94,7 +94,7 @@ const buildMidiDeviceProject = (): ProjectStore => {
  * One note each, held to the end: the browser's offline render loses every engine note event after
  * the first (INST-49), so a chord, a note-off or a second track would compare that bug, not the mix.
  */
-const MIX_PROJECTS: Record<string, (project: ProjectStore) => void> = {
+const MIX_PROJECTS: Record<string, (project: ProjectStore) => void | Promise<void>> = {
   synth: (project) => notes(project.addTrack("subtractive"), [60], 0.5),
   bass: (project) => notes(project.addTrack("fm"), [36], 0.8),
   "track effect": (project) => {
@@ -108,7 +108,24 @@ const MIX_PROJECTS: Record<string, (project: ProjectStore) => void> = {
     project.addEffect(keys.parentId!, "reverb");
     notes(keys, [60], 0.5);
   },
+  // A take at 44.1 kHz, so the core's resampling meets the browser's decoder, through an effect.
+  "audio clip": async (project) => {
+    const track = project.addAudioTrack({ fileId: await takeAt(44100, 1), durationSec: 1, length: MIX_BEATS });
+    project.addEffect(track.id, "distortion");
+  },
 };
+
+/** A take of a 220 Hz sine at half scale, stored as a project's recordings are; its file id. */
+const takeAt = (sampleRate: number, durationSec: number) =>
+  putAudio(
+    encodeWav(
+      Float32Array.from(
+        { length: Math.floor(sampleRate * durationSec) },
+        (_, frame) => 0.5 * Math.sin((2 * Math.PI * 220 * frame) / sampleRate),
+      ),
+      sampleRate,
+    ),
+  );
 
 const MIX_BEATS = 8;
 
@@ -118,11 +135,11 @@ const notes = (track: Track, pitches: number[], velocity: number) => {
     pitches.forEach((pitch) => track.clips[0].store.addNote({ pitch, start: 0, length: MIX_BEATS, velocity }));
 };
 
-const mixProject = (name: string): ProjectStore => {
+const mixProject = async (name: string): Promise<ProjectStore> => {
   const project = new ProjectStore(false);
   project.setTempo(120);
   project.setLength(MIX_BEATS);
-  MIX_PROJECTS[name](project);
+  await MIX_PROJECTS[name](project);
   return project;
 };
 
@@ -148,13 +165,15 @@ export function installRenderHarness(): void {
   // The same project through the browser's offline render and through the engine render core.
   harness.__dawRenderBothWays = async (name) => {
     const sampleRate = 48000;
-    const offline = await renderProjectOffline(mixProject(name), { sampleRate, tailSec: 0 });
+    const project = await mixProject(name);
+    const offline = await renderProjectOffline(project, { sampleRate, tailSec: 0 });
     const decoder = new OfflineAudioContext(1, 1, sampleRate);
     const core = await renderProject(
-      mixProject(name),
+      project,
       {
         engine: await fetchEngine(),
         loadSample: browserSample(decoder),
+        loadAudio: browserAudio(decoder),
         sampleRate,
       },
       { tailSec: 0 },

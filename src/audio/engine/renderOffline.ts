@@ -22,12 +22,11 @@ import { renderIsolated } from "./renderIsolated";
 import { setSampleAssets } from "../samples/sampleRegistry";
 import { soloMutedTrackIds } from "./mix";
 import { beatsToSeconds } from "../sequencer/scheduler";
-import { trackNotes } from "../render/trackNotes";
+import { audioTriggers, trackNotes } from "../render/trackNotes";
 import { getAudioBuffer } from "../audioStore";
 import { audioPlayWindow } from "./audioWindow";
 import { midiChain } from "../midi/device/registry";
 import { analyzeMix, summarizeMix, type MixSummary } from "../analysis/analyze";
-import { GRID } from "../sequencer/types";
 import type { ProjectStore, EffectInstance, InstrumentTrack, AudioTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
 import type { Instrument } from "../instruments/types";
@@ -162,7 +161,12 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       const chain = chainOf(input, track.effects, gain);
       route(mixTracks, gain, { id: track.id, parentId: track.parentId, latency: chain.latency() });
       gain.gain.value = mutedTracks.has(track.id) ? 0 : track.volume;
-      scheduleFns.push(() => scheduleAudioTrack(ctx, track, input, audioBuffers, loopStart, project.length, bpm));
+      scheduleFns.push(() =>
+        audioTriggers(track, timeline).forEach(({ clip, start, maxSec }) => {
+          const buffer = audioBuffers.get(clip.fileId);
+          if (buffer) scheduleAudioClipOffline(ctx, buffer, clip, input, start, maxSec);
+        }),
+      );
     }
   }
 
@@ -219,35 +223,6 @@ async function decodeAudioClips(
       }
     }),
   );
-}
-
-/** Schedule an audio track's placements over the render timeline, mirroring Scheduler.tick's audio
- *  branch for a single pass of [loopStart, length): each placement re-triggers its clip's loop
- *  region every region-length, truncated at the arrangement end. */
-function scheduleAudioTrack(
-  ctx: BaseAudioContext,
-  track: AudioTrack,
-  dest: AudioNode,
-  audioBuffers: Map<string, AudioBuffer>,
-  loopStart: number,
-  length: number,
-  bpm: number,
-): void {
-  for (const placement of track.placements) {
-    const clip = track.clips.find((entry) => entry.id === placement.clipId);
-    if (!clip) continue;
-    const buffer = audioBuffers.get(clip.fileId);
-    if (!buffer) continue;
-    const regionSec = (clip.loopEndSec ?? clip.durationSec) - (clip.loopStartSec ?? 0);
-    const stepBeats = regionSec > 0 ? Math.max(GRID, (regionSec * bpm) / 60) : Infinity;
-    for (let tau = 0; tau < placement.length; tau += stepBeats) {
-      const atBeat = placement.startBeat + tau;
-      if (atBeat < loopStart || atBeat >= length) continue;
-      const whenSec = beatsToSeconds(atBeat - loopStart, bpm);
-      // Cap at the arrangement end so a region overrunning the end is truncated, not left ringing.
-      scheduleAudioClipOffline(ctx, buffer, clip, dest, whenSec, beatsToSeconds(length - atBeat, bpm));
-    }
-  }
 }
 
 /** Play one audio-clip trigger: its loop-region slice of the buffer at `when`, into `dest`. Mirrors

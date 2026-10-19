@@ -5,8 +5,9 @@
  * name. `ready` waits until the bank has every one, so an offline render doesn't start without them.
  */
 import { loadSampleBuffer } from "../samples/builtinUrls";
-import { sampleAudioFor, type LoadSample } from "../render/sampleAudio";
+import { sampleAudioFor, type LoadAudio, type LoadSample } from "../render/sampleAudio";
 import type { SampleAudio } from "./bank";
+import { getAudioBuffer } from "../audioStore";
 
 /** A decoded sample for the bank, under a sample param. */
 export interface SampleMessage {
@@ -75,17 +76,29 @@ export class DeviceSamples {
 
 const answerKey = (param: string, ref: string) => `${param}\n${ref}`;
 
+/** A decoded buffer as the engine takes audio: up to two channels at its own rate. */
+const audioOf = (buffer: AudioBuffer): SampleAudio => ({
+  channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
+    buffer.getChannelData(channel).slice(),
+  ),
+  rate: buffer.sampleRate,
+});
+
 /** A sample fetched and decoded by the browser: up to two channels at its own rate, or null for none. */
 export const browserSample =
   (context: BaseAudioContext): LoadSample =>
   async (ref) => {
     const buffer = await loadSampleBuffer(context, ref);
-    return (
-      buffer && {
-        channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
-          buffer.getChannelData(channel).slice(),
-        ),
-        rate: buffer.sampleRate,
-      }
-    );
+    return buffer && audioOf(buffer);
+  };
+
+/** An audio clip's file from the project's store, decoded by the browser, for the render core; null if it won't load. */
+export const browserAudio =
+  (context: BaseAudioContext): LoadAudio =>
+  async (fileId) => {
+    try {
+      return audioOf(await context.decodeAudioData(await getAudioBuffer(fileId)));
+    } catch {
+      return null;
+    }
   };

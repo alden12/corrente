@@ -16,7 +16,7 @@ import { instrumentSchema } from "../instruments/catalog";
 import { effectSchema } from "../effects/catalog";
 import { ParamStore } from "../params/store";
 import type { ParamSchema, ParamValue } from "../params/types";
-import { sampleAudioFor, type LoadSample } from "./sampleAudio";
+import { sampleAudioFor, type LoadAudio, type LoadSample } from "./sampleAudio";
 
 export interface DeviceSpec {
   type: string;
@@ -49,10 +49,12 @@ export interface Rendered {
   sampleRate: number;
 }
 
-/** What a render needs from where it runs: the engine's bytes, and a way to load samples. */
+/** What a render needs from where it runs: the engine's bytes, and ways to load samples and audio clips. */
 export interface RenderSetup {
   engine: BufferSource;
   loadSample: LoadSample;
+  /** Audio clips' files, for a project render; where there's no way to load them, they're left out. */
+  loadAudio?: LoadAudio;
   /** 48 kHz unless asked. */
   sampleRate?: number;
 }

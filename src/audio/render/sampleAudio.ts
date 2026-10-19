@@ -11,6 +11,9 @@ import type { SampleAudio } from "../bank/bank";
 /** A sample ref's audio, up to two channels at its own rate; null for none or one that won't load. */
 export type LoadSample = (ref: string) => Promise<SampleAudio | null>;
 
+/** An audio clip's file by its id, decoded, at its own rate; null for one that won't load. */
+export type LoadAudio = (fileId: string) => Promise<SampleAudio | null>;
+
 /** Built-in wavetables as tables, made once each: their levels take a moment to work out. */
 const builtinTables = new Map<string, Float32Array | null>();
 
