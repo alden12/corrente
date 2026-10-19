@@ -6,7 +6,7 @@ import { BLOCK } from "../src/audio/bank/exports";
 import { CATALOGUE } from "../src/audio/definitions/catalogue";
 import { compileDefinition, type CompiledPlan } from "../src/audio/definitions/compile";
 import type { DeviceDefinition, InputValue } from "../src/audio/definitions/format";
-import { buildBanks } from "../src/audio/dsp/wavetable";
+import { builtinWavetable } from "../src/audio/dsp/wavetable";
 import { tableOf } from "../src/audio/samples/tables";
 import { RATE, wasm } from "./support/engine";
 
@@ -61,7 +61,8 @@ const SETUP: Record<string, { inputs: Record<string, InputValue>; start: (bank: 
   },
   wavetable: {
     inputs: { table: { param: "table" } },
-    start: (bank) => bank.setSample(0, "table", "classic", { channels: [tableOf(buildBanks()[0])], rate: RATE }),
+    start: (bank) =>
+      bank.setSample(0, "table", "classic", { channels: [tableOf(builtinWavetable("classic")!)], rate: RATE }),
   },
 };
 

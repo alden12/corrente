@@ -8,7 +8,7 @@ import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
 import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import { MAX_ZONES, type DeviceDefinition } from "../src/audio/definitions/format";
-import { buildBanks } from "../src/audio/dsp/wavetable";
+import { builtinWavetable } from "../src/audio/dsp/wavetable";
 import { tableOf } from "../src/audio/samples/tables";
 import { RATE, wasm } from "./support/engine";
 
@@ -486,7 +486,7 @@ describe("EngineBank", () => {
         }),
       );
       // The classic set's first cycle is a sine: at A4, 440 cycles a second from phase 0.
-      bank.setSample(0, "table", "classic", { channels: [tableOf(buildBanks()[0])], rate: RATE });
+      bank.setSample(0, "table", "classic", { channels: [tableOf(builtinWavetable("classic")!)], rate: RATE });
       bank.noteOn(0, 69, 1, 0);
       bank.process(0);
       const out = Array.from(bank.output(0, 0));
@@ -559,7 +559,7 @@ describe("the engine's instruments: the built-ins written for it, and the test d
         (_, frame) => 0.5 * Math.sin((2 * Math.PI * 220 * frame) / RATE),
       );
       // And wavetables get the built-in classic set.
-      const classic = { channels: [tableOf(buildBanks()[0])], rate: RATE };
+      const classic = { channels: [tableOf(builtinWavetable("classic")!)], rate: RATE };
       schema.forEach((spec) => {
         if (spec.kind === "sample")
           bank.setSample(0, spec.id, spec.id, spec.wavetable ? classic : { channels: [sine], rate: RATE });

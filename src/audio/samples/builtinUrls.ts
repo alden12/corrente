@@ -1,31 +1,22 @@
 /**
- * Browser-only: the bundled bytes for the built-in kit and a decoder. The `?url`
- * suffix tells Vite to emit each WAV as a build asset and hand back its URL
- * (the same asset-bundling pattern the worklets use). Kept separate from the
- * DOM-free `catalog.ts` so the Node MCP server can import the catalog without
+ * Browser-only: the bundled bytes for the built-in kit and a decoder. Vite emits each WAV as a
+ * build asset and hands back its URL (the same asset-bundling pattern the worklets use). Kept
+ * separate from the DOM-free `catalog.ts` so the Node MCP server can import the catalog without
  * pulling in Vite asset imports or Web Audio.
  */
 import { parseRef } from "./catalog";
 import { resolveSampleHash } from "./sampleRegistry";
 import { getAudioBuffer } from "../audioStore";
-import kickUrl from "./assets/kick.wav?url";
-import snareUrl from "./assets/snare.wav?url";
-import hatClosedUrl from "./assets/hat-closed.wav?url";
-import hatOpenUrl from "./assets/hat-open.wav?url";
-import clapUrl from "./assets/clap.wav?url";
-import rimUrl from "./assets/rim.wav?url";
-import tomUrl from "./assets/tom.wav?url";
 
-/** Built-in sample id -> bundled asset URL. Keys match `BUILTIN_SAMPLES`. */
-export const BUILTIN_URLS: Record<string, string> = {
-  kick: kickUrl,
-  snare: snareUrl,
-  "hat-closed": hatClosedUrl,
-  "hat-open": hatOpenUrl,
-  clap: clapUrl,
-  rim: rimUrl,
-  tom: tomUrl,
-};
+/**
+ * Built-in sample id -> bundled asset URL: each `assets/<id>.wav`, its name the id in
+ * `BUILTIN_SAMPLES` (a test checks every one has its file). Node reads the same files
+ * (server/render/nodeRender.ts).
+ */
+const FILES = import.meta.glob<string>("./assets/*.wav", { eager: true, query: "?url", import: "default" });
+export const BUILTIN_URLS: Record<string, string> = Object.fromEntries(
+  Object.entries(FILES).map(([path, url]) => [path.slice("./assets/".length, -".wav".length), url]),
+);
 
 // One decode per source, shared across every Sampler instance (buffers are
 // immutable). Keyed by a "builtin:<id>" ref or by an asset's content hash, so two

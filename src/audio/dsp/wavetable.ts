@@ -1,6 +1,6 @@
 /**
  * The built-in wavetables (no DOM, so unit-testable on their own): banks of single-cycle
- * waveforms a `wavetable` block morphs through, dark to bright (bank/deviceSamples.ts loads
+ * waveforms a `wavetable` block morphs through, dark to bright (render/sampleAudio.ts loads
  * them). The brighter tables are built additively from a bounded number of partials.
  */
 
@@ -35,18 +35,23 @@ export function buildTables(): Float32Array[] {
   ];
 }
 
+const pulse = (width: number) => (k: number) => Math.sin(Math.PI * k * width) / k;
+
 /**
- * The built-in wavetables a `wavetable` block morphs through, each dark to bright, in the order of
- * BUILTIN_WAVETABLES (samples/catalog.ts):
+ * The built-in wavetables a `wavetable` block morphs through, each dark to bright, by the id
+ * BUILTIN_WAVETABLES (samples/catalog.ts) names them by:
  * - classic: sine, triangle, square, sawtooth - the Wavetable instrument's bank;
  * - harmonics: the fundamental, then 2, 4, 8 and 16 equal harmonics - an organ's drawbars pulled out;
  * - pulse: a square narrowing to a thin pulse (widths 0.5, 0.3, 0.15, 0.05), the nasal end of PWM.
  */
-export function buildBanks(): Float32Array[][] {
-  const pulse = (width: number) => (k: number) => Math.sin(Math.PI * k * width) / k;
-  return [
-    buildTables(),
-    [1, 2, 4, 8, 16].map((count) => additive((k) => (k <= count ? 1 : 0))),
-    [0.5, 0.3, 0.15, 0.05].map((width) => additive(pulse(width))),
-  ];
-}
+const BUILTIN_CYCLES: Record<string, () => Float32Array[]> = {
+  classic: buildTables,
+  harmonics: () => [1, 2, 4, 8, 16].map((count) => additive((k) => (k <= count ? 1 : 0))),
+  pulse: () => [0.5, 0.3, 0.15, 0.05].map((width) => additive(pulse(width))),
+};
+
+/** A built-in wavetable's single cycles by its id, or undefined for one there isn't. */
+export const builtinWavetable = (id: string): Float32Array[] | undefined => BUILTIN_CYCLES[id]?.();
+
+/** Every built-in wavetable's id. */
+export const builtinWavetableIds = (): string[] => Object.keys(BUILTIN_CYCLES);

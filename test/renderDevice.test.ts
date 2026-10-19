@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DeviceRenderError, renderDevice, type Rendered } from "../src/audio/render/renderDevice";
 import { decodeWav } from "../src/audio/render/wav";
-import { nodeRenderSetup } from "../server/render/nodeRender";
+import { loadNodeSample, nodeRenderSetup } from "../server/render/nodeRender";
+import { BUILTIN_URLS } from "../src/audio/samples/builtinUrls";
+import { BUILTIN_SAMPLES, builtinRef } from "../src/audio/samples/catalog";
 import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
 import { ENGINE_EFFECTS } from "../src/audio/effects/engine";
 
@@ -83,6 +85,17 @@ describe("renderDevice (AGENT-4.9): a device alone, on the engine, in Node", () 
       renderDevice({ instrument: { type: "subtractive" } }, { kind: "impulse" }, 0.1, nodeRenderSetup()),
     ).rejects.toBeInstanceOf(DeviceRenderError);
   });
+});
+
+describe("the built-in kit, found by file name", () => {
+  it.each(BUILTIN_SAMPLES.map((sample) => [sample.id] as const))(
+    "%s is bundled for the browser and read in Node",
+    async (id) => {
+      expect(BUILTIN_URLS[id]).toBeTruthy();
+      const audio = await loadNodeSample(builtinRef(id));
+      expect(audio?.channels[0].length).toBeGreaterThan(100);
+    },
+  );
 });
 
 describe("decodeWav", () => {
