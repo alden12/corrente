@@ -14,6 +14,7 @@ import { pluck } from "./pluck";
 import { pluckBass } from "./pluckBass";
 import { nimbus } from "./nimbus";
 import { wavetable } from "./wavetable";
+import { hybridWave } from "./hybridWave";
 import { wobble } from "./wobble";
 import type { EngineBuiltin } from "../../definitions/builtin";
 
@@ -24,6 +25,7 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   organ,
   mellotronFlute,
   wavetable,
+  hybridWave,
   microVa,
   nimbus,
   sampler,

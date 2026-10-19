@@ -198,6 +198,7 @@ describe("MCP server (tracks)", () => {
       "bell",
       "drumkit",
       "fm",
+      "hybrid-wave",
       "mellotron",
       "micro-va",
       "nimbus",

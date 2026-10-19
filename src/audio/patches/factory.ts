@@ -44,6 +44,7 @@ const builtinFor =
 
 const nimbus = builtinFor("nimbus");
 const microVa = builtinFor("micro-va");
+const hybridWave = builtinFor("hybrid-wave");
 
 // Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
 // fills the rest from schema defaults when the patch is applied.
@@ -282,6 +283,19 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     "dly.div": "1/8.",
     "dly.fb": 0.3,
     "dly.mix": 0.15,
+  }),
+  // --- Hybrid Wave ----------------------------------------------------------
+  // Alden's preset on the Block Test Synth it was promoted from: the filter open, so the wavetable's
+  // morph and the PWM layer carry it.
+  hybridWave("Keys", "Morph Keys", ["keys", "bright", "glassy"], {
+    "wt.position": 0.36,
+    "filter.cutoff": 8000,
+    "filter.resonance": 0.1,
+    "filter.env": 0,
+    "fenv.decay": 38,
+    "env.attack": 9,
+    "env.decay": 670,
+    "env.sustain": 0.68,
   }),
   // --- FX -------------------------------------------------------------------
   nimbus("FX", "Noise Sweep", ["fx", "airy"], {
