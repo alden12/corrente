@@ -21,10 +21,8 @@ import { setTransport as setEngineTransport } from "../bank/pool";
 import { renderIsolated } from "./renderIsolated";
 import { setSampleAssets } from "../samples/sampleRegistry";
 import { soloMutedTrackIds } from "./mix";
-import { beatsToSeconds, tileClipNotes } from "../sequencer/scheduler";
-import { grooveById } from "../grooves/catalog";
-import { grooveAt } from "../sequencer/groove";
-import { clamp } from "../../util";
+import { beatsToSeconds } from "../sequencer/scheduler";
+import { trackNotes } from "../render/trackNotes";
 import { getAudioBuffer } from "../audioStore";
 import { audioPlayWindow } from "./audioWindow";
 import { createMidiDevice } from "../midi/device/registry";
@@ -33,7 +31,6 @@ import { GRID } from "../sequencer/types";
 import type { ProjectStore, EffectInstance, InstrumentTrack, AudioTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
 import type { Instrument } from "../instruments/types";
-import type { NoteEvent } from "../sequencer/types";
 import type { TransportClock } from "../midi/device/clock";
 import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 
@@ -65,9 +62,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   const durationSec = beatsToSeconds(regionBeats, bpm) + tailSec;
   const frames = Math.max(1, Math.ceil(durationSec * sampleRate));
   const ctx = new OfflineAudioContext(2, frames, sampleRate);
-  // Project groove: the schedule-time onset + velocity nudge the live scheduler applies per note.
-  const { id: grooveId, amount: grooveAmount } = project.getGroove();
-  const groove = grooveById(grooveId);
+  // The notes' timeline: tempo, region, and the groove the live scheduler nudges each note by.
+  const timeline = { tempo: bpm, loopStart, length: project.length, groove: project.getGroove() };
   // The transport clock MIDI devices read, as a pure function of the render timeline: render time 0
   // maps to beat loopStart, so continuousBeatAtTime(t) = loopStart + t*bps. `playing` is always true
   // (we are bouncing the arrangement), so generators (arp) lock to the grid exactly as they do live.
@@ -155,17 +151,10 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       // so an arp / octavator renders faithfully offline. No devices => head IS the instrument.
       const noteHead = buildMidiChain(track, instrument, transportClock, disposables);
 
-      const events = flattenTrackNotes(track, loopStart, project.length);
-      scheduleFns.push(() => {
-        for (const { note, atBeat } of events) {
-          // Groove nudges the onset + scales velocity at schedule time (the notes are untouched),
-          // matching Scheduler.tick. A no-op when the project has no groove (amount 0 / Straight).
-          const shift = grooveAt(groove, atBeat, grooveAmount);
-          const whenSec = beatsToSeconds(atBeat - loopStart + shift.offsetBeats, bpm);
-          const velocity = clamp(note.velocity * shift.velocityScale, 0, 1);
-          noteHead.playNote(note.pitch, beatsToSeconds(note.length, bpm), velocity, Math.max(0, whenSec));
-        }
-      });
+      const notes = trackNotes(track, timeline);
+      scheduleFns.push(() =>
+        notes.forEach((note) => noteHead.playNote(note.pitch, note.length, note.velocity, note.start)),
+      );
     } else {
       // Audio track: input -> effects -> gain -> group tree; its clips are scheduled below.
       const input = ctx.createGain();
@@ -228,25 +217,6 @@ function buildMidiChain(
   });
   disposables.push(...devices);
   return devices[0] ?? instrument;
-}
-
-/** Flatten a track's arrangement into absolute-beat note onsets within [loopStart, length). */
-function flattenTrackNotes(
-  track: InstrumentTrack,
-  loopStart: number,
-  length: number,
-): { note: NoteEvent; atBeat: number }[] {
-  const onsets: { note: NoteEvent; atBeat: number }[] = [];
-  for (const placement of track.placements) {
-    const clip = track.clips.find((entry) => entry.id === placement.clipId);
-    if (!clip) continue;
-    const { notes, lengthBeats } = clip.store.getClip();
-    for (const note of tileClipNotes(notes, lengthBeats, placement.offset, placement.length)) {
-      const atBeat = placement.startBeat + note.start;
-      if (atBeat >= loopStart && atBeat < length) onsets.push({ note, atBeat });
-    }
-  }
-  return onsets;
 }
 
 /** Decode every audio-clip file the project references into `audioBuffers` (keyed by fileId). A

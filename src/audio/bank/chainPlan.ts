@@ -119,3 +119,49 @@ export const applyBypass = (
     const param = bypass.get(effect.id);
     if (param) target.setFixed(param, effect.bypassed ? 1 : 0);
   });
+
+/** An engine instrument's plan with the effects it takes in, and which those are. */
+interface InstrumentChain {
+  plan: ChainPlan;
+  absorbed: EffectInstance[];
+}
+
+/** The key of what an instrument took in, to see when it changes. */
+export const absorbedKey = (absorbed: EffectInstance[]): string =>
+  absorbed.length === 0 ? "" : pieceKey({ kind: "run", effects: absorbed });
+
+/**
+ * An engine instrument's plan with the run of engine effects after it, or alone if that would be too
+ * heavy; undefined for an instrument not on the engine.
+ */
+export const instrumentChain = (
+  type: string,
+  store: ParamStore,
+  effects: EffectInstance[],
+  keyed: ReadonlySet<string> = new Set(),
+): InstrumentChain | undefined => {
+  if (!engineDevice(type)) return undefined;
+  const instrument = { key: "instrument", type, store };
+  // A keyed effect (part 5) needs a later stage than its key's track, so the run stops before it.
+  const run = leadingRun(effects, keyed);
+  const whole = run.length > 0 ? chainPlan([instrument, ...run.map((effect) => memberOf(effect))], true) : undefined;
+  if (whole) return { plan: whole, absorbed: run };
+  const alone = chainPlan([instrument], true);
+  return alone && { plan: alone, absorbed: [] };
+};
+
+/**
+ * A run of engine effects as plans: one for the whole run if it composes within the cost cap, or else
+ * one each (undefined for an effect too heavy even alone). An effect in `keyed` is keyed by another
+ * track, so it hears that track as its sidechain.
+ */
+export const runParts = (
+  run: EffectInstance[],
+  keyed: ReadonlySet<string> = new Set(),
+): { plan: ChainPlan | undefined; effects: EffectInstance[] }[] => {
+  const member = (effect: EffectInstance) => memberOf(effect, keyed.has(effect.id));
+  const whole = chainPlan(run.map(member), false);
+  return whole
+    ? [{ plan: whole, effects: run }]
+    : run.map((effect) => ({ plan: chainPlan([member(effect)], false), effects: [effect] }));
+};

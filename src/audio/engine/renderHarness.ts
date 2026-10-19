@@ -12,11 +12,15 @@
  * module is dead-code-eliminated from production builds and never ships.
  */
 import { renderWorkletSmokeTest, renderProjectOffline, analyzeProjectMix, peakAmplitude } from "./renderOffline";
-import { ProjectStore } from "../project/projectStore";
+import { ProjectStore, type Track } from "../project/projectStore";
 import { encodeWav } from "../recording/wav";
 import { putAudio } from "../audioStore";
 import { renderPortraits } from "../portraits/renderPortraits";
 import type { Portrait } from "../portraits/draw";
+import { renderProject } from "../render/renderProject";
+import { fetchEngine } from "../bank/pool";
+import { browserSample } from "../bank/deviceSamples";
+import { spectrumOf } from "../analysis/spectrum";
 
 interface RenderHarness {
   __dawRenderWorkletSmoke?: () => Promise<number>;
@@ -26,6 +30,13 @@ interface RenderHarness {
   __dawRenderMidiDeviceSmoke?: () => Promise<number>;
   __dawAnalyzeMix?: () => Promise<unknown>;
   __dawRenderPortraits?: () => Promise<Record<string, Portrait>>;
+  __dawRenderBothWays?: (name: string) => Promise<{ offline: BandLevels; core: BandLevels }>;
+}
+
+/** A render's level by octave band, and overall, in dB: what the two renders are compared by. */
+interface BandLevels {
+  bands: number[];
+  rms: number;
 }
 
 // Build a tiny project (the seeded default instrument track + a wavetable/worklet track), put a
@@ -73,6 +84,49 @@ const buildMidiDeviceProject = (): ProjectStore => {
   return project;
 };
 
+/**
+ * Projects to render both ways, building up the mix a piece at a time, so a difference has a place.
+ * One note each, held to the end: the browser's offline render loses every engine note event after
+ * the first (INST-49), so a chord, a note-off or a second track would compare that bug, not the mix.
+ */
+const MIX_PROJECTS: Record<string, (project: ProjectStore) => void> = {
+  synth: (project) => notes(project.addTrack("subtractive"), [60], 0.5),
+  bass: (project) => notes(project.addTrack("fm"), [36], 0.8),
+  "track effect": (project) => {
+    const bass = project.addTrack("fm");
+    project.addEffect(bass.id, "distortion");
+    project.setVolume(bass.id, 0.6);
+    notes(bass, [36], 0.8);
+  },
+  "group effect": (project) => {
+    const keys = project.addTrack("subtractive");
+    project.addEffect(keys.parentId!, "reverb");
+    notes(keys, [60], 0.5);
+  },
+};
+
+const MIX_BEATS = 8;
+
+/** Notes held from the start to the end of the project. */
+const notes = (track: Track, pitches: number[], velocity: number) => {
+  if (track.kind === "instrument")
+    pitches.forEach((pitch) => track.clips[0].store.addNote({ pitch, start: 0, length: MIX_BEATS, velocity }));
+};
+
+const mixProject = (name: string): ProjectStore => {
+  const project = new ProjectStore(false);
+  project.setTempo(120);
+  project.setLength(MIX_BEATS);
+  MIX_PROJECTS[name](project);
+  return project;
+};
+
+const levelsOf = (samples: Float32Array, sampleRate: number): BandLevels => {
+  const spectrum = spectrumOf(samples, sampleRate);
+  const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+  return { bands: spectrum.bands.map((band) => band.db), rms: 20 * Math.log10(rms) };
+};
+
 /** Install the offline-render e2e hooks onto `window`. Called from main.tsx in dev/test only. */
 export function installRenderHarness(): void {
   const harness = window as unknown as RenderHarness;
@@ -86,4 +140,23 @@ export function installRenderHarness(): void {
   harness.__dawAnalyzeMix = async () => analyzeProjectMix(buildSmokeProject());
   // Every built-in's Explore portrait (COMM-1.9.2): what `yarn portraits` collects and commits.
   harness.__dawRenderPortraits = renderPortraits;
+  // The same project through the browser's offline render and through the engine render core.
+  harness.__dawRenderBothWays = async (name) => {
+    const sampleRate = 48000;
+    const offline = await renderProjectOffline(mixProject(name), { sampleRate, tailSec: 0 });
+    const decoder = new OfflineAudioContext(1, 1, sampleRate);
+    const core = await renderProject(
+      mixProject(name),
+      {
+        engine: await fetchEngine(),
+        loadSample: browserSample(decoder),
+        sampleRate,
+      },
+      { tailSec: 0 },
+    );
+    return {
+      offline: levelsOf(offline.getChannelData(0), sampleRate),
+      core: levelsOf(core.channels[0], sampleRate),
+    };
+  };
 }

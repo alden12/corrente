@@ -76,7 +76,7 @@ export class DeviceSamples {
 const answerKey = (param: string, ref: string) => `${param}\n${ref}`;
 
 /** A sample fetched and decoded by the browser: up to two channels at its own rate, or null for none. */
-const browserSample =
+export const browserSample =
   (context: BaseAudioContext): LoadSample =>
   async (ref) => {
     const buffer = await loadSampleBuffer(context, ref);

@@ -4,6 +4,7 @@
  * through a delay making up for what's later beside it (INST-36.7, latency.ts).
  */
 import { compensate, type MixNode } from "./latency";
+import { SOFT_CLIP_RANGE, softClip } from "./softClip";
 
 /**
  * The master bus, through a gentle brick-wall limiter (stacked tracks and effects sum) and then a
@@ -26,18 +27,6 @@ export const masterBus = (context: BaseAudioContext): { master: GainNode; limite
   const softClip = new WaveShaperNode(context, { curve: softClipCurve(), oversample: "2x" });
   master.connect(limiter).connect(scale).connect(softClip).connect(context.destination);
   return { master, limiter };
-};
-
-/** Where the soft clip starts to bend, and how far past full scale its curve reaches. */
-export const SOFT_CLIP_KNEE = 0.9;
-export const SOFT_CLIP_RANGE = 4;
-
-/** Unchanged up to the knee, then curving smoothly toward full scale and never past it. */
-export const softClip = (sample: number): number => {
-  const size = Math.abs(sample);
-  if (size <= SOFT_CLIP_KNEE) return sample;
-  const room = 1 - SOFT_CLIP_KNEE;
-  return Math.sign(sample) * (SOFT_CLIP_KNEE + room * Math.tanh((size - SOFT_CLIP_KNEE) / room));
 };
 
 /** `softClip` over -RANGE..RANGE, as the shaper's -1..1 curve. Fine enough that interpolating it is exact under the knee. */

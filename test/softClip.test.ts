@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOFT_CLIP_KNEE, softClip } from "../src/audio/engine/mixer";
+import { SOFT_CLIP_KNEE, softClip } from "../src/audio/engine/softClip";
 
 describe("the master's soft clip (INST-46)", () => {
   it("leaves everything under the knee alone", () => {

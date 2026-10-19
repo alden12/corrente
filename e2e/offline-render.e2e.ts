@@ -143,3 +143,33 @@ test("every built-in renders a non-empty sound portrait", async ({ page }) => {
   expect(Object.keys(portraits).length).toBeGreaterThan(20);
   expect(empty).toEqual([]);
 });
+
+/**
+ * The engine render core (AGENT-4.9) against the browser's own offline render of the same project, a
+ * piece of the mix at a time. The core is what the agent hears in Node, so it has to sound like the
+ * app: the same shape across the octave bands, and the same level but for one thing. The browser's
+ * master DynamicsCompressor adds makeup gain (about +1.7 dB at its settings, below its threshold),
+ * which the core doesn't reproduce; the core has the soft clip alone (renderProject.ts).
+ */
+const MAKEUP_DB = 1.7;
+for (const name of ["synth", "bass", "track effect", "group effect"])
+  test(`the engine render core sounds like the browser's offline render: ${name}`, async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __dawRenderBothWays?: unknown }).__dawRenderBothWays === "function",
+    );
+    type Levels = { bands: number[]; rms: number };
+    const { offline, core } = await page.evaluate(
+      async (project) =>
+        (
+          window as unknown as { __dawRenderBothWays: (name: string) => Promise<{ offline: Levels; core: Levels }> }
+        ).__dawRenderBothWays(project),
+      name,
+    );
+    expect(offline.rms - core.rms).toBeCloseTo(MAKEUP_DB, 0);
+    // Every band audible in either, off by the same makeup: the same sound, a little quieter.
+    core.bands.forEach((db, index) => {
+      if (Math.max(db, offline.bands[index]) < -90) return;
+      expect(Math.abs(offline.bands[index] - db - MAKEUP_DB)).toBeLessThan(1);
+    });
+  });

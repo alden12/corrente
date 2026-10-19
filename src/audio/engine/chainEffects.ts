@@ -15,7 +15,7 @@ import type { EffectInstance } from "../project/projectStore";
 import type { Effect } from "../effects/types";
 import { passThroughEffect } from "../effects/registry";
 import { trackEffectStage } from "../bank/stages";
-import { applyBypass, chainPlan, memberOf, pieceKey, piecesOf, type ChainPiece } from "../bank/chainPlan";
+import { applyBypass, chainPlan, memberOf, pieceKey, piecesOf, runParts, type ChainPiece } from "../bank/chainPlan";
 import { EngineEffect } from "../bank/EngineEffect";
 
 interface LivePiece {
@@ -167,12 +167,7 @@ export const runEffects = (
   stageOf: (effect: EffectInstance) => number,
   keys: ReadonlyMap<string, AudioNode> = new Map(),
 ): EngineEffect[] => {
-  const member = (effect: EffectInstance) => memberOf(effect, keys.has(effect.id));
-  const whole = chainPlan(run.map(member), false);
-  const parts = whole
-    ? [{ plan: whole, effects: run }]
-    : run.map((effect) => ({ plan: chainPlan([member(effect)], false), effects: [effect] }));
-  return parts.flatMap(({ plan, effects }) => {
+  return runParts(run, new Set(keys.keys())).flatMap(({ plan, effects }) => {
     if (!plan) {
       console.error(`${effects[0].type}: too heavy for the engine`);
       return [];

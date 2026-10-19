@@ -7,39 +7,8 @@ import type { Instrument } from "../instruments/types";
 import { SilentInstrument } from "../instruments/Silent";
 import type { EffectInstance } from "../project/projectStore";
 import type { ParamStore } from "../params/store";
-import { engineDevice } from "../definitions/engineDevices";
-import { applyBypass, chainPlan, leadingRun, memberOf, pieceKey, type ChainPlan } from "../bank/chainPlan";
+import { absorbedKey, applyBypass, instrumentChain } from "../bank/chainPlan";
 import { EngineInstrument } from "../bank/EngineInstrument";
-
-/** An engine instrument's plan with the effects it takes in, and which those are. */
-interface InstrumentChain {
-  plan: ChainPlan;
-  absorbed: EffectInstance[];
-}
-
-/** The key of what an instrument took in, to see when it changes. */
-export const absorbedKey = (absorbed: EffectInstance[]): string =>
-  absorbed.length === 0 ? "" : pieceKey({ kind: "run", effects: absorbed });
-
-/**
- * An engine instrument's plan with the run of engine effects after it, or alone if that would be too
- * heavy; undefined for an instrument not on the engine.
- */
-export const instrumentChain = (
-  type: string,
-  store: ParamStore,
-  effects: EffectInstance[],
-  keyed: ReadonlySet<string> = new Set(),
-): InstrumentChain | undefined => {
-  if (!engineDevice(type)) return undefined;
-  const instrument = { key: "instrument", type, store };
-  // A keyed effect (part 5) needs a later stage than its key's track, so the run stops before it.
-  const run = leadingRun(effects, keyed);
-  const whole = run.length > 0 ? chainPlan([instrument, ...run.map((effect) => memberOf(effect))], true) : undefined;
-  if (whole) return { plan: whole, absorbed: run };
-  const alone = chainPlan([instrument], true);
-  return alone && { plan: alone, absorbed: [] };
-};
 
 /** A track's instrument, and the effects of its chain it plays itself (the rest follow it). */
 export const trackInstrument = (
