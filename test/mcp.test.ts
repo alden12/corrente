@@ -184,6 +184,7 @@ describe("MCP server (tracks)", () => {
       "drumkit",
       "fm",
       "mellotron",
+      "micro-va",
       "nimbus",
       "organ",
       "pad",
@@ -237,6 +238,11 @@ describe("MCP server (tracks)", () => {
     expect((await call("set_parameter", { id: "nope", value: 1 })).isError).toBe(true);
     // fm.ratio is not a subtractive param
     expect((await call("set_parameter", { id: "fm.ratio", value: 2 })).isError).toBe(true);
+
+    // A client that sends every value as text (AGENT-31): read as the number it says.
+    expect((await call("set_parameter", { id: "filter.cutoff", value: "1500" })).isError).toBeFalsy();
+    await waitFor(() => messages.some((message) => "value" in message && message.value === 1500));
+    expect((await call("set_parameter", { id: "filter.cutoff", value: "lots" })).isError).toBe(true);
   });
 
   it("list_samples lists the built-in kit; set_parameter validates a sampler sample ref", async () => {

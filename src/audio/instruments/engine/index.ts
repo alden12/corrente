@@ -3,6 +3,7 @@ import { acid } from "./acid";
 import { drumkit } from "./drumkit";
 import { fm } from "./fm";
 import { mellotronFlute } from "./mellotronFlute";
+import { microVa } from "./microVa";
 import { organ } from "./organ";
 import { sampler } from "./sampler";
 import { subtractive } from "./subtractive";
@@ -23,6 +24,7 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   organ,
   mellotronFlute,
   wavetable,
+  microVa,
   nimbus,
   sampler,
   drumkit,
