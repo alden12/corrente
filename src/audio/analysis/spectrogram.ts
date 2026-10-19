@@ -35,10 +35,8 @@ export function spectrogramOf(
   { width, rows }: { width: number; rows: number },
 ): Spectrogram {
   const length = channels[0]?.length ?? 0;
-  const mono = Float32Array.from(
-    { length },
-    (_, index) => channels.reduce((sum, channel) => sum + channel[index], 0) / channels.length,
-  );
+  const mono = new Float32Array(length);
+  channels.forEach((channel) => channel.forEach((sample, index) => (mono[index] += sample / channels.length)));
   const binHz = sampleRate / FRAME;
   const halfStep = (HIGHEST_HZ / LOWEST_HZ) ** (0.5 / (rows - 1));
   /** For each row, the bins it spans, or failing that, the fractional bin it falls at. */
@@ -61,14 +59,12 @@ export function spectrogramOf(
       imaginary[index] = 0;
     });
     fft(real, imaginary, false);
-    amplitude.forEach((_, bin) => (amplitude[bin] = Math.hypot(real[bin], imaginary[bin]) * amplitudeScale));
+    // Plain loops: this runs a few hundred times a picture (Math.hypot alone was most of its time).
+    for (let bin = 0; bin < amplitude.length; bin++)
+      amplitude[bin] = Math.sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin]) * amplitudeScale;
     return Float32Array.from(rowBins, ({ from, to, at }) => {
-      const level =
-        to >= from
-          ? amplitude
-              .subarray(from, Math.min(to, FRAME / 2) + 1)
-              .reduce((loudest, value) => Math.max(loudest, value), 0)
-          : interpolate(amplitude, at);
+      let level = to >= from ? 0 : interpolate(amplitude, at);
+      for (let bin = from; bin <= Math.min(to, FRAME / 2); bin++) level = Math.max(level, amplitude[bin]);
       return level > 1e-6 ? Math.max(FLOOR_DB, 20 * Math.log10(level)) : FLOOR_DB;
     });
   });
