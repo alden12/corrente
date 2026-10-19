@@ -18,11 +18,16 @@ const HEIGHT = MARGIN.top + PLOT.height + MARGIN.bottom;
 /** The level range the palette spans, in dBFS: quieter is black, 0 is the palette's top. */
 export const LEVEL_RANGE = { quietest: -90, loudest: 0 } as const;
 
-/** The picture's key, said alongside it so a reader knows how to read it. */
+/**
+ * The picture's key, said alongside it so a reader knows how to read it. It warns about leakage
+ * because the first real use misread it twice: faint spread around loud notes looked like faults.
+ */
 export const PICTURE_KEY =
   `Spectrogram: time across in seconds, frequency up on a log scale from ${LOWEST_HZ} Hz to ${HIGHEST_HZ / 1000} kHz, ` +
   `brightness is level on the magma palette from ${LEVEL_RANGE.quietest} dBFS (black) through purple and orange ` +
-  `to ${LEVEL_RANGE.loudest} dBFS (pale yellow).`;
+  `to ${LEVEL_RANGE.loudest} dBFS (pale yellow). Dark purple (about -60 dBFS and below) close to loud notes, such as ` +
+  "a haze under a chord or thin stripes at note starts, is mostly the analysis's own leakage rather than the sound: " +
+  "judge faults by the bright parts and check a suspicion against the band levels before acting on it.";
 
 /** Matplotlib's magma at evenly spaced stops, from quiet to loud. */
 const MAGMA: [number, number, number][] = [
