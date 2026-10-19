@@ -8,34 +8,23 @@
 import { z } from "zod";
 import { defineTool, type ToolContext } from "./factory";
 import { analyzeProjectMix, analyzeTrackDevice } from "../../engine/renderInWorker";
-import { PHRASE_NAMES, PHRASES } from "../../analysis/phrases";
-
-const phraseList = PHRASE_NAMES.map((name) => `"${name}" (${PHRASES[name].says})`).join(", ");
+import { ANALYZE_DEVICE_DOC, ANALYZE_MIX_DOC, deviceAnalysisArgs } from "../../analysis/toolDocs";
 
 export function analysisTools(context: ToolContext) {
   return [
     defineTool({
       name: "analyze_mix",
-      description:
-        "Render the whole project offline (the exact audio the user would hear) and measure its master output: " +
-        "peak level and headroom (dBFS), whether it is clipping, and overall loudness (RMS dBFS). Use it to check " +
-        "your work - that the mix is not clipping and not too quiet or too hot - before telling the user you are done.",
+      description: ANALYZE_MIX_DOC,
       schema: z.object({}),
       run: () => analyzeProjectMix(context.projectStore),
     }),
-    // The same as the MCP tool (AGENT-4.6), less the picture: this chat carries text only.
+    // The MCP tool's text and arguments (toolDocs.ts), less the picture: this chat carries text only.
     defineTool({
       name: "analyze_device",
-      description:
-        "Render one track's sound on its own (its MIDI devices, instrument and effects, without the rest of the mix) " +
-        "and measure it: levels, octave-band balance (dBFS RMS by band centre), spectral centroid (low is dark, high " +
-        "is bright) and stereo correlation (1 mono, 0 wide). Use it to check a sound you're designing. " +
-        `\`play\`: its own notes ("track", the default when it has any), or a phrase for its role: ${phraseList}. ` +
-        '`through`: an effect id to hear the chain only up to it, or "instrument" for the instrument alone.',
+      description: ANALYZE_DEVICE_DOC,
       schema: z.object({
         trackId: z.string().optional(),
-        play: z.enum(["track", ...PHRASE_NAMES]).optional(),
-        through: z.string().optional(),
+        ...deviceAnalysisArgs,
       }),
       run: async ({ trackId, play, through }) => {
         const track = context.resolveTrack(trackId);

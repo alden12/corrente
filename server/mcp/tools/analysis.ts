@@ -2,21 +2,20 @@
 import { z } from "zod";
 import { ok, fail, type ToolResult } from "../shared";
 import type { ToolContext } from "../context";
-import { PHRASE_NAMES, PHRASES } from "../../../src/audio/analysis/phrases";
 import type { DeviceAnalysis } from "../../../src/audio/analysis/analyzeDevice";
-
-const phraseList = PHRASE_NAMES.map((name) => `"${name}" (${PHRASES[name].says})`).join(", ");
+import {
+  ANALYZE_DEVICE_DOC,
+  ANALYZE_MIX_DOC,
+  PICTURE_DOC,
+  deviceAnalysisArgs,
+} from "../../../src/audio/analysis/toolDocs";
 
 export function registerAnalysisTools({ server, target, trackArg, resolveTrack }: ToolContext): void {
   server.registerTool(
     "analyze_mix",
     {
       title: "Analyze mix",
-      description:
-        "Render the whole arrangement (the audio the user would hear) and measure it, naming the project it heard: peak level and headroom (dBFS) " +
-        "going into the master, whether it clips, and overall loudness (RMS dBFS), with a plain-language note. " +
-        "Anything the render couldn't play is listed under `omitted`. Use it to check your work - that the mix " +
-        "isn't clipping, too quiet or too hot - before telling the user you're done.",
+      description: `${ANALYZE_MIX_DOC} The report names the project it heard.`,
       inputSchema: {},
     },
     async () => {
@@ -35,20 +34,10 @@ export function registerAnalysisTools({ server, target, trackArg, resolveTrack }
     "analyze_device",
     {
       title: "Analyze a track's sound",
-      description:
-        "Render one track's sound on its own - its MIDI devices, instrument and effects, without the rest of the mix, " +
-        "its groups' effects or its fader - and measure it: levels (as analyze_mix), octave-band balance (dBFS RMS by " +
-        "band centre), spectral centroid (low is dark, high is bright) and stereo correlation (1 mono, 0 wide). " +
-        "`picture: true` adds a spectrogram image with labelled axes, where filter sweeps, envelopes, vibrato, detune, " +
-        "noise and mud show; read it for mechanics (what changes where), and use it to check a sound you're designing " +
-        "does what you meant. It costs more tokens, so ask for it when the numbers aren't enough. " +
-        `\`play\`: its own notes ("track", the default when it has any, up to 32 beats), or a phrase that suits its ` +
-        `role, at the project's tempo: ${phraseList}. Pick the phrase for its role: chords make a lead read like a pad. ` +
-        '`through`: an effect id to hear the chain only up to and including it, or "instrument" for the instrument alone.',
+      description: `${ANALYZE_DEVICE_DOC} ${PICTURE_DOC}`,
       inputSchema: {
         ...trackArg,
-        play: z.enum(["track", ...PHRASE_NAMES]).optional(),
-        through: z.string().optional(),
+        ...deviceAnalysisArgs,
         picture: z.boolean().optional(),
       },
     },
