@@ -18,6 +18,9 @@ import type { DawTarget, Reply } from "./mcp/target";
 import { makeToolContext } from "./mcp/context";
 import { registerDawTools } from "./mcp/tools";
 
+/** How long the tab gets to render and measure the song for analyze_mix. */
+const ANALYSIS_TIMEOUT_MS = 120_000;
+
 export interface DawMcp {
   server: McpServer;
   close(): Promise<void>;
@@ -48,6 +51,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     midiDeviceParamChanged: (msg) => mirror.getMidiDevice(msg.trackId, msg.deviceId)?.params.set(msg.id, msg.value),
     historyReply: (msg) => resolvePending(msg),
     patchReply: (msg) => resolvePending(msg),
+    analysisReply: (msg) => resolvePending(msg),
   };
 
   // Both RPC paths (history, patches) correlate by a shared id and resolve here.
@@ -95,13 +99,13 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
    * in the tab (OPFS), so these tools can't read the mirror - they ask the tab.
    * Rejects if no tab is connected or the reply doesn't arrive in time.
    */
-  const awaitReply = (sendRequest: (id: string) => boolean): Promise<Reply> =>
+  const awaitReply = (sendRequest: (id: string) => boolean, timeoutMs = 5000): Promise<Reply> =>
     new Promise((resolve, reject) => {
       const id = `rq-${nextReqId++}`;
       const timer = setTimeout(() => {
         pending.delete(id);
         reject(new Error("The DAW tab did not respond in time."));
-      }, 5000);
+      }, timeoutMs);
       pending.set(id, { resolve, timer });
       if (!sendRequest(id)) {
         clearTimeout(timer);
@@ -123,6 +127,8 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     connected,
     requestHistory: requestTab,
     requestPatch,
+    // A song takes a moment to render, a long one longer, so this waits well past the other requests.
+    analyzeMix: () => awaitReply((id) => sendToTab({ type: "analysisRequest", id }), ANALYSIS_TIMEOUT_MS),
   };
   const server = new McpServer({ name: "corrente", version: "0.1.0" });
   const context = makeToolContext(server, target);

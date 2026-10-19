@@ -7,7 +7,7 @@
 import type { AudioTrack, InstrumentTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
 import { GRID, type NoteEvent } from "../sequencer/types";
-import { beatsToSeconds, tileClipNotes } from "../sequencer/scheduler";
+import { beatsToSeconds, tileClipNotes } from "../sequencer/timing";
 import { grooveById } from "../grooves/catalog";
 import { grooveAt } from "../sequencer/groove";
 import { clamp } from "../../util";

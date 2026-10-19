@@ -732,6 +732,30 @@ describe("MCP server (tracks)", () => {
     expect(res.content[0].text).toMatch(/no patch matching/i);
   });
 
+  it("analyze_mix asks the tab, which holds the project's own samples, and passes its report on", async () => {
+    await connectTab();
+    tab!.on("message", (data) => {
+      const msg = JSON.parse(data.toString()) as { type: string; id: string };
+      if (msg.type !== "analysisRequest") return;
+      tab!.send(
+        JSON.stringify({
+          type: "analysisReply",
+          id: msg.id,
+          ok: true,
+          result: { peakDbfs: -6.2, note: "Levels look healthy." },
+        }),
+      );
+    });
+    const report = parse(await call("analyze_mix"));
+    expect(report).toEqual({ peakDbfs: -6.2, note: "Levels look healthy." });
+  });
+
+  it("analyze_mix fails cleanly when no tab is connected", async () => {
+    const res = await call("analyze_mix");
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/no daw tab connected/i);
+  });
+
   it("remove_group cascades and removes its tracks", async () => {
     const messages = await connectTab();
     const trackId = await makeTrack("subtractive");

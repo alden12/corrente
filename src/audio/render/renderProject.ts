@@ -27,7 +27,7 @@ import { engineValueOf } from "../definitions/values";
 import { compensate, type MixNode } from "../engine/latency";
 import { soloMutedTrackIds } from "../engine/mix";
 import { softClip } from "../engine/softClip";
-import { beatsToSeconds } from "../sequencer/scheduler";
+import { beatsToSeconds } from "../sequencer/timing";
 import type { AudioTrack, EffectInstance, Group, InstrumentTrack, ProjectStore, Track } from "../project/projectStore";
 import { sampleAudioFor } from "./sampleAudio";
 import type { Rendered, RenderSetup } from "./renderDevice";
@@ -232,6 +232,7 @@ export async function renderProject(
           const ref = String(store.get(id));
           const asTable = !!source.wavetable;
           const audio = ref ? await sampleAudioFor(ref, asTable, loadSample, sampleRate) : null;
+          if (ref && !audio) omitted.push(`sample ${ref} wouldn't load, so it's silent`);
           bank.setSample(slot.track, source.param, ref && asTable ? `table:${ref}` : ref, audio);
         });
       });

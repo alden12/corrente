@@ -13,6 +13,7 @@ import type { VersionStore } from "../commands/history";
 import { savePatch, newPatchId } from "../patches/library";
 import { listPatchSummaries, patchDetails, patchTrackCommand } from "../patches/patchTools";
 import { DEFAULT_WS_PORT } from "./protocol";
+import { analyzeProjectMix } from "../engine/renderInWorker";
 import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
 
 export type McpStatus = "connecting" | "connected" | "disconnected";
@@ -162,9 +163,18 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     }
   };
 
+  // The song rendered in the render worker and measured, as the in-app agent's analyze_mix does.
+  const handleAnalysisRequest = ({ id }: Extract<ServerToBrowser, { type: "analysisRequest" }>) =>
+    analyzeProjectMix(projectStore).then(
+      (result) => send({ type: "analysisReply", id, ok: true, result }),
+      (err: unknown) =>
+        send({ type: "analysisReply", id, ok: false, error: err instanceof Error ? err.message : String(err) }),
+    );
+
   const handle = (msg: ServerToBrowser) => {
     if (msg.type === "historyRequest") void handleHistoryRequest(msg);
     else if (msg.type === "patchRequest") handlePatchRequest(msg);
+    else if (msg.type === "analysisRequest") void handleAnalysisRequest(msg);
     else if (liveTypes.has(msg.type)) (live[msg.type as LiveType] as (m: ServerToBrowser) => void)(msg);
     else editLog.dispatchAsAgent(msg as EditCommand);
   };

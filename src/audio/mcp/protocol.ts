@@ -36,7 +36,8 @@ export type BrowserToServer =
   | { type: "effectParamChanged"; hostId: string; effectId: string; id: string; value: ParamValue }
   | { type: "midiDeviceParamChanged"; trackId: string; deviceId: string; id: string; value: ParamValue }
   | { type: "historyReply"; id: string; ok: boolean; result?: unknown; error?: string }
-  | { type: "patchReply"; id: string; ok: boolean; result?: unknown; error?: string };
+  | { type: "patchReply"; id: string; ok: boolean; result?: unknown; error?: string }
+  | { type: "analysisReply"; id: string; ok: boolean; result?: unknown; error?: string };
 
 /** Sent by the server to the browser tab (commands). */
 export type ServerToBrowser =
@@ -159,6 +160,9 @@ export type ServerToBrowser =
   // Version-history RPC (expects a matching historyReply, correlated by `id`)
   | { type: "historyRequest"; id: string; method: HistoryMethod; params?: Record<string, unknown> }
   // Patch-library RPC (expects a matching patchReply, correlated by `id`)
-  | { type: "patchRequest"; id: string; method: PatchMethod; params?: Record<string, unknown> };
+  | { type: "patchRequest"; id: string; method: PatchMethod; params?: Record<string, unknown> }
+  // Mix-analysis RPC (expects a matching analysisReply): the tab renders the project, since it holds
+  // the project's own samples and recordings (AGENT-4.9).
+  | { type: "analysisRequest"; id: string };
 
 export const DEFAULT_WS_PORT = 8765;

@@ -23,4 +23,9 @@ export interface DawTarget {
   requestHistory(method: HistoryMethod, params?: Record<string, unknown>): Promise<Reply>;
   /** The patch library. */
   requestPatch(method: PatchMethod, params?: Record<string, unknown>): Promise<Reply>;
+  /**
+   * Render the project on the engine render core and measure the mix (AGENT-4.9): the tab renders
+   * it in its worker, the hosted server on a worker thread. Answers a `MixSummary`.
+   */
+  analyzeMix(): Promise<Reply>;
 }
