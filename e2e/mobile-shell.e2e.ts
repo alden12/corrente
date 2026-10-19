@@ -695,7 +695,7 @@ test.describe("phone", () => {
     // while they are showing, so it sits on them.
     const box = (await sheet(page).boundingBox())!;
     expect(box.height, "minimised is just the header").toBeLessThan(80);
-    await expect(sheet(page).getByText(/^subtractive · \d+ devices?$/)).toBeVisible();
+    await expect(sheet(page).getByText(/^Subtractive · \d+ devices?$/)).toBeVisible();
     expect(Math.abs(box.y + box.height - (await keysTop(page))), "and it sits on the keys").toBeLessThan(2);
 
     // Hidden, the keys give up their header row too, and the bar's keyboard button stands in for it.
@@ -745,7 +745,7 @@ test.describe("phone", () => {
     await tab(page, "Explore").tap();
     await openExploreCategory(page, "Instruments");
     await page.getByRole("button", { name: 'Add "Sampler" as a new track', exact: true }).tap();
-    await expect(sheet(page).getByText(/^sampler · /)).toBeVisible();
+    await expect(sheet(page).getByText(/^Sampler · /)).toBeVisible();
     expect(await detentOf(page)).toBe("peek");
   });
 
@@ -1274,13 +1274,13 @@ test.describe("phone", () => {
     await expect(tracks.getByTestId("tree-track")).toHaveCount(2);
     await tracks.getByTestId("tree-track").first().tap();
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
-    await expect(sheet(page).getByText(/^subtractive · /)).toBeVisible();
+    await expect(sheet(page).getByText(/^Subtractive · /)).toBeVisible();
   });
 
   test("swapping a sound from Explore goes back to the Studio, so you can see what it just did", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await expect(sheet(page).getByText(/^subtractive · /)).toBeVisible();
+    await expect(sheet(page).getByText(/^Subtractive · /)).toBeVisible();
 
     await tab(page, "Explore").tap();
     await openExploreCategory(page, "Instruments");
@@ -1289,7 +1289,7 @@ test.describe("phone", () => {
     // The track it changed is in the Studio, so that is where you land; staying on a
     // full-screen tab would show nothing happening.
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
-    await expect(sheet(page).getByText(/^fm · /)).toBeVisible();
+    await expect(sheet(page).getByText(/^FM · /)).toBeVisible();
   });
 
   test("the pads sit under the roll, in the key they say they are in", async ({ page }) => {

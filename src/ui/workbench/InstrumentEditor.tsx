@@ -22,7 +22,6 @@ import { StepGrid } from "../StepGrid";
 import { Segmented } from "../controls/Segmented";
 import { ClipPreview } from "../shell/ClipPreview";
 import { useProject } from "../../audio/project/useProject";
-import { useClip } from "../../audio/sequencer/useClip";
 import { beatsPerBar } from "../../audio/project/schema";
 
 /** Bars a folded roll's glance at its clip spans: the header has room for far more than a chip. */
@@ -80,7 +79,15 @@ export function InstrumentEditor({
   const [mode, setMode] = usePersistentString<DrumEditor>(`corrente:drum-editor:${track.id}`, "keys", DRUM_EDITORS);
   const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
   const { timeSignature } = useProject(projectStore);
-  const foldedPreview = <FoldedRollPreview clip={active} beatsPerBar={beatsPerBar(timeSignature)} />;
+  const foldedPreview = (
+    <ClipPreview
+      store={active.store}
+      name={active.name}
+      beatsPerBar={beatsPerBar(timeSignature)}
+      bars={FOLDED_PREVIEW_BARS}
+      empty={null}
+    />
+  );
 
   return (
     // No padding of its own: in the column, the roll's header lines up with the sections around it.
@@ -140,28 +147,6 @@ export function InstrumentEditor({
             foldedPreview={foldedPreview}
           />
         )}
-      </div>
-    </div>
-  );
-}
-
-/** A folded roll's header: the clip's notes drawn small, and how many there are (MOBILE-27). */
-function FoldedRollPreview({ clip, beatsPerBar }: { clip: InstrumentTrack["clips"][number]; beatsPerBar: number }) {
-  const { notes } = useClip(clip.store);
-  return (
-    // The count first, where the other sections' headers start their summaries.
-    <div className="flex items-center gap-2 h-full min-w-0">
-      <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
-        {notes.length} {notes.length === 1 ? "note" : "notes"}
-      </span>
-      <div className="flex-1 min-w-0 h-full">
-        <ClipPreview
-          store={clip.store}
-          name={clip.name}
-          beatsPerBar={beatsPerBar}
-          bars={FOLDED_PREVIEW_BARS}
-          empty={null}
-        />
       </div>
     </div>
   );
