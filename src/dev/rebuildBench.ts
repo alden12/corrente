@@ -5,15 +5,15 @@
  * gate on whether the rebuild approach survives on a phone or has to grow a per-command inverse fast
  * path, and the only numbers we had were taken on a laptop. So this measures it, and it is a plain
  * function over plain data specifically so the thing you run it on can be the phone in your hand
- * rather than a device farm - see `ui/rebuildBenchPage.ts` for the two-tap version.
+ * rather than a device farm - see `rebuildBenchPage.ts` for the two-tap version.
  *
  * DOM-free, like everything else in this directory: the replay it measures is the same
  * `replayEntries` the authority, the repository and undo all call, not a stand-in for it.
  */
-import { ProjectStore } from "../project/projectStore";
-import { replayEntries } from "../commands/replay";
-import type { EditCommand, EditEntry } from "../commands/types";
-import type { ProjectData } from "../project/types";
+import { ProjectStore } from "../audio/project/projectStore";
+import { replayEntries } from "../audio/commands/replay";
+import type { EditCommand, EditEntry } from "../audio/commands/types";
+import type { ProjectData } from "../audio/project/types";
 
 /** One measurement, in milliseconds, split the way the work actually divides. */
 export interface RebuildSample {

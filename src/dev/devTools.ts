@@ -1,11 +1,12 @@
 /**
  * The dev- and test-only extras, behind one call so `main.tsx` carries one guard instead of three.
+ * They all live in this folder, apart from the app's own code: anything here is tooling, never shipped.
  *
  * None of it ships. The caller's `import.meta.env.DEV` check is statically false in a production
  * build, so the call goes and this module tree-shakes out behind it (checked: the built bundle
  * contains none of the bench's strings).
  */
-import { renderRebuildBench, wantsRebuildBench } from "./ui/rebuildBenchPage";
+import { renderRebuildBench, wantsRebuildBench } from "./rebuildBenchPage";
 
 /**
  * Install them, and say whether one has **taken over the page** - which is the caller's cue not to
@@ -25,13 +26,13 @@ export function installDevTools(): boolean {
   }
 
   // The offline-render e2e harness: the `window.__daw*` hooks the Playwright suite calls. See
-  // `audio/engine/renderHarness.ts` and AGENT-4.1.
-  void import("./audio/engine/renderHarness").then(({ installRenderHarness }) => installRenderHarness());
+  // `renderHarness.ts` and AGENT-4.1.
+  void import("./renderHarness").then(({ installRenderHarness }) => installRenderHarness());
 
   // Safe-area insets, on the console rather than behind an import: the thing you want to try them on
   // is a phone, and a phone has no editor to add an import statement in. See
-  // `ui/shell/safeAreaSimulation.ts` for what to pass and why it exists (MOBILE-8).
-  void import("./ui/shell/safeAreaSimulation").then(({ simulateInsets, applySimulatedInsets }) => {
+  // `safeAreaSimulation.ts` for what to pass and why it exists (MOBILE-8).
+  void import("./safeAreaSimulation").then(({ simulateInsets, applySimulatedInsets }) => {
     (window as unknown as { simulateInsets: typeof simulateInsets }).simulateInsets = simulateInsets;
     applySimulatedInsets();
   });

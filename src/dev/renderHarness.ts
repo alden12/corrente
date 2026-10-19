@@ -11,16 +11,21 @@
  * `installRenderHarness` is invoked from `main.tsx` behind an `import.meta.env` guard, so the whole
  * module is dead-code-eliminated from production builds and never ships.
  */
-import { renderWorkletSmokeTest, renderProjectOffline, analyzeProjectMix, peakAmplitude } from "./renderOffline";
-import { ProjectStore, type Track } from "../project/projectStore";
-import { encodeWav } from "../recording/wav";
-import { putAudio } from "../audioStore";
-import { renderPortraits } from "../portraits/renderPortraits";
-import type { Portrait } from "../portraits/draw";
-import { renderProject } from "../render/renderProject";
-import { fetchEngine } from "../bank/pool";
-import { browserSample } from "../bank/deviceSamples";
-import { spectrumOf } from "../analysis/spectrum";
+import {
+  renderWorkletSmokeTest,
+  renderProjectOffline,
+  analyzeProjectMix,
+  peakAmplitude,
+} from "../audio/engine/renderOffline";
+import { ProjectStore, type Track } from "../audio/project/projectStore";
+import { encodeWav } from "../audio/recording/wav";
+import { putAudio } from "../audio/audioStore";
+import { renderPortraits } from "../audio/portraits/renderPortraits";
+import type { Portrait } from "../audio/portraits/draw";
+import { renderProject } from "../audio/render/renderProject";
+import { fetchEngine } from "../audio/bank/pool";
+import { browserSample } from "../audio/bank/deviceSamples";
+import { spectrumOf } from "../audio/analysis/spectrum";
 
 interface RenderHarness {
   __dawRenderWorkletSmoke?: () => Promise<number>;

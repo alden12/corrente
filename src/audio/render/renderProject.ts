@@ -53,7 +53,7 @@ const silence = (): Stereo => [new Float32Array(BLOCK), new Float32Array(BLOCK)]
 
 /** One engine plan in a chain: where it runs, and the effects it carries (for their bypass). */
 interface Slot {
-  plan: ChainPlan;
+  chain: ChainPlan;
   stage: number;
   effects: EffectInstance[];
   /** Its place in its stage's bank. */
@@ -86,12 +86,12 @@ const effectSlots = (
       omitted.push(`${where}: effect "${piece.effect.type}" isn't an engine device, so it's passed through`);
       return [];
     }
-    return runParts(piece.effects).flatMap(({ plan, effects: part }) => {
-      if (!plan) {
+    return runParts(piece.effects).flatMap(({ plan: chain, effects: part }) => {
+      if (!chain) {
         omitted.push(`${where}: effect "${part[0].type}" is too heavy for the engine`);
         return [];
       }
-      return [{ plan, stage: stageAt(all.indexOf(part[0])), effects: part }];
+      return [{ chain, stage: stageAt(all.indexOf(part[0])), effects: part }];
     });
   });
 
@@ -151,7 +151,7 @@ export async function renderProject(
     if (!chain) return [];
     const rest = track.effects.slice(chain.absorbed.length);
     return [
-      { plan: chain.plan, stage: INSTRUMENT_STAGE, effects: chain.absorbed },
+      { chain: chain.plan, stage: INSTRUMENT_STAGE, effects: chain.absorbed },
       ...effectSlots(rest, track.effects, (index) => trackEffectStage(index), omitted, `track "${track.name}"`),
     ];
   };
@@ -200,17 +200,18 @@ export async function renderProject(
       const bank = banks.get(stage)!;
       bank.setTransport(transport);
       return byStage.get(stage)!.flatMap((slot) => {
-        bank.load(slot.track, slot.plan.plan, valuesOf(slot.plan, slot.effects));
+        const { plan, sources } = slot.chain;
+        bank.load(slot.track, plan, valuesOf(slot.chain, slot.effects));
         // A table is the bank's own thing, apart from the same sample played as one (as deviceSamples names them).
         const samples = [
           ...new Map(
-            slot.plan.plan.params
-              .filter((source) => source.sample && slot.plan.sources[source.param])
+            plan.params
+              .filter((source) => source.sample && sources[source.param])
               .map((source) => [source.param, source]),
           ).values(),
         ];
         return samples.map(async (source) => {
-          const { store, id } = slot.plan.sources[source.param];
+          const { store, id } = sources[source.param];
           const ref = String(store.get(id));
           const asTable = !!source.wavetable;
           const audio = ref ? await sampleAudioFor(ref, asTable, loadSample, sampleRate) : null;
@@ -252,7 +253,7 @@ export async function renderProject(
   const generators = players.flatMap((player) => player.devices.filter((device) => device.generates));
 
   // --- latency compensation -----------------------------------------------------------------
-  const latencyOf = (strip: Strip) => strip.slots.reduce((sum, slot) => sum + slot.plan.plan.latency, 0);
+  const latencyOf = (strip: Strip) => strip.slots.reduce((sum, slot) => sum + slot.chain.plan.latency, 0);
   const mixNode = (strip: Strip): MixNode => ({ id: strip.id, parentId: strip.parentId, latency: latencyOf(strip) });
   const { delays, total } = compensate(
     strips.filter((strip) => !strip.isGroup).map(mixNode),

@@ -9,7 +9,7 @@
  * Open `?bench=rebuild` on the device. Sizes run smallest first with a yield between, so the biggest
  * one arriving late does not stop you reading the rest.
  */
-import { BENCH_SIZES, measureRebuild, type RebuildSample } from "../audio/history/rebuildBench";
+import { BENCH_SIZES, measureRebuild, type RebuildSample } from "./rebuildBench";
 
 /** Whether this page load asked for the benchmark. */
 export const wantsRebuildBench = (): boolean => {

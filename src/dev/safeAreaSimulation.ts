@@ -32,7 +32,7 @@
  * device still has the last word. But it turns "did the layout move at all" into something you
  * can answer in a second, which is the question that was going unanswered.
  */
-import { SAFE_AREA_EDGES, simulationVariable } from "./safeArea";
+import { SAFE_AREA_EDGES, simulationVariable } from "../ui/shell/safeArea";
 
 export interface Insets {
   top: number;

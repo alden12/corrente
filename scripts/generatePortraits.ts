@@ -3,7 +3,7 @@
  *
  * Portraits are drawn from a real render of each device, and that needs AudioWorklets, so a real
  * browser: this starts the Vite dev server, opens it in headless Chromium, calls the dev-only
- * `window.__dawRenderPortraits` hook (`audio/engine/renderHarness.ts`), and writes what comes back to
+ * `window.__dawRenderPortraits` hook (`dev/renderHarness.ts`), and writes what comes back to
  * `src/ui/explore/portraits.json`. That file is committed, so the app draws portraits on load without
  * rendering anything. Run it after adding or retuning a built-in; `test/portraits.test.ts` fails
  * until every built-in has one.

@@ -11,7 +11,7 @@ import "./index.css";
 import { registerServiceWorker } from "./pwa/serviceWorkerUpdate";
 import { applyStoredTheme } from "./ui/theme";
 import App from "./App.tsx";
-import { installDevTools } from "./devTools";
+import { installDevTools } from "./dev/devTools";
 
 // Dev/test-only extras (the e2e render harness, safe-area simulation, the rebuild bench), guarded by
 // import.meta.env so the whole module is dead-code-eliminated from production builds and never
