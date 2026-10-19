@@ -1,13 +1,13 @@
 /**
  * The agent's "ears" (AGENT-4.1): tools that render the project offline and measure the result,
- * so the agent can judge its own output instead of reasoning blind on symbolic data. Uses the
- * exact DSP the user hears (renderProjectOffline), then reports objective measures (peak,
+ * so the agent can judge its own output instead of reasoning blind on symbolic data. Renders on the
+ * engine render core in a worker (renderInWorker, AGENT-4.9), the engine the user hears, then reports objective measures (peak,
  * clipping, loudness). This is the grounded verify tool - the loop calls it, hears the mix, and
  * continues. See the agent design notes.
  */
 import { z } from "zod";
 import { defineTool, type ToolContext } from "./factory";
-import { analyzeProjectMix } from "../../engine/renderOffline";
+import { analyzeProjectMix } from "../../engine/renderInWorker";
 
 export function analysisTools(context: ToolContext) {
   return [

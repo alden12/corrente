@@ -39,6 +39,8 @@ import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 export interface ProjectRender extends Rendered {
   /** The loudest sample going into the master, before the soft clip: over 1 means it clips. */
   masterPeak: number;
+  /** How many samples went into the master over full scale, which the soft clip then rounds off. */
+  masterOver: number;
   /** What the project has that this render doesn't play yet, one line each. */
   omitted: string[];
 }
@@ -305,6 +307,7 @@ export async function renderProject(
     ),
   );
   let masterPeak = 0;
+  let masterOver = 0;
 
   for (let block = 0; block < blocks; block++) {
     const start = block * BLOCK;
@@ -364,6 +367,7 @@ export async function renderProject(
     mixed.forEach((channel, index) =>
       channel.forEach((sample, frame) => {
         masterPeak = Math.max(masterPeak, Math.abs(sample));
+        if (Math.abs(sample) > 1) masterOver++;
         master[index][start + frame] = softClip(sample);
       }),
     );
@@ -374,6 +378,7 @@ export async function renderProject(
     channels: [master[0].slice(total, total + frames), master[1].slice(total, total + frames)],
     sampleRate,
     masterPeak,
+    masterOver,
     omitted,
   };
 }

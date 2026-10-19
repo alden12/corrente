@@ -7,6 +7,7 @@
  * turns the raw numbers into a compact, model-friendly report (rounded dB + a plain-language note).
  * Spectral balance / masking and integrated LUFS are the next tiers (AGENT-4.1 follow-ups / 4.2).
  */
+import type { ProjectRender } from "../render/renderProject";
 
 /** The slice of AudioBuffer we read - so analysis is testable with a plain stub. */
 export interface AudioBufferLike {
@@ -31,6 +32,8 @@ export interface MixAnalysis {
   /** dB from the peak to full scale (>= 0 means headroom remains; < 0 means over). */
   headroomDb: number;
   clipping: { clipped: boolean; sampleCount: number; fraction: number };
+  /** What the render left out (AGENT-4.9's `omitted`), so a report never passes it off as the whole mix. */
+  omitted?: string[];
 }
 
 /** Samples at/above this magnitude count as clipped (~-0.009 dBFS, i.e. effectively full scale). */
@@ -74,6 +77,35 @@ export function analyzeMix(buffer: AudioBufferLike): MixAnalysis {
   };
 }
 
+/**
+ * A render from the engine render core (AGENT-4.9) measured as a mix. Its level and clipping are
+ * what went into the master, before the soft clip guarding the speakers rounds them off and would
+ * hide them; its loudness is what plays.
+ */
+export function analyzeRender(render: ProjectRender): MixAnalysis {
+  const [left, right] = render.channels;
+  const played = analyzeMix({
+    numberOfChannels: 2,
+    length: left.length,
+    sampleRate: render.sampleRate,
+    duration: left.length / render.sampleRate,
+    getChannelData: (channel) => (channel === 0 ? left : right),
+  });
+  const peakDbfs = toDbfs(render.masterPeak);
+  return {
+    ...played,
+    peak: render.masterPeak,
+    peakDbfs,
+    headroomDb: -peakDbfs,
+    clipping: {
+      clipped: render.masterOver > 0,
+      sampleCount: render.masterOver,
+      fraction: render.masterOver / (2 * left.length || 1),
+    },
+    omitted: render.omitted,
+  };
+}
+
 /** A compact, model-friendly report: rounded dB figures plus a plain-language verdict. */
 export interface MixSummary {
   durationSec: number;
@@ -83,6 +115,8 @@ export interface MixSummary {
   clipping: boolean;
   clippedSamples: number;
   note: string;
+  /** What the render couldn't play, when there is something. */
+  omitted?: string[];
 }
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
@@ -99,6 +133,8 @@ export function summarizeMix(analysis: MixAnalysis): MixSummary {
     }
     if (analysis.rmsDbfs < -30) notes.push("Quiet overall (low RMS) - there is room to bring the level up.");
   }
+  if (analysis.omitted?.length)
+    notes.push("Some of the project wasn't rendered, so it isn't in these figures (see omitted).");
   return {
     durationSec: round1(analysis.durationSec),
     peakDbfs: round1(analysis.peakDbfs),
@@ -107,5 +143,6 @@ export function summarizeMix(analysis: MixAnalysis): MixSummary {
     clipping: analysis.clipping.clipped,
     clippedSamples: analysis.clipping.sampleCount,
     note: notes.join(" ") || "Levels look healthy.",
+    ...(analysis.omitted?.length ? { omitted: analysis.omitted } : {}),
   };
 }
