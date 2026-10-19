@@ -4,6 +4,9 @@ import { parseCustomDevice, type CustomKind } from "../../../src/audio/definitio
 import { DEVICE_COLOR_NAMES, type DeviceColor } from "../../../src/audio/deviceColors";
 import { makeCustomInstrumentId, makeCustomEffectId, deviceFormatDoc, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
+import { checkEffect, checkInstrument } from "../../../src/audio/render/deviceCheck";
+import { DeviceRenderError } from "../../../src/audio/render/renderDevice";
+import { nodeRenderSetup } from "../../render/nodeRender";
 
 /**
  * What an author sends: everything but the `type` id (the server mints that). **An outline, not the
@@ -28,6 +31,9 @@ const deviceInput = {
 };
 
 type DeviceInput = { label?: string; color?: DeviceColor; schema: unknown; definition: unknown };
+
+/** How each kind is played to check it. */
+const CHECKS = { instrument: checkInstrument, effect: checkEffect } as const;
 
 export function registerCustomDevicesTools({ server, target, trackArg, resolveTrack }: ToolContext): void {
   /** The project's devices of a kind, and how to store one. */
@@ -63,15 +69,31 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
   const invalid = (kind: CustomKind, errors: string[]) =>
     fail(`Invalid ${kind}:\n${errors.map((error) => `- ${error}`).join("\n")}`);
 
-  const create = (kind: CustomKind, type: string, input: DeviceInput) => {
+  /**
+   * Play the device just stored, alone, and say how it went (AGENT-4.8): the author can't hear it,
+   * so this is how a silent, NaN or runaway device is caught in the same turn.
+   */
+  const check = async (kind: CustomKind, type: string): Promise<string> => {
+    try {
+      const verdict = await CHECKS[kind]({ type }, nodeRenderSetup());
+      return `\nCheck (played alone): ${verdict.summary}`;
+    } catch (error) {
+      if (error instanceof DeviceRenderError) return `\nCheck: couldn't play it alone (${error.message}).`;
+      throw error;
+    }
+  };
+
+  const create = async (kind: CustomKind, type: string, input: DeviceInput) => {
     const result = parseCustomDevice({ type, ...input }, kind);
     if (!result.ok) return invalid(kind, result.errors);
     if (!target.send({ type: KINDS[kind].add, def: result.device })) return fail("No DAW tab connected.");
     KINDS[kind].store(result.device);
-    return ok(`Created ${kind} "${input.label ?? type}" (type ${type}). Use ${KINDS[kind].use} "${type}".`);
+    return ok(
+      `Created ${kind} "${input.label ?? type}" (type ${type}). Use ${KINDS[kind].use} "${type}".${await check(kind, type)}`,
+    );
   };
 
-  const update = (kind: CustomKind, deviceType: string, input: DeviceInput) => {
+  const update = async (kind: CustomKind, deviceType: string, input: DeviceInput) => {
     const current = KINDS[kind].list().find((device) => device.type === deviceType);
     if (!current) return fail(`No custom ${kind} with type "${deviceType}". Use list_custom_devices.`);
     const result = parseCustomDevice(
@@ -81,7 +103,9 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     if (!result.ok) return invalid(kind, result.errors);
     if (!target.send({ type: KINDS[kind].update, def: result.device })) return fail("No DAW tab connected.");
     KINDS[kind].store(result.device);
-    return ok(`Updated ${kind} "${result.device.label ?? deviceType}" (type ${deviceType}).`);
+    return ok(
+      `Updated ${kind} "${result.device.label ?? deviceType}" (type ${deviceType}).${await check(kind, deviceType)}`,
+    );
   };
 
   server.registerTool(

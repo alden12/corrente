@@ -33,6 +33,11 @@ export const deviceFormatDoc = () => ({
     "`schema` is a list of params, each one of `paramKinds`. A sample param's default is a sample ref; " +
     "`wavetable: true` offers the built-in wavetables in its picker. A level is a number param into a mul; " +
     "dry/wet is the chain's, by a `mix` param (see `effects`).",
+  levels:
+    "Gain-stage so it sits with the built-ins: a single held note around -10 dBFS at its default level, so a " +
+    "five-note chord stays under about +6 dBFS (voices sum). create_* and update_* play the device alone and " +
+    "report it (peak, chord peak, how soon it goes quiet), with a PROBLEM for silence, NaN, a runaway or a sound " +
+    "that never stops; fix those before using it.",
   paramKinds: paramKindsDoc,
   ...definitionFormatDoc(),
 });

@@ -125,6 +125,21 @@ describe("MCP server (tracks)", () => {
     await call("remove_custom_device", { deviceType: created }); // cleanup (global catalog)
   });
 
+  it("create_instrument plays the device alone and says how it went (AGENT-4.8)", async () => {
+    await connectTab();
+    const good = await call("create_instrument", { label: "Plays", schema: [level], definition: synth() });
+    expect(good.content[0].text).toMatch(/Check \(played alone\): OK \(a note peaks at -?\d+\.\d dBFS/);
+
+    // Stored either way (it validated), but the reply says what's wrong.
+    const silent = { ...level, default: 0 };
+    const quiet = await call("create_instrument", { label: "Mute", schema: [silent], definition: synth() });
+    expect(quiet.isError).toBeFalsy();
+    expect(quiet.content[0].text).toContain("PROBLEM: silent");
+
+    const list = parse(await call("list_custom_devices"));
+    for (const { type } of list.instruments) await call("remove_custom_device", { deviceType: type }); // cleanup (global catalog)
+  });
+
   it("update_instrument edits a device in place: tracks keep it, and the values of params it still has", async () => {
     const messages = await connectTab();
     const created = await call("create_instrument", { label: "Edit Me", schema: [level], definition: synth() });
