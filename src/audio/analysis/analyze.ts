@@ -127,7 +127,10 @@ export function summarizeMix(analysis: MixAnalysis): MixSummary {
     notes.push("Silent - the project produced no sound (no notes, or every track muted / undecoded).");
   } else {
     if (analysis.clipping.clipped) {
-      notes.push(`Clipping: ${analysis.clipping.sampleCount} sample(s) at full scale - reduce track or master levels.`);
+      notes.push(
+        `Clipping: ${analysis.clipping.sampleCount} sample(s) went over full scale into the master. The soft clip ` +
+          "rounds them off, so they add crunch rather than crackle; bring track or group levels down to clear it.",
+      );
     } else if (analysis.peakDbfs > -1) {
       notes.push("Very hot - peaks are near full scale with little headroom.");
     }

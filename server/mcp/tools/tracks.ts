@@ -17,12 +17,13 @@ export function registerTracksTools({
     {
       title: "List tracks",
       description:
-        "List all tracks (id, name, instrument, group, mute, volume, note count), the tempo, and the available instrument types (with their default group family).",
+        "List all tracks (id, name, instrument, group, mute, volume, note count), the project's name, the tempo, and the available instrument types (with their default group family).",
     },
     async () =>
       ok(
         JSON.stringify(
           {
+            project: target.project.name,
             connected: target.connected(),
             tempoBpm: target.project.tempo,
             timeSignature: target.project.timeSignature,

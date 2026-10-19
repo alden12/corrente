@@ -747,7 +747,8 @@ describe("MCP server (tracks)", () => {
       );
     });
     const report = parse(await call("analyze_mix"));
-    expect(report).toEqual({ peakDbfs: -6.2, note: "Levels look healthy." });
+    expect(report).toEqual({ project: "Untitled", peakDbfs: -6.2, note: "Levels look healthy." });
+    expect(parse(await call("list_tracks")).project).toBe("Untitled");
   });
 
   it("analyze_mix fails cleanly when no tab is connected", async () => {

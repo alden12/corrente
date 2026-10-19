@@ -56,7 +56,7 @@ describe("summarizeMix", () => {
     const summary = summarizeMix(analyzeMix(buffer([data])));
     expect(summary.clipping).toBe(true);
     expect(summary.clippedSamples).toBe(1);
-    expect(summary.note).toMatch(/clipping/i);
+    expect(summary.note).toMatch(/clipping.*over full scale/i);
   });
 
   it("calls a healthy level healthy", () => {
