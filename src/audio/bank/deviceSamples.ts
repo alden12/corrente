@@ -1,13 +1,11 @@
 /**
  * An engine device's samples (INST-36.6): a sample param names a sample, and each time it changes the
  * sample is decoded here (the worklet can't decode) and sent to the bank, which keeps it in a slot by
- * name. One a wavetable plays is sent as a table, band-limited (samples/tables.ts), under its own
+ * name. One a wavetable plays is sent as a table, band-limited (render/sampleAudio.ts), under its own
  * name. `ready` waits until the bank has every one, so an offline render doesn't start without them.
  */
-import { buildBanks } from "../dsp/wavetable";
 import { loadSampleBuffer } from "../samples/builtinUrls";
-import { BUILTIN_WAVETABLES, parseRef } from "../samples/catalog";
-import { cyclesOf, tableOf } from "../samples/tables";
+import { sampleAudioFor, type LoadSample } from "../render/sampleAudio";
 import type { SampleAudio } from "./bank";
 
 /** A decoded sample for the bank, under a sample param. */
@@ -43,7 +41,7 @@ export class DeviceSamples {
     this.requests.set(param, request);
     const key = answerKey(param, ref);
     let heard: (() => void) | undefined;
-    request.done = (asTable ? tableAudio(this.context, sampleRef) : sampleAudio(this.context, sampleRef))
+    request.done = sampleAudioFor(sampleRef, asTable, browserSample(this.context), this.context.sampleRate)
       .catch((error: unknown) => {
         console.error(`${param}: couldn't load ${sampleRef}`, error);
         return null;
@@ -77,36 +75,17 @@ export class DeviceSamples {
 
 const answerKey = (param: string, ref: string) => `${param}\n${ref}`;
 
-/** A sample decoded: up to two channels at its own rate, or null for none. */
-const sampleAudio = async (context: BaseAudioContext, ref: string): Promise<SampleAudio | null> => {
-  const buffer = await loadSampleBuffer(context, ref);
-  return (
-    buffer && {
-      channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
-        buffer.getChannelData(channel).slice(),
-      ),
-      rate: buffer.sampleRate,
-    }
-  );
-};
-
-/** Built-in wavetables, made once each: their levels take a moment to work out. */
-const builtinTables = new Map<string, Float32Array>();
-
-/**
- * A wavetable, band-limited at every level the engine reads: a built-in, or a sample's first channel
- * cut into 2048-sample cycles. Null for none, or a sample shorter than a cycle.
- */
-const tableAudio = async (context: BaseAudioContext, ref: string): Promise<SampleAudio | null> => {
-  const parsed = parseRef(ref);
-  if (parsed.kind === "wavetable") {
-    const index = BUILTIN_WAVETABLES.findIndex((table) => table.id === parsed.id);
-    if (index < 0) return null;
-    const table = builtinTables.get(parsed.id) ?? tableOf(buildBanks()[index]);
-    builtinTables.set(parsed.id, table);
-    return { channels: [table], rate: context.sampleRate };
-  }
-  const buffer = await loadSampleBuffer(context, ref);
-  const cycles = buffer ? cyclesOf(buffer.getChannelData(0)) : [];
-  return cycles.length > 0 ? { channels: [tableOf(cycles)], rate: context.sampleRate } : null;
-};
+/** A sample fetched and decoded by the browser: up to two channels at its own rate, or null for none. */
+const browserSample =
+  (context: BaseAudioContext): LoadSample =>
+  async (ref) => {
+    const buffer = await loadSampleBuffer(context, ref);
+    return (
+      buffer && {
+        channels: Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, channel) =>
+          buffer.getChannelData(channel).slice(),
+        ),
+        rate: buffer.sampleRate,
+      }
+    );
+  };

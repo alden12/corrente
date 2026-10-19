@@ -11,7 +11,6 @@ import { BYPASS, chainParam, composeChain, type ChainLink } from "../definitions
 import { compileDefinition, DefinitionError, type CompiledPlan } from "../definitions/compile";
 import { engineDevice } from "../definitions/engineDevices";
 import type { EffectInstance } from "../project/projectStore";
-import { EngineEffect } from "./EngineEffect";
 
 /** One device in a chain: its key (the effect's id), type and params. */
 export interface ChainMember {
@@ -120,32 +119,3 @@ export const applyBypass = (
     const param = bypass.get(effect.id);
     if (param) target.setFixed(param, effect.bypassed ? 1 : 0);
   });
-
-/**
- * A run of engine effects as engine slots: one plan at the first effect's stage if they compose within
- * the cost cap, or else one each, each at its own stage (`stageOf`, its place in the chain), so a
- * split run never loops through one bank. Each with its bypass params set.
- */
-export const runEffects = (
-  context: BaseAudioContext,
-  run: EffectInstance[],
-  stageOf: (effect: EffectInstance) => number,
-  keys: ReadonlyMap<string, AudioNode> = new Map(),
-): EngineEffect[] => {
-  const member = (effect: EffectInstance) => memberOf(effect, keys.has(effect.id));
-  const whole = chainPlan(run.map(member), false);
-  const parts = whole
-    ? [{ plan: whole, effects: run }]
-    : run.map((effect) => ({ plan: chainPlan([member(effect)], false), effects: [effect] }));
-  return parts.flatMap(({ plan, effects }) => {
-    if (!plan) {
-      console.error(`${effects[0].type}: too heavy for the engine`);
-      return [];
-    }
-    // A keyed effect is a run of its own (piecesOf), so a part has at most one key.
-    const key = effects.map((each) => keys.get(each.id)).find((node) => node !== undefined);
-    const effect = new EngineEffect(context, plan, stageOf(effects[0]), key);
-    applyBypass(effect, plan.bypass, effects);
-    return [effect];
-  });
-};
