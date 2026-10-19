@@ -6,10 +6,11 @@
  * patch, and they show up in the library (flat Patches view + nested under their
  * instrument) and search alongside user patches.
  *
- * These are original, "inspired-by" presets for the Nimbus synth (a Juno-style
- * polysynth) - classic patch *types* (bass, lead, pad, keys, pluck, brass), tuned by
- * ear-knowledge to Nimbus's schema, with the chorus effect bundled where the sound
- * wants that lush ensemble shimmer. Names are our own.
+ * These are original, "inspired-by" presets: classic patch *types* (bass, lead, pad,
+ * keys, pluck, brass), mostly for the Nimbus synth (a Juno-style polysynth), with the
+ * chorus effect bundled where the sound wants that lush ensemble shimmer. The Micro VA
+ * ones were designed with the agent's ears (analyze_device, AGENT-4.6) after classic
+ * virtual-analog presets, and kept by ear. Names are our own.
  */
 import type { KnownTag } from "../tags";
 import { listPatches, type Patch, type PatchEffect } from "./library";
@@ -18,30 +19,33 @@ import { listPatches, type Patch, type PatchEffect } from "./library";
 const chorusI: PatchEffect = { type: "chorus", params: { "chorus.rate": 0.7, "chorus.depth": 0.35, mix: 0.5 } };
 const chorusII: PatchEffect = { type: "chorus", params: { "chorus.rate": 1.6, "chorus.depth": 0.55, mix: 0.55 } };
 
-/** Terser factory-patch literals: fills in the constant fields (builtin, author, id). */
-function nimbus(
-  category: string,
-  name: string,
-  /** Built-ins tag from the known vocabulary, so they stay consistent with each other. */
-  tags: readonly KnownTag[],
-  params: Patch["params"],
-  effects: PatchEffect[] = [],
-): Patch & { category: string } {
-  return {
-    id: `factory:nimbus:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+/** Terser factory-patch literals for one instrument: fills in the constant fields (builtin, author, id). */
+const builtinFor =
+  (instrumentType: string) =>
+  (
+    category: string,
+    name: string,
+    /** Built-ins tag from the known vocabulary, so they stay consistent with each other. */
+    tags: readonly KnownTag[],
+    params: Patch["params"],
+    effects: PatchEffect[] = [],
+  ): Patch & { category: string } => ({
+    id: `factory:${instrumentType}:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     name,
     author: "you",
     builtin: true,
     category,
     tags,
-    instrumentType: "nimbus",
+    instrumentType,
     params,
     effects,
     createdAt: 0,
-  };
-}
+  });
 
-// Param ids match nimbusSchema. Only the interesting params are set; the ParamStore
+const nimbus = builtinFor("nimbus");
+const microVa = builtinFor("micro-va");
+
+// Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
 // fills the rest from schema defaults when the patch is applied.
 export const FACTORY_PATCHES: (Patch & { category: string })[] = [
   // --- Bass -----------------------------------------------------------------
@@ -240,6 +244,45 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     },
     [chorusI],
   ),
+  // --- Micro VA -------------------------------------------------------------
+  microVa("Lead", "Classic Lead", ["lead", "bright", "retro"], {
+    "o1.wave": "Saw",
+    "o2.tune": -6,
+    "f.type": "24dB LPF",
+    "f.cutoff": 3000,
+    "f.reso": 0.25,
+    "f.egInt": 12,
+    "eg1.a": 5,
+    "eg1.d": 400,
+    "eg1.r": 250,
+    "eg2.a": 12,
+    "eg2.s": 1,
+    "eg2.r": 250,
+    "lfo2.pitch": 18,
+    "amp.level": 0.5,
+    "mod.mix": 0.2,
+    "dly.fb": 0.35,
+  }),
+  microVa("Keys", "Bright Poly", ["keys", "bright", "retro"], {
+    "o1.wave": "Saw",
+    "o2.level": 0.8,
+    "f.type": "24dB LPF",
+    "f.cutoff": 3500,
+    "f.egInt": 24,
+    "eg1.a": 5,
+    "eg1.d": 600,
+    "eg1.s": 0.5,
+    "eg1.r": 400,
+    "eg2.a": 5,
+    "eg2.d": 800,
+    "eg2.s": 0.8,
+    "eg2.r": 450,
+    "amp.level": 0.35,
+    "mod.mix": 0.4,
+    "dly.div": "1/8.",
+    "dly.fb": 0.3,
+    "dly.mix": 0.15,
+  }),
   // --- FX -------------------------------------------------------------------
   nimbus("FX", "Noise Sweep", ["fx", "airy"], {
     "osc.noise": 0.8,
