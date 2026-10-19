@@ -20,3 +20,20 @@ export function validateParam(spec: ParamSpec, value: ParamValue): string | null
   const valid = specToZod(spec).safeParse(value).success;
   return valid ? null : (MESSAGE[spec.kind] as (spec: ParamSpec) => string)(spec);
 }
+
+/**
+ * A value as a client sent it, read for the param it is for (AGENT-31). A tool's `value` takes a
+ * number, text or a boolean, and some clients send every value as text ("0.5", "true"), which a
+ * number or boolean param would then refuse. Anything that doesn't read as its kind is left for
+ * `validateParam` to refuse with its message.
+ */
+const FROM_TEXT: { [K in ParamSpec["kind"]]: (text: string) => ParamValue } = {
+  number: (text) => (text.trim() !== "" && Number.isFinite(Number(text)) ? Number(text) : text),
+  boolean: (text) => (text.trim() === "true" ? true : text.trim() === "false" ? false : text),
+  enum: (text) => text,
+  sample: (text) => text,
+};
+
+export function readParamValue(spec: ParamSpec, value: ParamValue): ParamValue {
+  return typeof value === "string" ? FROM_TEXT[spec.kind](value) : value;
+}

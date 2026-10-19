@@ -1,7 +1,7 @@
 /** MCP tools: Parameters. */
 import { z } from "zod";
 import { instrumentSchema } from "../../../src/audio/instruments/catalog";
-import { validateParam } from "../../../src/audio/params/validate";
+import { readParamValue, validateParam } from "../../../src/audio/params/validate";
 import { ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 
@@ -31,7 +31,7 @@ export function registerParametersTools({ server, target, trackArg, resolveInstr
       description: "Set an instrument parameter on a track. Validated against the schema (range/enum).",
       inputSchema: { ...trackArg, id: z.string(), value: z.union([z.number(), z.string(), z.boolean()]) },
     },
-    async ({ track, id, value }) => {
+    async ({ track, id, value: sent }) => {
       const r = resolveInstrumentTrack(track);
       if ("error" in r) return fail(r.error);
       let spec;
@@ -40,6 +40,7 @@ export function registerParametersTools({ server, target, trackArg, resolveInstr
       } catch {
         return fail(`Unknown parameter "${id}" for instrument "${r.track.instrumentType}".`);
       }
+      const value = readParamValue(spec, sent);
       const err = validateParam(spec, value);
       if (err) return fail(err);
       if (!target.send({ type: "setParam", trackId: r.id, id, value })) return fail("No DAW tab connected.");

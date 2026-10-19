@@ -1,7 +1,7 @@
 /** MCP tools: Effects (on a host: a track or a group bus). */
 import { z } from "zod";
 import { effectInfos, hasEffect, effectSchema } from "../../../src/audio/effects/catalog";
-import { validateParam } from "../../../src/audio/params/validate";
+import { readParamValue, validateParam } from "../../../src/audio/params/validate";
 import { makeEffectId, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 
@@ -144,7 +144,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
         value: z.union([z.number(), z.string(), z.boolean()]),
       },
     },
-    async ({ track, group, effect_id, id, value }) => {
+    async ({ track, group, effect_id, id, value: sent }) => {
       const r = resolveEffect(track, group, effect_id);
       if ("error" in r) return fail(r.error);
       let spec;
@@ -153,6 +153,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
       } catch {
         return fail(`Unknown parameter "${id}" for effect "${r.effect.type}".`);
       }
+      const value = readParamValue(spec, sent);
       const err = validateParam(spec, value);
       if (err) return fail(err);
       if (!target.send({ type: "setEffectParam", hostId: r.hostId, effectId: effect_id, id, value }))

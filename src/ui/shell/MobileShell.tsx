@@ -47,7 +47,7 @@ import type { LibraryView } from "../libraryViews";
 import { WorkbenchColumn } from "../workbench/WorkbenchColumn";
 import { NotePads } from "../pads/NotePads";
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
-import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
+import { EMPTY_INSTRUMENT, catalogEntry, hasInstrument } from "../../audio/instruments/catalog";
 import { keysRoom } from "../pads/geometry";
 import { KeysToggle } from "../pads/KeysToggle";
 import { useProject } from "../../audio/project/useProject";
@@ -114,7 +114,9 @@ function BarButton({
 function sheetSubtitle(track: Track): string {
   if (track.kind === "audio") return `audio · ${devicesLabel(track.effects.length)}`;
   const instrument = track.instrumentType === EMPTY_INSTRUMENT ? 0 : 1;
-  return `${track.instrumentType} · ${devicesLabel(track.midiDevices.length + instrument + track.effects.length)}`;
+  // By its label: a custom device's type is a minted id, not a name.
+  const name = hasInstrument(track.instrumentType) ? catalogEntry(track.instrumentType).label : track.instrumentType;
+  return `${name} · ${devicesLabel(track.midiDevices.length + instrument + track.effects.length)}`;
 }
 
 const devicesLabel = (count: number) => `${count} ${count === 1 ? "device" : "devices"}`;

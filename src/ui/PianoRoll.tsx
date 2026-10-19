@@ -173,6 +173,7 @@ export function PianoRoll({
   footer,
   fold,
   foldedPreview,
+  headerControls,
 }: {
   clipStore: ClipStore;
   scheduler: Scheduler;
@@ -198,6 +199,8 @@ export function PianoRoll({
   fold?: Fold;
   /** What the toolbar shows while the grid is folded away: a glance at the clip's notes. */
   foldedPreview?: ReactNode;
+  /** Controls of the editor around the roll, first in its header while it is open (a kit's Keys / Pads). */
+  headerControls?: ReactNode;
 }) {
   const clip = useClip(clipStore);
   const presence = useAuthorPresence();
@@ -913,6 +916,7 @@ export function PianoRoll({
             )
           }
         >
+          {(!fold || fold.open) && headerControls}
           {!compact && (
             <>
               <Menu

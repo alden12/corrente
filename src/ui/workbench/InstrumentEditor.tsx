@@ -22,6 +22,7 @@ import { StepGrid } from "../StepGrid";
 import { Segmented } from "../controls/Segmented";
 import { ClipPreview } from "../shell/ClipPreview";
 import { useProject } from "../../audio/project/useProject";
+import { useClip } from "../../audio/sequencer/useClip";
 import { beatsPerBar } from "../../audio/project/schema";
 
 /** Bars a folded roll's glance at its clip spans: the header has room for far more than a chip. */
@@ -79,22 +80,15 @@ export function InstrumentEditor({
   const [mode, setMode] = usePersistentString<DrumEditor>(`corrente:drum-editor:${track.id}`, "keys", DRUM_EDITORS);
   const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
   const { timeSignature } = useProject(projectStore);
-  const foldedPreview = (
-    <ClipPreview
-      store={active.store}
-      name={active.name}
-      beatsPerBar={beatsPerBar(timeSignature)}
-      bars={FOLDED_PREVIEW_BARS}
-      empty={null}
-    />
-  );
+  const foldedPreview = <FoldedRollPreview clip={active} beatsPerBar={beatsPerBar(timeSignature)} />;
 
   return (
     // No padding of its own: in the column, the roll's header lines up with the sections around it.
     <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
       {/* No clip name here: the clip rail beside this already names the active clip and is
-          where you rename it, so a second copy only cost a row of vertical space. */}
-      {isDrumkit && (
+          where you rename it, so a second copy only cost a row of vertical space. A kit's Keys / Pads
+          switch sits in the roll's header while it shows the roll, and on its own row over the pads. */}
+      {isDrumkit && mode === "pads" && (
         <div className={`shrink-0 flex items-center gap-2 ${compact ? "px-2" : "px-3 pt-2"}`}>
           <DrumEditorToggle mode={mode} onChange={setMode} />
         </div>
@@ -128,6 +122,7 @@ export function InstrumentEditor({
             footer={rollFooter}
             fold={fold}
             foldedPreview={foldedPreview}
+            headerControls={<DrumEditorToggle mode={mode} onChange={setMode} />}
           />
         ) : (
           <PianoRoll
@@ -146,6 +141,27 @@ export function InstrumentEditor({
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/** A folded roll's header: the clip's notes drawn small, and how many there are (MOBILE-27). */
+function FoldedRollPreview({ clip, beatsPerBar }: { clip: InstrumentTrack["clips"][number]; beatsPerBar: number }) {
+  const { notes } = useClip(clip.store);
+  return (
+    <div className="flex items-center gap-2 h-full min-w-0">
+      <div className="flex-1 min-w-0 h-full">
+        <ClipPreview
+          store={clip.store}
+          name={clip.name}
+          beatsPerBar={beatsPerBar}
+          bars={FOLDED_PREVIEW_BARS}
+          empty={null}
+        />
+      </div>
+      <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
+        {notes.length} {notes.length === 1 ? "note" : "notes"}
+      </span>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /** MCP tools: MIDI devices (on an instrument track's note chain). */
 import { z } from "zod";
 import { midiDeviceInfos, hasMidiDevice, midiDeviceSchema } from "../../../src/audio/midi/device/catalog";
-import { validateParam } from "../../../src/audio/params/validate";
+import { readParamValue, validateParam } from "../../../src/audio/params/validate";
 import { makeMidiDeviceId, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 
@@ -149,7 +149,7 @@ export function registerMidiDevicesTools({
         value: z.union([z.number(), z.string(), z.boolean()]),
       },
     },
-    async ({ track, device_id, id, value }) => {
+    async ({ track, device_id, id, value: sent }) => {
       const r = resolveMidiDevice(track, device_id);
       if ("error" in r) return fail(r.error);
       let spec;
@@ -158,6 +158,7 @@ export function registerMidiDevicesTools({
       } catch {
         return fail(`Unknown parameter "${id}" for MIDI device "${r.device.type}".`);
       }
+      const value = readParamValue(spec, sent);
       const err = validateParam(spec, value);
       if (err) return fail(err);
       if (!target.send({ type: "setMidiDeviceParam", trackId: r.trackId, deviceId: device_id, id, value }))

@@ -12,7 +12,7 @@ import { defineTool, describeParam, type ToolContext } from "./factory";
 import { newEffectId, newMidiDeviceId, newTrackId } from "../../commands/ids";
 import { effectInfos, effectSchema, hasEffect } from "../../effects/catalog";
 import { instrumentSchema } from "../../instruments/catalog";
-import { validateParam } from "../../params/validate";
+import { readParamValue, validateParam } from "../../params/validate";
 import { pitchName } from "../../params/noteName";
 import { BUILTIN_SAMPLES, assetRef, builtinRef } from "../../samples/catalog";
 import { newPatchId, savePatch } from "../../patches/library";
@@ -57,7 +57,7 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
         id: z.string(),
         value: z.union([z.number(), z.string(), z.boolean()]),
       }),
-      run: ({ track, id, value }) => {
+      run: ({ track, id, value: sent }) => {
         const instrumentTrack = resolveInstrumentTrack(track);
         let spec: ParamSpec;
         try {
@@ -67,6 +67,7 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
             `Unknown parameter "${id}" on ${instrumentTrack.instrumentType}. Call list_parameters for valid ids.`,
           );
         }
+        const value = readParamValue(spec, sent);
         const error = validateParam(spec, value);
         if (error) throw new Error(error);
         dispatch({ type: "setParam", trackId: instrumentTrack.id, id, value });
@@ -156,7 +157,7 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
         id: z.string(),
         value: z.union([z.number(), z.string(), z.boolean()]),
       }),
-      run: ({ track, effect_id, id, value }) => {
+      run: ({ track, effect_id, id, value: sent }) => {
         const { track: resolved, effect } = resolveEffect(track, effect_id);
         let spec: ParamSpec;
         try {
@@ -164,6 +165,7 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
         } catch {
           throw new Error(`Unknown parameter "${id}" on ${effect.type}. Call list_effect_parameters for valid ids.`);
         }
+        const value = readParamValue(spec, sent);
         const error = validateParam(spec, value);
         if (error) throw new Error(error);
         dispatch({ type: "setEffectParam", hostId: resolved.id, effectId: effect.id, id, value });

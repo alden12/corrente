@@ -124,7 +124,9 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
         >
           <StepIcon direction="up" />
         </IconButton>
+        {/* Apart from the range's arrows, so the two pairs read as two things (MOBILE-29). */}
         <IconButton
+          className="ml-2"
           label={pairs ? "Fewer octaves (a row of two)" : `Fewer ${sizeWhat}`}
           size="md"
           onClick={() => settings.sizeRange(-1)}

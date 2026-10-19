@@ -211,6 +211,14 @@
     overscroll-behavior: none;
     touch-action: manipulation;
   }
+  /* A long press on a button is a held press, not a text selection (MOBILE-29): CONTROL_BASE says
+     so for the shared controls, this for every other button. */
+  button,
+  [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
 
   /* Low-profile scrollbars app-wide: no track background, just a light, slightly
      translucent handle. The transparent border + padding-box clip slims the

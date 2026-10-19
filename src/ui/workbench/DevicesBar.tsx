@@ -20,24 +20,26 @@ interface Jump {
   key: string;
   label: string;
   color: string;
+  /** Switched off: its dot is crossed through. */
+  bypassed: boolean;
 }
 
 /** The track's devices in chain order, as jump targets. */
 function jumpsFor(track: Track): Jump[] {
   const effects = track.effects.map((effect) => {
     const info = effectCatalogEntry(effect.type);
-    return { key: effect.id, label: info.label, color: deviceAccent(info) };
+    return { key: effect.id, label: info.label, color: deviceAccent(info), bypassed: effect.bypassed };
   });
   if (track.kind !== "instrument") return effects;
   const midi = track.midiDevices.map((device) => {
     const info = midiDeviceCatalogEntry(device.type);
-    return { key: device.id, label: info.label, color: deviceAccent(info) };
+    return { key: device.id, label: info.label, color: deviceAccent(info), bypassed: device.bypassed };
   });
   const instrument = catalogEntry(track.instrumentType);
   const instruments =
     track.instrumentType === EMPTY_INSTRUMENT
       ? []
-      : [{ key: instrumentFold(track.id), label: instrument.label, color: deviceAccent(instrument) }];
+      : [{ key: instrumentFold(track.id), label: instrument.label, color: deviceAccent(instrument), bypassed: false }];
   return [...midi, ...instruments, ...effects];
 }
 
@@ -101,11 +103,23 @@ export function DevicesBar({
             onClick={() => onDevice(jump.key)}
             className="flex items-center gap-1.5 h-7 px-2 rounded-md text-[12px] text-muted hover:text-strong hover:bg-control cursor-pointer whitespace-nowrap"
           >
-            <span aria-hidden="true" className="w-2 h-2 rounded-sm" style={{ background: jump.color }} />
+            <DeviceDot color={jump.color} bypassed={jump.bypassed} />
             {jump.label}
+            {jump.bypassed && <span className="sr-only">(off)</span>}
           </button>
         ))}
       </PagedStrip>
     </SectionHeader>
+  );
+}
+
+/** A device's colour; crossed through when it is switched off, as its block's power button says. */
+function DeviceDot({ color, bypassed }: { color: string; bypassed: boolean }) {
+  if (!bypassed) return <span aria-hidden="true" className="w-2 h-2 rounded-sm" style={{ background: color }} />;
+  return (
+    <svg aria-hidden="true" data-bypassed="" viewBox="0 0 10 10" className="w-2.5 h-2.5 shrink-0">
+      <rect x="1" y="1" width="8" height="8" rx="1" fill={color} opacity="0.4" />
+      <path d="M1 1 9 9M9 1 1 9" stroke="var(--color-ink)" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   );
 }

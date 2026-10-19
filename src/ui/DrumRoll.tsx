@@ -35,6 +35,7 @@ export function DrumRoll({
   footer,
   fold,
   foldedPreview,
+  headerControls,
 }: {
   clipStore: ClipStore;
   params: ParamStore;
@@ -52,6 +53,7 @@ export function DrumRoll({
   footer?: ReactNode;
   fold?: Fold;
   foldedPreview?: ReactNode;
+  headerControls?: ReactNode;
 }) {
   const pads = usePads(params);
   const rows = useMemo<RollRows>(() => {
@@ -95,6 +97,7 @@ export function DrumRoll({
       footer={footer}
       fold={fold}
       foldedPreview={foldedPreview}
+      headerControls={headerControls}
     />
   );
 }
