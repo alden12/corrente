@@ -29,7 +29,7 @@ import { beatsToSeconds } from "../sequencer/scheduler";
 import type { EffectInstance, Group, InstrumentTrack, ProjectStore, Track } from "../project/projectStore";
 import { sampleAudioFor } from "./sampleAudio";
 import type { Rendered, RenderSetup } from "./renderDevice";
-import { trackNotes } from "./trackNotes";
+import { trackNotes, type ScheduledNote } from "./trackNotes";
 import { midiChain } from "../midi/device/registry";
 import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 
@@ -247,8 +247,12 @@ export async function renderProject(
       allNotesOff: () => {},
     };
     const { head, devices } = midiChain(strip.track.midiDevices, slot, clock);
-    const notes = trackNotes(strip.track, timeline).sort((a, b) => a.start - b.start);
-    return [{ head, devices, notes, played: 0 }];
+    // Each note under the block it starts in, so a block plays just its own.
+    const byBlock = trackNotes(strip.track, timeline).reduce((blocks, note) => {
+      const block = Math.floor((note.start * sampleRate) / BLOCK);
+      return blocks.set(block, [...(blocks.get(block) ?? []), note]);
+    }, new Map<number, ScheduledNote[]>());
+    return [{ head, devices, byBlock }];
   });
   const generators = players.flatMap((player) => player.devices.filter((device) => device.generates));
 
@@ -278,12 +282,9 @@ export async function renderProject(
     const start = block * BLOCK;
     const [from, to] = [start / sampleRate, (start + BLOCK) / sampleRate];
     clock.currentTime = from;
-    players.forEach((player) => {
-      for (; player.played < player.notes.length && player.notes[player.played].start < to; player.played++) {
-        const note = player.notes[player.played];
-        player.head.playNote(note.pitch, note.length, note.velocity, note.start);
-      }
-    });
+    players.forEach(({ head, byBlock }) =>
+      byBlock.get(block)?.forEach((note) => head.playNote(note.pitch, note.length, note.velocity, note.start)),
+    );
     generators.forEach((generator) => generator.scheduleWindow(from, to));
     const outputs = new Map<string, Stereo>();
     /** A strip's output this block: its last slot (or, a group without effects, its bus), at its volume, delayed. */
