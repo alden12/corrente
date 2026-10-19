@@ -129,6 +129,8 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     requestPatch,
     // A song takes a moment to render, a long one longer, so this waits well past the other requests.
     analyzeMix: () => awaitReply((id) => sendToTab({ type: "analysisRequest", id }), ANALYSIS_TIMEOUT_MS),
+    analyzeDevice: (device) =>
+      awaitReply((id) => sendToTab({ type: "analysisRequest", id, device }), ANALYSIS_TIMEOUT_MS),
   };
   const server = new McpServer({ name: "corrente", version: "0.1.0" });
   const context = makeToolContext(server, target);

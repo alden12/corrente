@@ -10,6 +10,7 @@ import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
 import type { ClipContent, ProjectData } from "../project/types";
 import type { CustomDevice } from "../definitions/custom";
+import type { DeviceAnalysisRequest } from "../analysis/deviceAlone";
 
 /**
  * Version-history RPC. The commit DAG lives in the tab (OPFS), so the server
@@ -162,7 +163,7 @@ export type ServerToBrowser =
   // Patch-library RPC (expects a matching patchReply, correlated by `id`)
   | { type: "patchRequest"; id: string; method: PatchMethod; params?: Record<string, unknown> }
   // Mix-analysis RPC (expects a matching analysisReply): the tab renders the project, since it holds
-  // the project's own samples and recordings (AGENT-4.9).
-  | { type: "analysisRequest"; id: string };
+  // the project's own samples and recordings (AGENT-4.9). With `device`, one track's sound alone (AGENT-4.6).
+  | { type: "analysisRequest"; id: string; device?: DeviceAnalysisRequest };
 
 export const DEFAULT_WS_PORT = 8765;

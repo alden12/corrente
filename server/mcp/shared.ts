@@ -42,6 +42,9 @@ export const deviceFormatDoc = () => ({
   ...definitionFormatDoc(),
 });
 
-export type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+export type ToolResult = {
+  content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[];
+  isError?: boolean;
+};
 export const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 export const fail = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });

@@ -5,6 +5,7 @@
  */
 import type { ProjectStore } from "../../src/audio/project/projectStore";
 import type { HistoryMethod, PatchMethod, ServerToBrowser } from "../../src/audio/mcp/protocol";
+import type { DeviceAnalysisRequest } from "../../src/audio/analysis/deviceAlone";
 
 /** A round-trip's answer: the tab's `historyReply` / `patchReply`, or the hosted equivalent. */
 export type Reply = { ok: boolean; result?: unknown; error?: string };
@@ -28,4 +29,6 @@ export interface DawTarget {
    * it in its worker, the hosted server on a worker thread. Answers a `MixSummary`.
    */
   analyzeMix(): Promise<Reply>;
+  /** One track's sound alone, rendered and measured the same way (AGENT-4.6). Answers a `DeviceAnalysis`. */
+  analyzeDevice(request: DeviceAnalysisRequest): Promise<Reply>;
 }

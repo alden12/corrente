@@ -11,7 +11,10 @@ import { fetchEngine } from "../bank/pool";
 import { browserAudio, browserSample } from "../bank/deviceSamples";
 import { setSampleAssets } from "../samples/sampleRegistry";
 import { analyzeRender, summarizeMix, type MixSummary } from "../analysis/analyze";
+import { analyzeDeviceRender, type DeviceAnalysis } from "../analysis/analyzeDevice";
+import { deviceAlone, type DeviceAnalysisRequest } from "../analysis/deviceAlone";
 import type { ProjectStore } from "../project/projectStore";
+import type { ProjectData } from "../project/types";
 import type { ProjectRender, ProjectRenderOptions } from "../render/renderProject";
 import type { FromWorker } from "../render/worker/messages";
 import { renderClient } from "../render/worker/renderClient";
@@ -28,15 +31,22 @@ const render = renderClient(() => {
   };
 });
 
-/** Render a project's arrangement on the engine render core, in the render worker. */
+/**
+ * Render a project's arrangement on the engine render core, in the render worker: the open one, or
+ * a document made from it (`as`), such as one track alone.
+ */
 export async function renderProjectInWorker(
   project: ProjectStore,
-  { sampleRate = DEFAULT_RATE, ...options }: ProjectRenderOptions & { sampleRate?: number } = {},
+  {
+    sampleRate = DEFAULT_RATE,
+    as = project.snapshot(),
+    ...options
+  }: ProjectRenderOptions & { sampleRate?: number; as?: ProjectData } = {},
 ): Promise<ProjectRender> {
   setSampleAssets(project.getSamples()); // so a Sampler's "asset:<id>" ref resolves
   const decoder = new OfflineAudioContext(1, 1, sampleRate);
   return render({
-    project: project.snapshot(),
+    project: as,
     engine: (await fetchEngine()).slice(0),
     sampleRate,
     options,
@@ -50,4 +60,13 @@ export async function renderProjectInWorker(
  */
 export async function analyzeProjectMix(project: ProjectStore): Promise<MixSummary> {
   return summarizeMix(analyzeRender(await renderProjectInWorker(project)));
+}
+
+/** Render one track's sound alone and measure it: what `analyze_device` runs (AGENT-4.6). */
+export async function analyzeTrackDevice(
+  project: ProjectStore,
+  request: DeviceAnalysisRequest,
+): Promise<DeviceAnalysis> {
+  const { project: alone, played } = deviceAlone(project.snapshot(), request);
+  return analyzeDeviceRender(await renderProjectInWorker(project, { as: alone }), played, request.picture);
 }

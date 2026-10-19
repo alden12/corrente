@@ -13,7 +13,7 @@ import type { VersionStore } from "../commands/history";
 import { savePatch, newPatchId } from "../patches/library";
 import { listPatchSummaries, patchDetails, patchTrackCommand } from "../patches/patchTools";
 import { DEFAULT_WS_PORT } from "./protocol";
-import { analyzeProjectMix } from "../engine/renderInWorker";
+import { analyzeProjectMix, analyzeTrackDevice } from "../engine/renderInWorker";
 import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
 
 export type McpStatus = "connecting" | "connected" | "disconnected";
@@ -164,8 +164,8 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
   };
 
   // The song rendered in the render worker and measured, as the in-app agent's analyze_mix does.
-  const handleAnalysisRequest = ({ id }: Extract<ServerToBrowser, { type: "analysisRequest" }>) =>
-    analyzeProjectMix(projectStore).then(
+  const handleAnalysisRequest = ({ id, device }: Extract<ServerToBrowser, { type: "analysisRequest" }>) =>
+    (device ? analyzeTrackDevice(projectStore, device) : analyzeProjectMix(projectStore)).then(
       (result) => send({ type: "analysisReply", id, ok: true, result }),
       (err: unknown) =>
         send({ type: "analysisReply", id, ok: false, error: err instanceof Error ? err.message : String(err) }),

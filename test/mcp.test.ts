@@ -751,6 +751,29 @@ describe("MCP server (tracks)", () => {
     expect(parse(await call("list_tracks")).project).toBe("Untitled");
   });
 
+  it("analyze_device asks the tab to render one track alone, and returns its picture as an image", async () => {
+    await connectTab();
+    const trackId = await makeTrack("subtractive");
+    const asked: unknown[] = [];
+    tab!.on("message", (data) => {
+      const msg = JSON.parse(data.toString()) as { type: string; id: string; device?: unknown };
+      if (msg.type !== "analysisRequest") return;
+      asked.push(msg.device);
+      tab!.send(
+        JSON.stringify({
+          type: "analysisReply",
+          id: msg.id,
+          ok: true,
+          result: { summary: { played: "the bass phrase", peakDbfs: -9 }, picture: "iVBORw0KGgo=" },
+        }),
+      );
+    });
+    const res = await call("analyze_device", { track: trackId, play: "bass", picture: true });
+    expect(asked).toEqual([{ track: trackId, play: "bass", picture: true }]);
+    expect(JSON.parse(res.content[0].text)).toMatchObject({ played: "the bass phrase", peakDbfs: -9 });
+    expect(res.content[1]).toEqual({ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" });
+  });
+
   it("analyze_mix fails cleanly when no tab is connected", async () => {
     const res = await call("analyze_mix");
     expect(res.isError).toBe(true);
