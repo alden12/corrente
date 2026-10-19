@@ -11,9 +11,8 @@
  *   stages before them played this block, so nothing is a block late.
  * - **The mix as live:** each track and group at its volume (silent when muted or soloed out),
  *   delayed to make up for later chains beside it (latency.ts), summed into its group and on to
- *   master, then the soft clip. The browser's DynamicsCompressor limiter before it isn't
- *   reproduced; `masterPeak` reports the level going into the master, which is what to judge
- *   clipping by.
+ *   master, then the soft clip. `masterPeak` reports the level going into the master, which is
+ *   what to judge clipping by.
  *
  * Not yet (each named in `omitted` when a project has it, never silently left out): MIDI devices
  * (part 2b), audio tracks and sidechains (part 2c).

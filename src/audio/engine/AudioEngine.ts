@@ -7,7 +7,7 @@
  *     -> trackGain
  * Both feed their group's bus, mirroring the project's tree:
  *   ... -> trackGain -> group.input -> [group effects] -> group.output
- *       -> parent group.input | master -> limiter -> destination
+ *       -> parent group.input | master -> soft clip -> destination
  *
  * `reconcile` keeps audio in sync with the project: it builds/disposes nodes for
  * tracks and groups, rewires each effect chain, re-routes to the current parent,
@@ -88,7 +88,6 @@ export class AudioEngine {
    */
   private router: MixRouter | null = null;
   private master: GainNode | null = null;
-  private limiter: DynamicsCompressorNode | null = null;
   /** A master-level bus for the metronome click (independent of any track). */
   private metronomeGain: GainNode | null = null;
   private metronomeVolume = 0.6;
@@ -225,7 +224,7 @@ export class AudioEngine {
     this.ctx = ctx;
     this.stopSlow = onSlowBlocks(ctx, (blocks) => this.slowListeners.forEach((listener) => listener(blocks)));
     setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
-    ({ master: this.master, limiter: this.limiter } = masterBus(ctx));
+    this.master = masterBus(ctx);
     this.router = new MixRouter(ctx, (parentId) => this.parentInput(parentId), COMPENSATION_GLIDE_SECONDS);
     // The metronome feeds the master bus (so it is limited with everything else) but is not a
     // track, so it ignores mute/solo and the arrangement. It is as late as the whole mix (INST-36.7),
@@ -862,13 +861,12 @@ export class AudioEngine {
     this.audioBuffers.clear();
     this.decoding.clear();
     this.metronomeGain?.disconnect();
-    this.limiter?.disconnect();
+    this.master?.disconnect();
     this.stopSlow?.();
     this.stopSlow = null;
     void this.ctx?.close();
     this.ctx = null;
     this.master = null;
-    this.limiter = null;
     this.metronomeGain = null;
   }
 }

@@ -45,7 +45,7 @@ export interface RenderOptions {
  * Render a project's arrangement to an AudioBuffer under an OfflineAudioContext, reusing the
  * exact instrument/effect factories the live engine uses (the "same DSP" thesis). The graph
  * mirrors AudioEngine.reconcile: instrument -> effects -> track gain -> group bus(es) -> master
- * -> limiter -> destination. Notes are flattened from placements and scheduled up front inside a
+ * -> soft clip -> destination. Notes are flattened from placements and scheduled up front inside a
  * single suspend(0), so worklet-instrument port messages are queued before the first block.
  *
  * Fidelity (AGENT-4.7): the output matches live playback - async assets (sampler/drumkit +
@@ -82,8 +82,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
   setEngineTransport(ctx, { time: 0, beat: loopStart, tempo: bpm, playing: true });
   setSampleAssets(project.getSamples()); // so a Sampler's "asset:<id>" ref resolves
 
-  // Master bus + limiter, as the live engine has (mixer.ts).
-  const { master } = masterBus(ctx);
+  // Master bus and soft clip, as the live engine has (mixer.ts).
+  const master = masterBus(ctx);
 
   const groups = project.getGroups();
   const tracks = project.getTracks();

@@ -1,32 +1,25 @@
 /**
  * The mix's Web Audio half, shared by AudioEngine and offline renders so both sum a project the same
- * way: the master bus and the limiter guarding it, and each track's and group's way into its parent
+ * way: the master bus and the soft clip guarding it, and each track's and group's way into its parent
  * through a delay making up for what's later beside it (INST-36.7, latency.ts).
  */
 import { compensate, type MixNode } from "./latency";
 import { SOFT_CLIP_RANGE, softClip } from "./softClip";
 
 /**
- * The master bus, through a gentle brick-wall limiter (stacked tracks and effects sum) and then a
- * soft clip to the speakers. The limiter takes 3 ms to act and a compressor only leans on a peak, so
- * a loud chord's onset still went past full scale and crackled (INST-46); the soft clip rounds off
- * whatever gets through, and leaves everything under its knee untouched.
+ * The master bus, through a soft clip to the speakers. It leaves everything under its knee untouched
+ * and rounds off what goes past, so a mix too hot for full scale bends rather than crackles (INST-46).
+ * There is no hidden limiter before it: as in most DAWs, a loud mix is the meters' to show and a
+ * Limiter device's to fix (INST-47), and live, offline and the render core all hear the same thing.
  */
-export const masterBus = (context: BaseAudioContext): { master: GainNode; limiter: DynamicsCompressorNode } => {
+export const masterBus = (context: BaseAudioContext): GainNode => {
   const master = new GainNode(context);
-  const limiter = new DynamicsCompressorNode(context, {
-    threshold: -3,
-    knee: 0,
-    ratio: 20,
-    attack: 0.003,
-    release: 0.25,
-  });
   // A shaper reads its curve over -1..1 and holds the ends past it, so the signal goes in scaled
   // down by the range the curve covers, and the curve scales it back up.
   const scale = new GainNode(context, { gain: 1 / SOFT_CLIP_RANGE });
   const softClip = new WaveShaperNode(context, { curve: softClipCurve(), oversample: "2x" });
-  master.connect(limiter).connect(scale).connect(softClip).connect(context.destination);
-  return { master, limiter };
+  master.connect(scale).connect(softClip).connect(context.destination);
+  return master;
 };
 
 /** `softClip` over -RANGE..RANGE, as the shaper's -1..1 curve. Fine enough that interpolating it is exact under the knee. */
