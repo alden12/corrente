@@ -105,7 +105,7 @@ export abstract class StepStrategy implements MidiStrategy {
   }
 
   private ensureRunning(): void {
-    if (this.timer) return;
+    if (this.timer || this.ctx.clock.drivesSteps) return;
     this.scheduledUntil = this.now();
     this.timer = setInterval(() => this.tick(), LOOKAHEAD_MS);
   }

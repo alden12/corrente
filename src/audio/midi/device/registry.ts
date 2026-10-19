@@ -34,6 +34,24 @@ export function createMidiDevice(
   return make(store, next, clock);
 }
 
+/**
+ * A track's MIDI-device chain (first -> ... -> `last`), each device linked to the next and bypassed
+ * as the track says (a bypassed device stays linked and passes notes through). `head` is where notes
+ * go in: `last` itself when there are no devices. Mirrors AudioEngine.reconcileMidiDevices.
+ */
+export function midiChain(
+  instances: readonly { type: string; params: ParamStore; bypassed: boolean }[],
+  last: NoteTarget,
+  clock: TransportClock,
+): { head: NoteTarget; devices: GraphMidiDevice[] } {
+  const devices = instances.map((instance) => createMidiDevice(instance.type, instance.params, last, clock));
+  devices.forEach((device, index) => {
+    device.bypassed = instances[index].bypassed;
+    device.setNext(devices[index + 1] ?? last);
+  });
+  return { head: devices[0] ?? last, devices };
+}
+
 // --- built-in factories (self-registered) ---------------------------------
 // Every device is the one GraphMidiDevice interpreter over a data def; the def's
 // transform kind (tap / arpeggiate / euclid) selects the runtime strategy.

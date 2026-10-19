@@ -93,12 +93,42 @@ describe("renderProject (AGENT-4.9 part 2): the song, on the engine, in Node", (
     expect(peakOf(await render(store))).toBe(0);
   });
 
-  it("names what it can't play yet rather than leaving it out silently", async () => {
+  it("plays a track's notes through its MIDI devices", async () => {
     const store = project();
-    const track = trackWith(store, "subtractive", [{ pitch: 60, start: 0, length: 1 }]);
+    const track = trackWith(store, "subtractive", [{ pitch: 60, start: 1, length: 1 }]);
     store.addMidiDevice(track.id, "octavator");
-    const song = await render(store);
-    expect(song.omitted).toEqual([expect.stringContaining("MIDI devices aren't rendered yet")]);
+    const doubled = await render(store);
+
+    // The octavator's defaults: the note, and an octave up at 0.7 of its velocity.
+    const written = project();
+    const byHand = trackWith(written, "subtractive", []);
+    byHand.clips[0].store.addNote({ pitch: 60, start: 1, length: 1, velocity: 0.8 });
+    byHand.clips[0].store.addNote({ pitch: 72, start: 1, length: 1, velocity: 0.8 * 0.7 });
+    const expected = await render(written);
+    expect(doubled.omitted).toEqual([]);
+    doubled.channels[0].forEach((sample, index) => expect(sample).toBeCloseTo(expected.channels[0][index], 5));
+  });
+
+  it("steps a generator on the render's own clock, phrase after phrase", async () => {
+    // A chord held for a beat, twice: the arpeggiator's defaults (1/8, up, gate 0.5) play its lowest
+    // two notes each time, starting over after the gap.
+    const chord = (start: number) => [60, 64, 67].map((pitch) => ({ pitch, start, length: 1 }));
+    const store = project();
+    const track = trackWith(store, "subtractive", [...chord(0), ...chord(2)]);
+    store.addMidiDevice(track.id, "arpeggiator");
+    const arpeggiated = await render(store);
+
+    const written = project();
+    trackWith(
+      written,
+      "subtractive",
+      [0, 2].flatMap((start) => [
+        { pitch: 60, start, length: 0.25 },
+        { pitch: 64, start: start + 0.5, length: 0.25 },
+      ]),
+    );
+    const expected = await render(written);
+    arpeggiated.channels[0].forEach((sample, index) => expect(sample).toBeCloseTo(expected.channels[0][index], 5));
   });
 
   it("reports the level going into the master, past the soft clip", async () => {

@@ -19,4 +19,9 @@ export interface TransportClock {
   readonly secondsPerBeat: number;
   /** Continuous (unlooped) beats since playback start at audio-clock `time`; only meaningful while playing. */
   continuousBeatAtTime(time: number): number;
+  /**
+   * Whether the host forwards a generator's steps itself, calling `scheduleWindow` as its blocks
+   * advance (the engine render core, AGENT-4.9), so a generator starts no lookahead timer of its own.
+   */
+  readonly drivesSteps?: boolean;
 }

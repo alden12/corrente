@@ -14,8 +14,8 @@
  *   master, then the soft clip. `masterPeak` reports the level going into the master, which is
  *   what to judge clipping by.
  *
- * Not yet (each named in `omitted` when a project has it, never silently left out): MIDI devices
- * (part 2b), audio tracks and sidechains (part 2c).
+ * Not yet (each named in `omitted` when a project has it, never silently left out): audio tracks and
+ * sidechains (part 2c).
  */
 import { EngineBank } from "../bank/bank";
 import { BLOCK } from "../bank/exports";
@@ -30,6 +30,8 @@ import type { EffectInstance, Group, InstrumentTrack, ProjectStore, Track } from
 import { sampleAudioFor } from "./sampleAudio";
 import type { Rendered, RenderSetup } from "./renderDevice";
 import { trackNotes } from "./trackNotes";
+import { midiChain } from "../midi/device/registry";
+import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 
 export interface ProjectRender extends Rendered {
   /** The loudest sample going into the master, before the soft clip: over 1 means it clips. */
@@ -145,8 +147,6 @@ export async function renderProject(
       if (track.placements.length > 0) omitted.push(`audio track "${track.name}": audio clips aren't rendered yet`);
       return [];
     }
-    if (track.midiDevices.some((device) => !device.bypassed))
-      omitted.push(`track "${track.name}": MIDI devices aren't rendered yet, so its notes play as written`);
     const chain = instrumentChain(track.instrumentType, track.params, track.effects);
     if (!chain) return [];
     const rest = track.effects.slice(chain.absorbed.length);
@@ -220,16 +220,36 @@ export async function renderProject(
     }),
   );
 
-  // --- the notes, all queued up front -------------------------------------------------------
-  strips.forEach((strip) => {
+  // --- the notes ----------------------------------------------------------------------------
+  // Each track's notes go in through its MIDI devices to its instrument's slot. A generator (an
+  // arpeggiator) plays steps off the transport, so rather than its own timer the render drives it:
+  // each block, the notes starting in it go in, then every step landing in it comes out.
+  const secondsPerBeat = 60 / timeline.tempo;
+  const clock = {
+    playing: true,
+    currentTime: 0,
+    secondsPerBeat,
+    continuousBeatAtTime: (time: number) => timeline.loopStart + time / secondsPerBeat,
+    drivesSteps: true,
+  };
+  const instruments = banks.get(INSTRUMENT_STAGE);
+  const players = strips.flatMap((strip) => {
     const first = strip.slots[0];
-    if (!strip.track || first?.stage !== INSTRUMENT_STAGE) return;
-    const bank = banks.get(INSTRUMENT_STAGE)!;
-    trackNotes(strip.track, timeline).forEach((note) => {
-      bank.noteOn(first.track, note.pitch, note.velocity, note.start);
-      bank.noteOff(first.track, note.pitch, note.start + note.length);
-    });
+    if (!strip.track || !instruments || first?.stage !== INSTRUMENT_STAGE) return [];
+    const slot: NoteTarget = {
+      noteOn: (pitch, velocity = 1, when = clock.currentTime) => instruments.noteOn(first.track, pitch, velocity, when),
+      noteOff: (pitch, when = clock.currentTime) => instruments.noteOff(first.track, pitch, when),
+      playNote: (pitch, length, velocity = 1, when = clock.currentTime) => {
+        instruments.noteOn(first.track, pitch, velocity, when);
+        instruments.noteOff(first.track, pitch, when + length);
+      },
+      allNotesOff: () => {},
+    };
+    const { head, devices } = midiChain(strip.track.midiDevices, slot, clock);
+    const notes = trackNotes(strip.track, timeline).sort((a, b) => a.start - b.start);
+    return [{ head, devices, notes, played: 0 }];
   });
+  const generators = players.flatMap((player) => player.devices.filter((device) => device.generates));
 
   // --- latency compensation -----------------------------------------------------------------
   const latencyOf = (strip: Strip) => strip.slots.reduce((sum, slot) => sum + slot.plan.plan.latency, 0);
@@ -255,6 +275,15 @@ export async function renderProject(
 
   for (let block = 0; block < blocks; block++) {
     const start = block * BLOCK;
+    const [from, to] = [start / sampleRate, (start + BLOCK) / sampleRate];
+    clock.currentTime = from;
+    players.forEach((player) => {
+      for (; player.played < player.notes.length && player.notes[player.played].start < to; player.played++) {
+        const note = player.notes[player.played];
+        player.head.playNote(note.pitch, note.length, note.velocity, note.start);
+      }
+    });
+    generators.forEach((generator) => generator.scheduleWindow(from, to));
     const outputs = new Map<string, Stereo>();
     /** A strip's output this block: its last slot (or, a group without effects, its bus), at its volume, delayed. */
     const outputOf = (strip: Strip): Stereo => {
@@ -303,6 +332,7 @@ export async function renderProject(
     );
   }
 
+  players.forEach((player) => player.devices.forEach((device) => device.dispose()));
   return {
     channels: [master[0].slice(total, total + frames), master[1].slice(total, total + frames)],
     sampleRate,

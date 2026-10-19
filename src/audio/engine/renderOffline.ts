@@ -25,14 +25,13 @@ import { beatsToSeconds } from "../sequencer/scheduler";
 import { trackNotes } from "../render/trackNotes";
 import { getAudioBuffer } from "../audioStore";
 import { audioPlayWindow } from "./audioWindow";
-import { createMidiDevice } from "../midi/device/registry";
+import { midiChain } from "../midi/device/registry";
 import { analyzeMix, summarizeMix, type MixSummary } from "../analysis/analyze";
 import { GRID } from "../sequencer/types";
 import type { ProjectStore, EffectInstance, InstrumentTrack, AudioTrack } from "../project/projectStore";
 import type { AudioClipData } from "../project/types";
 import type { Instrument } from "../instruments/types";
 import type { TransportClock } from "../midi/device/clock";
-import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 
 export interface RenderOptions {
   /** Render sample rate. Default 44100. */
@@ -149,7 +148,8 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
       // MIDI-device note chain (d0 -> ... -> instrument); notes enter at the head. The device
       // strategy self-schedules all transformed notes from one playNote using the transport clock,
       // so an arp / octavator renders faithfully offline. No devices => head IS the instrument.
-      const noteHead = buildMidiChain(track, instrument, transportClock, disposables);
+      const { head: noteHead, devices } = midiChain(track.midiDevices, instrument, transportClock);
+      disposables.push(...devices);
 
       const notes = trackNotes(track, timeline);
       scheduleFns.push(() =>
@@ -197,26 +197,6 @@ export async function renderProjectOffline(project: ProjectStore, options: Rende
  */
 export async function analyzeProjectMix(project: ProjectStore): Promise<MixSummary> {
   return summarizeMix(analyzeMix(await renderProjectOffline(project)));
-}
-
-/** Build a track's MIDI-device chain (d0 -> ... -> instrument) and return the head note target -
- *  the instrument itself when there are no devices. Mirrors AudioEngine.reconcileMidiDevices;
- *  bypassed devices stay linked (they pass through internally). Devices are added to `disposables`. */
-function buildMidiChain(
-  track: InstrumentTrack,
-  instrument: Instrument,
-  clock: TransportClock,
-  disposables: { dispose(): void }[],
-): NoteTarget {
-  const devices = track.midiDevices.map((instance) =>
-    createMidiDevice(instance.type, instance.params, instrument, clock),
-  );
-  devices.forEach((device, index) => {
-    device.bypassed = track.midiDevices[index].bypassed;
-    device.setNext(devices[index + 1] ?? instrument);
-  });
-  disposables.push(...devices);
-  return devices[0] ?? instrument;
 }
 
 /** Decode every audio-clip file the project references into `audioBuffers` (keyed by fileId). A
