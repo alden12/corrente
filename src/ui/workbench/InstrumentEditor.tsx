@@ -149,7 +149,11 @@ export function InstrumentEditor({
 function FoldedRollPreview({ clip, beatsPerBar }: { clip: InstrumentTrack["clips"][number]; beatsPerBar: number }) {
   const { notes } = useClip(clip.store);
   return (
+    // The count first, where the other sections' headers start their summaries.
     <div className="flex items-center gap-2 h-full min-w-0">
+      <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
+        {notes.length} {notes.length === 1 ? "note" : "notes"}
+      </span>
       <div className="flex-1 min-w-0 h-full">
         <ClipPreview
           store={clip.store}
@@ -159,9 +163,6 @@ function FoldedRollPreview({ clip, beatsPerBar }: { clip: InstrumentTrack["clips
           empty={null}
         />
       </div>
-      <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
-        {notes.length} {notes.length === 1 ? "note" : "notes"}
-      </span>
     </div>
   );
 }

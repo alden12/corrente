@@ -56,7 +56,12 @@ export const bell: EngineBuiltin = {
       },
       fm: { block: "mul", voice: true, inputs: { a: "modulator", b: "deviation" } },
       carrier: { block: "sine", voice: true, inputs: { frequency: ["voice.frequency", "fm"] } },
-      amp: { block: "mul", voice: true, inputs: { a: "carrier", b: { from: "ampEnv", scale: { param: "level" } } } },
+      // Halved (INST-46): a four-note chord at the old level peaked past twice full scale.
+      amp: {
+        block: "mul",
+        voice: true,
+        inputs: { a: "carrier", b: { from: "ampEnv", scale: { param: "level", scale: 0.5 } } },
+      },
     },
     voice: "amp",
   },

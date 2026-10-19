@@ -59,7 +59,8 @@ export const pluckBass: EngineBuiltin = {
       amp: {
         block: "mul",
         voice: true,
-        inputs: { a: ["string", "subOut"], b: { from: "gateEnv", scale: { param: "level" } } },
+        // Trimmed (INST-46): a four-note chord at the old level peaked past full scale.
+        inputs: { a: ["string", "subOut"], b: { from: "gateEnv", scale: { param: "level", scale: 0.7 } } },
       },
     },
     voice: "amp",

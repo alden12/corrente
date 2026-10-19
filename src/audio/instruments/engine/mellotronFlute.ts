@@ -125,7 +125,8 @@ export const mellotronFlute: EngineBuiltin = {
         },
       },
       amp: { block: "mul", voice: true, inputs: { a: "warmth", b: "envelope" } },
-      level: { block: "mul", stereo: true, inputs: { a: "voices", b: { param: "amp.level" } } },
+      // Halved (INST-46): a four-note chord at the old level peaked past twice full scale.
+      level: { block: "mul", stereo: true, inputs: { a: "voices", b: { param: "amp.level", scale: 0.5 } } },
     },
     voice: "amp",
     output: "level",

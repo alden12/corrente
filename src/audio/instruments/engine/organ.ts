@@ -89,7 +89,8 @@ export const organ: EngineBuiltin = {
         voice: true,
         inputs: { a: ORGAN_HARMONICS.map((harmonic) => `level${harmonic}`), b: "envelope" },
       },
-      level: { block: "mul", stereo: true, inputs: { a: "voices", b: { param: "amp.level" } } },
+      // Trimmed (INST-46): a four-note chord at the old level peaked past full scale.
+      level: { block: "mul", stereo: true, inputs: { a: "voices", b: { param: "amp.level", scale: 0.7 } } },
     },
     voice: "amp",
     output: "level",

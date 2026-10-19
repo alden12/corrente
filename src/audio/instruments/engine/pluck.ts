@@ -42,7 +42,8 @@ export const pluck: EngineBuiltin = {
           release: 0.001,
         },
       },
-      excite: { block: "mul", voice: true, inputs: { a: "exciter", b: "burst" } },
+      // Halved (INST-46): a four-note chord at the old level peaked past twice full scale.
+      excite: { block: "mul", voice: true, inputs: { a: "exciter", b: { from: "burst", scale: 0.5 } } },
       period: { block: "period", voice: true, inputs: { frequency: "voice.frequency", offset: 0.5 } },
       string: { block: "delay", voice: true, inputs: { signal: ["excite", "feedback"], length: "period" } },
       // Brightness, plus six times the note: high notes stay bright.

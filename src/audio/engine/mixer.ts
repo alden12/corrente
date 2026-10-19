@@ -5,7 +5,12 @@
  */
 import { compensate, type MixNode } from "./latency";
 
-/** The master bus, through a gentle brick-wall limiter (stacked tracks and effects sum) to the speakers. */
+/**
+ * The master bus, through a gentle brick-wall limiter (stacked tracks and effects sum) and then a
+ * soft clip to the speakers. The limiter takes 3 ms to act and a compressor only leans on a peak, so
+ * a loud chord's onset still went past full scale and crackled (INST-46); the soft clip rounds off
+ * whatever gets through, and leaves everything under its knee untouched.
+ */
 export const masterBus = (context: BaseAudioContext): { master: GainNode; limiter: DynamicsCompressorNode } => {
   const master = new GainNode(context);
   const limiter = new DynamicsCompressorNode(context, {
@@ -15,9 +20,29 @@ export const masterBus = (context: BaseAudioContext): { master: GainNode; limite
     attack: 0.003,
     release: 0.25,
   });
-  master.connect(limiter).connect(context.destination);
+  // A shaper reads its curve over -1..1 and holds the ends past it, so the signal goes in scaled
+  // down by the range the curve covers, and the curve scales it back up.
+  const scale = new GainNode(context, { gain: 1 / SOFT_CLIP_RANGE });
+  const softClip = new WaveShaperNode(context, { curve: softClipCurve(), oversample: "2x" });
+  master.connect(limiter).connect(scale).connect(softClip).connect(context.destination);
   return { master, limiter };
 };
+
+/** Where the soft clip starts to bend, and how far past full scale its curve reaches. */
+export const SOFT_CLIP_KNEE = 0.9;
+export const SOFT_CLIP_RANGE = 4;
+
+/** Unchanged up to the knee, then curving smoothly toward full scale and never past it. */
+export const softClip = (sample: number): number => {
+  const size = Math.abs(sample);
+  if (size <= SOFT_CLIP_KNEE) return sample;
+  const room = 1 - SOFT_CLIP_KNEE;
+  return Math.sign(sample) * (SOFT_CLIP_KNEE + room * Math.tanh((size - SOFT_CLIP_KNEE) / room));
+};
+
+/** `softClip` over -RANGE..RANGE, as the shaper's -1..1 curve. Fine enough that interpolating it is exact under the knee. */
+const softClipCurve = (points = 8193): Float32Array<ArrayBuffer> =>
+  Float32Array.from({ length: points }, (_, index) => softClip(((2 * index) / (points - 1) - 1) * SOFT_CLIP_RANGE));
 
 /** The longest delay a compensating DelayNode is made to hold: a second at 48 kHz is plenty. */
 export const MAX_COMPENSATION_SECONDS = 1;
