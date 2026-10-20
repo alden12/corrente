@@ -36,6 +36,15 @@ export const mostUsedTags = (entries: readonly { tags: readonly string[] }[], li
 };
 
 /**
+ * An instrument's tags (COMM-1.2's comments): what its patches carry, counted, most carried first,
+ * its default settings counting as its default patch. Tags live on patches because a patch is what
+ * a tag describes; an instrument is what it has been shown to do, and it gains tags as people make
+ * patches for it.
+ */
+export const instrumentTags = (defaults: readonly string[], patches: readonly { tags?: readonly string[] }[]) =>
+  mostUsedTags([{ tags: defaults }, ...patches.map((patch) => ({ tags: patch.tags ?? [] }))], Infinity);
+
+/**
  * `patches` carrying the words' tags, best match first; with `withDefaults`, the instruments whose
  * default settings carry them too. A misspelt word is read as the tag most like it (`readAs`), and
  * one like no tag comes back with the most used tags, for the model to pick its meaning from.

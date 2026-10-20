@@ -10,6 +10,7 @@ import {
 } from "../src/ui/explore/exploreItems";
 import { pickableInstrumentInfos } from "../src/audio/instruments/catalog";
 import { search } from "../src/audio/search";
+import { instrumentTags } from "../src/audio/patches/byTags";
 import { effectInfos } from "../src/audio/effects/catalog";
 import { midiDeviceInfos } from "../src/audio/midi/device/catalog";
 import { FACTORY_PATCHES } from "../src/audio/patches/factory";
@@ -89,6 +90,24 @@ describe("searching Explore (search.ts)", () => {
     expect(search(items, "#glasy").readAs).toEqual({ "#glasy": "#glassy" });
     // Like nothing at all: left as typed, so nothing is found.
     expect(search(items, "zzqx")).toEqual({ items: [] });
+  });
+});
+
+describe("an instrument's tags (COMM-1.2)", () => {
+  it("are its patches' tags counted, most carried first, its defaults counting as one patch", () => {
+    expect(
+      instrumentTags(["bass", "warm"], [{ tags: ["pad", "glassy"] }, { tags: ["glassy", "warm"] }, { tags: [] }]),
+    ).toEqual(["warm", "glassy", "bass", "pad"]);
+  });
+
+  it("gain what your patches for it carry, so it turns up for those sounds in Explore", () => {
+    const type = pickableInstrumentInfos()[0].type;
+    const before = exploreItems({ savedPatches: [], samples: [] }).find((item) => item.key.endsWith(type))!;
+    const mine: Patch = { ...saved, instrumentType: type, tags: ["shoegaze"] };
+    const after = exploreItems({ savedPatches: [mine], samples: [] }).find((item) => item.key.endsWith(type))!;
+    expect(before.tags).not.toContain("shoegaze");
+    expect(after.tags).toContain("shoegaze");
+    expect(hasTags(after, ["shoegaze"])).toBe(true);
   });
 });
 

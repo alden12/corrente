@@ -7,6 +7,7 @@
  * Pure: the component supplies the live inputs (saved patches, samples) and decides what a pick
  * does from the item's `source`.
  */
+import { instrumentTags } from "../../audio/patches/byTags";
 import { pickableInstrumentInfos } from "../../audio/instruments/catalog";
 import { effectInfos } from "../../audio/effects/catalog";
 import { midiDeviceInfos } from "../../audio/midi/device/catalog";
@@ -83,6 +84,7 @@ export function exploreItems({
   const instruments = pickableInstrumentInfos();
   const instrumentOf = (type: string) => instruments.find((info) => info.type === type);
   const instrumentLabel = (type: string) => instrumentOf(type)?.label ?? type;
+  const patches = [...FACTORY_PATCHES, ...savedPatches];
   const items: Unrated[] = [
     ...instruments.map(
       (info): Unrated => ({
@@ -90,13 +92,17 @@ export function exploreItems({
         category: "instruments",
         name: info.label,
         meta: info.custom ? "Instrument · custom" : "Instrument",
-        tags: info.tags ?? [],
+        // What its patches carry, counted, so it turns up for the sounds it's been shown to make.
+        tags: instrumentTags(
+          info.tags ?? [],
+          patches.filter((patch) => patch.instrumentType === info.type),
+        ),
         builtin: !info.custom,
         hue: deviceHue(info),
         source: { kind: "instrument", type: info.type },
       }),
     ),
-    ...[...FACTORY_PATCHES, ...savedPatches].map(
+    ...patches.map(
       (patch): Unrated => ({
         key: PORTRAIT_KEYS.patch(patch.id),
         category: "patches",
