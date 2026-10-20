@@ -20,6 +20,7 @@ export const patchSummary = (patch: Patch) => ({
   instrument: patch.instrumentType,
   builtin: patch.builtin ?? false,
   tags: patch.tags ?? [],
+  ...(patch.description ? { description: patch.description } : {}),
   effects: patch.effects.map((effect) => effect.type),
 });
 

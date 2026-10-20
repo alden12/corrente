@@ -3,11 +3,20 @@ import { ProjectStore } from "../src/audio/project/projectStore";
 import { applyEdit } from "../src/audio/commands/applyEdit";
 import { describeCommand } from "../src/audio/commands/describe";
 import type { EditCommand } from "../src/audio/commands/types";
-import { listPatches, savePatch, removePatch, newPatchId } from "../src/audio/patches/library";
+import "fake-indexeddb/auto";
+import {
+  libraryWritten,
+  listPatches,
+  newPatchId,
+  openLibrary,
+  removePatch,
+  savePatch,
+} from "../src/audio/patches/library";
+import { memoryBackend, type LibraryBackend } from "../src/audio/library/backend";
+import { indexedDbBackend } from "../src/audio/library/indexedDb";
 
-// The patch library is localStorage-backed; the node test env has none, so install
-// a minimal in-memory shim per test.
-function installLocalStorage(): void {
+/** A localStorage for the move-in, which the node test env doesn't have. */
+function installLocalStorage(): Map<string, string> {
   const store = new Map<string, string>();
   (globalThis as { localStorage?: Storage }).localStorage = {
     getItem: (k: string) => store.get(k) ?? null,
@@ -19,6 +28,7 @@ function installLocalStorage(): void {
       return store.size;
     },
   } as Storage;
+  return store;
 }
 
 const samplePatch = (over: Partial<Parameters<typeof savePatch>[0]> = {}) => ({
@@ -32,33 +42,81 @@ const samplePatch = (over: Partial<Parameters<typeof savePatch>[0]> = {}) => ({
   ...over,
 });
 
-describe("patch library (global, localStorage-backed)", () => {
-  beforeEach(() => installLocalStorage());
+/** A fresh device: its own IndexedDB database. */
+const freshDevice = async (): Promise<LibraryBackend> => {
+  indexedDB.deleteDatabase("corrente-library");
+  return (await indexedDbBackend())!;
+};
+
+describe("the patch library (COMM-1.11.1)", () => {
+  beforeEach(async () => openLibrary(memoryBackend()));
   afterEach(() => delete (globalThis as { localStorage?: Storage }).localStorage);
 
-  it("saves, lists newest-first, and removes", () => {
+  it("saves, lists newest first, and hides what's deleted", () => {
     expect(listPatches()).toEqual([]);
     const a = samplePatch({ name: "A" });
     const b = samplePatch({ name: "B" });
-    savePatch(a);
-    savePatch(b);
-    expect(listPatches().map((p) => p.name)).toEqual(["B", "A"]); // newest first
+    savePatch(a, 1);
+    savePatch(b, 2);
+    expect(listPatches().map((p) => p.name)).toEqual(["B", "A"]);
 
     removePatch(a.id);
     expect(listPatches().map((p) => p.name)).toEqual(["B"]);
   });
 
-  it("upserts by id rather than duplicating", () => {
-    const p = samplePatch({ name: "One" });
-    savePatch(p);
-    savePatch({ ...p, name: "Renamed" });
+  it("saves over a patch as its next version, with that version's tags and description", () => {
+    const p = samplePatch({ name: "One", tags: ["pad"], description: "for the verse" });
+    expect(savePatch(p).version).toBe(1);
+    const again = savePatch({ ...p, name: "Renamed", tags: ["pad", "dark"], description: undefined });
+    expect(again.version).toBe(2);
     expect(listPatches()).toHaveLength(1);
-    expect(listPatches()[0].name).toBe("Renamed");
+    expect(listPatches()[0]).toMatchObject({ name: "Renamed", tags: ["pad", "dark"], version: 2 });
+    expect(listPatches()[0].description).toBeUndefined();
   });
 
-  it("degrades to an empty library when storage is unavailable", () => {
-    delete (globalThis as { localStorage?: Storage }).localStorage;
+  it("keeps patches on the device, and every version written once", async () => {
+    const device = await freshDevice();
+    await openLibrary(device);
+    const p = samplePatch({ tags: ["keys"] });
+    savePatch(p);
+    savePatch({ ...p, params: { "filter.cutoff": 400 } });
+    await libraryWritten();
+
+    await openLibrary(memoryBackend());
     expect(listPatches()).toEqual([]);
+    await openLibrary(device);
+    expect(listPatches()).toMatchObject([{ id: p.id, version: 2, params: { "filter.cutoff": 400 }, tags: ["keys"] }]);
+    // A version can't be written twice.
+    await expect(
+      device.save(
+        { id: p.id, kind: "patch", name: p.name, version: 2, createdAt: 1, updatedAt: 1 },
+        { itemId: p.id, version: 2, createdAt: 1, author: "you", tags: [], document: {} },
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("moves patches kept in localStorage in, once they're stored", async () => {
+    const storage = installLocalStorage();
+    const old = [samplePatch({ name: "Newer", createdAt: 2 }), samplePatch({ name: "Older", createdAt: 1 })];
+    storage.set("corrente:patches:v1", JSON.stringify(old));
+    const device = await freshDevice();
+    await openLibrary(device);
+    expect(listPatches().map((p) => p.name)).toEqual(["Newer", "Older"]);
+    expect(storage.has("corrente:patches:v1")).toBe(false);
+
+    await openLibrary(device);
+    expect(listPatches()).toHaveLength(2);
+  });
+
+  it("leaves the old patches where they were when storing them fails", async () => {
+    const storage = installLocalStorage();
+    storage.set("corrente:patches:v1", JSON.stringify([samplePatch()]));
+    const failing: LibraryBackend = {
+      load: async () => ({ items: [], current: [] }),
+      save: () => Promise.reject(new Error("full")),
+    };
+    await openLibrary(failing);
+    expect(storage.has("corrente:patches:v1")).toBe(true);
   });
 });
 

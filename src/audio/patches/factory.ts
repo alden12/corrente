@@ -1,6 +1,6 @@
 /**
  * Factory patches: a bank of ready-made presets shipped with the app, as pure data.
- * Unlike user patches (localStorage, savePatch/removePatch), these are read-only and
+ * Unlike user patches (the library, savePatch/removePatch), these are read-only and
  * built in - they can't be deleted, only used as a starting point. They share the
  * `Patch` shape, so applying one is the same `createTrackFromPatch` edit as any saved
  * patch, and they show up in the library (flat Patches view + nested under their

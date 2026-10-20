@@ -10,8 +10,13 @@ import type { Scheduler } from "../sequencer/scheduler";
 import type { EditLog } from "../commands/editLog";
 import type { EditCommand } from "../commands/types";
 import type { VersionStore } from "../commands/history";
-import { savePatch, newPatchId } from "../patches/library";
-import { listPatchesFor, patchDetails, patchTrackCommand } from "../patches/patchTools";
+import {
+  listPatchesFor,
+  patchDetails,
+  patchTrackCommand,
+  savePatchFromTrack,
+  type SaveOptions,
+} from "../patches/patchTools";
 import { DEFAULT_WS_PORT } from "./protocol";
 import { analyzeProjectMix, analyzeTrackDevice } from "../engine/renderInWorker";
 import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
@@ -129,22 +134,8 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
       if (!track) throw new Error("No track specified and none selected.");
       if (track.kind !== "instrument")
         throw new Error(`Track ${track.id} is an audio track; patches need an instrument track.`);
-      const patch = {
-        id: newPatchId(),
-        name: (params.name as string | undefined)?.trim() || track.name,
-        author: editLog.agentAuthor,
-        instrumentType: track.instrumentType,
-        params: track.params.snapshot(),
-        midiDevices: track.midiDevices.map((device) => ({
-          type: device.type,
-          bypassed: device.bypassed,
-          params: device.params.snapshot(),
-        })),
-        effects: track.effects.map((fx) => ({ type: fx.type, bypassed: fx.bypassed, params: fx.params.snapshot() })),
-        createdAt: Date.now(),
-      };
-      savePatch(patch);
-      return { id: patch.id, name: patch.name };
+      const saved = savePatchFromTrack(track, editLog.agentAuthor, params as SaveOptions);
+      return { id: saved.id, name: saved.name, version: saved.version };
     },
     apply: (params) => {
       const command = patchTrackCommand(String(params.patch ?? ""), params.name as string | undefined);

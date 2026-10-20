@@ -11,7 +11,7 @@ import { useState } from "react";
 import type { InstrumentTrack, ProjectStore, Track } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
 import type { SampleAsset } from "../../audio/samples/catalog";
-import { savePatch, newPatchId } from "../../audio/patches/library";
+import { savePatchFromTrack } from "../../audio/patches/patchTools";
 import { EMPTY_INSTRUMENT, pickableInstrumentInfos } from "../../audio/instruments/catalog";
 import { MidiDeviceChain } from "../MidiDeviceChain";
 import { InstrumentPanel } from "../InstrumentPanel";
@@ -37,24 +37,7 @@ export function SavePatchControl({
   const [name, setName] = useState("");
 
   const save = () => {
-    savePatch({
-      id: newPatchId(),
-      name: name.trim() || track.name,
-      author: "you",
-      instrumentType: track.instrumentType,
-      params: track.params.snapshot(),
-      midiDevices: track.midiDevices.map((device) => ({
-        type: device.type,
-        bypassed: device.bypassed,
-        params: device.params.snapshot(),
-      })),
-      effects: track.effects.map((fx) => ({
-        type: fx.type,
-        bypassed: fx.bypassed,
-        params: fx.params.snapshot(),
-      })),
-      createdAt: Date.now(),
-    });
+    savePatchFromTrack(track, "you", { name });
     setNaming(false);
     setName("");
   };

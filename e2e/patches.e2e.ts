@@ -4,8 +4,8 @@ import { dismissStart, openExploreCategory } from "./support/app";
 /**
  * Patches: save the selected instrument track (its instrument + params + effect
  * chain) as a named entry in the library, then add a new track from it. The patch
- * library is global (localStorage), so it shows up on Explore's Patches
- * page across projects.
+ * library is global (IndexedDB on the device, COMM-1.11.1), so it shows up on Explore's
+ * Patches page across projects.
  */
 
 test.use({ viewport: { width: 1320, height: 900 } });
@@ -41,6 +41,36 @@ test("save an instrument as a patch, then add a track from it", async ({ page })
   await page.reload();
   await dismissStart(page);
   await expect(page.getByRole("button", { name: "Brass Pluck", exact: true })).toBeVisible();
+});
+
+test("patches saved before the library move into it, once", async ({ page }) => {
+  const old = [
+    {
+      id: "pt-old00001",
+      name: "Old Keepsake",
+      author: "you",
+      instrumentType: "nimbus",
+      params: {},
+      effects: [],
+      createdAt: 1,
+    },
+  ];
+  await page.addInitScript((patches) => {
+    // Only before the first load: the move-in clears the key, and a reload mustn't put it back.
+    if (!sessionStorage.getItem("seeded")) {
+      localStorage.setItem("corrente:patches:v1", JSON.stringify(patches));
+      sessionStorage.setItem("seeded", "1");
+    }
+  }, old);
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Patches");
+  await expect(page.getByRole("button", { name: "Old Keepsake", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("corrente:patches:v1"))).toBeNull();
+
+  await page.reload();
+  await dismissStart(page);
+  await expect(page.getByRole("button", { name: "Old Keepsake", exact: true })).toBeVisible();
 });
 
 test("a factory patch adds as a new track from its +", async ({ page }) => {

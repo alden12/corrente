@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { FACTORY_PATCHES, allPatches, findPatch } from "../src/audio/patches/factory";
-import { savePatch, newPatchId } from "../src/audio/patches/library";
+import { newPatchId, openLibrary, savePatch } from "../src/audio/patches/library";
+import { memoryBackend } from "../src/audio/library/backend";
 import { hasInstrument, instrumentSchema } from "../src/audio/instruments/catalog";
 import { hasEffect, effectSchema } from "../src/audio/effects/catalog";
 import type { ParamSchema, ParamValue } from "../src/audio/params/types";
@@ -47,19 +48,8 @@ describe("factory patches", () => {
 });
 
 describe("patch lookup across factory + user (allPatches / findPatch)", () => {
-  // The user library is localStorage-backed; the node env has none, so shim it.
-  beforeEach(() => {
-    const store = new Map<string, string>();
-    (globalThis as { localStorage?: Storage }).localStorage = {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, String(v)),
-      removeItem: (k: string) => void store.delete(k),
-      clear: () => store.clear(),
-      key: () => null,
-      length: 0,
-    } as Storage;
-  });
-  afterEach(() => delete (globalThis as { localStorage?: Storage }).localStorage);
+  // A fresh library in memory for each test.
+  beforeEach(() => openLibrary(memoryBackend()));
 
   it("allPatches merges factory presets and user patches", () => {
     expect(allPatches()).toHaveLength(FACTORY_PATCHES.length);

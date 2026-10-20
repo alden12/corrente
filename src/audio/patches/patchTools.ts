@@ -6,7 +6,10 @@
  */
 import type { EditCommand } from "../commands/types";
 import { newTrackId } from "../commands/ids";
+import type { Author } from "../commands/types";
+import type { InstrumentTrack } from "../project/projectStore";
 import { soundChains } from "./sound";
+import { newPatchId, savePatch, type Patch } from "./library";
 import { allPatches, findPatch } from "./factory";
 import { patchesByTags, patchSummary } from "./byTags";
 
@@ -17,6 +20,50 @@ export const LIST_PATCHES_DOC =
   '`tags` looks sounds up by what they\'re like: give tags ("warm", "glassy", "bass") and get the patches ' +
   "carrying them, best match first, as starting points, plus each instrument whose default settings carry them. " +
   "A word that isn't a tag comes back with the tags there are: pick the nearest and ask again.";
+
+/** save_patch's text, shared by the MCP servers and the in-app agent. */
+export const SAVE_PATCH_DOC =
+  "Save an instrument track's sound (instrument, params, MIDI-device and effect chains) as a patch in the " +
+  "user's library, usable in any project. Defaults to the selected track. `tags` say what it sounds like, its " +
+  'role first then its character ("pad", "dark", "eerie"); `description` says why it exists (the brief, the ' +
+  "song, the part it was made for), not how it sounds, so the two don't contradict. `patch` names one of the " +
+  "user's patches to save a new version of instead (its earlier versions are kept); tags and description carry " +
+  "over unless given.";
+
+/** What save_patch takes, besides the track. */
+export interface SaveOptions {
+  name?: string;
+  tags?: string[];
+  description?: string;
+  /** One of the user's patches (id or name) to save a new version of. */
+  patch?: string;
+}
+
+/** Save a track's sound to the library, as a new patch or a new version of one of the user's. */
+export function savePatchFromTrack(track: InstrumentTrack, author: Author, options: SaveOptions = {}): Patch {
+  const over = options.patch ? requirePatch(options.patch) : undefined;
+  if (over?.builtin) throw new Error(`"${over.name}" is built in, so it can't be saved over. Save a new patch.`);
+  return savePatch({
+    id: over?.id ?? newPatchId(),
+    name: options.name?.trim() || over?.name || track.name,
+    author,
+    instrumentType: track.instrumentType,
+    params: track.params.snapshot(),
+    midiDevices: track.midiDevices.map((device) => ({
+      type: device.type,
+      bypassed: device.bypassed,
+      params: device.params.snapshot(),
+    })),
+    effects: track.effects.map((effect) => ({
+      type: effect.type,
+      bypassed: effect.bypassed,
+      params: effect.params.snapshot(),
+    })),
+    createdAt: Date.now(),
+    tags: options.tags ?? over?.tags ?? [],
+    description: options.description ?? over?.description,
+  });
+}
 
 /** list_patches: every patch, or those matching `tags`. */
 export const listPatchesFor = ({ tags }: { tags?: unknown }) =>
@@ -38,6 +85,8 @@ export const patchDetails = (query: string) => {
     instrument: patch.instrumentType,
     builtin: patch.builtin ?? false,
     tags: patch.tags ?? [],
+    ...(patch.description ? { description: patch.description } : {}),
+    ...(patch.version ? { version: patch.version } : {}),
     params: patch.params,
     midiDevices: (patch.midiDevices ?? []).map((device) => ({
       type: device.type,

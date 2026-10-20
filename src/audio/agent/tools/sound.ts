@@ -15,9 +15,8 @@ import { instrumentSchema } from "../../instruments/catalog";
 import { readParamValue, validateParam } from "../../params/validate";
 import { pitchName } from "../../params/noteName";
 import { BUILTIN_SAMPLES, assetRef, builtinRef } from "../../samples/catalog";
-import { newPatchId, savePatch } from "../../patches/library";
 import { findPatch } from "../../patches/factory";
-import { LIST_PATCHES_DOC, listPatchesFor } from "../../patches/patchTools";
+import { LIST_PATCHES_DOC, SAVE_PATCH_DOC, listPatchesFor, savePatchFromTrack } from "../../patches/patchTools";
 
 export function soundTools(ctx: ToolContext): AgentTool[] {
   const { projectStore, dispatch, author, resolveInstrumentTrack, resolveTrack, resolveEffect } = ctx;
@@ -244,31 +243,17 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
 
     defineTool({
       name: "save_patch",
-      description:
-        "Save a track's current instrument + params + effect chain as a reusable patch (defaults to the selected track).",
-      schema: z.object({ name: z.string().min(1), track: z.string().optional() }),
-      run: ({ name, track }) => {
-        const instrumentTrack = resolveInstrumentTrack(track);
-        const id = newPatchId();
-        savePatch({
-          id,
-          name,
-          author,
-          instrumentType: instrumentTrack.instrumentType,
-          params: instrumentTrack.params.snapshot(),
-          midiDevices: instrumentTrack.midiDevices.map((device) => ({
-            type: device.type,
-            bypassed: device.bypassed,
-            params: device.params.snapshot(),
-          })),
-          effects: instrumentTrack.effects.map((effect) => ({
-            type: effect.type,
-            bypassed: effect.bypassed,
-            params: effect.params.snapshot(),
-          })),
-          createdAt: Date.now(),
-        });
-        return { ok: true, patchId: id, name };
+      description: SAVE_PATCH_DOC,
+      schema: z.object({
+        name: z.string().min(1).optional(),
+        track: z.string().optional(),
+        tags: z.array(z.string().min(1)).optional(),
+        description: z.string().optional(),
+        patch: z.string().optional(),
+      }),
+      run: ({ track, ...options }) => {
+        const saved = savePatchFromTrack(resolveInstrumentTrack(track), author, options);
+        return { ok: true, patchId: saved.id, name: saved.name, version: saved.version };
       },
     }),
   ];

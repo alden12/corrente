@@ -117,7 +117,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
   const requestTab = (method: HistoryMethod, params?: Record<string, unknown>): Promise<Reply> =>
     awaitReply((id) => sendToTab({ type: "historyRequest", id, method, params }));
 
-  /** Round-trip a patch-library RPC to the tab (patches live in its localStorage). */
+  /** Round-trip a patch-library RPC to the tab (patches live in its library, on the device). */
   const requestPatch = (method: PatchMethod, params?: Record<string, unknown>): Promise<Reply> =>
     awaitReply((id) => sendToTab({ type: "patchRequest", id, method, params }));
 

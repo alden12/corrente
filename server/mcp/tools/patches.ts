@@ -1,10 +1,10 @@
-/** MCP tools: Patches (saved instrument presets, in the tab's localStorage). */
+/** MCP tools: Patches (saved instrument presets, in the tab's library on the device). */
 import { z } from "zod";
 import type { PatchMethod } from "../../../src/audio/mcp/protocol";
 import { ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 import type { Reply } from "../target";
-import { LIST_PATCHES_DOC } from "../../../src/audio/patches/patchTools";
+import { LIST_PATCHES_DOC, SAVE_PATCH_DOC } from "../../../src/audio/patches/patchTools";
 
 export function registerPatchesTools({ server, target }: ToolContext): void {
   const runPatch = async (
@@ -57,19 +57,21 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
     "save_patch",
     {
       title: "Save patch",
-      description:
-        "Save an instrument track's sound (its instrument + parameter values + effect chain) as a named, reusable patch in the user library. Defaults to the selected track.",
+      description: SAVE_PATCH_DOC,
       inputSchema: {
-        name: z.string().min(1).max(60).describe("name for the saved patch"),
+        name: z.string().min(1).max(60).optional().describe("its name (default: the track's, or the patch's)"),
         track: z.string().optional().describe("instrument track id (default: the selected track)"),
+        tags: z.array(z.string().min(1).max(40)).max(12).optional(),
+        description: z.string().max(500).optional(),
+        patch: z.string().optional().describe("one of the user's patches (id or name) to save a new version of"),
       },
     },
-    async ({ name, track }) => {
-      const r = await runPatch("save", { name, trackId: track });
+    async ({ name, track, tags, description, patch }) => {
+      const r = await runPatch("save", { name, trackId: track, tags, description, patch });
       if ("tabError" in r) return fail(r.tabError);
       if (!r.ok) return fail(r.error ?? "Could not save the patch.");
-      const saved = r.result as { id: string; name: string };
-      return ok(`Saved patch "${saved.name}" (id ${saved.id}).`);
+      const saved = r.result as { id: string; name: string; version: number };
+      return ok(`Saved patch "${saved.name}" (id ${saved.id}, version ${saved.version}).`);
     },
   );
 
