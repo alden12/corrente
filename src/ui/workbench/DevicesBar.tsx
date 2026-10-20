@@ -113,12 +113,12 @@ export function DevicesBar({
   );
 }
 
-/** A device's colour; struck through in that colour, over a faded dot, when it is switched off. */
+/** A device's colour; when it is switched off, a faded circle struck through in that colour. */
 function DeviceDot({ color, bypassed }: { color: string; bypassed: boolean }) {
   if (!bypassed) return <span aria-hidden="true" className="w-2 h-2 rounded-sm" style={{ background: color }} />;
   return (
     <svg aria-hidden="true" data-bypassed="" viewBox="0 0 12 12" className="w-3 h-3 shrink-0 -mx-0.5">
-      <rect x="2" y="2" width="8" height="8" rx="1" fill={color} opacity="0.35" />
+      <circle cx="6" cy="6" r="4" fill={color} opacity="0.35" />
       <path d="M1 11 11 1" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
