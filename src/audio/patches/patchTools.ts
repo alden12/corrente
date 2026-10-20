@@ -1,8 +1,8 @@
 /**
  * The patch library as the MCP tools see it: summaries, one patch in full, and the edit that makes a
  * track from one. Shared by the browser bridge and the hosted MCP server (AGENT-28), so both answer
- * `list_patches` / `get_patch` / `apply_patch` the same way. Pure: user patches come from whatever
- * `allPatches` can reach, which on the server is the factory bank alone.
+ * `list_patches` / `get_patch` / `apply_patch` the same way. The user's own patches are an argument:
+ * this device's library by default, or what the hosted server read from their account (COMM-1.11.2).
  */
 import type { EditCommand } from "../commands/types";
 import { newTrackId } from "../commands/ids";
@@ -10,7 +10,7 @@ import type { Author } from "../commands/types";
 import type { InstrumentTrack, ProjectStore } from "../project/projectStore";
 import { keepDevice } from "../library/devices";
 import { soundChains, soundDevicesOf, type DeviceSource } from "./sound";
-import { newPatchId, savePatch, type Patch } from "./library";
+import { listPatches, newPatchId, savePatch, type Patch } from "./library";
 import { allPatches, findPatch } from "./factory";
 import { patchesByTags, patchSummary } from "./byTags";
 
@@ -20,7 +20,9 @@ export const LIST_PATCHES_DOC =
   "shipped factory preset, or the user's own). Patches are shared across projects; get_patch gives one in full. " +
   '`tags` looks sounds up by what they\'re like: give tags ("warm", "glassy", "bass") and get the patches ' +
   "carrying them, best match first, as starting points, plus each instrument whose default settings carry them. " +
-  "A word that isn't a tag comes back with the tags there are: pick the nearest and ask again.";
+  "A misspelt tag is read as the nearest (`readAs` says so); a word like no tag comes back with the most used " +
+  "tags: pick the nearest in meaning and ask again. `mine` lists only the user's own patches. A page at a time " +
+  "(`limit`, default 50): pass `next` back as `cursor` for the rest.";
 
 /** save_patch's text, shared by the MCP servers and the in-app agent. */
 export const SAVE_PATCH_DOC =
@@ -106,9 +108,46 @@ export function trackToSave(project: ProjectStore, trackId?: string): Instrument
   return track;
 }
 
-/** list_patches: every patch, or those matching `tags`. `mine` as in `allPatches`. */
-export const listPatchesFor = ({ tags }: { tags?: unknown }, mine?: readonly Patch[]) =>
-  Array.isArray(tags) && tags.length ? patchesByTags(tags.map(String), mine) : allPatches(mine).map(patchSummary);
+/** What list_patches takes. */
+export interface PatchListing {
+  tags?: unknown;
+  /** Only the user's own patches. */
+  mine?: unknown;
+  limit?: unknown;
+  /** Where the last page left off: its `next`. */
+  cursor?: unknown;
+}
+
+/** A page of list_patches: how many by default, and at most. */
+export const PATCH_PAGE = 50;
+export const MAX_PATCH_PAGE = 100;
+
+/** Where a page starts and how long it is, from a listing's `cursor` and `limit`. */
+export const pageBounds = ({ limit, cursor }: PatchListing) => ({
+  size: Math.min(Math.max(Math.trunc(Number(limit)) || PATCH_PAGE, 1), MAX_PATCH_PAGE),
+  from: Math.max(Math.trunc(Number(cursor)) || 0, 0),
+});
+
+/** One page of `entries`, and the cursor to the next if there's more. */
+export function pageOf<Entry>(entries: readonly Entry[], listing: PatchListing) {
+  const { size, from } = pageBounds(listing);
+  return {
+    patches: entries.slice(from, from + size),
+    ...(from + size < entries.length ? { next: String(from + size) } : {}),
+  };
+}
+
+/**
+ * list_patches: a page of every patch, or of those matching `tags`, or of the user's own (`mine`:
+ * this device's library by default, as in `allPatches`). Summaries only: get_patch has one in full.
+ */
+export function listPatchesFor(listing: PatchListing, mine: readonly Patch[] = listPatches()) {
+  const own = listing.mine === true;
+  const pool = own ? mine : allPatches(mine);
+  const words = Array.isArray(listing.tags) ? listing.tags.map(String) : [];
+  const found = words.length ? patchesByTags(words, pool, !own) : { patches: pool.map(patchSummary) };
+  return { ...found, ...pageOf(found.patches, listing) };
+}
 
 const requirePatch = (query: string, mine?: readonly Patch[]) => {
   const patch = findPatch(query.trim(), mine);

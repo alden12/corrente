@@ -4,7 +4,7 @@ import type { PatchMethod } from "../../../src/audio/mcp/protocol";
 import { ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 import type { Reply } from "../target";
-import { LIST_PATCHES_DOC, SAVE_PATCH_DOC } from "../../../src/audio/patches/patchTools";
+import { LIST_PATCHES_DOC, MAX_PATCH_PAGE, SAVE_PATCH_DOC } from "../../../src/audio/patches/patchTools";
 
 export function registerPatchesTools({ server, target }: ToolContext): void {
   const runPatch = async (
@@ -25,10 +25,13 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
       description: LIST_PATCHES_DOC,
       inputSchema: {
         tags: z.array(z.string()).optional().describe("words for the sound wanted; every patch when absent"),
+        mine: z.boolean().optional().describe("only the user's own patches"),
+        limit: z.number().int().min(1).max(MAX_PATCH_PAGE).optional(),
+        cursor: z.string().optional().describe("the last page's `next`"),
       },
     },
-    async ({ tags }) => {
-      const r = await runPatch("list", { tags });
+    async ({ tags, mine, limit, cursor }) => {
+      const r = await runPatch("list", { tags, mine, limit, cursor });
       if ("tabError" in r) return fail(r.tabError);
       if (!r.ok) return fail(r.error ?? "Could not read patches.");
       return ok(JSON.stringify(r.result, null, 2));

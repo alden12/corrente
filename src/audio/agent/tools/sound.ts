@@ -16,7 +16,13 @@ import { readParamValue, validateParam } from "../../params/validate";
 import { pitchName } from "../../params/noteName";
 import { BUILTIN_SAMPLES, assetRef, builtinRef } from "../../samples/catalog";
 import { findPatch } from "../../patches/factory";
-import { LIST_PATCHES_DOC, SAVE_PATCH_DOC, listPatchesFor, savePatchFromTrack } from "../../patches/patchTools";
+import {
+  LIST_PATCHES_DOC,
+  MAX_PATCH_PAGE,
+  SAVE_PATCH_DOC,
+  listPatchesFor,
+  savePatchFromTrack,
+} from "../../patches/patchTools";
 
 export function soundTools(ctx: ToolContext): AgentTool[] {
   const { projectStore, dispatch, author, resolveInstrumentTrack, resolveTrack, resolveEffect } = ctx;
@@ -187,8 +193,13 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
     defineTool({
       name: "list_patches",
       description: LIST_PATCHES_DOC,
-      schema: z.object({ tags: z.array(z.string()).optional() }),
-      run: ({ tags }) => ({ patches: listPatchesFor({ tags }) }),
+      schema: z.object({
+        tags: z.array(z.string()).optional(),
+        mine: z.boolean().optional(),
+        limit: z.number().int().min(1).max(MAX_PATCH_PAGE).optional(),
+        cursor: z.string().optional(),
+      }),
+      run: (listing) => listPatchesFor(listing),
     }),
 
     defineTool({

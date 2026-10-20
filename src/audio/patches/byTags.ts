@@ -6,11 +6,12 @@
  * Shared by both MCP servers and the in-app agent.
  */
 import { pickableInstrumentInfos } from "../instruments/catalog";
-import { allPatches } from "./factory";
+import { byTagOrder } from "../tags";
+import { nearestTags, resolveTags } from "../tagMatch";
 import type { Patch } from "./library";
 
-/** The most patches a lookup returns, best matches first. */
-const MAX_PATCHES = 12;
+/** How many tags a word that matched none is answered with: the most used. */
+export const KNOWN_TAGS = 40;
 
 /** How a patch is listed. */
 export const patchSummary = (patch: Patch) => ({
@@ -24,17 +25,36 @@ export const patchSummary = (patch: Patch) => ({
   effects: patch.effects.map((effect) => effect.type),
 });
 
-export function patchesByTags(words: string[], mine?: readonly Patch[]) {
-  const patches = allPatches(mine).map(patchSummary);
-  const defaults = pickableInstrumentInfos().map((info) => ({
-    instrument: info.type,
-    name: `${info.label} (default settings)`,
-    tags: info.tags ?? [],
-  }));
-  const inUse = new Set<string>([...patches, ...defaults].flatMap((entry) => entry.tags));
-  const asked = words.map((word) => word.trim().toLowerCase());
-  const tags = asked.filter((word) => inUse.has(word));
-  const unknown = asked.filter((word) => !inUse.has(word));
+/** The tags most used across `entries`, most used first, `limit` of them. */
+export const mostUsedTags = (entries: readonly { tags: readonly string[] }[], limit = KNOWN_TAGS): string[] => {
+  const counts = new Map<string, number>();
+  entries.flatMap((entry) => entry.tags).forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1));
+  return [...counts]
+    .sort(([left, leftCount], [right, rightCount]) => rightCount - leftCount || byTagOrder(left, right))
+    .slice(0, limit)
+    .map(([tag]) => tag);
+};
+
+/**
+ * `patches` carrying the words' tags, best match first; with `withDefaults`, the instruments whose
+ * default settings carry them too. A misspelt word is read as the tag most like it (`readAs`), and
+ * one like no tag comes back with the most used tags, for the model to pick its meaning from.
+ */
+export function patchesByTags(words: string[], patches: readonly Patch[], withDefaults = true) {
+  const summaries = patches.map(patchSummary);
+  const defaults = withDefaults
+    ? pickableInstrumentInfos().map((info) => ({
+        instrument: info.type,
+        name: `${info.label} (default settings)`,
+        tags: info.tags ?? [],
+      }))
+    : [];
+  const inUse = new Set<string>([...summaries, ...defaults].flatMap((entry) => entry.tags));
+  const { tags, readAs, unknown } = resolveTags(
+    words,
+    (word) => inUse.has(word),
+    (word) => nearestTags(word, inUse),
+  );
   const matching = <Entry extends { tags: readonly string[] }>(entries: Entry[]) =>
     entries
       .map((entry) => ({ entry, score: entry.tags.filter((tag) => tags.includes(tag)).length }))
@@ -43,9 +63,10 @@ export function patchesByTags(words: string[], mine?: readonly Patch[]) {
       .map(({ entry }) => entry);
 
   return {
-    patches: matching(patches).slice(0, MAX_PATCHES),
-    defaults: matching(defaults),
-    // Only when a word missed, so a retry has the tags to choose from.
-    ...(unknown.length ? { unknown, knownTags: [...inUse].sort() } : {}),
+    patches: matching(summaries),
+    ...(withDefaults ? { defaults: matching(defaults) } : {}),
+    ...(readAs ? { readAs } : {}),
+    // Only when a word missed, so a retry has tags to choose from.
+    ...(unknown ? { unknown, knownTags: mostUsedTags([...summaries, ...defaults]) } : {}),
   };
 }
