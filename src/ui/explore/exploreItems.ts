@@ -104,7 +104,13 @@ export function exploreItems({
 }): ExploreItem[] {
   const instruments = pickableInstrumentInfos();
   const instrumentOf = (type: string) => instruments.find((info) => info.type === type);
-  const instrumentLabel = (type: string) => instrumentOf(type)?.label ?? type;
+  /** A patch's instrument: the project's, else the custom one it carries (not added here yet). */
+  const patchInstrument = (patch: Patch) =>
+    instrumentOf(patch.instrumentType) ??
+    patch.devices?.instruments?.find((device) => device.type === patch.instrumentType) ?? {
+      type: patch.instrumentType,
+      label: patch.instrumentType,
+    };
   const patches = [...FACTORY_PATCHES, ...savedPatches];
   const items: Unrated[] = [
     ...instruments.map(
@@ -124,21 +130,21 @@ export function exploreItems({
         source: { kind: "instrument", type: info.type },
       }),
     ),
-    ...patches.map(
-      (patch): Unrated => ({
+    ...patches.map((patch): Unrated => {
+      const instrument = patchInstrument(patch);
+      const instrumentLabel = instrument.label ?? instrument.type;
+      return {
         key: PORTRAIT_KEYS.patch(patch.id),
         category: "patches",
         name: patch.name,
-        meta: patch.builtin
-          ? `${instrumentLabel(patch.instrumentType)} · built in`
-          : `${instrumentLabel(patch.instrumentType)} · yours`,
+        meta: patch.builtin ? `${instrumentLabel} · built in` : `${instrumentLabel} · yours`,
         tags: patch.tags ?? [],
         builtin: !!patch.builtin,
-        hue: deviceHue(instrumentOf(patch.instrumentType) ?? { type: patch.instrumentType }),
+        hue: deviceHue(instrument),
         ...(patch.builtin ? {} : { drawing: patchDrawing(patch) }),
         source: { kind: "patch", patch },
-      }),
-    ),
+      };
+    }),
     ...effectInfos().map(
       (info): Unrated => ({
         key: PORTRAIT_KEYS.effect(info.type),

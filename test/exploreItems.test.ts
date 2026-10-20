@@ -16,6 +16,8 @@ import { midiDeviceInfos } from "../src/audio/midi/device/catalog";
 import { FACTORY_PATCHES } from "../src/audio/patches/factory";
 import type { Patch } from "../src/audio/patches/library";
 import { registerInstrument, unregisterInstrument } from "../src/audio/instruments/catalog";
+import { deviceHue } from "../src/audio/deviceColors";
+import { customInstrument } from "./support/customDevices";
 
 const saved: Patch = {
   id: "mine",
@@ -215,5 +217,19 @@ describe("search results (COMM-1.9.3)", () => {
   it("lists favourites in the order given, skipping refs with no item", () => {
     const listed = favouriteItems(items, ["effect:reverb", "instrument:gone", "sample:s1", "instrument:fm"]);
     expect(listed.map((item) => item.key)).toEqual(["effect:reverb", "instrument:fm"]);
+  });
+});
+
+describe("a patch on a custom instrument the project doesn't have", () => {
+  it("is named and coloured from the instrument it carries, not its type id", () => {
+    const synth = { ...customInstrument("ci-carried01", "Carried Saw"), color: "lime" as const };
+    const patch: Patch = { ...saved, id: "pt-carried", instrumentType: synth.type, devices: { instruments: [synth] } };
+    const item = exploreItems({
+      project: { customInstruments: [], customEffects: [] },
+      savedPatches: [patch],
+      samples: [],
+    }).find((each) => each.key === "patch:pt-carried")!;
+    expect(item.meta).toBe("Carried Saw · yours");
+    expect(item.hue).toBe(deviceHue(synth));
   });
 });
