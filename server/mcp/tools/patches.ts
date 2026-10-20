@@ -4,6 +4,7 @@ import type { PatchMethod } from "../../../src/audio/mcp/protocol";
 import { ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 import type { Reply } from "../target";
+import { LIST_PATCHES_DOC } from "../../../src/audio/patches/patchTools";
 
 export function registerPatchesTools({ server, target }: ToolContext): void {
   const runPatch = async (
@@ -21,12 +22,13 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
     "list_patches",
     {
       title: "List patches",
-      description:
-        "List the instrument patches (presets) available: id, name, author, instrument type, effect types, a `builtin` flag (true = a shipped factory preset, false = a user-saved one), and category. Patches are global (shared across projects). Use get_patch for one patch's full parameter values.",
-      inputSchema: {},
+      description: LIST_PATCHES_DOC,
+      inputSchema: {
+        tags: z.array(z.string()).optional().describe("words for the sound wanted; every patch when absent"),
+      },
     },
-    async () => {
-      const r = await runPatch("list");
+    async ({ tags }) => {
+      const r = await runPatch("list", { tags });
       if ("tabError" in r) return fail(r.tabError);
       if (!r.ok) return fail(r.error ?? "Could not read patches.");
       return ok(JSON.stringify(r.result, null, 2));

@@ -8,17 +8,21 @@ import type { EditCommand } from "../commands/types";
 import { newTrackId } from "../commands/ids";
 import { soundChains } from "./sound";
 import { allPatches, findPatch } from "./factory";
+import { patchesByTags, patchSummary } from "./byTags";
 
-export const listPatchSummaries = () =>
-  allPatches().map((patch) => ({
-    id: patch.id,
-    name: patch.name,
-    author: patch.author,
-    instrument: patch.instrumentType,
-    builtin: patch.builtin ?? false,
-    category: patch.category,
-    effects: patch.effects.map((effect) => effect.type),
-  }));
+/** list_patches' text, shared by the MCP servers and the in-app agent. */
+export const LIST_PATCHES_DOC =
+  "List the instrument patches (presets): id, name, author, instrument, tags, effect types, and `builtin` (a " +
+  "shipped factory preset, or the user's own). Patches are shared across projects; get_patch gives one in full. " +
+  '`tags` looks sounds up by what they\'re like: give a brief\'s words ("warm", "eerie", "supersaw") and get ' +
+  "the patches carrying them, best match first, as starting points, plus each instrument whose default settings " +
+  "carry them. A tag can come with a note (how to build it on the engine's blocks) and a check (what " +
+  "analyze_device shows when it worked): follow the note when designing, and confirm the check after. A word " +
+  "it doesn't know comes back with the tags it does.";
+
+/** list_patches: every patch, or those matching `tags`. */
+export const listPatchesFor = ({ tags }: { tags?: unknown }) =>
+  Array.isArray(tags) && tags.length ? patchesByTags(tags.map(String)) : allPatches().map(patchSummary);
 
 const requirePatch = (query: string) => {
   const patch = findPatch(query.trim());
@@ -35,7 +39,7 @@ export const patchDetails = (query: string) => {
     author: patch.author,
     instrument: patch.instrumentType,
     builtin: patch.builtin ?? false,
-    category: patch.category,
+    tags: patch.tags ?? [],
     params: patch.params,
     midiDevices: (patch.midiDevices ?? []).map((device) => ({
       type: device.type,

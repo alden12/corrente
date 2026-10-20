@@ -43,8 +43,6 @@ export interface Patch {
   createdAt: number;
   /** True for a shipped factory preset (read-only, not in localStorage - see factory.ts). */
   builtin?: boolean;
-  /** Optional grouping label for the library (factory presets set this, e.g. "Bass"). */
-  category?: string;
   /** Tags from the vocabulary (`tags.ts`). Factory presets carry them; saved patches have none yet. */
   tags?: readonly Tag[];
 }

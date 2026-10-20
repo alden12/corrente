@@ -40,6 +40,10 @@ export const deviceFormatDoc = () => ({
     "that never stops; fix those before using it.",
   paramKinds: paramKindsDoc,
   ...definitionFormatDoc(),
+  designing:
+    'To design to a brief ("warm and a bit eerie"), look its words up with list_patches\' `tags` first: the ' +
+    "patches carrying them are worked examples, and a tag's note says how to build it on these blocks and what " +
+    "analyze_device shows when it landed.",
 });
 
 export type ToolResult = {

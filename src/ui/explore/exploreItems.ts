@@ -102,7 +102,7 @@ export function exploreItems({
         category: "patches",
         name: patch.name,
         meta: patch.builtin
-          ? `${instrumentLabel(patch.instrumentType)} · ${patch.category}`
+          ? `${instrumentLabel(patch.instrumentType)} · built in`
           : `${instrumentLabel(patch.instrumentType)} · yours`,
         tags: patch.tags ?? [],
         builtin: !!patch.builtin,

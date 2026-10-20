@@ -1,0 +1,104 @@
+{
+  "lush": {
+    "synonyms": ["rich", "thick", "big", "full"],
+    "note": "Several oscillators a voice, detuned 5 to 20 cents apart (a pitch node each, semitones ±0.05 to ±0.2 on voice.frequency), maybe an octave or a fifth below quietly; then chorus. Scale the level down as oscillators are added: they sum.",
+    "blocks": ["saw", "pulse", "pitch", "chorus"],
+    "check": "stereoCorrelation falls (under about 0.6 with chorus); the picture's harmonics shimmer and thicken."
+  },
+  "bright": {
+    "synonyms": ["vibrant", "crisp", "present", "cutting", "sparkly"],
+    "note": "Harmonic-rich sources (saw, narrow pulse, a wavetable's later cycles) with the filter well open; for vibrant, keep it moving: a slow lfo or beatlfo on cutoff, or a filter envelope on each note.",
+    "blocks": ["saw", "pulse", "wavetable", "svf", "lfo", "beatlfo"],
+    "check": "centroidHz above about 1500 for a lead or keys; the 2k to 8k bands within 10 dB of the 500 band."
+  },
+  "dark": {
+    "synonyms": ["mellow", "muffled", "dull", "deep"],
+    "note": "A low-pass with cutoff around 300 to 1500 Hz and little resonance, cutoff key-tracked (a scaled voice.frequency in its list) so high notes don't vanish; sine, triangle or a sub rather than bright sources.",
+    "blocks": ["ladder", "svf", "sine", "triangle"],
+    "check": "centroidHz under about 800; the 4k and 8k bands 20 dB or more below the 250 to 500 bands."
+  },
+  "warm": {
+    "synonyms": ["round", "analog", "cosy", "fat"],
+    "note": "A ladder low-pass around 1 to 3 kHz with a little resonance, a touch of shaper drive (2 to 4), and slow drift: voice.seed into a pitch node, a few cents.",
+    "blocks": ["ladder", "shaper", "pitch"],
+    "check": "centroidHz around 600 to 1500; the 250 to 1k bands lead, with the 4k band 10 to 20 dB under them."
+  },
+  "eerie": {
+    "synonyms": ["haunting", "unsettling", "ghostly", "spooky", "creepy"],
+    "note": "Unsteady pitch (a slow lfo, 0.1 to 0.5 Hz, into a pitch node by ±10 to 30 cents, plus voice.seed drift), a quiet layer at an odd interval (a tritone, +6, or a major seventh, +11), a dark filter, slow attack, and a long reverb (decay 4 to 8 s). Some pinknoise through a band-pass for air.",
+    "blocks": ["lfo", "pitch", "sine", "triangle", "svf", "adsr", "reverb", "pinknoise"],
+    "check": "The picture's harmonic lines waver, and a tail rings on after the notes; centroidHz low to mid."
+  },
+  "glassy": {
+    "synonyms": ["crystalline", "bell-like", "shimmering", "chiming"],
+    "note": "Sine or triangle partials, some inharmonic (ratios like 2.76 or 3.5), each with its own fast decay; or the harmonics wavetable; a high-pass to clear the lows, and a bright reverb (damping high).",
+    "blocks": ["sine", "triangle", "wavetable", "svf", "adsr", "reverb"],
+    "check": "Clean, separate lines in the picture that fade top first; centroidHz high, little between the lines."
+  },
+  "gritty": {
+    "synonyms": ["dirty", "crunchy", "distorted", "fuzzy", "lo-fi"],
+    "note": "Shaper drive 10 to 40, or a waveshaper (hardClip for edge), before the filter so it can tame the fizz; bitcrush (bits 6 to 10, downsample 2 to 6) for lo-fi crunch. Drive adds level, so bring the output down.",
+    "blocks": ["shaper", "waveshaper", "bitcrush", "svf", "ladder"],
+    "check": "The 4k to 16k bands rise and the picture fills in between harmonics; a note still peaks near -10 dBFS."
+  },
+  "airy": {
+    "synonyms": ["breathy", "whispery", "light"],
+    "note": "Pinknoise or noise through an svf band-pass or high-pass, on the note's envelope, mixed well under the tone.",
+    "blocks": ["pinknoise", "noise", "svf", "mul", "adsr"],
+    "check": "The 8k and 16k bands rise; a haze above the harmonics in the picture while notes sound."
+  },
+  "wide": {
+    "synonyms": ["spacious", "stereo", "enveloping", "huge"],
+    "note": "Chorus; each voice panned a little by voice.seed (a pan node in the voice, voice: [left, right]); different delay or reverb settings on each side. Keep bass mono.",
+    "blocks": ["chorus", "pan", "delay", "reverb"],
+    "check": "stereoCorrelation between about 0.2 and 0.6 (below 0 means phase trouble, and it vanishes in mono)."
+  },
+  "punchy": {
+    "synonyms": ["percussive", "snappy", "tight"],
+    "note": "An amp envelope with attack under 5 ms, decay 0.1 to 0.4 s and low sustain; a filter envelope opening on the attack and closing fast (an adsr into a pitch node's semitones on cutoff).",
+    "blocks": ["adsr", "pitch", "svf", "ladder"],
+    "check": "Each onset in the picture is bright and tall, then narrows within a few hundred ms."
+  },
+  "soft": {
+    "synonyms": ["smooth", "gentle", "evolving", "slow"],
+    "note": "Attack 0.2 to 1 s, release 1 to 3 s, a low-pass and slow movement (wavetable position or cutoff on a slow lfo); for evolving, two lfos at unrelated rates.",
+    "blocks": ["adsr", "svf", "wavetable", "lfo"],
+    "check": "No sharp onsets in the picture: notes fade in, and the bands drift slowly over time."
+  },
+  "supersaw": {
+    "synonyms": ["trance lead", "hoover"],
+    "note": "Five to seven saws a voice, detuned symmetrically up to ±0.3 semitones, the outer ones quieter, panned apart; a gentle low-pass, chorus and reverb.",
+    "blocks": ["saw", "pitch", "pan", "svf", "chorus", "reverb"],
+    "check": "stereoCorrelation well under 0.5; dense beating harmonics in the picture; a bright centroid."
+  },
+  "strings": {
+    "synonyms": ["pwm strings", "string machine", "ensemble"],
+    "note": "A pulse whose width an lfo moves (0.5 ± 0.2 at 0.3 to 1 Hz), a second detuned, attack 0.3 to 0.8 s, a low-pass around 3 to 5 kHz, chorus.",
+    "blocks": ["pulse", "lfo", "pitch", "adsr", "svf", "chorus"],
+    "check": "Slow attacks and a gently moving comb of harmonics in the picture; a mid centroid."
+  },
+  "bell": {
+    "synonyms": ["fm bell", "electric piano", "fm", "dx"],
+    "note": "A sine carrier whose frequency input is [voice.frequency, modulator]: a sine modulator at a ratio (3.5 for a bell, 1 for an e-piano, via a pitch node) multiplied (mul) by voice.frequency, a fast-decaying adsr, and the index (scale 1 to 5). The index envelope makes the strike bright and the tail pure.",
+    "blocks": ["sine", "pitch", "mul", "adsr"],
+    "check": "Many lines at the onset collapsing to a few as it rings; inharmonic lines for a bell."
+  },
+  "acid": {
+    "synonyms": ["303", "squelchy"],
+    "note": "A saw or square into a ladder with resonance 0.7 to 0.9; a short decay envelope (0.1 to 0.3 s) on cutoff by 2 to 4 octaves, deeper with velocity for accents. No glide yet.",
+    "blocks": ["saw", "pulse", "ladder", "adsr", "pitch"],
+    "check": "A resonant peak sweeping down from each onset in the picture."
+  },
+  "sub": {
+    "synonyms": ["sub bass", "808"],
+    "note": "A sine (or a triangle for more presence) at the note, a short attack, mono, maybe a little shaper drive.",
+    "blocks": ["sine", "triangle", "shaper", "adsr"],
+    "check": "The 63 and 125 bands dominate; stereoCorrelation 1."
+  },
+  "pluck": {
+    "synonyms": ["plucked", "harp", "guitar-like"],
+    "note": "A plucked string: a burst of noise into a delay tuned by period, fed back through onepole damping, its gain from loopgain; or a bright saw with a fast filter envelope.",
+    "blocks": ["noise", "delay", "period", "onepole", "loopgain", "saw", "adsr"],
+    "check": "Bright onsets darkening as they decay; the tail falls away rather than holding."
+  }
+}

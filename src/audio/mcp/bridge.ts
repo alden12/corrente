@@ -11,7 +11,7 @@ import type { EditLog } from "../commands/editLog";
 import type { EditCommand } from "../commands/types";
 import type { VersionStore } from "../commands/history";
 import { savePatch, newPatchId } from "../patches/library";
-import { listPatchSummaries, patchDetails, patchTrackCommand } from "../patches/patchTools";
+import { listPatchesFor, patchDetails, patchTrackCommand } from "../patches/patchTools";
 import { DEFAULT_WS_PORT } from "./protocol";
 import { analyzeProjectMix, analyzeTrackDevice } from "../engine/renderInWorker";
 import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
@@ -119,7 +119,7 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
   // dispatches a createTrackFromPatch edit authored as the agent (violet, undoable by the user
   // driving it, replayable - effect ids minted here and carried in the command).
   const patchMethods: { [K in PatchMethod]: (params: Record<string, unknown>) => unknown } = {
-    list: () => listPatchSummaries(),
+    list: listPatchesFor,
     // Full specifics of one patch (param values + per-effect params), for inspecting or
     // promoting a user patch into the factory bank. Searches factory + user by id/name.
     get: (params) => patchDetails(String(params.patch ?? "")),

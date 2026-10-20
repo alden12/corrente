@@ -12,7 +12,7 @@
  * ones were designed with the agent's ears (analyze_device, AGENT-4.6) after classic
  * virtual-analog presets, and kept by ear. Names are our own.
  */
-import type { KnownTag } from "../tags";
+import type { Tag } from "../tags";
 import { listPatches, type Patch, type PatchEffect } from "./library";
 
 /** Juno-style chorus settings for the lush presets (bundled as the one effect). */
@@ -23,18 +23,16 @@ const chorusII: PatchEffect = { type: "chorus", params: { "chorus.rate": 1.6, "c
 const builtinFor =
   (instrumentType: string) =>
   (
-    category: string,
     name: string,
-    /** Built-ins tag from the known vocabulary, so they stay consistent with each other. */
-    tags: readonly KnownTag[],
+    /** What it is and sounds like: its role first, then its character. */
+    tags: readonly Tag[],
     params: Patch["params"],
     effects: PatchEffect[] = [],
-  ): Patch & { category: string } => ({
+  ): Patch => ({
     id: `factory:${instrumentType}:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     name,
     author: "you",
     builtin: true,
-    category,
     tags,
     instrumentType,
     params,
@@ -48,9 +46,9 @@ const hybridWave = builtinFor("hybrid-wave");
 
 // Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
 // fills the rest from schema defaults when the patch is applied.
-export const FACTORY_PATCHES: (Patch & { category: string })[] = [
+export const FACTORY_PATCHES: Patch[] = [
   // --- Bass -----------------------------------------------------------------
-  nimbus("Bass", "Deep Sub", ["bass", "dark", "soft"], {
+  nimbus("Deep Sub", ["bass", "dark", "soft"], {
     "osc.saw": 0.4,
     "osc.sub": 1,
     "osc.pulse": 0,
@@ -64,7 +62,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     "env.release": 140,
     "amp.level": 0.85,
   }),
-  nimbus("Bass", "Reso Acid", ["bass", "gritty", "retro"], {
+  nimbus("Reso Acid", ["bass", "gritty", "retro"], {
     "osc.saw": 0.9,
     "osc.sub": 0.3,
     "filter.cutoff": 340,
@@ -79,7 +77,6 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
   }),
   // --- Lead -----------------------------------------------------------------
   nimbus(
-    "Lead",
     "Bright Saw",
     ["lead", "bright", "aggressive"],
     {
@@ -112,7 +109,6 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     ],
   ),
   nimbus(
-    "Lead",
     "Hollow PWM",
     ["lead", "retro"],
     {
@@ -135,7 +131,6 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
   ),
   // --- Pad ------------------------------------------------------------------
   nimbus(
-    "Pad",
     "Warm Strings",
     ["pad", "warm", "lush"],
     {
@@ -156,7 +151,6 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     [chorusII],
   ),
   nimbus(
-    "Pad",
     "Glass Pad",
     ["pad", "glassy", "airy"],
     {
@@ -178,7 +172,6 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
   ),
   // --- Keys -----------------------------------------------------------------
   nimbus(
-    "Keys",
     "Electric Piano",
     ["keys", "warm", "soft"],
     {
@@ -197,7 +190,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     },
     [chorusI],
   ),
-  nimbus("Keys", "Clav", ["keys", "bright", "retro"], {
+  nimbus("Clav", ["keys", "bright", "retro"], {
     "osc.pulse": 0.9,
     "osc.pulseWidth": 0.3,
     "filter.cutoff": 3500,
@@ -211,7 +204,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     "amp.level": 0.8,
   }),
   // --- Pluck ----------------------------------------------------------------
-  nimbus("Pluck", "Synth Pluck", ["pluck", "bright"], {
+  nimbus("Synth Pluck", ["pluck", "bright"], {
     "osc.saw": 0.8,
     "osc.sub": 0.4,
     "filter.cutoff": 2500,
@@ -226,9 +219,8 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
   }),
   // --- Brass ----------------------------------------------------------------
   nimbus(
-    "Brass",
     "Analog Brass",
-    ["lead", "bright", "retro"],
+    ["brass", "lead", "bright", "retro"],
     {
       "osc.saw": 0.9,
       "osc.pulse": 0.5,
@@ -246,7 +238,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     [chorusI],
   ),
   // --- Micro VA -------------------------------------------------------------
-  microVa("Lead", "Classic Lead", ["lead", "bright", "retro"], {
+  microVa("Classic Lead", ["lead", "bright", "retro"], {
     "o1.wave": "Saw",
     "o2.tune": -6,
     "f.type": "24dB LPF",
@@ -264,7 +256,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     "mod.mix": 0.2,
     "dly.fb": 0.35,
   }),
-  microVa("Keys", "Bright Poly", ["keys", "bright", "retro"], {
+  microVa("Bright Poly", ["keys", "bright", "retro"], {
     "o1.wave": "Saw",
     "o2.level": 0.8,
     "f.type": "24dB LPF",
@@ -287,7 +279,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
   // --- Hybrid Wave ----------------------------------------------------------
   // Alden's preset on the Block Test Synth it was promoted from: the filter open, so the wavetable's
   // morph and the PWM layer carry it.
-  hybridWave("Keys", "Morph Keys", ["keys", "bright", "glassy"], {
+  hybridWave("Morph Keys", ["keys", "bright", "glassy"], {
     "wt.position": 0.36,
     "filter.cutoff": 8000,
     "filter.resonance": 0.1,
@@ -298,7 +290,7 @@ export const FACTORY_PATCHES: (Patch & { category: string })[] = [
     "env.sustain": 0.68,
   }),
   // --- FX -------------------------------------------------------------------
-  nimbus("FX", "Noise Sweep", ["fx", "airy"], {
+  nimbus("Noise Sweep", ["fx", "airy"], {
     "osc.noise": 0.8,
     "osc.saw": 0.2,
     "osc.sub": 0,

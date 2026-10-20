@@ -35,11 +35,11 @@ describe("factory patches", () => {
     }
   });
 
-  it("are all built-in, categorized, and uniquely identified", () => {
+  it("are all built-in, tagged, and uniquely identified", () => {
     const ids = new Set<string>();
     for (const patch of FACTORY_PATCHES) {
       expect(patch.builtin, `${patch.name}: should be builtin`).toBe(true);
-      expect(patch.category, `${patch.name}: needs a category`).toBeTruthy();
+      expect(patch.tags?.length, `${patch.name}: needs tags`).toBeTruthy();
       expect(ids.has(patch.id), `${patch.name}: duplicate id ${patch.id}`).toBe(false);
       ids.add(patch.id);
     }
