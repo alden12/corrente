@@ -26,6 +26,7 @@ test("save an instrument as a patch, then add a track from it", async ({ page })
   await page.getByRole("button", { name: "Device chain actions" }).click();
   await page.getByRole("menuitem", { name: "Save as patch…" }).click();
   await page.getByPlaceholder("Patch name…").fill("Brass Pluck");
+  await page.getByLabel("Tags, separated by commas").fill("Pluck, brassy");
   await page.getByPlaceholder("Patch name…").press("Enter");
 
   // It appears on the Patches page.
@@ -40,6 +41,11 @@ test("save an instrument as a patch, then add a track from it", async ({ page })
   // does the page Explore was left on.
   await page.reload();
   await dismissStart(page);
+  await expect(page.getByRole("button", { name: "Brass Pluck", exact: true })).toBeVisible();
+
+  // Its tags find it, as typed in the save form.
+  await page.getByRole("button", { name: "Back to Explore" }).click();
+  await page.getByRole("searchbox", { name: "Search Explore" }).fill("#brassy");
   await expect(page.getByRole("button", { name: "Brass Pluck", exact: true })).toBeVisible();
 });
 

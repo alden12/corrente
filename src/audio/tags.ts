@@ -43,6 +43,16 @@ export type Tag = KnownTag | (string & {});
 
 const KNOWN_ORDER: readonly string[] = Object.keys(KNOWN_TAGS);
 
+/** Tags typed as text ("pad, Dark , pad"): split on commas, trimmed, lower case, each once. */
+export const parseTags = (text: string): Tag[] => [
+  ...new Set(
+    text
+      .split(",")
+      .map((tag) => tag.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+];
+
 /** Which group a tag lists under in "More tags": its known group, or "other". */
 export const tagGroup = (tag: Tag): TagGroup | "other" => (KNOWN_TAGS as Record<string, TagGroup>)[tag] ?? "other";
 

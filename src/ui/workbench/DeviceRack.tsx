@@ -7,11 +7,12 @@
  * wrap into a vertical stack of one block per device on its own. On desktop it is `bare`: the
  * workbench column draws the heading (`DevicesBar`, with Save as patch) and does the scrolling.
  */
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import type { InstrumentTrack, ProjectStore, Track } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
 import type { SampleAsset } from "../../audio/samples/catalog";
 import { savePatchFromTrack } from "../../audio/patches/patchTools";
+import { parseTags } from "../../audio/tags";
 import { EMPTY_INSTRUMENT, pickableInstrumentInfos } from "../../audio/instruments/catalog";
 import { MidiDeviceChain } from "../MidiDeviceChain";
 import { InstrumentPanel } from "../InstrumentPanel";
@@ -22,8 +23,8 @@ import { Menu, type MenuItem } from "../Menu";
 
 /**
  * "Save as patch": capture the instrument + its params + effect chain as a named,
- * reusable library entry. Picking it from the ⋮ reveals an inline name field (defaulting
- * to the track name); Enter or Save writes it to the global patch library.
+ * reusable library entry. Picking it from the ⋮ reveals inline name and tags fields (the name
+ * defaulting to the track's); Enter or Save writes it to the global patch library.
  */
 export function SavePatchControl({
   track,
@@ -38,11 +39,17 @@ export function SavePatchControl({
 }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
+  const [tags, setTags] = useState("");
 
   const save = () => {
-    savePatchFromTrack(track, "you", projectStore, { name });
+    savePatchFromTrack(track, "you", projectStore, { name, tags: parseTags(tags) });
     setNaming(false);
     setName("");
+    setTags("");
+  };
+  const keys = (event: KeyboardEvent) => {
+    if (event.key === "Enter") save();
+    if (event.key === "Escape") setNaming(false);
   };
 
   if (!naming)
@@ -68,12 +75,18 @@ export function SavePatchControl({
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") save();
-          if (e.key === "Escape") setNaming(false);
-        }}
+        onKeyDown={keys}
         placeholder="Patch name…"
         className="w-32 font-mono text-[11px] px-1.5 py-0.5 rounded border border-line bg-ground text-strong placeholder:text-faint"
+      />
+      {/* What it sounds like, role first: what Explore's chips and the agent's lookup find it by. */}
+      <input
+        value={tags}
+        onChange={(e) => setTags(e.target.value)}
+        onKeyDown={keys}
+        placeholder="Tags: pad, dark…"
+        aria-label="Tags, separated by commas"
+        className="w-28 font-mono text-[11px] px-1.5 py-0.5 rounded border border-line bg-ground text-strong placeholder:text-faint"
       />
       {/* The one primary action on this little form, and the only thing that commits it, so
           it takes the solid variant rather than a tint. */}

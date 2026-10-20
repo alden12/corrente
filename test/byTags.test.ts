@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { patchesByTags } from "../src/audio/patches/byTags";
 import { listPatchesFor } from "../src/audio/patches/patchTools";
+import { parseTags } from "../src/audio/tags";
 
 describe("patchesByTags (AGENT-4.16): patches found by what they sound like", () => {
   it("finds the patches carrying the tags, best match first", () => {
@@ -23,5 +24,12 @@ describe("patchesByTags (AGENT-4.16): patches found by what they sound like", ()
   it("is what list_patches gives for tags, and every patch without them", () => {
     expect(listPatchesFor({ tags: ["bass"] })).toMatchObject({ patches: expect.any(Array) });
     expect(Array.isArray(listPatchesFor({}))).toBe(true);
+  });
+});
+
+describe("parseTags: tags typed as text", () => {
+  it("splits on commas, trims, lower-cases and keeps each once", () => {
+    expect(parseTags(" Pad, dark ,, pad,Eerie ")).toEqual(["pad", "dark", "eerie"]);
+    expect(parseTags("")).toEqual([]);
   });
 });
