@@ -14,6 +14,7 @@ import { soundChains, soundDevicesOf, type DeviceSource } from "./sound";
 import { listPatches, newPatchId, savePatch, type Patch } from "./library";
 import { allPatches, findPatch } from "./factory";
 import { patchesByTags, patchSummary } from "./byTags";
+import { search } from "../search";
 
 /** list_patches' text, shared by the MCP servers and the in-app agent. */
 export const LIST_PATCHES_DOC =
@@ -22,7 +23,8 @@ export const LIST_PATCHES_DOC =
   '`tags` looks sounds up by what they\'re like: give tags ("warm", "glassy", "bass") and get the patches ' +
   "carrying them, best match first, as starting points, plus each instrument whose default settings carry them. " +
   "A misspelt tag is read as the nearest (`readAs` says so); a word like no tag comes back with the most used " +
-  "tags: pick the nearest in meaning and ask again. `mine` lists only the user's own patches. A page at a time " +
+  "tags: pick the nearest in meaning and ask again. `query` finds words in a patch's name, description or tags, " +
+  "forgiving spelling: how to find one the user made. `mine` lists only the user's own patches. A page at a time " +
   "(`limit`, default 50): pass `next` back as `cursor` for the rest.";
 
 /** save_patch's text, shared by the MCP servers and the in-app agent. */
@@ -56,6 +58,7 @@ const patchArg = z.string().min(1).describe("patch name or id (from list_patches
 export const PATCH_TOOL_ARGS = {
   list_patches: {
     tags: z.array(z.string()).optional().describe("words for the sound wanted; every patch when absent"),
+    query: z.string().optional().describe("words in a patch's name, description or tags, spelling forgiven"),
     mine: z.boolean().optional().describe("only the user's own patches"),
     limit: z.number().int().min(1).max(MAX_PATCH_PAGE).optional(),
     cursor: z.string().optional().describe("the last page's `next`"),
@@ -152,6 +155,8 @@ export function trackToSave(project: ProjectStore, trackId?: string): Instrument
 /** What list_patches takes. */
 export interface PatchListing {
   tags?: unknown;
+  /** Words to find in a patch's name, description or tags (search.ts). */
+  query?: unknown;
   /** Only the user's own patches. */
   mine?: unknown;
   limit?: unknown;
@@ -183,7 +188,14 @@ export function listPatchesFor(listing: PatchListing, mine: readonly Patch[] = l
   const pool = own ? mine : allPatches(mine);
   const words = Array.isArray(listing.tags) ? listing.tags.map(String) : [];
   const found = words.length ? patchesByTags(words, pool, !own) : { patches: pool.map(patchSummary) };
-  return { ...found, ...pageOf(found.patches, listing) };
+  const query = typeof listing.query === "string" ? listing.query : "";
+  const searched = search(found.patches, query);
+  const readAs = { ...("readAs" in found ? found.readAs : {}), ...searched.readAs };
+  return {
+    ...found,
+    ...(Object.keys(readAs).length ? { readAs } : {}),
+    ...pageOf(searched.items, listing),
+  };
 }
 
 const requirePatch = (query: string, mine?: readonly Patch[]) => {

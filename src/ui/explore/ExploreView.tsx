@@ -21,6 +21,7 @@ import { itemTaps } from "./itemTaps";
 import { useRecent } from "./recent/useRecent";
 import { ExploreThumb } from "./ExploreThumb";
 import { SampleImport } from "./SampleImport";
+import { search } from "../../audio/search";
 import { TagChips } from "./TagChips";
 import {
   byName,
@@ -33,7 +34,6 @@ import {
   itemsByKey,
   groupByCategory,
   hasTags,
-  matchesQuery,
   rankTags,
   tagsIn,
 } from "./exploreItems";
@@ -205,7 +205,8 @@ export function ExploreView({
   }
 
   const filtering = query.trim() !== "" || picked.length > 0;
-  const searched = items.filter((item) => matchesQuery(item, query));
+  // Forgiving spelling: a word like nothing listed is read as the nearest term, and the count says so.
+  const { items: searched, readAs } = search(items, query);
   const results = searched.filter((item) => hasTags(item, picked));
   const matchCount = results.length;
 
@@ -281,6 +282,10 @@ export function ExploreView({
           <>
             <div className="px-3.5 text-[11px] text-faint">
               {matchCount} {matchCount === 1 ? "match" : "matches"}
+              {readAs &&
+                `, for ${Object.entries(readAs)
+                  .map(([typed, read]) => `“${read}” (you typed “${typed}”)`)
+                  .join(", ")}`}
             </div>
             {/* Grouped like the tiles. Explore searches what you can add; your projects and tracks have
                 searches of their own, where they live (decided 2026-10-12). */}

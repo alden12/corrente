@@ -56,6 +56,17 @@ describe("patchesByTags (AGENT-4.16): patches found by what they sound like", ()
     expect(tagged).toMatchObject({ readAs: { shimery: "shimmery" }, next: "5" });
     expect(tagged).not.toHaveProperty("defaults");
   });
+
+  it("finds words in a patch's name, description or tags with `query`, forgiving spelling", () => {
+    const own = [...mine(3), { ...mine(1)[0], id: "pt-verse", name: "Verse Keys", description: "for the bridge" }];
+    expect(listPatchesFor({ mine: true, query: "bridge" }, own).patches.map((patch) => patch.id)).toEqual(["pt-verse"]);
+    expect(listPatchesFor({ mine: true, query: "vers" }, own).patches.map((patch) => patch.id)).toEqual(["pt-verse"]);
+    const misspelt = listPatchesFor({ mine: true, query: "verce keys" }, own);
+    expect(misspelt).toMatchObject({ readAs: { verce: "verse" } });
+    expect(misspelt.patches.map((patch) => patch.id)).toEqual(["pt-verse"]);
+    // With tags as well: both narrow.
+    expect(listPatchesFor({ mine: true, tags: ["pad"], query: "mine 2" }, own).patches).toHaveLength(1);
+  });
 });
 
 describe("tag matching: pg_trgm's similarity, written out", () => {

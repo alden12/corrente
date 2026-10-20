@@ -169,19 +169,6 @@ export function itemsByKey(items: ExploreItem[], keys: readonly string[]): Explo
   return keys.flatMap((key) => byKey.get(key) ?? []);
 }
 
-/**
- * Search: every word must match the name or a tag. A word written `#warm` matches only a tag, so
- * a tag search is not tripped up by a device that happens to have the word in its name.
- */
-export function matchesQuery(item: ExploreItem, query: string): boolean {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return words.every((word) =>
-    word.startsWith("#")
-      ? item.tags.some((tag) => tag.startsWith(word.slice(1)))
-      : item.name.toLowerCase().includes(word) || item.tags.some((tag) => tag.startsWith(word)),
-  );
-}
-
 /** Results by category, in tile order and A to Z within each, leaving out empty categories. */
 export function groupByCategory(items: ExploreItem[]): { category: ItemCategory; items: ExploreItem[] }[] {
   return CATEGORY_ORDER.filter((key): key is ItemCategory => key !== "favourites").flatMap((category) => {

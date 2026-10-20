@@ -30,8 +30,8 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
       description: LIST_PATCHES_DOC,
       inputSchema: PATCH_TOOL_ARGS.list_patches,
     },
-    async ({ tags, mine, limit, cursor }) => {
-      const r = await runPatch("list", { tags, mine, limit, cursor });
+    async (listing) => {
+      const r = await runPatch("list", listing);
       if ("tabError" in r) return fail(r.tabError);
       if (!r.ok) return fail(r.error ?? "Could not read patches.");
       return ok(JSON.stringify(r.result, null, 2));

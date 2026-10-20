@@ -73,6 +73,11 @@ test("Explore's search finds devices, grouped by kind", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Tracks" })).toHaveCount(0);
   await search.fill("#bass");
   await expect(page.getByRole("region", { name: "Patches" })).toBeVisible();
+
+  // Forgiving spelling: a word like nothing listed is read as the nearest, and the count says so.
+  await search.fill("glasy");
+  await expect(page.getByText("“glassy” (you typed “glasy”)")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Patches" })).toBeVisible();
 });
 
 test("the header has undo and redo", async ({ page }) => {

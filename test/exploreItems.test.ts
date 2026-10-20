@@ -4,12 +4,12 @@ import {
   favouriteItems,
   groupByCategory,
   hasTags,
-  matchesQuery,
   rankTags,
   tagsIn,
   type ExploreItem,
 } from "../src/ui/explore/exploreItems";
 import { pickableInstrumentInfos } from "../src/audio/instruments/catalog";
+import { search } from "../src/audio/search";
 import { effectInfos } from "../src/audio/effects/catalog";
 import { midiDeviceInfos } from "../src/audio/midi/device/catalog";
 import { FACTORY_PATCHES } from "../src/audio/patches/factory";
@@ -64,18 +64,31 @@ describe("custom devices", () => {
   });
 });
 
-describe("matchesQuery", () => {
+describe("searching Explore (search.ts)", () => {
+  const found = (items: ExploreItem[], query: string) => search(items, query).items.map((item) => item.name);
+
   it("matches a name or a tag, every word", () => {
-    expect(matchesQuery(named("Glass Pad"), "glass")).toBe(true);
-    expect(matchesQuery(named("Glass Pad"), "airy")).toBe(true);
-    expect(matchesQuery(named("Glass Pad"), "glass bass")).toBe(false);
+    expect(found([named("Glass Pad")], "glass")).toEqual(["Glass Pad"]);
+    expect(found([named("Glass Pad")], "airy")).toEqual(["Glass Pad"]);
+    expect(found([named("Glass Pad")], "glass bass")).toEqual([]);
   });
 
   it("matches only tags for a #word", () => {
-    expect(matchesQuery(named("Deep Sub"), "#bass")).toBe(true);
+    expect(found([named("Deep Sub")], "#bass")).toEqual(["Deep Sub"]);
     // "My Bass" has bass in its name but no tag.
-    expect(matchesQuery(named("My Bass"), "#bass")).toBe(false);
-    expect(matchesQuery(named("My Bass"), "bass")).toBe(true);
+    expect(found([named("My Bass")], "#bass")).toEqual([]);
+    expect(found([named("My Bass")], "bass")).toEqual(["My Bass"]);
+  });
+
+  it("reads a misspelt word as the nearest tag or name word listed, and says so", () => {
+    const items = exploreItems({ savedPatches: [], samples: [] });
+    const glassy = search(items, "glasy");
+    expect(glassy.readAs).toEqual({ glasy: "glassy" });
+    expect(glassy.items.every((item) => item.tags.includes("glassy"))).toBe(true);
+    expect(search(items, "nimbs").readAs).toEqual({ nimbs: "nimbus" });
+    expect(search(items, "#glasy").readAs).toEqual({ "#glasy": "#glassy" });
+    // Like nothing at all: left as typed, so nothing is found.
+    expect(search(items, "zzqx")).toEqual({ items: [] });
   });
 });
 
@@ -94,7 +107,7 @@ describe("tags outside the known vocabulary", () => {
   });
 
   it("are searchable and filterable like any other", () => {
-    expect(matchesQuery(custom, "#shoe")).toBe(true);
+    expect(search([custom], "#shoe").items).toEqual([custom]);
     expect(hasTags(custom, ["shoegaze"])).toBe(true);
   });
 });
@@ -135,7 +148,7 @@ describe("search results (COMM-1.9.3)", () => {
   const items = exploreItems({ savedPatches: [saved], samples: [{ id: "s1", name: "Kick" }] });
 
   it("groups results in tile order, A to Z within each, with no empty groups", () => {
-    const groups = groupByCategory(items.filter((item) => matchesQuery(item, "bass")));
+    const groups = groupByCategory(search(items, "bass").items);
     const order = ["instruments", "patches", "effects", "midi", "samples"];
     const categories = groups.map((group) => group.category);
     expect(categories).toEqual([...categories].sort((left, right) => order.indexOf(left) - order.indexOf(right)));
