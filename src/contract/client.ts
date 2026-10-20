@@ -29,6 +29,9 @@ export type FavouriteEntry = z.infer<(typeof routes.syncFavourites)["response"]>
 export type LibrarySync = z.input<(typeof routes.syncLibrary)["body"]>;
 export type LibrarySyncReply = z.infer<(typeof routes.syncLibrary)["response"]>;
 
+/** The answers to a library sync that refuse its saves, rather than fail for now. */
+const LIBRARY_REFUSALS = new Set([400, 409, 413]);
+
 /** The bearer credential: either a fixed string, or a getter re-read per request/reconnect (so a
  *  refreshed auth token takes effect without rebuilding the client). Evaluated lazily via `resolveToken`. */
 export type TokenSource = string | (() => string | undefined);
@@ -62,8 +65,11 @@ export interface ApiClient {
   removeMember(id: string, email: string): Promise<void>;
   /** Apply hearts and un-hearts (either may be empty), then return all the caller's favourites. */
   syncFavourites(changes: { add: string[]; remove: string[] }): Promise<FavouriteEntry[]>;
-  /** Send this device's library saves, and get back what changed since `since`, with the next cursor. */
-  syncLibrary(sync: LibrarySync): Promise<LibrarySyncReply>;
+  /**
+   * Send this device's library saves, and get back what changed since `since`, with the next cursor;
+   * or why the saves were refused (a bad document, an id held as another kind, too large).
+   */
+  syncLibrary(sync: LibrarySync): Promise<LibrarySyncReply | { refused: string }>;
 }
 
 /**
@@ -231,6 +237,8 @@ export function createApiClient(config: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sync),
       });
+      // Saves it won't take: the caller sets them aside rather than retry them forever.
+      if (LIBRARY_REFUSALS.has(res.status)) return { refused: `${res.status}: ${(await res.text()).slice(0, 500)}` };
       if (!res.ok) throw new Error(`sync: library failed (${res.status})`);
       return (await res.json()) as LibrarySyncReply;
     },

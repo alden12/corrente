@@ -117,6 +117,14 @@ export function subscribeAuth(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/** Whose data a signed-out device keeps, per account stores like favourites and the library. */
+export const SIGNED_OUT = "local";
+
+/** Whose stored data is in use: the signed-in user's id, or `SIGNED_OUT` (auth off, or signed out). */
+export function accountOwner(): string {
+  return authEnabled && state.status === "signed-in" ? state.user.id : SIGNED_OUT;
+}
+
 /** Where we were when we left for the provider, so the round trip can put us back (HOST-17). */
 const RETURN_PATH_KEY = "corrente:auth-return";
 

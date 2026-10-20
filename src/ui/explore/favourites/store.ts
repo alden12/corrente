@@ -12,7 +12,14 @@
  */
 import { createApiClient, type ApiClient } from "../../../contract/client";
 import { MAX_FAVOURITE_CHANGES } from "../../../contract/http";
-import { authEnabled, getAccessToken, onUnauthorized, readAuthState, subscribeAuth } from "../../../auth/session";
+import {
+  accountOwner as owner,
+  authEnabled,
+  getAccessToken,
+  onUnauthorized,
+  SIGNED_OUT,
+  subscribeAuth,
+} from "../../../auth/session";
 import { readPersistent, writePersistent } from "../../persistentStore";
 import {
   applyServerList,
@@ -28,14 +35,7 @@ const client: ApiClient | null = apiUrl
   ? createApiClient({ baseUrl: apiUrl, token: getAccessToken, onUnauthorized })
   : null;
 
-const SIGNED_OUT = "local";
 const storageKey = (owner: string) => `corrente:favourites:v1:${owner}`;
-
-/** Whose favourites these are: the signed-in user, or `local`. */
-function owner(): string {
-  const auth = readAuthState();
-  return authEnabled && auth.status === "signed-in" ? auth.user.id : SIGNED_OUT;
-}
 
 /** Whether there is an account to sync with: an API, and (when auth is on) someone signed in to it. */
 const canSync = () => client !== null && (!authEnabled || owner() !== SIGNED_OUT);

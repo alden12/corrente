@@ -41,11 +41,47 @@ export interface LibraryVersion {
   hash?: string;
 }
 
+/** An item with its current version. */
+export interface LibraryEntry {
+  item: LibraryItem;
+  current: LibraryVersion;
+}
+
 export interface LibraryBackend {
   /** Every item, and each one's current version. */
   load(): Promise<{ items: LibraryItem[]; current: LibraryVersion[] }>;
   /** Write an item, and a new version of it when there is one. */
   save(item: LibraryItem, version?: LibraryVersion): Promise<void>;
+}
+
+/** A save not yet on the account: the item as it now stands, and the version saved, if one was. */
+export interface QueuedSave {
+  key: number;
+  item: LibraryItem;
+  version?: LibraryVersion;
+}
+
+/**
+ * A backend whose saves wait in a queue for the account (COMM-1.11.2). What the account confirmed
+ * and what it hasn't are kept apart: a queued version lives in the queue, numbered as this device
+ * guessed, and only the account's own versions are stored as versions. So a save the account
+ * numbers differently (another device took that number) never leaves a wrongly numbered copy.
+ */
+export interface LibraryOutbox {
+  /** The oldest saves still to send, up to `limit`, leaving out any the account refused. */
+  queued(limit: number): Promise<QueuedSave[]>;
+  /** Where the last sync read up to. */
+  cursor(): Promise<string | undefined>;
+  /**
+   * Settle a sync: drop the saves sent, store what the account sent back, and the cursor to read
+   * from next. An item with saves still queued keeps this device's copy until those are sent too.
+   * Returns the entries it stored.
+   */
+  settle(sent: readonly number[], received: readonly LibraryEntry[], cursor?: string): Promise<LibraryEntry[]>;
+  /** Keep a save the account refused, unsent, so it stays here and stops blocking the rest. */
+  refuse(key: number, reason: string): Promise<void>;
+  /** Empty it: once what it held has moved into an account. */
+  clear(): Promise<void>;
 }
 
 /** Records held in memory only: where there's no storage (Node, a private window), and in tests. */

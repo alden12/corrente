@@ -12,7 +12,7 @@ import {
   removePatch,
   savePatch,
 } from "../src/audio/patches/library";
-import { memoryBackend, type LibraryBackend } from "../src/audio/library/backend";
+import { memoryBackend, type LibraryBackend, type LibraryOutbox } from "../src/audio/library/backend";
 import { indexedDbBackend } from "../src/audio/library/indexedDb";
 
 /** A localStorage for the move-in, which the node test env doesn't have. */
@@ -43,7 +43,7 @@ const samplePatch = (over: Partial<Parameters<typeof savePatch>[0]> = {}) => ({
 });
 
 /** A fresh device: its own IndexedDB database. */
-const freshDevice = async (): Promise<LibraryBackend> => {
+const freshDevice = async (): Promise<LibraryBackend & LibraryOutbox> => {
   indexedDB.deleteDatabase("corrente-library");
   return (await indexedDbBackend())!;
 };
@@ -74,7 +74,7 @@ describe("the patch library (COMM-1.11.1)", () => {
     expect(listPatches()[0].description).toBeUndefined();
   });
 
-  it("keeps patches on the device, and every version written once", async () => {
+  it("keeps patches on the device, each version queued for the account in order", async () => {
     const device = await freshDevice();
     await openLibrary(device);
     const p = samplePatch({ tags: ["keys"] });
@@ -86,13 +86,8 @@ describe("the patch library (COMM-1.11.1)", () => {
     expect(listPatches()).toEqual([]);
     await openLibrary(device);
     expect(listPatches()).toMatchObject([{ id: p.id, version: 2, params: { "filter.cutoff": 400 }, tags: ["keys"] }]);
-    // A version can't be written twice.
-    await expect(
-      device.save(
-        { id: p.id, kind: "patch", name: p.name, version: 2, createdAt: 1, updatedAt: 1 },
-        { itemId: p.id, version: 2, createdAt: 1, author: "you", tags: [], document: {} },
-      ),
-    ).rejects.toThrow();
+    // Not on an account yet: both versions wait, oldest first.
+    expect((await device.queued(10)).map((save) => save.version?.version)).toEqual([1, 2]);
   });
 
   it("moves patches kept in localStorage in, once they're stored", async () => {

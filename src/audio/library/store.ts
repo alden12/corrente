@@ -4,12 +4,16 @@
  * in order. Patches (patches/library.ts) and custom devices (devices.ts) are views over it.
  */
 import type { Author } from "../commands/types";
-import { memoryBackend, type LibraryBackend, type LibraryItem, type LibraryKind, type LibraryVersion } from "./backend";
+import {
+  memoryBackend,
+  type LibraryBackend,
+  type LibraryEntry,
+  type LibraryItem,
+  type LibraryKind,
+  type LibraryVersion,
+} from "./backend";
 
-export interface LibraryEntry {
-  item: LibraryItem;
-  current: LibraryVersion;
-}
+export type { LibraryEntry };
 
 /** What saving an item takes: the item's identity, and the new version's contents. */
 export interface ItemDraft {
@@ -29,6 +33,10 @@ const notify = () => listeners.forEach((listener) => listener());
 
 let backend: LibraryBackend = memoryBackend();
 const entries = new Map<string, LibraryEntry>();
+/** How many changes this device has made, and the count at each item's latest: see `libraryMark`. */
+let changes = 0;
+const changedAt = new Map<string, number>();
+
 /** The backend's writes, one after another, so a version never lands before its item's last. */
 let writes: Promise<void> = Promise.resolve();
 
@@ -42,16 +50,39 @@ function write(item: LibraryItem, version?: LibraryVersion): Promise<void> {
 /** Until the library has been written, for tests and anything that must see it stored. */
 export const libraryWritten = (): Promise<void> => writes;
 
-/** Load the library from `chosen`, and write to it from now on. */
+/** Which open is the latest, so a slower load of one switched away from doesn't land over it. */
+let opening = 0;
+
+/**
+ * Load the library from `chosen`, and write to it from now on: at start, and on switching account.
+ * Writes queued for the last backend land there first.
+ */
 export async function openStore(chosen: LibraryBackend): Promise<void> {
+  const thisOpen = ++opening;
+  await writes;
   backend = chosen;
   const { items, current } = await chosen.load();
+  if (thisOpen !== opening) return;
   const currentOf = new Map(current.map((version) => [version.itemId, version]));
   entries.clear();
   items.forEach((item) => {
     const version = currentOf.get(item.id);
     if (version) entries.set(item.id, { item, current: version });
   });
+  notify();
+}
+
+/**
+ * A point in this device's changes. A sync takes one before it reads its queue, so what the account
+ * sends back can't replace a change made after it (which the next sync sends).
+ */
+export const libraryMark = (): number => changes;
+
+/** Take in entries the account sent back (already stored by the backend), skipping any changed since `mark`. */
+export function receiveEntries(received: readonly LibraryEntry[], mark: number): void {
+  const taken = received.filter((entry) => (changedAt.get(entry.item.id) ?? 0) <= mark);
+  if (!taken.length) return;
+  taken.forEach((entry) => entries.set(entry.item.id, entry));
   notify();
 }
 
@@ -87,6 +118,7 @@ export function saveItem(draft: ItemDraft, at = Date.now()): { entry: LibraryEnt
   };
   const entry = { item, current };
   entries.set(draft.id, entry);
+  changedAt.set(draft.id, ++changes);
   const written = write(item, current);
   notify();
   return { entry, written };
@@ -98,6 +130,7 @@ export function hideItem(id: string): void {
   if (!entry) return;
   const item = { ...entry.item, hiddenAt: Date.now() };
   entries.set(id, { ...entry, item });
+  changedAt.set(id, ++changes);
   void write(item).catch(() => {}); // the queue has warned
   notify();
 }

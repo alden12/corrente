@@ -12,8 +12,7 @@ import { registerServiceWorker } from "./pwa/serviceWorkerUpdate";
 import { applyStoredTheme } from "./ui/theme";
 import App from "./App.tsx";
 import { installDevTools } from "./dev/devTools";
-import { indexedDbBackend } from "./audio/library/indexedDb";
-import { openLibrary } from "./audio/patches/library";
+import { startLibrary } from "./audio/library/account";
 
 // Dev/test-only extras (the e2e render harness, safe-area simulation, the rebuild bench), guarded by
 // import.meta.env so the whole module is dead-code-eliminated from production builds and never
@@ -37,12 +36,10 @@ registerServiceWorker();
 // Before the first render, so nobody on a non-default theme sees a frame of the wrong one.
 applyStoredTheme();
 
-// The patch library on the device (COMM-1.11.1). It reads empty until it opens, a moment after
-// starting; without IndexedDB it stays empty for the session, and older saved patches stay where
-// they were rather than move into storage that won't keep them.
-void indexedDbBackend()
-  .then((device) => device && openLibrary(device))
-  .catch((error: unknown) => console.warn("[corrente] the patch library didn't open:", error));
+// Your library (COMM-1.11): patches and custom devices, on the device and in your account. It reads
+// empty until it opens, a moment after starting; without IndexedDB it stays empty for the session,
+// and older saved patches stay where they were rather than move into storage that won't keep them.
+startLibrary();
 
 if (!devToolOwnsThePage) {
   createRoot(document.getElementById("root")!).render(
