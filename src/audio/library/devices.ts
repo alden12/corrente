@@ -9,6 +9,7 @@
  * version its copy is, through undo, redo and replay, and never one the library doesn't have.
  */
 import type { Author, EditCommand } from "../commands/types";
+import type { DeviceEdit } from "../mcp/protocol";
 import type { CustomDevice, CustomKind } from "../definitions/custom";
 import type { DeviceRef } from "./backend";
 import { libraryEntries, libraryEntry, saveItem, type LibraryEntry } from "./store";
@@ -31,7 +32,7 @@ export async function keepDevice(kind: CustomKind, device: CustomDevice, author:
 }
 
 /** The edits that add or change a device, and which kind each is. */
-const DEVICE_EDITS: Partial<Record<EditCommand["type"], CustomKind>> = {
+export const DEVICE_EDIT_KINDS: Record<DeviceEdit["type"], CustomKind> = {
   addCustomInstrument: "instrument",
   updateCustomInstrument: "instrument",
   addCustomEffect: "effect",
@@ -44,7 +45,7 @@ const DEVICE_EDITS: Partial<Record<EditCommand["type"], CustomKind>> = {
  * the edit mustn't land: the project would hold a device the library doesn't.
  */
 export async function withLibraryRef(command: EditCommand, author: Author): Promise<EditCommand> {
-  const kind = DEVICE_EDITS[command.type];
+  const kind = (DEVICE_EDIT_KINDS as Partial<Record<EditCommand["type"], CustomKind>>)[command.type];
   if (!kind || !("def" in command)) return command;
   return { ...command, library: await keepDevice(kind, command.def, author) };
 }

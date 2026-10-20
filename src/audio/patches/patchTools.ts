@@ -7,7 +7,7 @@
 import type { EditCommand } from "../commands/types";
 import { newTrackId } from "../commands/ids";
 import type { Author } from "../commands/types";
-import type { InstrumentTrack } from "../project/projectStore";
+import type { InstrumentTrack, ProjectStore } from "../project/projectStore";
 import { keepDevice } from "../library/devices";
 import { soundChains, soundDevicesOf, type DeviceSource } from "./sound";
 import { newPatchId, savePatch, type Patch } from "./library";
@@ -41,23 +41,21 @@ export interface SaveOptions {
 }
 
 /**
- * Save a track's sound to the library, as a new patch or a new version of one of the user's. Its
- * custom devices go with it, and into the library on their own (COMM-1.11.1).
+ * A track's sound as a patch: a new one, or the next version of one of the user's (`mine`, this
+ * device's library by default). Its custom devices go with it. Built, not saved: the tab saves it to
+ * the library on the device, the hosted server to the account.
  */
-export async function savePatchFromTrack(
+export function patchFromTrack(
   track: InstrumentTrack,
   author: Author,
   project: DeviceSource,
   options: SaveOptions = {},
-): Promise<Patch> {
-  const over = options.patch ? requirePatch(options.patch) : undefined;
+  mine?: readonly Patch[],
+): Patch {
+  const over = options.patch ? requirePatch(options.patch, mine) : undefined;
   if (over?.builtin) throw new Error(`"${over.name}" is built in, so it can't be saved over. Save a new patch.`);
   const devices = soundDevicesOf(track, project);
-  await Promise.all([
-    ...(devices?.instruments ?? []).map((device) => keepDevice("instrument", device, author)),
-    ...(devices?.effects ?? []).map((device) => keepDevice("effect", device, author)),
-  ]);
-  return savePatch({
+  return {
     ...(devices ? { devices } : {}),
     id: over?.id ?? newPatchId(),
     name: options.name?.trim() || over?.name || track.name,
@@ -77,22 +75,50 @@ export async function savePatchFromTrack(
     createdAt: Date.now(),
     tags: options.tags ?? over?.tags ?? [],
     description: options.description ?? over?.description,
-  });
+  };
 }
 
-/** list_patches: every patch, or those matching `tags`. */
-export const listPatchesFor = ({ tags }: { tags?: unknown }) =>
-  Array.isArray(tags) && tags.length ? patchesByTags(tags.map(String)) : allPatches().map(patchSummary);
+/**
+ * Save a track's sound to the library on this device, as a new patch or a new version of one of the
+ * user's. Its custom devices go with it, and into the library on their own (COMM-1.11.1).
+ */
+export async function savePatchFromTrack(
+  track: InstrumentTrack,
+  author: Author,
+  project: DeviceSource,
+  options: SaveOptions = {},
+): Promise<Patch> {
+  const patch = patchFromTrack(track, author, project, options);
+  await Promise.all([
+    ...(patch.devices?.instruments ?? []).map((device) => keepDevice("instrument", device, author)),
+    ...(patch.devices?.effects ?? []).map((device) => keepDevice("effect", device, author)),
+  ]);
+  return savePatch(patch);
+}
 
-const requirePatch = (query: string) => {
-  const patch = findPatch(query.trim());
+/** The instrument track save_patch means: the one named, else the selected one. */
+export function trackToSave(project: ProjectStore, trackId?: string): InstrumentTrack {
+  const id = trackId ?? project.selectedId ?? undefined;
+  const track = id ? project.getTrack(id) : undefined;
+  if (!track) throw new Error("No track specified and none selected.");
+  if (track.kind !== "instrument")
+    throw new Error(`Track ${track.id} is an audio track; patches need an instrument track.`);
+  return track;
+}
+
+/** list_patches: every patch, or those matching `tags`. `mine` as in `allPatches`. */
+export const listPatchesFor = ({ tags }: { tags?: unknown }, mine?: readonly Patch[]) =>
+  Array.isArray(tags) && tags.length ? patchesByTags(tags.map(String), mine) : allPatches(mine).map(patchSummary);
+
+const requirePatch = (query: string, mine?: readonly Patch[]) => {
+  const patch = findPatch(query.trim(), mine);
   if (!patch) throw new Error(`No patch matching "${query.trim()}". Use list_patches.`);
   return patch;
 };
 
 /** Full specifics of one patch (param values + per-device params), searched by id or name. */
-export const patchDetails = (query: string) => {
-  const patch = requirePatch(query);
+export const patchDetails = (query: string, mine?: readonly Patch[]) => {
+  const patch = requirePatch(query, mine);
   return {
     id: patch.id,
     name: patch.name,
@@ -128,8 +154,9 @@ export const patchDetails = (query: string) => {
 export const patchTrackCommand = (
   query: string,
   name?: string,
+  mine?: readonly Patch[],
 ): Extract<EditCommand, { type: "createTrackFromPatch" }> => {
-  const patch = requirePatch(query);
+  const patch = requirePatch(query, mine);
   return {
     type: "createTrackFromPatch",
     id: newTrackId(),

@@ -69,12 +69,22 @@ export interface Patch {
 }
 
 /** What a library version holds for a patch: its sound, without the library's metadata. */
-type PatchDocument = Pick<Patch, "instrumentType" | "params" | "effects" | "midiDevices" | "devices">;
+export type PatchDocument = Pick<Patch, "instrumentType" | "params" | "effects" | "midiDevices" | "devices">;
+
+/** A patch's library document. */
+export const patchDocumentOf = (patch: Patch): PatchDocument => ({
+  instrumentType: patch.instrumentType,
+  params: patch.params,
+  effects: patch.effects,
+  midiDevices: patch.midiDevices ?? [],
+  ...(patch.devices ? { devices: patch.devices } : {}),
+});
 
 /** Where patches were kept before the library, moved in on first open. */
 const OLD_STORAGE_KEY = "corrente:patches:v1";
 
-const patchOf = ({ item, current }: LibraryEntry): Patch => ({
+/** A library entry as a patch: wherever it came from, this device's library or an account's. */
+export const patchOf = ({ item, current }: LibraryEntry): Patch => ({
   id: item.id,
   name: item.name,
   author: current.author,
@@ -95,14 +105,7 @@ export const listPatches = (): Patch[] => libraryEntries("patch").map(patchOf);
  * written with it. Resolves to it as saved, once it's stored.
  */
 export async function savePatch(patch: Patch, at = Date.now()): Promise<Patch> {
-  const document: PatchDocument = {
-    instrumentType: patch.instrumentType,
-    params: patch.params,
-    effects: patch.effects,
-    midiDevices: patch.midiDevices ?? [],
-    ...(patch.devices ? { devices: patch.devices } : {}),
-  };
-  return patchOf(await saveItem({ ...patch, kind: "patch", document }, at));
+  return patchOf(await saveItem({ ...patch, kind: "patch", document: patchDocumentOf(patch) }, at));
 }
 
 /** Delete a patch: hidden from the library, its versions kept. */

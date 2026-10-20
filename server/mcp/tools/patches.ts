@@ -1,4 +1,4 @@
-/** MCP tools: Patches (saved instrument presets, in the tab's library on the device). */
+/** MCP tools: Patches (saved instrument presets, in your library: the tab's on the device, or your account's when hosted). */
 import { z } from "zod";
 import type { PatchMethod } from "../../../src/audio/mcp/protocol";
 import { ok, fail } from "../shared";

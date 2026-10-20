@@ -16,6 +16,7 @@ import {
   patchDetails,
   patchTrackCommand,
   savePatchFromTrack,
+  trackToSave,
   type SaveOptions,
 } from "../patches/patchTools";
 import { DEFAULT_WS_PORT } from "./protocol";
@@ -130,11 +131,7 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     // promoting a user patch into the factory bank. Searches factory + user by id/name.
     get: (params) => patchDetails(String(params.patch ?? "")),
     save: async (params) => {
-      const trackId = (params.trackId as string | undefined) ?? projectStore.selectedId ?? undefined;
-      const track = trackId ? projectStore.getTrack(trackId) : undefined;
-      if (!track) throw new Error("No track specified and none selected.");
-      if (track.kind !== "instrument")
-        throw new Error(`Track ${track.id} is an audio track; patches need an instrument track.`);
+      const track = trackToSave(projectStore, params.trackId as string | undefined);
       const saved = await savePatchFromTrack(track, editLog.agentAuthor, projectStore, params as SaveOptions);
       return { id: saved.id, name: saved.name, version: saved.version };
     },

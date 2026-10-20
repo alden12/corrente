@@ -24,8 +24,8 @@ export const patchSummary = (patch: Patch) => ({
   effects: patch.effects.map((effect) => effect.type),
 });
 
-export function patchesByTags(words: string[]) {
-  const patches = allPatches().map(patchSummary);
+export function patchesByTags(words: string[], mine?: readonly Patch[]) {
+  const patches = allPatches(mine).map(patchSummary);
   const defaults = pickableInstrumentInfos().map((info) => ({
     instrument: info.type,
     name: `${info.label} (default settings)`,

@@ -307,15 +307,18 @@ export const FACTORY_PATCHES: Patch[] = [
   }),
 ];
 
-/** Every patch the library can offer: the shipped factory presets plus the user's
- *  saved patches. Used by the MCP patch RPC (list / apply / get) and the UI. */
-export function allPatches(): Patch[] {
-  return [...FACTORY_PATCHES, ...listPatches()];
+/**
+ * Every patch the library can offer: the shipped factory presets plus the user's saved patches.
+ * `mine` is the user's: this device's library by default, or what the hosted server read from
+ * their account (COMM-1.11.2). Used by the MCP patch RPC (list / apply / get) and the UI.
+ */
+export function allPatches(mine: readonly Patch[] = listPatches()): Patch[] {
+  return [...FACTORY_PATCHES, ...mine];
 }
 
 /** Resolve a patch by exact id, else by case-insensitive name, across factory + user. */
-export function findPatch(query: string): Patch | undefined {
+export function findPatch(query: string, mine?: readonly Patch[]): Patch | undefined {
   const q = query.trim();
-  const all = allPatches();
+  const all = allPatches(mine);
   return all.find((patch) => patch.id === q) ?? all.find((patch) => patch.name.toLowerCase() === q.toLowerCase());
 }
