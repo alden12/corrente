@@ -52,22 +52,22 @@ describe("the patch library (COMM-1.11.1)", () => {
   beforeEach(async () => openLibrary(memoryBackend()));
   afterEach(() => delete (globalThis as { localStorage?: Storage }).localStorage);
 
-  it("saves, lists newest first, and hides what's deleted", () => {
+  it("saves, lists newest first, and hides what's deleted", async () => {
     expect(listPatches()).toEqual([]);
     const a = samplePatch({ name: "A" });
     const b = samplePatch({ name: "B" });
-    savePatch(a, 1);
-    savePatch(b, 2);
+    await savePatch(a, 1);
+    await savePatch(b, 2);
     expect(listPatches().map((p) => p.name)).toEqual(["B", "A"]);
 
     removePatch(a.id);
     expect(listPatches().map((p) => p.name)).toEqual(["B"]);
   });
 
-  it("saves over a patch as its next version, with that version's tags and description", () => {
+  it("saves over a patch as its next version, with that version's tags and description", async () => {
     const p = samplePatch({ name: "One", tags: ["pad"], description: "for the verse" });
-    expect(savePatch(p).version).toBe(1);
-    const again = savePatch({ ...p, name: "Renamed", tags: ["pad", "dark"], description: undefined });
+    expect((await savePatch(p)).version).toBe(1);
+    const again = await savePatch({ ...p, name: "Renamed", tags: ["pad", "dark"], description: undefined });
     expect(again.version).toBe(2);
     expect(listPatches()).toHaveLength(1);
     expect(listPatches()[0]).toMatchObject({ name: "Renamed", tags: ["pad", "dark"], version: 2 });
@@ -78,8 +78,8 @@ describe("the patch library (COMM-1.11.1)", () => {
     const device = await freshDevice();
     await openLibrary(device);
     const p = samplePatch({ tags: ["keys"] });
-    savePatch(p);
-    savePatch({ ...p, params: { "filter.cutoff": 400 } });
+    await savePatch(p);
+    await savePatch({ ...p, params: { "filter.cutoff": 400 } });
     await libraryWritten();
 
     await openLibrary(memoryBackend());

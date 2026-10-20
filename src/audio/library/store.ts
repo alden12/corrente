@@ -4,6 +4,7 @@
  * in order. Patches (patches/library.ts) and custom devices (devices.ts) are views over it.
  */
 import type { Author } from "../commands/types";
+import { documentHash } from "../contentHash";
 import {
   memoryBackend,
   type LibraryBackend,
@@ -63,7 +64,14 @@ export async function openStore(chosen: LibraryBackend): Promise<void> {
   backend = chosen;
   const { items, current } = await chosen.load();
   if (thisOpen !== opening) return;
-  const currentOf = new Map(current.map((version) => [version.itemId, version]));
+  // Versions saved before the device hashed them get their hash now: it's what a project matches on.
+  const hashed = await Promise.all(
+    current.map(async (version) =>
+      version.hash ? version : { ...version, hash: await documentHash(version.document) },
+    ),
+  );
+  if (thisOpen !== opening) return;
+  const currentOf = new Map(hashed.map((version) => [version.itemId, version]));
   entries.clear();
   items.forEach((item) => {
     const version = currentOf.get(item.id);
@@ -95,10 +103,23 @@ export const libraryEntries = (kind: LibraryKind): LibraryEntry[] =>
     .filter(({ item }) => item.kind === kind && item.hiddenAt === undefined)
     .sort((left, right) => right.item.updatedAt - left.item.updatedAt);
 
-/** Save an item as its next version (its first, if new), and say when it's stored. */
-export function saveItem(draft: ItemDraft, at = Date.now()): { entry: LibraryEntry; written: Promise<void> } {
+/** Whether a save says nothing the item's current version doesn't: the account's rule too (its db/library.ts). */
+const sameVersion = (current: LibraryVersion, hash: string, draft: ItemDraft) =>
+  current.hash === hash &&
+  (current.description || undefined) === (draft.description || undefined) &&
+  current.tags.join("\n") === (draft.tags ?? []).join("\n");
+
+/**
+ * Save an item as its next version (its first, if new), resolving once its document is hashed and
+ * the save stored. A save that changes nothing about the current version adds none: a new name, or
+ * bringing back a deleted item, rewrites the item alone, and an identical save is the current entry.
+ */
+export async function saveItem(draft: ItemDraft, at = Date.now()): Promise<LibraryEntry> {
+  const hash = await documentHash(draft.document);
   const existing = entries.get(draft.id);
-  const version = (existing?.item.version ?? 0) + 1;
+  const unchanged = existing !== undefined && sameVersion(existing.current, hash, draft);
+  if (unchanged && existing.item.name === draft.name && existing.item.hiddenAt === undefined) return existing;
+  const version = unchanged ? existing.item.version : (existing?.item.version ?? 0) + 1;
   const item: LibraryItem = {
     id: draft.id,
     kind: draft.kind,
@@ -107,21 +128,24 @@ export function saveItem(draft: ItemDraft, at = Date.now()): { entry: LibraryEnt
     createdAt: existing?.item.createdAt ?? draft.createdAt,
     updatedAt: at,
   };
-  const current: LibraryVersion = {
-    itemId: draft.id,
-    version,
-    createdAt: at,
-    author: draft.author,
-    tags: [...(draft.tags ?? [])],
-    ...(draft.description ? { description: draft.description } : {}),
-    document: draft.document,
-  };
+  const current: LibraryVersion = unchanged
+    ? existing.current
+    : {
+        itemId: draft.id,
+        version,
+        createdAt: at,
+        author: draft.author,
+        tags: [...(draft.tags ?? [])],
+        ...(draft.description ? { description: draft.description } : {}),
+        document: draft.document,
+        hash,
+      };
   const entry = { item, current };
   entries.set(draft.id, entry);
   changedAt.set(draft.id, ++changes);
-  const written = write(item, current);
   notify();
-  return { entry, written };
+  await write(item, unchanged ? undefined : current);
+  return entry;
 }
 
 /** Delete an item: hidden from the library, its versions kept. */

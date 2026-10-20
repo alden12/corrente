@@ -30,6 +30,7 @@ import type {
 import type { Track, Group, NoteClip, EffectInstance, EffectHost, MidiDeviceInstance } from "./projectStore";
 import type { SampleAsset } from "../samples/catalog";
 import { DEVICE_FORMAT_VERSION, type CustomDevice } from "../definitions/custom";
+import type { DeviceRef } from "../library/backend";
 import { FIRST_CLIP_NAME } from "./seedClip";
 
 /** Serialize an effect chain (its params snapshotted) for persistence. */
@@ -68,6 +69,8 @@ export interface TransportState {
   /** User-authored devices embedded in the project (see ProjectData). */
   customInstruments?: CustomDevice[];
   customEffects?: CustomDevice[];
+  /** Which library version each custom device is (see ProjectData). */
+  deviceLibrary?: Record<string, DeviceRef>;
 }
 
 /**
@@ -146,6 +149,7 @@ export function snapshotProject(tracks: Track[], groups: Group[], transport: Tra
     authorship: { ...(transport.authorship ?? {}) },
     customInstruments: (transport.customInstruments ?? []).map((def) => ({ ...def })),
     customEffects: (transport.customEffects ?? []).map((def) => ({ ...def })),
+    deviceLibrary: { ...(transport.deviceLibrary ?? {}) },
     deviceFormatVersion: DEVICE_FORMAT_VERSION,
   };
 }

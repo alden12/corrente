@@ -1,18 +1,25 @@
 /**
- * Custom instruments and effects in the library (COMM-1.11.1, COMM-1.9.8). A device's type is its
- * id for good: every project that uses it holds a copy of one version, and every change you make to
- * it, in any project, is kept here as the next version. So the library always has your latest, and a
+ * Custom instruments and effects in the library (COMM-1.11, COMM-1.9.8). A device's type is its id
+ * for good: every project that uses it holds a copy of one version, and every change you make to it,
+ * in any project, is kept here as the next version. So the library always has your latest, and a
  * project whose copy differs can offer the update (`LibraryUpdate`), as published devices will.
+ *
+ * **The library first, then the project.** A device edit lands only once its version is hashed and
+ * stored (`withLibraryRef`), and carries `{ version, hash }`, so the project records exactly which
+ * version its copy is, through undo, redo and replay, and never one the library doesn't have.
  */
 import type { Author, EditCommand } from "../commands/types";
-import { sameDevice, type CustomDevice, type CustomKind } from "../definitions/custom";
-import { libraryEntries, libraryEntry, saveItem } from "./store";
+import type { CustomDevice, CustomKind } from "../definitions/custom";
+import type { DeviceRef } from "./backend";
+import { libraryEntries, libraryEntry, saveItem, type LibraryEntry } from "./store";
 
-/** Keep a device in the library, as a new version if it changed since it was last kept. */
-export function keepDevice(kind: CustomKind, device: CustomDevice, author: Author): void {
-  const kept = libraryEntry(device.type);
-  if (kept && kept.item.hiddenAt === undefined && sameDevice(kept.current.document as CustomDevice, device)) return;
-  const { written } = saveItem({
+export type { DeviceRef };
+
+export const deviceRefOf = ({ current }: LibraryEntry): DeviceRef => ({ version: current.version, hash: current.hash });
+
+/** Keep a device in the library, as a new version if it changed, and say which version it is. */
+export async function keepDevice(kind: CustomKind, device: CustomDevice, author: Author): Promise<DeviceRef> {
+  const entry = await saveItem({
     id: device.type,
     kind,
     name: device.label ?? device.type,
@@ -20,7 +27,7 @@ export function keepDevice(kind: CustomKind, device: CustomDevice, author: Autho
     document: device,
     createdAt: Date.now(),
   });
-  void written.catch(() => {}); // the queue has warned
+  return deviceRefOf(entry);
 }
 
 /** The edits that add or change a device, and which kind each is. */
@@ -31,10 +38,20 @@ const DEVICE_EDITS: Partial<Record<EditCommand["type"], CustomKind>> = {
   updateCustomEffect: "effect",
 };
 
-/** Keep the device an edit adds or changes: what the app does with every edit made on this device. */
-export function keepDevicesOf(command: EditCommand, author: Author): void {
+/**
+ * An edit ready to land: a device edit once its device is kept in the library, carrying which
+ * version it is; any other edit as it is. If the library couldn't store the device, the edit lands
+ * without saying, so the project never names a version the library doesn't have.
+ */
+export async function withLibraryRef(command: EditCommand, author: Author): Promise<EditCommand> {
   const kind = DEVICE_EDITS[command.type];
-  if (kind && "def" in command) keepDevice(kind, command.def, author);
+  if (!kind || !("def" in command)) return command;
+  try {
+    return { ...command, library: await keepDevice(kind, command.def, author) };
+  } catch (error) {
+    console.warn("[corrente] the library couldn't keep this device:", error);
+    return command;
+  }
 }
 
 /** The library's latest version of a device, unless it was deleted. */

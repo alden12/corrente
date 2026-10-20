@@ -37,8 +37,21 @@ export interface LibraryVersion {
   description?: string;
   /** The item itself: for a patch, its instrument and chains. */
   document: unknown;
-  /** The document's content hash (contentHash.ts): what a project's cached copy is checked against. */
-  hash?: string;
+  /**
+   * The document's content hash (contentHash.ts), worked out on the device and again by the account:
+   * what a project's copy is matched against. Versions stored before the device hashed them are
+   * hashed as the library opens.
+   */
+  hash: string;
+}
+
+/**
+ * Which library version a project's copy of a device is (COMM-1.11.2). The hash is what matches;
+ * the number is the account's, and may change when the account renumbers a version saved offline.
+ */
+export interface DeviceRef {
+  version: number;
+  hash: string;
 }
 
 /** An item with its current version. */

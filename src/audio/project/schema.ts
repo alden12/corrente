@@ -221,6 +221,11 @@ export const projectDataSchema = z.object({
   samples: z.array(sampleAssetSchema).optional(),
   customInstruments: z.array(customInstrumentSchema).optional(),
   customEffects: z.array(customEffectSchema).optional(),
+  /**
+   * Which library version each custom device's copy is, by type (COMM-1.11.2). Optional: a device
+   * from before the library, or one taken in with a patch, has none.
+   */
+  deviceLibrary: z.record(z.string(), z.object({ version: z.number().int().positive(), hash: z.string() })).optional(),
   deviceFormatVersion: z.number().optional(),
   authorship: z.record(z.string(), authorSchema).optional(),
   selectedTrackId: z.string().nullable(),

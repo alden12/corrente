@@ -4,6 +4,7 @@
  * track's ParamStore/ClipStore, or drive instruments/scheduler; local changes
  * (structure, per-track params, per-track clips) are mirrored back to the server.
  */
+import { withLibraryRef } from "../library/devices";
 import type { ProjectStore } from "../project/projectStore";
 import type { AudioEngine } from "../engine/AudioEngine";
 import type { Scheduler } from "../sequencer/scheduler";
@@ -128,13 +129,13 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     // Full specifics of one patch (param values + per-effect params), for inspecting or
     // promoting a user patch into the factory bank. Searches factory + user by id/name.
     get: (params) => patchDetails(String(params.patch ?? "")),
-    save: (params) => {
+    save: async (params) => {
       const trackId = (params.trackId as string | undefined) ?? projectStore.selectedId ?? undefined;
       const track = trackId ? projectStore.getTrack(trackId) : undefined;
       if (!track) throw new Error("No track specified and none selected.");
       if (track.kind !== "instrument")
         throw new Error(`Track ${track.id} is an audio track; patches need an instrument track.`);
-      const saved = savePatchFromTrack(track, editLog.agentAuthor, projectStore, params as SaveOptions);
+      const saved = await savePatchFromTrack(track, editLog.agentAuthor, projectStore, params as SaveOptions);
       return { id: saved.id, name: saved.name, version: saved.version };
     },
     apply: (params) => {
@@ -144,11 +145,11 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     },
   };
 
-  const handlePatchRequest = (msg: Extract<ServerToBrowser, { type: "patchRequest" }>) => {
+  const handlePatchRequest = async (msg: Extract<ServerToBrowser, { type: "patchRequest" }>) => {
     const fn = patchMethods[msg.method];
     if (!fn) return send({ type: "patchReply", id: msg.id, ok: false, error: `Unknown method ${msg.method}` });
     try {
-      send({ type: "patchReply", id: msg.id, ok: true, result: fn(p(msg.params)) });
+      send({ type: "patchReply", id: msg.id, ok: true, result: await fn(p(msg.params)) });
     } catch (err) {
       send({ type: "patchReply", id: msg.id, ok: false, error: err instanceof Error ? err.message : String(err) });
     }
@@ -162,12 +163,22 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
         send({ type: "analysisReply", id, ok: false, error: err instanceof Error ? err.message : String(err) }),
     );
 
+  /**
+   * The agent's edits and live messages, in the order sent. A device edit waits for its device to be
+   * kept in the library (COMM-1.11.2), and whatever came after it, say a track that plays the device,
+   * waits with it rather than land first.
+   */
+  let inbound: Promise<void> = Promise.resolve();
+  const inOrder = (land: () => Promise<void> | void) => {
+    inbound = inbound.then(land).catch((err: unknown) => console.warn("[mcp] an agent edit didn't land:", err));
+  };
+
   const handle = (msg: ServerToBrowser) => {
     if (msg.type === "historyRequest") void handleHistoryRequest(msg);
-    else if (msg.type === "patchRequest") handlePatchRequest(msg);
+    else if (msg.type === "patchRequest") void handlePatchRequest(msg);
     else if (msg.type === "analysisRequest") void handleAnalysisRequest(msg);
-    else if (liveTypes.has(msg.type)) (live[msg.type as LiveType] as (m: ServerToBrowser) => void)(msg);
-    else editLog.dispatchAsAgent(msg as EditCommand);
+    else if (liveTypes.has(msg.type)) inOrder(() => (live[msg.type as LiveType] as (m: ServerToBrowser) => void)(msg));
+    else inOrder(async () => editLog.dispatchAsAgent(await withLibraryRef(msg as EditCommand, editLog.agentAuthor)));
   };
 
   // Per-track/group param/clip subscriptions, rebuilt whenever structure changes.

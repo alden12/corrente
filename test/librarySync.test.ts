@@ -79,7 +79,7 @@ describe("the library's queue for the account", () => {
         },
       ],
     });
-    savePatch(saved);
+    await savePatch(saved);
     await drainLibrary(library, library, account.send, always);
 
     expect(listPatches()).toMatchObject([{ id: saved.id, version: 2, params: { "filter.cutoff": 800 } }]);
@@ -94,7 +94,7 @@ describe("the library's queue for the account", () => {
   it("keeps a save made while a sync is out, and sends it next time", async () => {
     const account = fakeAccount();
     const saved = patch(800);
-    savePatch(saved);
+    await savePatch(saved);
     let answer: () => void = () => {};
     let sent: () => void = () => {};
     const out = new Promise<void>((resolve) => (sent = resolve));
@@ -105,7 +105,7 @@ describe("the library's queue for the account", () => {
     };
     const syncing = drainLibrary(library, library, slow, always);
     await out;
-    savePatch({ ...saved, params: { "filter.cutoff": 300 } });
+    await savePatch({ ...saved, params: { "filter.cutoff": 300 } });
     answer();
     await syncing;
 
@@ -119,9 +119,9 @@ describe("the library's queue for the account", () => {
 
   it("sets aside a save the account refuses, and sends the rest", async () => {
     const account = fakeAccount((save) => save.item.name === "Broken");
-    savePatch(patch(1, { name: "Fine" }));
-    savePatch(patch(2, { name: "Broken" }));
-    savePatch(patch(3, { name: "Also fine" }));
+    await savePatch(patch(1, { name: "Fine" }));
+    await savePatch(patch(2, { name: "Broken" }));
+    await savePatch(patch(3, { name: "Also fine" }));
     expect(await drainLibrary(library, library, account.send, always)).toBe(1);
 
     expect([...account.entries.values()].map((entry) => entry.item.name).sort()).toEqual(["Also fine", "Fine"]);
@@ -134,7 +134,7 @@ describe("the library's queue for the account", () => {
 
   it("leaves an answer alone once the account it was for isn't signed in", async () => {
     const account = fakeAccount();
-    savePatch(patch(800));
+    await savePatch(patch(800));
     await drainLibrary(library, library, account.send, () => false);
     expect(await library.queued(10)).toHaveLength(1);
   });
@@ -142,7 +142,7 @@ describe("the library's queue for the account", () => {
   it("moves a signed-out library into an account", async () => {
     const signedOut = library;
     const kept = patch(800, { name: "Made signed out" });
-    savePatch(kept);
+    await savePatch(kept);
     const accountLibrary = await freshLibrary();
     await openLibrary(accountLibrary);
     const account = fakeAccount();

@@ -69,7 +69,7 @@ export const libraryVersionSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(32),
   description: z.string().max(2000).optional(),
   document: z.unknown(),
-  hash: z.string().optional(),
+  hash: z.string(),
 }) satisfies z.ZodType<LibraryVersion>;
 
 /**

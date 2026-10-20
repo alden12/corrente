@@ -51,9 +51,9 @@ describe("patch lookup across factory + user (allPatches / findPatch)", () => {
   // A fresh library in memory for each test.
   beforeEach(() => openLibrary(memoryBackend()));
 
-  it("allPatches merges factory presets and user patches", () => {
+  it("allPatches merges factory presets and user patches", async () => {
     expect(allPatches()).toHaveLength(FACTORY_PATCHES.length);
-    savePatch({
+    await savePatch({
       id: newPatchId(),
       name: "My Sound",
       author: "you",
@@ -72,9 +72,17 @@ describe("patch lookup across factory + user (allPatches / findPatch)", () => {
     expect(findPatch("no-such-patch")).toBeUndefined();
   });
 
-  it("findPatch resolves a user patch too", () => {
+  it("findPatch resolves a user patch too", async () => {
     const id = newPatchId();
-    savePatch({ id, name: "Nimbus 4", author: "you", instrumentType: "nimbus", params: {}, effects: [], createdAt: 1 });
+    await savePatch({
+      id,
+      name: "Nimbus 4",
+      author: "you",
+      instrumentType: "nimbus",
+      params: {},
+      effects: [],
+      createdAt: 1,
+    });
     expect(findPatch("nimbus 4")?.id).toBe(id);
   });
 });

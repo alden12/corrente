@@ -10,6 +10,7 @@ import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
 import type { ClipContent, ProjectData } from "../project/types";
 import type { CustomDevice } from "../definitions/custom";
+import type { DeviceRef } from "../library/backend";
 import type { DeviceAnalysisRequest } from "../analysis/deviceAlone";
 import type { MixAnalysisRequest } from "../analysis/mixScope";
 
@@ -59,15 +60,16 @@ export type ServerToBrowser =
   // Assign (or swap) the instrument on an existing track - e.g. an empty track picks one.
   | { type: "setInstrument"; trackId: string; instrumentType: string }
   // Custom devices: user/AI-authored instruments & effects (engine definitions), stored in the
-  // project. The def carries its own minted `type` id; removal addresses it by `deviceType`.
-  | { type: "addCustomInstrument"; def: CustomDevice }
+  // project. The def carries its own minted `type` id; removal addresses it by `deviceType`. Once
+  // the device is kept in the library, `library` says which version it is (COMM-1.11.2).
+  | { type: "addCustomInstrument"; def: CustomDevice; library?: DeviceRef }
   | { type: "removeCustomInstrument"; deviceType: string }
-  | { type: "addCustomEffect"; def: CustomDevice }
+  | { type: "addCustomEffect"; def: CustomDevice; library?: DeviceRef }
   | { type: "removeCustomEffect"; deviceType: string }
   // Replace a custom device's def under its existing type: tracks and slots using it keep the
   // values of params it still has, and are rebuilt with the new graph.
-  | { type: "updateCustomInstrument"; def: CustomDevice }
-  | { type: "updateCustomEffect"; def: CustomDevice }
+  | { type: "updateCustomInstrument"; def: CustomDevice; library?: DeviceRef }
+  | { type: "updateCustomEffect"; def: CustomDevice; library?: DeviceRef }
   // Group structure (bus tree; id assigned by the creator so both ends agree)
   | { type: "createGroup"; id: string; name?: string; parentId?: string | null }
   | { type: "removeGroup"; groupId: string }

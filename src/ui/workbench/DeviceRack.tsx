@@ -42,7 +42,9 @@ export function SavePatchControl({
   const [tags, setTags] = useState("");
 
   const save = () => {
-    savePatchFromTrack(track, "you", projectStore, { name, tags: parseTags(tags) });
+    savePatchFromTrack(track, "you", projectStore, { name, tags: parseTags(tags) }).catch((error: unknown) =>
+      console.warn("[corrente] the patch didn't save:", error),
+    );
     setNaming(false);
     setName("");
     setTags("");

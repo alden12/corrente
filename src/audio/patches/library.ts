@@ -90,8 +90,11 @@ export { libraryWritten };
 /** Every saved patch, newest first, deleted ones left out. Empty until the library opens. */
 export const listPatches = (): Patch[] => libraryEntries("patch").map(patchOf);
 
-/** Save a patch, and say when it's stored. */
-function stored(patch: Patch, at: number): { saved: Patch; written: Promise<void> } {
+/**
+ * Save a patch: a new one, or a new version of one already saved (by id), its tags and description
+ * written with it. Resolves to it as saved, once it's stored.
+ */
+export async function savePatch(patch: Patch, at = Date.now()): Promise<Patch> {
   const document: PatchDocument = {
     instrumentType: patch.instrumentType,
     params: patch.params,
@@ -99,18 +102,7 @@ function stored(patch: Patch, at: number): { saved: Patch; written: Promise<void
     midiDevices: patch.midiDevices ?? [],
     ...(patch.devices ? { devices: patch.devices } : {}),
   };
-  const { entry, written } = saveItem({ ...patch, kind: "patch", document }, at);
-  return { saved: patchOf(entry), written };
-}
-
-/**
- * Save a patch: a new one, or a new version of one already saved (by id), its tags and description
- * written with it. Returns it as saved.
- */
-export function savePatch(patch: Patch, at = Date.now()): Patch {
-  const { saved, written } = stored(patch, at);
-  void written.catch(() => {}); // the queue has warned
-  return saved;
+  return patchOf(await saveItem({ ...patch, kind: "patch", document }, at));
 }
 
 /** Delete a patch: hidden from the library, its versions kept. */
@@ -165,7 +157,7 @@ export async function openLibrary(chosen: LibraryBackend): Promise<void> {
   if (!patches.length) return;
   try {
     const moving = patches.filter((patch) => !libraryEntry(patch.id));
-    await Promise.all(moving.map((patch) => stored(patch, patch.createdAt).written));
+    await Promise.all(moving.map((patch) => savePatch(patch, patch.createdAt)));
     // An entry that didn't read keeps the key, so nothing is thrown away unseen.
     if (complete) localStorage.removeItem(OLD_STORAGE_KEY);
   } catch {

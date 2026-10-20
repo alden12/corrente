@@ -251,8 +251,8 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
         description: z.string().optional(),
         patch: z.string().optional(),
       }),
-      run: ({ track, ...options }) => {
-        const saved = savePatchFromTrack(resolveInstrumentTrack(track), author, projectStore, options);
+      run: async ({ track, ...options }) => {
+        const saved = await savePatchFromTrack(resolveInstrumentTrack(track), author, projectStore, options);
         return { ok: true, patchId: saved.id, name: saved.name, version: saved.version };
       },
     }),

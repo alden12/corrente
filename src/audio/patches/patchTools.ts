@@ -44,17 +44,19 @@ export interface SaveOptions {
  * Save a track's sound to the library, as a new patch or a new version of one of the user's. Its
  * custom devices go with it, and into the library on their own (COMM-1.11.1).
  */
-export function savePatchFromTrack(
+export async function savePatchFromTrack(
   track: InstrumentTrack,
   author: Author,
   project: DeviceSource,
   options: SaveOptions = {},
-): Patch {
+): Promise<Patch> {
   const over = options.patch ? requirePatch(options.patch) : undefined;
   if (over?.builtin) throw new Error(`"${over.name}" is built in, so it can't be saved over. Save a new patch.`);
   const devices = soundDevicesOf(track, project);
-  devices?.instruments?.forEach((device) => keepDevice("instrument", device, author));
-  devices?.effects?.forEach((device) => keepDevice("effect", device, author));
+  await Promise.all([
+    ...(devices?.instruments ?? []).map((device) => keepDevice("instrument", device, author)),
+    ...(devices?.effects ?? []).map((device) => keepDevice("effect", device, author)),
+  ]);
   return savePatch({
     ...(devices ? { devices } : {}),
     id: over?.id ?? newPatchId(),

@@ -212,7 +212,6 @@ export class EditLog {
   private forwardTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly listeners = new Set<() => void>();
   /** What hears each edit made here, by this user or their agent; never a peer's. */
-  private readonly localEditListeners = new Set<(command: EditCommand, author: Author) => void>();
   private cached: EditLogState | null = null;
   /** Optional realtime sink: when a shared session is live, each dispatched edit is forwarded to the
    *  authority after being applied optimistically here (see SharedSession). It is handed the entry's
@@ -353,19 +352,8 @@ export class EditLog {
     this.lastKey = key;
     this.lastTime = now;
     this.forward(command, author, key, coalesce, id);
-    this.localEditListeners.forEach((listener) => listener(command, author));
     this.emit();
   };
-
-  /**
-   * Hear each edit made here, by this user or their agent, once it has applied; a peer's edits in a
-   * shared session don't come through. What keeps the devices you make in your library. Returns an
-   * unsubscribe fn.
-   */
-  onLocalEdit(listener: (command: EditCommand, author: Author) => void): () => void {
-    this.localEditListeners.add(listener);
-    return () => this.localEditListeners.delete(listener);
-  }
 
   /**
    * Open a gesture: every edit until `endGesture` is one drag (DAW-8.13).

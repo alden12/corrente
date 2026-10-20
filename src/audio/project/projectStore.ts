@@ -37,6 +37,7 @@ import {
 import { hasEffect, effectSchema, registerEffect, unregisterEffect, DEFAULT_EFFECT } from "../effects/catalog";
 import { hasMidiDevice, midiDeviceSchema, DEFAULT_MIDI_DEVICE } from "../midi/device/catalog";
 import { parseCustomDevices, type CustomDevice, type UnreadableDevices } from "../definitions/custom";
+import type { DeviceRef } from "../library/backend";
 import type { SoundDevices } from "../patches/sound";
 import { registerEngineDevice, unregisterEngineDevice } from "../definitions/engineDevices";
 import { DEFAULT_GROOVE_ID } from "../grooves/catalog";
@@ -206,6 +207,8 @@ export class ProjectStore {
   // engine plays them (both registries DOM-free).
   private customInstrumentDefs: CustomDevice[] = [];
   private customEffectDefs: CustomDevice[] = [];
+  /** Which library version each custom device's copy is, by type (COMM-1.11.2). */
+  private deviceRefs: Record<string, DeviceRef> = {};
   /** Custom devices this build could not read, kept as stored and written back out (parseCustomDevices). */
   private unreadableDevices: UnreadableDevices = { instruments: [], effects: [] };
   private selectedTrackId: string | null = null;
@@ -1460,6 +1463,7 @@ export class ProjectStore {
       // Ones this build could not read go back out as they came in, for a build that can.
       customInstruments: [...this.customInstrumentDefs, ...(this.unreadableDevices.instruments as CustomDevice[])],
       customEffects: [...this.customEffectDefs, ...(this.unreadableDevices.effects as CustomDevice[])],
+      deviceLibrary: sortedByKey(this.deviceRefs),
     });
   }
 
@@ -1511,6 +1515,15 @@ export class ProjectStore {
   get customEffects(): CustomDevice[] {
     return this.customEffectDefs;
   }
+  /** Which library version a custom device's copy is, where the project knows. */
+  deviceRef(type: string): DeviceRef | undefined {
+    return this.deviceRefs[type];
+  }
+  /** Record which library version a device's copy now is: none, for a copy that isn't one. */
+  private setDeviceRef(type: string, ref: DeviceRef | undefined): void {
+    const others = Object.fromEntries(Object.entries(this.deviceRefs).filter(([known]) => known !== type));
+    this.deviceRefs = ref ? { ...others, [type]: ref } : others;
+  }
 
   private registerInstrumentDef(def: CustomDevice): void {
     registerInstrument({
@@ -1555,6 +1568,7 @@ export class ProjectStore {
     this.customInstrumentDefs = instruments;
     this.customEffectDefs = effects;
     this.unreadableDevices = unreadable;
+    this.deviceRefs = { ...(data.deviceLibrary ?? {}) };
     for (const def of instruments) this.registerInstrumentDef(def);
     for (const def of effects) this.registerEffectDef(def);
   }
@@ -1562,8 +1576,9 @@ export class ProjectStore {
   /** Add (or replace by type) a custom instrument, registering its schema. The def is validated at
    *  the boundary (MCP / project load); this is also the authored command's replay path. Tracks
    *  already playing it take the new schema, keeping the values of params it still has. */
-  addCustomInstrument(def: CustomDevice): void {
+  addCustomInstrument(def: CustomDevice, library?: DeviceRef): void {
     this.customInstrumentDefs = [...this.customInstrumentDefs.filter((existing) => existing.type !== def.type), def];
+    this.setDeviceRef(def.type, library);
     this.registerInstrumentDef(def);
     for (const track of this.tracks) {
       if (track.kind === "instrument" && track.instrumentType === def.type) track.params.reschema(def.schema);
@@ -1573,11 +1588,13 @@ export class ProjectStore {
   removeCustomInstrument(type: string): void {
     if (!this.customInstrumentDefs.some((def) => def.type === type)) return;
     this.customInstrumentDefs = this.customInstrumentDefs.filter((def) => def.type !== type);
+    this.setDeviceRef(type, undefined);
     this.unregisterInstrumentDef(type);
     this.emit();
   }
-  addCustomEffect(def: CustomDevice): void {
+  addCustomEffect(def: CustomDevice, library?: DeviceRef): void {
     this.customEffectDefs = [...this.customEffectDefs.filter((existing) => existing.type !== def.type), def];
+    this.setDeviceRef(def.type, library);
     this.registerEffectDef(def);
     const hosts = [...this.tracks, ...this.groups];
     for (const effect of hosts.flatMap((host) => host.effects)) {
@@ -1613,6 +1630,7 @@ export class ProjectStore {
   removeCustomEffect(type: string): void {
     if (!this.customEffectDefs.some((def) => def.type === type)) return;
     this.customEffectDefs = this.customEffectDefs.filter((def) => def.type !== type);
+    this.setDeviceRef(type, undefined);
     this.unregisterEffectDef(type);
     this.emit();
   }
