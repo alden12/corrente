@@ -14,13 +14,21 @@ test("render + analyze produces a sane mix report (analyze_mix chain)", async ({
 
   const report = (await page.evaluate(async () =>
     (window as unknown as { __dawAnalyzeMix: () => Promise<Record<string, unknown>> }).__dawAnalyzeMix(),
-  )) as { peakDbfs: number; headroomDb: number; loudnessDbfs: number; clipping: boolean; note: string };
+  )) as {
+    peakDbfs: number;
+    headroomDb: number;
+    loudnessDbfs: number;
+    clipping: boolean;
+    note: string;
+    bands: Record<string, number>;
+  };
 
   expect(report.clipping).toBe(false);
   expect(report.peakDbfs).toBeGreaterThan(-120); // audible, not silent
   expect(report.peakDbfs).toBeLessThanOrEqual(0.5); // under (or at) full scale
   expect(report.headroomDb).toBeGreaterThan(0);
   expect(typeof report.note).toBe("string");
+  expect(Object.keys(report.bands)).toHaveLength(9);
 });
 
 /**

@@ -10,9 +10,9 @@
 import { fetchEngine } from "../bank/pool";
 import { browserAudio, browserSample } from "../bank/deviceSamples";
 import { setSampleAssets } from "../samples/sampleRegistry";
-import { analyzeRender, summarizeMix, type MixSummary } from "../analysis/analyze";
-import { analyzeDeviceRender, type DeviceAnalysis } from "../analysis/analyzeDevice";
+import { analyzeSoundRender, type DeviceAnalysis, type MixReport } from "../analysis/analyzeSound";
 import { deviceAlone, type DeviceAnalysisRequest } from "../analysis/deviceAlone";
+import { mixScope, type MixAnalysisRequest } from "../analysis/mixScope";
 import type { ProjectStore } from "../project/projectStore";
 import type { ProjectData } from "../project/types";
 import type { ProjectRender, ProjectRenderOptions } from "../render/renderProject";
@@ -55,11 +55,16 @@ export async function renderProjectInWorker(
 }
 
 /**
- * Render the project and measure it: the agent's ears as one call, what `analyze_mix` runs. It
- * hears the audio the user would, so the agent can check its edits (clipping, level, loudness).
+ * Render the project, or part of it (AGENT-4.4), and measure it: the agent's ears as one call, what
+ * `analyze_mix` runs. It hears the audio the user would, so the agent can check its edits.
  */
-export async function analyzeProjectMix(project: ProjectStore): Promise<MixSummary> {
-  return summarizeMix(analyzeRender(await renderProjectInWorker(project)));
+export async function analyzeProjectMix(project: ProjectStore, request: MixAnalysisRequest = {}): Promise<MixReport> {
+  const { project: scoped, options, heard } = mixScope(project.snapshot(), request);
+  return analyzeSoundRender(
+    await renderProjectInWorker(project, { as: scoped, ...options }),
+    { heard },
+    request.picture,
+  );
 }
 
 /** Render one track's sound alone and measure it: what `analyze_device` runs (AGENT-4.6). */
@@ -68,5 +73,5 @@ export async function analyzeTrackDevice(
   request: DeviceAnalysisRequest,
 ): Promise<DeviceAnalysis> {
   const { project: alone, played } = deviceAlone(project.snapshot(), request);
-  return analyzeDeviceRender(await renderProjectInWorker(project, { as: alone }), played, request.picture);
+  return analyzeSoundRender(await renderProjectInWorker(project, { as: alone }), { played }, request.picture);
 }

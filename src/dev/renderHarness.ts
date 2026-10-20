@@ -91,7 +91,7 @@ const mixProject = async (name: string): Promise<ProjectStore> => {
 export function installRenderHarness(): void {
   const harness = window as unknown as RenderHarness;
   // The full "agent ears" chain: render in the worker -> analyze -> model-friendly report.
-  harness.__dawAnalyzeMix = async () => analyzeProjectMix(await mixProject("chord and bass"));
+  harness.__dawAnalyzeMix = async () => (await analyzeProjectMix(await mixProject("chord and bass"))).summary;
   // The same project rendered in the worker and on the page: the worker has to hear what the core does.
   harness.__dawRenderBothPlaces = async (name) => {
     const sampleRate = 48000;

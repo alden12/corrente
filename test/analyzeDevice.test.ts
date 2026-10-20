@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { inflateSync } from "node:zlib";
 import { ProjectStore, type InstrumentTrack } from "../src/audio/project/projectStore";
 import { deviceAlone, DeviceAloneError } from "../src/audio/analysis/deviceAlone";
-import { analyzeDeviceRender } from "../src/audio/analysis/analyzeDevice";
+import { analyzeSoundRender } from "../src/audio/analysis/analyzeSound";
 import { PHRASE_BEATS } from "../src/audio/analysis/phrases";
 import { rowHz, spectrogramOf } from "../src/audio/analysis/spectrogram";
 import { encodePng } from "../src/audio/analysis/png";
@@ -90,14 +90,14 @@ describe("the spectrogram picture (AGENT-4.11)", () => {
   });
 });
 
-describe("analyzeDeviceRender (AGENT-4.6): a sound measured on its own", () => {
+describe("analyzeSoundRender (AGENT-4.6): a sound measured on its own", () => {
   it("reports its levels, balance and width, and draws it when asked", async () => {
     const { store, lead } = project();
     const { project: alone, played } = deviceAlone(store.snapshot(), { track: lead.id, play: "chords" });
     const loaded = new ProjectStore(false);
     loaded.load(alone);
     const render = await renderProject(loaded, nodeRenderSetup(), { tailSec: 1 });
-    const { summary, picture } = await analyzeDeviceRender(render, played, true);
+    const { summary, picture } = await analyzeSoundRender(render, { played }, true);
     expect(summary.played).toMatch(/chords/);
     expect(summary.peakDbfs).toBeGreaterThan(-40);
     expect(Object.keys(summary.bands)).toContain("1k");

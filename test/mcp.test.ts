@@ -735,20 +735,25 @@ describe("MCP server (tracks)", () => {
 
   it("analyze_mix asks the tab, which holds the project's own samples, and passes its report on", async () => {
     await connectTab();
+    const trackId = await makeTrack("subtractive");
+    const asked: unknown[] = [];
     tab!.on("message", (data) => {
-      const msg = JSON.parse(data.toString()) as { type: string; id: string };
+      const msg = JSON.parse(data.toString()) as { type: string; id: string; mix?: unknown };
       if (msg.type !== "analysisRequest") return;
+      asked.push(msg.mix);
       tab!.send(
         JSON.stringify({
           type: "analysisReply",
           id: msg.id,
           ok: true,
-          result: { peakDbfs: -6.2, note: "Levels look healthy." },
+          result: { summary: { peakDbfs: -6.2, note: "Levels look healthy." } },
         }),
       );
     });
-    const report = parse(await call("analyze_mix"));
+    const report = parse(await call("analyze_mix", { tracks: [trackId], from: 4, to: 8 }));
     expect(report).toEqual({ project: "Untitled", peakDbfs: -6.2, note: "Levels look healthy." });
+    expect(asked).toEqual([{ tracks: [trackId], from: 4, to: 8 }]);
+    expect((await call("analyze_mix", { tracks: ["t-nope"] })).isError).toBe(true);
     expect(parse(await call("list_tracks")).project).toBe("Untitled");
   });
 

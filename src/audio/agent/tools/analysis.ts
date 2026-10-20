@@ -8,17 +8,23 @@
 import { z } from "zod";
 import { defineTool, type ToolContext } from "./factory";
 import { analyzeProjectMix, analyzeTrackDevice } from "../../engine/renderInWorker";
-import { ANALYZE_DEVICE_DOC, ANALYZE_MIX_DOC, deviceAnalysisArgs } from "../../analysis/toolDocs";
+import { ANALYZE_DEVICE_DOC, ANALYZE_MIX_DOC, deviceAnalysisArgs, mixAnalysisArgs } from "../../analysis/toolDocs";
 
 export function analysisTools(context: ToolContext) {
   return [
+    // The MCP tools' text and arguments (toolDocs.ts), less the picture: this chat carries text only.
     defineTool({
       name: "analyze_mix",
       description: ANALYZE_MIX_DOC,
-      schema: z.object({}),
-      run: () => analyzeProjectMix(context.projectStore),
+      schema: z.object({
+        trackIds: z.array(z.string()).optional(),
+        ...mixAnalysisArgs,
+      }),
+      run: async ({ trackIds, from, to }) => {
+        const tracks = trackIds?.map((trackId) => context.resolveTrack(trackId).id);
+        return (await analyzeProjectMix(context.projectStore, { tracks, from, to })).summary;
+      },
     }),
-    // The MCP tool's text and arguments (toolDocs.ts), less the picture: this chat carries text only.
     defineTool({
       name: "analyze_device",
       description: ANALYZE_DEVICE_DOC,

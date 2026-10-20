@@ -164,8 +164,8 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
   };
 
   // The song rendered in the render worker and measured, as the in-app agent's analyze_mix does.
-  const handleAnalysisRequest = ({ id, device }: Extract<ServerToBrowser, { type: "analysisRequest" }>) =>
-    (device ? analyzeTrackDevice(projectStore, device) : analyzeProjectMix(projectStore)).then(
+  const handleAnalysisRequest = ({ id, device, mix }: Extract<ServerToBrowser, { type: "analysisRequest" }>) =>
+    (device ? analyzeTrackDevice(projectStore, device) : analyzeProjectMix(projectStore, mix)).then(
       (result) => send({ type: "analysisReply", id, ok: true, result }),
       (err: unknown) =>
         send({ type: "analysisReply", id, ok: false, error: err instanceof Error ? err.message : String(err) }),

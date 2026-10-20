@@ -48,6 +48,11 @@ export interface ProjectRender extends Rendered {
 export interface ProjectRenderOptions {
   /** Seconds rendered after the arrangement ends, for tails. 2 unless asked. */
   tailSec?: number;
+  /**
+   * Seconds from the region's start played but neither kept nor measured: a pre-roll, so a window
+   * of the song starts with the notes still held and the tails still ringing into it (AGENT-4.4).
+   */
+  skipSec?: number;
 }
 
 const DEFAULT_TAIL_SEC = 2;
@@ -133,7 +138,7 @@ function delayed(block: Stereo, history: Stereo, delay: number): Stereo {
 export async function renderProject(
   project: ProjectStore,
   { engine, loadSample, loadAudio, sampleRate = DEFAULT_RATE }: RenderSetup,
-  { tailSec = DEFAULT_TAIL_SEC }: ProjectRenderOptions = {},
+  { tailSec = DEFAULT_TAIL_SEC, skipSec = 0 }: ProjectRenderOptions = {},
 ): Promise<ProjectRender> {
   const timeline = {
     tempo: project.tempo,
@@ -288,11 +293,15 @@ export async function renderProject(
 
   // --- block by block -----------------------------------------------------------------------
   const children = (parentId: string | null) => strips.filter((strip) => strip.parentId === parentId);
-  // Master hears everything `total` samples late; render that much more and drop it from the front.
-  const frames = Math.ceil(
+  // Master hears everything `total` samples late; render that much more and drop it from the front,
+  // with the pre-roll after it.
+  const regionFrames = Math.ceil(
     (beatsToSeconds(Math.max(0, timeline.length - timeline.loopStart), timeline.tempo) + tailSec) * sampleRate,
   );
-  const blocks = Math.ceil((frames + total) / BLOCK);
+  const skip = Math.min(regionFrames, Math.round(skipSec * sampleRate));
+  const frames = regionFrames - skip;
+  const kept = total + skip;
+  const blocks = Math.ceil((kept + frames) / BLOCK);
   const master: Stereo = [new Float32Array(blocks * BLOCK), new Float32Array(blocks * BLOCK)];
   const tapes = new Map(
     await Promise.all(
@@ -367,8 +376,10 @@ export async function renderProject(
     const mixed = busOf(null);
     mixed.forEach((channel, index) =>
       channel.forEach((sample, frame) => {
-        masterPeak = Math.max(masterPeak, Math.abs(sample));
-        if (Math.abs(sample) > 1) masterOver++;
+        if (start + frame >= kept) {
+          masterPeak = Math.max(masterPeak, Math.abs(sample));
+          if (Math.abs(sample) > 1) masterOver++;
+        }
         master[index][start + frame] = softClip(sample);
       }),
     );
@@ -376,7 +387,7 @@ export async function renderProject(
 
   players.forEach((player) => player.devices.forEach((device) => device.dispose()));
   return {
-    channels: [master[0].slice(total, total + frames), master[1].slice(total, total + frames)],
+    channels: [master[0].slice(kept, kept + frames), master[1].slice(kept, kept + frames)],
     sampleRate,
     masterPeak,
     masterOver,

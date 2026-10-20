@@ -128,7 +128,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     requestHistory: requestTab,
     requestPatch,
     // A song takes a moment to render, a long one longer, so this waits well past the other requests.
-    analyzeMix: () => awaitReply((id) => sendToTab({ type: "analysisRequest", id }), ANALYSIS_TIMEOUT_MS),
+    analyzeMix: (mix) => awaitReply((id) => sendToTab({ type: "analysisRequest", id, mix }), ANALYSIS_TIMEOUT_MS),
     analyzeDevice: (device) =>
       awaitReply((id) => sendToTab({ type: "analysisRequest", id, device }), ANALYSIS_TIMEOUT_MS),
   };

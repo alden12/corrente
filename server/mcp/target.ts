@@ -6,6 +6,7 @@
 import type { ProjectStore } from "../../src/audio/project/projectStore";
 import type { HistoryMethod, PatchMethod, ServerToBrowser } from "../../src/audio/mcp/protocol";
 import type { DeviceAnalysisRequest } from "../../src/audio/analysis/deviceAlone";
+import type { MixAnalysisRequest } from "../../src/audio/analysis/mixScope";
 
 /** A round-trip's answer: the tab's `historyReply` / `patchReply`, or the hosted equivalent. */
 export type Reply = { ok: boolean; result?: unknown; error?: string };
@@ -26,9 +27,10 @@ export interface DawTarget {
   requestPatch(method: PatchMethod, params?: Record<string, unknown>): Promise<Reply>;
   /**
    * Render the project on the engine render core and measure the mix (AGENT-4.9): the tab renders
-   * it in its worker, the hosted server on a worker thread. Answers a `MixSummary`.
+   * it in its worker, the hosted server on a worker thread; some tracks or a window of it when asked
+   * (AGENT-4.4). Answers a `MixReport`.
    */
-  analyzeMix(): Promise<Reply>;
+  analyzeMix(request: MixAnalysisRequest): Promise<Reply>;
   /** One track's sound alone, rendered and measured the same way (AGENT-4.6). Answers a `DeviceAnalysis`. */
   analyzeDevice(request: DeviceAnalysisRequest): Promise<Reply>;
 }
