@@ -8,7 +8,8 @@ import type { EditCommand } from "../commands/types";
 import { newTrackId } from "../commands/ids";
 import type { Author } from "../commands/types";
 import type { InstrumentTrack } from "../project/projectStore";
-import { soundChains } from "./sound";
+import { keepDevice } from "../library/devices";
+import { soundChains, soundDevicesOf, type DeviceSource } from "./sound";
 import { newPatchId, savePatch, type Patch } from "./library";
 import { allPatches, findPatch } from "./factory";
 import { patchesByTags, patchSummary } from "./byTags";
@@ -39,11 +40,23 @@ export interface SaveOptions {
   patch?: string;
 }
 
-/** Save a track's sound to the library, as a new patch or a new version of one of the user's. */
-export function savePatchFromTrack(track: InstrumentTrack, author: Author, options: SaveOptions = {}): Patch {
+/**
+ * Save a track's sound to the library, as a new patch or a new version of one of the user's. Its
+ * custom devices go with it, and into the library on their own (COMM-1.11.1).
+ */
+export function savePatchFromTrack(
+  track: InstrumentTrack,
+  author: Author,
+  project: DeviceSource,
+  options: SaveOptions = {},
+): Patch {
   const over = options.patch ? requirePatch(options.patch) : undefined;
   if (over?.builtin) throw new Error(`"${over.name}" is built in, so it can't be saved over. Save a new patch.`);
+  const devices = soundDevicesOf(track, project);
+  devices?.instruments?.forEach((device) => keepDevice("instrument", device, author));
+  devices?.effects?.forEach((device) => keepDevice("effect", device, author));
   return savePatch({
+    ...(devices ? { devices } : {}),
     id: over?.id ?? newPatchId(),
     name: options.name?.trim() || over?.name || track.name,
     author,
@@ -87,6 +100,14 @@ export const patchDetails = (query: string) => {
     tags: patch.tags ?? [],
     ...(patch.description ? { description: patch.description } : {}),
     ...(patch.version ? { version: patch.version } : {}),
+    // Named, not inlined: a definition is long, and list_custom_devices shows one once it's in the project.
+    ...(patch.devices
+      ? {
+          customDevices: [...(patch.devices.instruments ?? []), ...(patch.devices.effects ?? [])].map(
+            (device) => device.label ?? device.type,
+          ),
+        }
+      : {}),
     params: patch.params,
     midiDevices: (patch.midiDevices ?? []).map((device) => ({
       type: device.type,

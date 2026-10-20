@@ -27,9 +27,12 @@ import { Menu, type MenuItem } from "../Menu";
  */
 export function SavePatchControl({
   track,
+  projectStore,
   moreItems = [],
 }: {
   track: InstrumentTrack;
+  /** Where the track's custom devices are, which the patch carries. */
+  projectStore: ProjectStore;
   /** Other actions on the chain, after Save as patch in the same menu. */
   moreItems?: MenuItem[];
 }) {
@@ -37,7 +40,7 @@ export function SavePatchControl({
   const [name, setName] = useState("");
 
   const save = () => {
-    savePatchFromTrack(track, "you", { name });
+    savePatchFromTrack(track, "you", projectStore, { name });
     setNaming(false);
     setName("");
   };
@@ -157,7 +160,7 @@ export function DeviceRack({
         <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint">Devices</span>
         {track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT && (
           <span className="ml-auto">
-            <SavePatchControl track={track} />
+            <SavePatchControl track={track} projectStore={projectStore} />
           </span>
         )}
       </div>

@@ -35,6 +35,7 @@ const APPLY: ApplyMap = {
       params: command.params,
       effects: command.effects,
       midiDevices: command.midiDevices,
+      devices: command.devices,
     }),
   createAudioTrack: (project, command) =>
     void project.addEmptyAudioTrack({ id: command.id, name: command.name, groupId: command.groupId }),

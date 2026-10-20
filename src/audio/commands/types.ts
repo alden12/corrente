@@ -12,6 +12,7 @@ import type { ServerToBrowser } from "../mcp/protocol";
 import type { PatchValues } from "../params/types";
 import type { NoteEvent } from "../sequencer/types";
 import type { ProjectData } from "../project/types";
+import type { SoundDevices } from "../patches/sound";
 
 // Who authored an edit. `"you"` is the default id for a user who has not set one; any other bare
 // value is a human user id (multi-user). An AI agent's edit is authored `agent:<userId>`, naming the
@@ -110,6 +111,8 @@ export type LocalEdit =
       params: PatchValues;
       effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
       midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      /** The custom devices it plays, taken into the project with it (COMM-1.11.1). */
+      devices?: SoundDevices;
       /**
        * A recorded take to start the track with, in place of the empty seed clip: what was
        * played on a sound being tried in Explore (COMM-1.4.1). Carried in this one edit so the
@@ -136,6 +139,8 @@ export type LocalEdit =
       params: PatchValues;
       effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
       midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      /** The custom devices it plays, taken into the project with it (COMM-1.11.1). */
+      devices?: SoundDevices;
     }
   | {
       // Add an imported sample to the project library. The bytes are already in the

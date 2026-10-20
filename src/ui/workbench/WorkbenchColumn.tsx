@@ -241,6 +241,7 @@ export function WorkbenchColumn({
       <section aria-label="Devices" className="pb-6">
         <DevicesBar
           track={track}
+          projectStore={projectStore}
           open={devicesOpen}
           onToggle={() => setDevicesOpen(!devicesOpen)}
           rollGone={rollGone}

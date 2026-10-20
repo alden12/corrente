@@ -134,7 +134,7 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
       if (!track) throw new Error("No track specified and none selected.");
       if (track.kind !== "instrument")
         throw new Error(`Track ${track.id} is an audio track; patches need an instrument track.`);
-      const saved = savePatchFromTrack(track, editLog.agentAuthor, params as SaveOptions);
+      const saved = savePatchFromTrack(track, editLog.agentAuthor, projectStore, params as SaveOptions);
       return { id: saved.id, name: saved.name, version: saved.version };
     },
     apply: (params) => {

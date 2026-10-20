@@ -73,6 +73,7 @@ import { readAutoQuantize } from "./quantizeSettings";
 import { readRecordOffsetMs } from "./recordOffset";
 import { readOutputDeviceId } from "./outputDevice";
 import { isTypingTarget } from "./typingTarget";
+import { keepDevicesOf } from "../audio/library/devices";
 
 const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
 
@@ -118,9 +119,11 @@ export function AppShell() {
   // computer keyboard and hardware MIDI so both get velocity and pedal handling.
   // The sound being tried in Explore (COMM-1.4.1): live notes play it, and a take records it
   // onto a new track.
-  const [preview] = useState(() => new SoundPreview(engine, noteUsed));
+  const [preview] = useState(() => new SoundPreview(engine, noteUsed, projectStore));
   // In an effect, not the initializer: React may run an initializer twice and keep only one result.
   useEffect(() => recorder.setPreviewSource(preview), [recorder, preview]);
+  // Every device made or changed here is kept in your library (COMM-1.11.1), for any project.
+  useEffect(() => editLog.onLocalEdit(keepDevicesOf), [editLog]);
   const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
   // The output buffer, picked from whether someone is playing live (INST-36.9).
   const [bufferControl] = useState(

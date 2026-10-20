@@ -11,7 +11,7 @@
  * the project.
  */
 import { ProjectStore, type InstrumentTrack } from "../project/projectStore";
-import { soundChains, type Sound } from "../patches/sound";
+import { soundChains, soundDevicesOf, type DeviceSource, type Sound } from "../patches/sound";
 import type { InstrumentTarget } from "./liveNotes";
 
 export interface PreviewEngine {
@@ -38,11 +38,21 @@ export class SoundPreview {
   private readonly listeners = new Set<() => void>();
   private readonly engine: PreviewEngine;
   private readonly onTaken: (key: string) => void;
+  private readonly project: DeviceSource;
+  private scratch: ProjectStore | null = null;
 
-  /** `onTaken` hears which item's sound reached the project (Explore's Recently used, COMM-1.9.7). */
-  constructor(engine: PreviewEngine, onTaken: (key: string) => void = () => undefined) {
+  /**
+   * `onTaken` hears which item's sound reached the project (Explore's Recently used, COMM-1.9.7).
+   * `project` is the open project, whose custom devices a sound's own must not displace.
+   */
+  constructor(
+    engine: PreviewEngine,
+    onTaken: (key: string) => void = () => undefined,
+    project: DeviceSource = { customInstruments: [], customEffects: [] },
+  ) {
     this.engine = engine;
     this.onTaken = onTaken;
+    this.project = project;
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -55,8 +65,14 @@ export class SoundPreview {
   /** Try a sound, replacing whatever was being tried. */
   open(key: string, sound: Sound): void {
     const scratch = new ProjectStore(false);
+    // The project's own devices first, so where a sound brings another version of one, the
+    // project's plays, as it would once added, rather than replacing it app-wide (devices register
+    // globally).
+    this.project.customInstruments.forEach((device) => scratch.addCustomInstrument(device));
+    this.project.customEffects.forEach((device) => scratch.addCustomEffect(device));
     const track = scratch.addTrackFromPatch({ id: PREVIEW_TRACK_ID, ...soundChains(sound) });
     if (track.kind !== "instrument") return;
+    this.scratch = scratch;
     this.engine.setPreview(track);
     this.set({ key, name: sound.name, track });
   }
@@ -87,7 +103,9 @@ export class SoundPreview {
   current(): Sound | null {
     const track = this.state?.track;
     if (!track) return null;
+    const devices = this.scratch ? soundDevicesOf(track, this.scratch) : undefined;
     return {
+      ...(devices ? { devices } : {}),
       name: this.state!.name,
       instrumentType: track.instrumentType,
       params: track.params.snapshot(),

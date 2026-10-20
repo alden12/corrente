@@ -4,7 +4,7 @@
  * Once the roll has scrolled off the top, a button back to it leads the bar, naming the clip open
  * in it, so moving between the notes and a device three rows down is one click either way.
  */
-import type { Track } from "../../audio/project/projectStore";
+import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import { SavePatchControl } from "./DeviceRack";
 import { catalogEntry, EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { effectCatalogEntry } from "../../audio/effects/catalog";
@@ -45,6 +45,7 @@ function jumpsFor(track: Track): Jump[] {
 
 export function DevicesBar({
   track,
+  projectStore,
   open,
   onToggle,
   rollGone,
@@ -52,6 +53,7 @@ export function DevicesBar({
   onDevice,
 }: {
   track: Track;
+  projectStore: ProjectStore;
   /** Whether the devices show, or are folded away under this bar. */
   open: boolean;
   onToggle: () => void;
@@ -76,7 +78,7 @@ export function DevicesBar({
       className="sticky top-0 z-20"
       actions={
         track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT ? (
-          <SavePatchControl track={track} moreItems={[{ separator: true }, ...foldItems]} />
+          <SavePatchControl track={track} projectStore={projectStore} moreItems={[{ separator: true }, ...foldItems]} />
         ) : (
           <Menu label="Device chain actions" items={foldItems} />
         )

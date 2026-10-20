@@ -37,6 +37,7 @@ import {
 import { hasEffect, effectSchema, registerEffect, unregisterEffect, DEFAULT_EFFECT } from "../effects/catalog";
 import { hasMidiDevice, midiDeviceSchema, DEFAULT_MIDI_DEVICE } from "../midi/device/catalog";
 import { parseCustomDevices, type CustomDevice, type UnreadableDevices } from "../definitions/custom";
+import type { SoundDevices } from "../patches/sound";
 import { registerEngineDevice, unregisterEngineDevice } from "../definitions/engineDevices";
 import { DEFAULT_GROOVE_ID } from "../grooves/catalog";
 import {
@@ -546,6 +547,7 @@ export class ProjectStore {
       params: PatchValues;
       effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
       midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      devices?: SoundDevices;
       take?: {
         id: string;
         placementId: string;
@@ -558,6 +560,7 @@ export class ProjectStore {
     author: ClipAuthor = "you",
   ): Track {
     if (spec.id && this.getTrack(spec.id)) return this.getTrack(spec.id)!;
+    this.adoptDevices(spec.devices);
     const track = this.addTrack(spec.instrumentType, {
       name: spec.name,
       id: spec.id,
@@ -606,9 +609,11 @@ export class ProjectStore {
     params: PatchValues;
     effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
     midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+    devices?: SoundDevices;
   }): void {
     const track = this.getTrack(spec.trackId);
     if (!track || track.kind !== "instrument") return;
+    this.adoptDevices(spec.devices);
     const type = hasInstrument(spec.instrumentType) ? spec.instrumentType : DEFAULT_INSTRUMENT;
     const schema = instrumentSchema(type);
     // The patch may set only some params; fill the rest from schema defaults so the
@@ -1579,6 +1584,21 @@ export class ProjectStore {
       if (effect.type === def.type) effect.params.reschema(def.schema);
     }
     this.emit();
+  }
+
+  /**
+   * Take a sound's custom devices into the project (COMM-1.11.1): the ones it doesn't have yet. A
+   * device's type is its id for good and a project holds one version of each, so where the project
+   * already has the device, its own version plays and nothing it already plays changes. Whether a
+   * newer one is in the library is the rack's to offer (LibraryUpdate).
+   */
+  private adoptDevices(devices: SoundDevices | undefined): void {
+    devices?.instruments
+      ?.filter((device) => !this.customInstrumentDefs.some((existing) => existing.type === device.type))
+      .forEach((device) => this.addCustomInstrument(device));
+    devices?.effects
+      ?.filter((device) => !this.customEffectDefs.some((existing) => existing.type === device.type))
+      .forEach((device) => this.addCustomEffect(device));
   }
 
   /** How many tracks play a custom instrument, or how many slots hold a custom effect: what

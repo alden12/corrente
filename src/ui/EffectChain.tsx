@@ -13,6 +13,7 @@ import { effectParamKey } from "../audio/commands/authorship";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { DeviceSections } from "./devices/DeviceSections";
 import { ChainActions } from "./devices/ChainActions";
+import { LibraryUpdate } from "./devices/LibraryUpdate";
 
 export function EffectChain({
   projectStore,
@@ -48,13 +49,18 @@ export function EffectChain({
                 dispatch({ type: "bypassEffect", hostId: trackId, effectId: fx.id, bypassed: !fx.bypassed }),
             }}
             actions={
-              <ChainActions
-                index={i}
-                count={effects.length}
-                onMove={(toIndex) => dispatch({ type: "moveEffect", hostId: trackId, effectId: fx.id, toIndex })}
-                onRemove={() => dispatch({ type: "removeEffect", hostId: trackId, effectId: fx.id })}
-                removeTitle="Remove effect"
-              />
+              <>
+                {info.custom && (
+                  <LibraryUpdate type={fx.type} kind="effect" projectStore={projectStore} dispatch={dispatch} />
+                )}
+                <ChainActions
+                  index={i}
+                  count={effects.length}
+                  onMove={(toIndex) => dispatch({ type: "moveEffect", hostId: trackId, effectId: fx.id, toIndex })}
+                  onRemove={() => dispatch({ type: "removeEffect", hostId: trackId, effectId: fx.id })}
+                  removeTitle="Remove effect"
+                />
+              </>
             }
             params={schema.length}
           >

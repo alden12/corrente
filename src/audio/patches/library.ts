@@ -2,9 +2,9 @@
  * The patch library: a user's saved instrument *patches* - an instrument type plus its parameter
  * values and MIDI-device and effect chains, captured as a named, reusable preset. Patches are
  * **global** (shared across all projects), so they live in the library (COMM-1.11) rather than a
- * project: on the device in IndexedDB, as items with write-once versions. Saving over a patch adds a
- * version; deleting one hides it. Reads come from a copy in memory, loaded once (`openLibrary`), so
- * they stay synchronous; writes go through to the backend in order.
+ * project: on the device in IndexedDB, as items with write-once versions (library/store.ts). Saving
+ * over a patch adds a version; deleting one hides it. A patch made on a custom instrument, or with
+ * custom effects, carries their definitions, so it plays in a project that doesn't have them.
  *
  * A patch stores effects *without* instance ids - ids are per-track and are minted
  * fresh when a patch is applied (see `createTrackFromPatch`), so the same patch can
@@ -17,7 +17,18 @@ import { randomUuid } from "../randomUuid";
 import type { Tag } from "../tags";
 import { z } from "zod";
 import { authorSchema, patchValuesSchema } from "../project/schema";
-import { memoryBackend, type LibraryBackend, type LibraryItem, type LibraryVersion } from "../library/backend";
+import type { LibraryBackend } from "../library/backend";
+import {
+  hideItem,
+  libraryEntries,
+  libraryEntry,
+  libraryWritten,
+  openStore,
+  saveItem,
+  subscribeLibrary,
+  type LibraryEntry,
+} from "../library/store";
+import type { SoundDevices } from "./sound";
 
 /** One effect in a saved patch: its type, bypass state, and parameter values. */
 export interface PatchEffect {
@@ -52,24 +63,17 @@ export interface Patch {
   description?: string;
   /** Which version of it this is: a library patch's count of saves. */
   version?: number;
+  /** The custom devices it plays, carried so it plays in any project. */
+  devices?: SoundDevices;
 }
 
 /** What a library version holds for a patch: its sound, without the library's metadata. */
-type PatchDocument = Pick<Patch, "instrumentType" | "params" | "effects" | "midiDevices">;
+type PatchDocument = Pick<Patch, "instrumentType" | "params" | "effects" | "midiDevices" | "devices">;
 
 /** Where patches were kept before the library, moved in on first open. */
 const OLD_STORAGE_KEY = "corrente:patches:v1";
 
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((listener) => listener());
-
-let backend: LibraryBackend = memoryBackend();
-/** Every patch in the library, with its current version. */
-const entries = new Map<string, { item: LibraryItem; current: LibraryVersion }>();
-/** The backend's writes, one after another, so a version never lands before its item's last. */
-let writes: Promise<void> = Promise.resolve();
-
-const patchOf = ({ item, current }: { item: LibraryItem; current: LibraryVersion }): Patch => ({
+const patchOf = ({ item, current }: LibraryEntry): Patch => ({
   id: item.id,
   name: item.name,
   author: current.author,
@@ -80,55 +84,22 @@ const patchOf = ({ item, current }: { item: LibraryItem; current: LibraryVersion
   ...(current.document as PatchDocument),
 });
 
-/** Queue a write; the returned promise says whether it landed, and a failure doesn't stop the queue. */
-function write(item: LibraryItem, version?: LibraryVersion): Promise<void> {
-  const written = writes.then(() => backend.save(item, version));
-  writes = written.catch((error: unknown) => console.warn("[corrente] the patch library couldn't save:", error));
-  return written;
-}
-
-/** Until the library has been written, for tests and anything that must see it stored. */
-export const libraryWritten = (): Promise<void> => writes;
+export { libraryWritten };
 
 /** Every saved patch, newest first, deleted ones left out. Empty until the library opens. */
-export function listPatches(): Patch[] {
-  return [...entries.values()]
-    .filter(({ item }) => item.hiddenAt === undefined)
-    .sort((left, right) => right.item.updatedAt - left.item.updatedAt)
-    .map(patchOf);
-}
+export const listPatches = (): Patch[] => libraryEntries("patch").map(patchOf);
 
 /** Save a patch, and say when it's stored. */
 function stored(patch: Patch, at: number): { saved: Patch; written: Promise<void> } {
-  const existing = entries.get(patch.id);
-  const version = (existing?.item.version ?? 0) + 1;
-  const item: LibraryItem = {
-    id: patch.id,
-    kind: "patch",
-    name: patch.name,
-    version,
-    createdAt: existing?.item.createdAt ?? patch.createdAt,
-    updatedAt: at,
-  };
   const document: PatchDocument = {
     instrumentType: patch.instrumentType,
     params: patch.params,
     effects: patch.effects,
     midiDevices: patch.midiDevices ?? [],
+    ...(patch.devices ? { devices: patch.devices } : {}),
   };
-  const current: LibraryVersion = {
-    itemId: patch.id,
-    version,
-    createdAt: at,
-    author: patch.author,
-    tags: [...(patch.tags ?? [])],
-    ...(patch.description ? { description: patch.description } : {}),
-    document,
-  };
-  entries.set(patch.id, { item, current });
-  const written = write(item, current);
-  notify();
-  return { saved: patchOf({ item, current }), written };
+  const { entry, written } = saveItem({ ...patch, kind: "patch", document }, at);
+  return { saved: patchOf(entry), written };
 }
 
 /**
@@ -142,20 +113,10 @@ export function savePatch(patch: Patch, at = Date.now()): Patch {
 }
 
 /** Delete a patch: hidden from the library, its versions kept. */
-export function removePatch(id: string): void {
-  const entry = entries.get(id);
-  if (!entry) return;
-  const item = { ...entry.item, hiddenAt: Date.now() };
-  entries.set(id, { ...entry, item });
-  void write(item).catch(() => {});
-  notify();
-}
+export const removePatch = (id: string): void => hideItem(id);
 
 /** Subscribe to library changes (save/remove). Returns an unsubscribe fn. */
-export function subscribePatches(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribePatches = subscribeLibrary;
 
 /** A fresh patch id. */
 export function newPatchId(): string {
@@ -201,19 +162,11 @@ function oldPatches(): { patches: Patch[]; complete: boolean } {
  * they're all stored.
  */
 export async function openLibrary(chosen: LibraryBackend): Promise<void> {
-  backend = chosen;
-  const { items, current } = await chosen.load();
-  const currentOf = new Map(current.map((version) => [version.itemId, version]));
-  entries.clear();
-  items.forEach((item) => {
-    const version = currentOf.get(item.id);
-    if (version) entries.set(item.id, { item, current: version });
-  });
-  notify();
+  await openStore(chosen);
   const { patches, complete } = oldPatches();
   if (!patches.length) return;
   try {
-    const moving = patches.filter((patch) => !entries.has(patch.id));
+    const moving = patches.filter((patch) => !libraryEntry(patch.id));
     await Promise.all(moving.map((patch) => stored(patch, patch.createdAt).written));
     // An entry that didn't read keeps the key, so nothing is thrown away unseen.
     if (complete) localStorage.removeItem(OLD_STORAGE_KEY);

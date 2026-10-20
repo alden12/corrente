@@ -16,6 +16,7 @@ import type { SampleContext } from "./Knob";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { DeviceSections } from "./devices/DeviceSections";
 import { instrumentFold } from "./devices/deviceFolds";
+import { LibraryUpdate } from "./devices/LibraryUpdate";
 
 export function InstrumentPanel({
   params,
@@ -45,7 +46,18 @@ export function InstrumentPanel({
     onReveal: onRevealSamples,
   };
   return (
-    <DeviceBlock device={info} label={info.label} kind="instr" foldKey={instrumentFold(trackId)} params={schema.length}>
+    <DeviceBlock
+      device={info}
+      label={info.label}
+      kind="instr"
+      foldKey={instrumentFold(trackId)}
+      params={schema.length}
+      actions={
+        info.custom && (
+          <LibraryUpdate type={instrumentType} kind="instrument" projectStore={projectStore} dispatch={dispatch} />
+        )
+      }
+    >
       <DeviceSections
         label={info.label}
         schema={schema}

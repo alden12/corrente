@@ -252,7 +252,7 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
         patch: z.string().optional(),
       }),
       run: ({ track, ...options }) => {
-        const saved = savePatchFromTrack(resolveInstrumentTrack(track), author, options);
+        const saved = savePatchFromTrack(resolveInstrumentTrack(track), author, projectStore, options);
         return { ok: true, patchId: saved.id, name: saved.name, version: saved.version };
       },
     }),

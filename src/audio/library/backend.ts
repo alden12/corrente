@@ -9,9 +9,10 @@
  *   and description are written with it, so they describe the sound they sit beside.
  */
 import type { Author } from "../commands/types";
+import type { CustomKind } from "../definitions/custom";
 
-/** What an item holds. Patches first; custom instruments and effects join them (COMM-1.11.1). */
-export type LibraryKind = "patch";
+/** What an item holds: a patch, or a custom instrument or effect (COMM-1.9.8). */
+export type LibraryKind = "patch" | CustomKind;
 
 export interface LibraryItem {
   id: string;
