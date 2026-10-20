@@ -108,6 +108,14 @@ describe("the patch library (COMM-1.11.1)", () => {
     expect(listPatches()).toHaveLength(2);
   });
 
+  it("moves the old patches that read, and keeps the key while any doesn't", async () => {
+    const storage = installLocalStorage();
+    storage.set("corrente:patches:v1", JSON.stringify([samplePatch({ name: "Fine" }), { name: "no id or sound" }]));
+    await openLibrary(await freshDevice());
+    expect(listPatches().map((p) => p.name)).toEqual(["Fine"]);
+    expect(storage.has("corrente:patches:v1")).toBe(true);
+  });
+
   it("leaves the old patches where they were when storing them fails", async () => {
     const storage = installLocalStorage();
     storage.set("corrente:patches:v1", JSON.stringify([samplePatch()]));

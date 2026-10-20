@@ -15,6 +15,8 @@ import type { Author } from "../commands/types";
 import type { PatchValues } from "../params/types";
 import { randomUuid } from "../randomUuid";
 import type { Tag } from "../tags";
+import { z } from "zod";
+import { authorSchema, patchValuesSchema } from "../project/schema";
 import { memoryBackend, type LibraryBackend, type LibraryItem, type LibraryVersion } from "../library/backend";
 
 /** One effect in a saved patch: its type, bypass state, and parameter values. */
@@ -160,13 +162,36 @@ export function newPatchId(): string {
   return `pt-${randomUuid().slice(0, 8)}`;
 }
 
-/** The patches kept in localStorage before the library, oldest first; none when there's no storage. */
-function oldPatches(): Patch[] {
+/** One device in a patch as localStorage kept it. */
+const oldChainSchema = z.object({ type: z.string(), bypassed: z.boolean().optional(), params: patchValuesSchema });
+
+/** A patch as localStorage kept it, checked before it moves in: it was written by older builds. */
+const oldPatchSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  author: authorSchema,
+  instrumentType: z.string(),
+  params: patchValuesSchema,
+  effects: z.array(oldChainSchema),
+  midiDevices: z.array(oldChainSchema).optional(),
+  createdAt: z.number(),
+});
+
+/**
+ * The patches kept in localStorage before the library, oldest first, and whether every entry read
+ * cleanly; none when there's no storage or nothing kept.
+ */
+function oldPatches(): { patches: Patch[]; complete: boolean } {
   try {
-    const list = JSON.parse(localStorage.getItem(OLD_STORAGE_KEY) ?? "[]") as Patch[];
-    return Array.isArray(list) ? [...list].reverse() : [];
+    const raw: unknown = JSON.parse(localStorage.getItem(OLD_STORAGE_KEY) ?? "[]");
+    const entries = Array.isArray(raw) ? raw : [];
+    const patches = entries.flatMap((entry) => {
+      const parsed = oldPatchSchema.safeParse(entry);
+      return parsed.success ? [parsed.data as Patch] : [];
+    });
+    return { patches: patches.reverse(), complete: Array.isArray(raw) && patches.length === entries.length };
   } catch {
-    return [];
+    return { patches: [], complete: false };
   }
 }
 
@@ -185,12 +210,13 @@ export async function openLibrary(chosen: LibraryBackend): Promise<void> {
     if (version) entries.set(item.id, { item, current: version });
   });
   notify();
-  const old = oldPatches();
-  if (!old.length) return;
+  const { patches, complete } = oldPatches();
+  if (!patches.length) return;
   try {
-    const moving = old.filter((patch) => !entries.has(patch.id));
+    const moving = patches.filter((patch) => !entries.has(patch.id));
     await Promise.all(moving.map((patch) => stored(patch, patch.createdAt).written));
-    localStorage.removeItem(OLD_STORAGE_KEY);
+    // An entry that didn't read keeps the key, so nothing is thrown away unseen.
+    if (complete) localStorage.removeItem(OLD_STORAGE_KEY);
   } catch {
     // A write failed: the old key stays, so the next open tries again and nothing is lost.
   }
