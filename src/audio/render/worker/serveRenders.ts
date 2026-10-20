@@ -3,13 +3,14 @@
  * Worker (renderWorker.ts) or a Node worker thread on the hosted server (server/render/renderThread.ts).
  *
  * It rebuilds each project from its document (registering its custom devices, as a load does) and
- * renders it with `renderProject`. Samples and audio clips come from whoever asked for the render,
+ * renders it with `renderProject`; or draws one device's portrait (COMM-1.9.6). Samples and audio clips come from whoever asked for the render,
  * one request each as the render reaches them: the page decodes them in a browser, the server reads
  * them from storage.
  */
 import { ProjectStore } from "../../project/projectStore";
 import type { SampleAudio } from "../../bank/bank";
 import { renderProject } from "../renderProject";
+import { drawPortrait } from "../../portraits/devicePortrait";
 import { buffersOf, type FromWorker, type LoadRequest, type ToWorker } from "./messages";
 
 /** A worker's end of its channel to whoever asked: what both kinds of worker share. */
@@ -42,6 +43,16 @@ export function serveRenders(port: WorkerPort): void {
       };
       renderProject(store, setup, options).then(
         (render) => port.post({ kind: "done", id, render }, buffersOf(render.channels)),
+        (error: unknown) => port.post({ kind: "failed", id, message: String(error) }),
+      );
+    },
+    portrait: ({ id, job, engine }) => {
+      // Registered as a project registers them; devices register globally, but this is the worker's own world.
+      const scratch = new ProjectStore(false);
+      job.devices?.instruments?.forEach((device) => scratch.addCustomInstrument(device));
+      job.devices?.effects?.forEach((device) => scratch.addCustomEffect(device));
+      drawPortrait(job, { engine, loadSample: (ref: string) => ask(id, "sample", ref) }).then(
+        (portrait) => port.post({ kind: "drawn", id, portrait }),
         (error: unknown) => port.post({ kind: "failed", id, message: String(error) }),
       );
     },

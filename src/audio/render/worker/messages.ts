@@ -1,10 +1,12 @@
 /**
  * What the browser and its render worker say to each other (AGENT-4.9 part 3b). The worker runs the
- * engine render core off the main thread; a worker can't decode audio (no Web Audio there), so it
+ * engine render core off the main thread, rendering projects and drawing portraits; a worker can't decode audio (no Web Audio there), so it
  * asks the page for each sample and audio clip it needs, decoded, as it comes to them.
  */
 import type { SampleAudio } from "../../bank/bank";
 import type { ProjectData } from "../../project/types";
+import type { Portrait } from "../../portraits/draw";
+import type { PortraitJob } from "../../portraits/devicePortrait";
 import type { ProjectRender, ProjectRenderOptions } from "../renderProject";
 
 /** From the page: render this project. */
@@ -17,6 +19,14 @@ export interface RenderRequest {
   options: ProjectRenderOptions;
 }
 
+/** From the page: draw this device's portrait (COMM-1.9.6). */
+export interface PortraitRequest {
+  kind: "portrait";
+  id: number;
+  job: PortraitJob;
+  engine: ArrayBuffer;
+}
+
 /** From the page: the audio the worker asked for, or null if it won't load. */
 export interface Loaded {
   kind: "loaded";
@@ -24,7 +34,7 @@ export interface Loaded {
   audio: SampleAudio | null;
 }
 
-export type ToWorker = RenderRequest | Loaded;
+export type ToWorker = RenderRequest | PortraitRequest | Loaded;
 
 /** From the worker: decode this sample (a sample param's ref) or audio clip (its file id). */
 export interface LoadRequest {
@@ -39,6 +49,7 @@ export interface LoadRequest {
 export type FromWorker =
   | LoadRequest
   | { kind: "done"; id: number; render: ProjectRender }
+  | { kind: "drawn"; id: number; portrait: Portrait }
   | { kind: "failed"; id: number; message: string };
 
 /** A render's or an audio's sample buffers, to move rather than copy across. */

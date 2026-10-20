@@ -16,7 +16,7 @@ declare global {
   var CORRENTE_RENDER_WORKER: string | undefined;
 }
 
-export const renderInThread = renderClient(() => {
+const thread = renderClient(() => {
   const worker = new Worker(
     new URL(globalThis.CORRENTE_RENDER_WORKER ?? new URL("./renderThread.mjs", import.meta.url)),
   );
@@ -28,3 +28,5 @@ export const renderInThread = renderClient(() => {
     terminate: () => void worker.terminate(),
   };
 });
+
+export const renderInThread = thread.render;

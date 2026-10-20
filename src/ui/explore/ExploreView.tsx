@@ -125,7 +125,7 @@ export function ExploreView({
     <TagChips tags={rankTags(shown, picked)} all={tagsIn(pool)} picked={picked} onToggle={toggleTag} />
   );
 
-  const items = exploreItems({ savedPatches, samples: project.samples });
+  const items = exploreItems({ savedPatches, samples: project.samples, project: projectStore });
 
   // Favourites keep the order you hearted them in, newest first; every other category reads A to Z.
   const inCategory = (key: ExploreCategory) =>

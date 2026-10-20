@@ -96,7 +96,9 @@ export function TryPanel({
   // The phone is the shell that passes pads; it gets the roomier buttons with fuller labels.
   const layout = pads ? "phone" : "desktop";
   // The row it was tried from, for its artwork: the same thumbnail, so the panel reads as that row.
-  const item = exploreItems({ savedPatches, samples: project.samples }).find((each) => each.key === trying.key);
+  const item = exploreItems({ savedPatches, samples: project.samples, project: projectStore }).find(
+    (each) => each.key === trying.key,
+  );
 
   const selected = project.tracks.find((track) => track.id === project.selectedTrackId && track.kind === "instrument");
   const take = (act: (sound: NonNullable<ReturnType<SoundPreview["current"]>>) => void) => () => {

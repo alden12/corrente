@@ -16,6 +16,8 @@ import type { Patch } from "../../audio/patches/library";
 import { byTagOrder, type Tag } from "../../audio/tags";
 import { PORTRAIT_KEYS } from "../../audio/portraits/keys";
 import type { Portrait } from "../../audio/portraits/draw";
+import type { PortraitJob } from "../../audio/portraits/devicePortrait";
+import type { DeviceSource } from "../../audio/patches/sound";
 import PORTRAITS from "./portraits.json";
 import { deviceHue } from "../../audio/deviceColors";
 
@@ -62,10 +64,11 @@ export interface ExploreItem {
   favouritable: boolean;
   /**
    * Its sound portrait (COMM-1.9.2), drawn from a render of it. Built-ins have one from
-   * `portraits.json` (`yarn portraits`); your patches and samples do not yet, and show the
-   * category's glyph instead.
+   * `portraits.json` (`yarn portraits`); samples have none, and show the category's glyph.
    */
   portrait?: Portrait;
+  /** What to draw for one made here (a custom device, a saved patch), drawn when its card is in view (COMM-1.9.6). */
+  drawing?: PortraitJob;
   /** A device's colour as a hue (DAW-61.2), for a device or a patch of one; samples go by category. */
   hue?: number;
   source: ItemSource;
@@ -74,12 +77,30 @@ export interface ExploreItem {
 /** An item before `favouritable` is worked out, which is the same rule for every source. */
 type Unrated = Omit<ExploreItem, "favouritable">;
 
+/** What draws a custom device's portrait: it at its defaults, carrying its definition. */
+function deviceDrawing(kind: "instrument" | "effect", type: string, project: DeviceSource): PortraitJob | undefined {
+  const device = (kind === "instrument" ? project.customInstruments : project.customEffects).find(
+    (each) => each.type === type,
+  );
+  return device && { kind, type, devices: kind === "instrument" ? { instruments: [device] } : { effects: [device] } };
+}
+
+/** What draws a saved patch's portrait: its sound, with the custom devices it carries. */
+const patchDrawing = (patch: Patch): PortraitJob => ({
+  kind: "patch",
+  sound: { instrumentType: patch.instrumentType, params: patch.params, effects: patch.effects },
+  ...(patch.devices ? { devices: patch.devices } : {}),
+});
+
 export function exploreItems({
   savedPatches,
   samples,
+  project,
 }: {
   savedPatches: Patch[];
   samples: { id: string; name: string }[];
+  /** The open project, whose custom devices Explore lists. */
+  project: DeviceSource;
 }): ExploreItem[] {
   const instruments = pickableInstrumentInfos();
   const instrumentOf = (type: string) => instruments.find((info) => info.type === type);
@@ -99,6 +120,7 @@ export function exploreItems({
         ),
         builtin: !info.custom,
         hue: deviceHue(info),
+        ...(info.custom ? { drawing: deviceDrawing("instrument", info.type, project) } : {}),
         source: { kind: "instrument", type: info.type },
       }),
     ),
@@ -113,6 +135,7 @@ export function exploreItems({
         tags: patch.tags ?? [],
         builtin: !!patch.builtin,
         hue: deviceHue(instrumentOf(patch.instrumentType) ?? { type: patch.instrumentType }),
+        ...(patch.builtin ? {} : { drawing: patchDrawing(patch) }),
         source: { kind: "patch", patch },
       }),
     ),
@@ -125,6 +148,7 @@ export function exploreItems({
         tags: info.tags ?? [],
         builtin: !info.custom,
         hue: deviceHue(info),
+        ...(info.custom ? { drawing: deviceDrawing("effect", info.type, project) } : {}),
         source: { kind: "effect", type: info.type },
       }),
     ),

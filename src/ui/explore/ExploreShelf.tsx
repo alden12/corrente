@@ -70,6 +70,7 @@ export function ExploreShelf({
                   category={item.category}
                   seed={item.name}
                   portrait={item.portrait}
+                  drawing={item.drawing}
                   hue={item.hue}
                   size={CARD}
                 />

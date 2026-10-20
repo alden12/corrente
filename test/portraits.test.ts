@@ -74,7 +74,11 @@ describe("draw", () => {
 
 describe("portraits.json", () => {
   it("has a portrait for every built-in (run `yarn portraits` after adding or retuning one)", () => {
-    const missing = exploreItems({ savedPatches: [], samples: [] })
+    const missing = exploreItems({
+      project: { customInstruments: [], customEffects: [] },
+      savedPatches: [],
+      samples: [],
+    })
       .filter((item) => item.builtin && !item.portrait?.line && !item.portrait?.fill)
       .map((item) => item.key);
     expect(missing).toEqual([]);

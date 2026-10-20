@@ -18,10 +18,12 @@ import type { ProjectData } from "../project/types";
 import type { ProjectRender, ProjectRenderOptions } from "../render/renderProject";
 import type { FromWorker } from "../render/worker/messages";
 import { renderClient } from "../render/worker/renderClient";
+import { PORTRAIT_RATE, type PortraitJob } from "../portraits/devicePortrait";
+import type { Portrait } from "../portraits/draw";
 
 const DEFAULT_RATE = 48000;
 
-const render = renderClient(() => {
+const client = renderClient(() => {
   const worker = new Worker(new URL("../render/worker/renderWorker.ts", import.meta.url), { type: "module" });
   return {
     post: (message, transfer = []) => worker.postMessage(message, transfer),
@@ -45,12 +47,26 @@ export async function renderProjectInWorker(
 ): Promise<ProjectRender> {
   setSampleAssets(project.getSamples()); // so a Sampler's "asset:<id>" ref resolves
   const decoder = new OfflineAudioContext(1, 1, sampleRate);
-  return render({
+  return client.render({
     project: as,
     engine: (await fetchEngine()).slice(0),
     sampleRate,
     options,
     load: { sample: browserSample(decoder), audio: browserAudio(decoder) },
+  });
+}
+
+/** A portrait that takes longer than this has hung: the worker is replaced, and the card keeps its glyph. */
+const PORTRAIT_TIMEOUT_MS = 20_000;
+
+/** Draw one device's portrait in the render worker (COMM-1.9.6), its samples decoded here. */
+export async function drawPortraitInWorker(job: PortraitJob): Promise<Portrait> {
+  const decoder = new OfflineAudioContext(1, 1, PORTRAIT_RATE);
+  return client.portrait({
+    job,
+    engine: (await fetchEngine()).slice(0),
+    load: { sample: browserSample(decoder) },
+    timeoutMs: PORTRAIT_TIMEOUT_MS,
   });
 }
 

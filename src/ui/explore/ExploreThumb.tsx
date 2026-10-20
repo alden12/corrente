@@ -1,7 +1,8 @@
 /**
  * The artwork for an Explore item or category: a gradient in the device's own colour (DAW-61.2), so
- * it looks the same here as in the rack, and on it the item's sound portrait (COMM-1.9.2) - or, for
- * what has none yet (your patches, samples), the category's glyph. What isn't a device (a sample, a
+ * it looks the same here as in the rack, and on it the item's sound portrait (COMM-1.9.2: shipped for
+ * built-ins, drawn on screen for what you made, COMM-1.9.6) - or, for what has none (samples, and
+ * yours until drawn), the category's glyph. What isn't a device (a sample, a
  * category's tile) takes its category's hue, nudged per name so a list of one category doesn't read
  * as a single repeated tile.
  *
@@ -11,6 +12,8 @@
 import type { ReactNode } from "react";
 import { CATEGORIES, type ExploreCategory } from "./exploreItems";
 import type { Portrait } from "../../audio/portraits/draw";
+import type { PortraitJob } from "../../audio/portraits/devicePortrait";
+import { useDrawnPortrait } from "./useDrawnPortrait";
 
 const GLYPHS: Record<ExploreCategory, ReactNode> = {
   favourites: <path d="M8 13.2s-5-3.1-6.1-6A3.1 3.1 0 0 1 8 4.4a3.1 3.1 0 0 1 6.1 2.8C13 10.1 8 13.2 8 13.2z" />,
@@ -65,7 +68,8 @@ const hueShift = (seed: string) =>
 export function ExploreThumb({
   category,
   seed = "",
-  portrait,
+  portrait: shipped,
+  drawing,
   hue: ownHue,
   size,
 }: {
@@ -73,13 +77,18 @@ export function ExploreThumb({
   seed?: string;
   /** The item's sound portrait, drawn in place of the glyph when there is one (COMM-1.9.2). */
   portrait?: Portrait;
+  /** What to draw for an item with none shipped, once the card is on screen (COMM-1.9.6). */
+  drawing?: PortraitJob;
   /** A device's own colour, in place of the category's. */
   hue?: number;
   size: number;
 }) {
   const hue = ownHue ?? CATEGORIES[category].hue + hueShift(seed);
+  const [watch, drawn] = useDrawnPortrait(shipped ? undefined : drawing);
+  const portrait = shipped ?? drawn;
   return (
     <span
+      ref={watch}
       aria-hidden="true"
       className="relative shrink-0 flex items-center justify-center rounded-md text-white/85"
       style={{

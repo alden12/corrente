@@ -31,7 +31,8 @@ const builtinFor =
   ): Patch => ({
     id: `factory:${instrumentType}:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     name,
-    author: "you",
+    // The app's, not the user's: "you" read to agents as theirs. The account library owns built-ins as the same name.
+    author: "corrente",
     builtin: true,
     tags,
     instrumentType,

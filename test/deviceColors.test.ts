@@ -42,7 +42,11 @@ describe("device colours (DAW-61.2)", () => {
   });
 
   it("colours a device's Explore card, and a patch's, by the device; a sample by its category", () => {
-    const items = exploreItems({ savedPatches: [], samples: [{ id: "kick", name: "Kick 01" }] });
+    const items = exploreItems({
+      project: { customInstruments: [], customEffects: [] },
+      savedPatches: [],
+      samples: [{ id: "kick", name: "Kick 01" }],
+    });
     const item = (name: string) => items.find((each) => each.name === name);
     expect(item("Nimbus")?.hue).toBe(deviceHue({ type: "nimbus", color: "amber" }));
     expect(item("Tape Echo")?.hue).toBe(DEVICE_COLORS.blue);

@@ -27,7 +27,11 @@ const saved: Patch = {
   createdAt: 1,
 };
 
-const items = exploreItems({ savedPatches: [saved], samples: [{ id: "kick", name: "Kick 01" }] });
+const items = exploreItems({
+  project: { customInstruments: [], customEffects: [] },
+  savedPatches: [saved],
+  samples: [{ id: "kick", name: "Kick 01" }],
+});
 const named = (name: string) => items.find((item) => item.name === name) as ExploreItem;
 
 describe("exploreItems", () => {
@@ -56,7 +60,11 @@ describe("custom devices", () => {
   it("are not marked built-in", () => {
     registerInstrument({ type: "agent-fizz", label: "Fizz", schema: [], family: "Custom", custom: true });
     try {
-      const fizz = exploreItems({ savedPatches: [], samples: [] }).find((item) => item.name === "Fizz");
+      const fizz = exploreItems({
+        project: { customInstruments: [], customEffects: [] },
+        savedPatches: [],
+        samples: [],
+      }).find((item) => item.name === "Fizz");
       expect(fizz?.builtin).toBe(false);
       expect(fizz?.meta).toBe("Instrument · custom");
     } finally {
@@ -82,7 +90,11 @@ describe("searching Explore (search.ts)", () => {
   });
 
   it("reads a misspelt word as the nearest tag or name word listed, and says so", () => {
-    const items = exploreItems({ savedPatches: [], samples: [] });
+    const items = exploreItems({
+      project: { customInstruments: [], customEffects: [] },
+      savedPatches: [],
+      samples: [],
+    });
     const glassy = search(items, "glasy");
     expect(glassy.readAs).toEqual({ glasy: "glassy" });
     expect(glassy.items.every((item) => item.tags.includes("glassy"))).toBe(true);
@@ -102,9 +114,17 @@ describe("an instrument's tags (COMM-1.2)", () => {
 
   it("gain what your patches for it carry, so it turns up for those sounds in Explore", () => {
     const type = pickableInstrumentInfos()[0].type;
-    const before = exploreItems({ savedPatches: [], samples: [] }).find((item) => item.key.endsWith(type))!;
+    const before = exploreItems({
+      project: { customInstruments: [], customEffects: [] },
+      savedPatches: [],
+      samples: [],
+    }).find((item) => item.key.endsWith(type))!;
     const mine: Patch = { ...saved, instrumentType: type, tags: ["shoegaze"] };
-    const after = exploreItems({ savedPatches: [mine], samples: [] }).find((item) => item.key.endsWith(type))!;
+    const after = exploreItems({
+      project: { customInstruments: [], customEffects: [] },
+      savedPatches: [mine],
+      samples: [],
+    }).find((item) => item.key.endsWith(type))!;
     expect(before.tags).not.toContain("shoegaze");
     expect(after.tags).toContain("shoegaze");
     expect(hasTags(after, ["shoegaze"])).toBe(true);
@@ -164,7 +184,11 @@ describe("rankTags", () => {
 });
 
 describe("search results (COMM-1.9.3)", () => {
-  const items = exploreItems({ savedPatches: [saved], samples: [{ id: "s1", name: "Kick" }] });
+  const items = exploreItems({
+    project: { customInstruments: [], customEffects: [] },
+    savedPatches: [saved],
+    samples: [{ id: "s1", name: "Kick" }],
+  });
 
   it("groups results in tile order, A to Z within each, with no empty groups", () => {
     const groups = groupByCategory(search(items, "bass").items);
