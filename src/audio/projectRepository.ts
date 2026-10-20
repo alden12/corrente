@@ -36,6 +36,7 @@ import {
   type KeyframeIndex,
 } from "./history/keyframes";
 import { randomUuid } from "./randomUuid";
+import { sha256Hex } from "./contentHash";
 
 /** `project.json` carries this keyframe marker: the edit `seq` the snapshot reflects, so load
  *  knows which log tail to replay on top. A persistence detail (the domain ignores it); the
@@ -616,7 +617,7 @@ export class ProjectRepository {
 
   /** Store an audio sample, returning its content hash (its `fileId`). Dedups. */
   async putSample(blob: Blob): Promise<string> {
-    const hash = await sha256hex(await blob.arrayBuffer());
+    const hash = await sha256Hex(await blob.arrayBuffer());
     const path = `samples/${hash}`;
     if (!(await this.store.exists(path))) await this.store.writeBlob(path, blob);
     return hash;
@@ -758,11 +759,6 @@ function json(value: unknown): Uint8Array {
 
 function text(bytes: Uint8Array | undefined): string {
   return bytes ? new TextDecoder().decode(bytes) : "";
-}
-
-async function sha256hex(buf: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** localStorage key holding the current project id (shared source of truth with the library). */

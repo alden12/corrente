@@ -14,6 +14,7 @@ import type { AuthoredDefinition } from "./format";
 import { hasVoiceNodes } from "./references";
 import { issueLines } from "../../util";
 import { DEVICE_COLOR_NAMES, type DeviceColor } from "../deviceColors";
+import { canonicalJson } from "../contentHash";
 
 /**
  * The version of the custom-device shape a project stores. 1 was the graph format the old engine
@@ -32,21 +33,9 @@ export interface CustomDevice {
 
 export type CustomKind = "instrument" | "effect";
 
-/** A value with its objects' keys in order, so two copies of a device compare equal however they were built. */
-const ordered = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? value.map(ordered)
-    : value && typeof value === "object"
-      ? Object.fromEntries(
-          Object.entries(value)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([key, entry]) => [key, ordered(entry)]),
-        )
-      : value;
-
 /** Whether two devices are the same device: the same type, look, params and definition. */
 export const sameDevice = (left: CustomDevice, right: CustomDevice): boolean =>
-  JSON.stringify(ordered(left)) === JSON.stringify(ordered(right));
+  canonicalJson(left) === canonicalJson(right);
 
 /** The shape, before its definition is compiled. */
 const customDeviceSchema = z.strictObject({

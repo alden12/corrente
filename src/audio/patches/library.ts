@@ -17,6 +17,7 @@ import { randomUuid } from "../randomUuid";
 import type { Tag } from "../tags";
 import { z } from "zod";
 import { authorSchema, patchValuesSchema } from "../project/schema";
+import { patchChainSchema } from "../library/schema";
 import type { LibraryBackend } from "../library/backend";
 import {
   hideItem,
@@ -123,9 +124,6 @@ export function newPatchId(): string {
   return `pt-${randomUuid().slice(0, 8)}`;
 }
 
-/** One device in a patch as localStorage kept it. */
-const oldChainSchema = z.object({ type: z.string(), bypassed: z.boolean().optional(), params: patchValuesSchema });
-
 /** A patch as localStorage kept it, checked before it moves in: it was written by older builds. */
 const oldPatchSchema = z.object({
   id: z.string().min(1),
@@ -133,8 +131,8 @@ const oldPatchSchema = z.object({
   author: authorSchema,
   instrumentType: z.string(),
   params: patchValuesSchema,
-  effects: z.array(oldChainSchema),
-  midiDevices: z.array(oldChainSchema).optional(),
+  effects: z.array(patchChainSchema),
+  midiDevices: z.array(patchChainSchema).optional(),
   createdAt: z.number(),
 });
 

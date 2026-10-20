@@ -16,6 +16,7 @@ import { z } from "zod";
 import { projectId, filePath } from "./errors";
 import { editEntrySchema } from "../audio/project/schema";
 import { projectSummarySchema } from "../audio/projects/summary";
+import { libraryEntrySchema, librarySaveSchema } from "../audio/library/schema";
 
 const fileParams = z.object({ id: projectId, path: filePath });
 const idParams = z.object({ id: projectId });
@@ -53,6 +54,9 @@ export const deviceRef = z.string().regex(/^[a-z]+:[A-Za-z0-9:._-]{1,200}$/, "no
 
 /** How many changes one favourites sync may carry: plenty for a queue built up offline. */
 export const MAX_FAVOURITE_CHANGES = 500;
+
+/** How many saves one library sync may carry; a longer queue goes over several. */
+export const MAX_LIBRARY_SAVES = 100;
 
 const favouriteList = z.object({
   favourites: z.array(z.object({ ref: z.string(), createdAt: z.string() })),
@@ -141,6 +145,21 @@ export const routes = {
       .object({ add: z.array(deviceRef).default([]), remove: z.array(deviceRef).default([]) })
       .refine((body) => body.add.length + body.remove.length <= MAX_FAVOURITE_CHANGES, "too many changes"),
     response: favouriteList,
+  },
+  /**
+   * The account library (COMM-1.11.2): send the saves made on this device since it last synced, then
+   * get back every item changed since `since` (all of them without it), each with its current version,
+   * and the cursor to send next time. Write-once: a version already there unchanged is skipped, and one
+   * whose number is taken is stored as the item's next, which the reply shows.
+   */
+  syncLibrary: {
+    method: "POST",
+    path: "/library",
+    body: z.object({
+      since: z.string().optional(),
+      saves: z.array(librarySaveSchema).max(MAX_LIBRARY_SAVES).default([]),
+    }),
+    response: z.object({ cursor: z.string(), entries: z.array(libraryEntrySchema) }),
   },
 } as const;
 

@@ -37,6 +37,8 @@ export interface LibraryVersion {
   description?: string;
   /** The item itself: for a patch, its instrument and chains. */
   document: unknown;
+  /** The document's content hash (contentHash.ts): what a project's cached copy is checked against. */
+  hash?: string;
 }
 
 export interface LibraryBackend {

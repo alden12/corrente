@@ -25,6 +25,10 @@ export type MemberEntry = z.infer<(typeof routes.listMembers)["response"]>["memb
 /** One favourite as the server lists it: the device ref and when it was hearted. */
 export type FavouriteEntry = z.infer<(typeof routes.syncFavourites)["response"]>["favourites"][number];
 
+/** What one library sync sends, and what comes back (COMM-1.11.2). */
+export type LibrarySync = z.input<(typeof routes.syncLibrary)["body"]>;
+export type LibrarySyncReply = z.infer<(typeof routes.syncLibrary)["response"]>;
+
 /** The bearer credential: either a fixed string, or a getter re-read per request/reconnect (so a
  *  refreshed auth token takes effect without rebuilding the client). Evaluated lazily via `resolveToken`. */
 export type TokenSource = string | (() => string | undefined);
@@ -58,6 +62,8 @@ export interface ApiClient {
   removeMember(id: string, email: string): Promise<void>;
   /** Apply hearts and un-hearts (either may be empty), then return all the caller's favourites. */
   syncFavourites(changes: { add: string[]; remove: string[] }): Promise<FavouriteEntry[]>;
+  /** Send this device's library saves, and get back what changed since `since`, with the next cursor. */
+  syncLibrary(sync: LibrarySync): Promise<LibrarySyncReply>;
 }
 
 /**
@@ -217,6 +223,16 @@ export function createApiClient(config: {
       if (!res.ok) throw new Error(`sync: favourites failed (${res.status})`);
       const body = (await res.json()) as z.infer<(typeof routes.syncFavourites)["response"]>;
       return body.favourites;
+    },
+
+    async syncLibrary(sync) {
+      const res = await send(`${baseUrl}${routes.syncLibrary.path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sync),
+      });
+      if (!res.ok) throw new Error(`sync: library failed (${res.status})`);
+      return (await res.json()) as LibrarySyncReply;
     },
   };
 }
