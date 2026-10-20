@@ -175,6 +175,16 @@ describe("custom devices travel with patches (COMM-1.11.1)", () => {
     expect(settingsReset(synth, { ...synth, label: "Relabelled" })).toEqual([]);
   });
 
+  it("won't make a device edit ready when the library can't keep the device", async () => {
+    await openLibrary({
+      load: async () => ({ items: [], current: [] }),
+      save: () => Promise.reject(new Error("the library is full")),
+    });
+    await expect(withLibraryRef({ type: "addCustomInstrument", def: synth }, "you")).rejects.toThrow(
+      "the library is full",
+    );
+  });
+
   it("keeps an identical device as the version it already is", async () => {
     const project = new ProjectStore(false);
     const log = new EditLog(project);

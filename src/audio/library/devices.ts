@@ -40,18 +40,13 @@ const DEVICE_EDITS: Partial<Record<EditCommand["type"], CustomKind>> = {
 
 /**
  * An edit ready to land: a device edit once its device is kept in the library, carrying which
- * version it is; any other edit as it is. If the library couldn't store the device, the edit lands
- * without saying, so the project never names a version the library doesn't have.
+ * version it is; any other edit as it is. Rejects if the library couldn't keep the device, and then
+ * the edit mustn't land: the project would hold a device the library doesn't.
  */
 export async function withLibraryRef(command: EditCommand, author: Author): Promise<EditCommand> {
   const kind = DEVICE_EDITS[command.type];
   if (!kind || !("def" in command)) return command;
-  try {
-    return { ...command, library: await keepDevice(kind, command.def, author) };
-  } catch (error) {
-    console.warn("[corrente] the library couldn't keep this device:", error);
-    return command;
-  }
+  return { ...command, library: await keepDevice(kind, command.def, author) };
 }
 
 /** The library's latest version of a device, unless it was deleted. */

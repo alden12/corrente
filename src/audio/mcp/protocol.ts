@@ -40,7 +40,8 @@ export type BrowserToServer =
   | { type: "midiDeviceParamChanged"; trackId: string; deviceId: string; id: string; value: ParamValue }
   | { type: "historyReply"; id: string; ok: boolean; result?: unknown; error?: string }
   | { type: "patchReply"; id: string; ok: boolean; result?: unknown; error?: string }
-  | { type: "analysisReply"; id: string; ok: boolean; result?: unknown; error?: string };
+  | { type: "analysisReply"; id: string; ok: boolean; result?: unknown; error?: string }
+  | { type: "deviceReply"; id: string; ok: boolean; result?: unknown; error?: string };
 
 /** Sent by the server to the browser tab (commands). */
 export type ServerToBrowser =
@@ -62,14 +63,9 @@ export type ServerToBrowser =
   // Custom devices: user/AI-authored instruments & effects (engine definitions), stored in the
   // project. The def carries its own minted `type` id; removal addresses it by `deviceType`. Once
   // the device is kept in the library, `library` says which version it is (COMM-1.11.2).
-  | { type: "addCustomInstrument"; def: CustomDevice; library?: DeviceRef }
+  | DeviceEdit
   | { type: "removeCustomInstrument"; deviceType: string }
-  | { type: "addCustomEffect"; def: CustomDevice; library?: DeviceRef }
   | { type: "removeCustomEffect"; deviceType: string }
-  // Replace a custom device's def under its existing type: tracks and slots using it keep the
-  // values of params it still has, and are rebuilt with the new graph.
-  | { type: "updateCustomInstrument"; def: CustomDevice; library?: DeviceRef }
-  | { type: "updateCustomEffect"; def: CustomDevice; library?: DeviceRef }
   // Group structure (bus tree; id assigned by the creator so both ends agree)
   | { type: "createGroup"; id: string; name?: string; parentId?: string | null }
   | { type: "removeGroup"; groupId: string }
@@ -167,6 +163,22 @@ export type ServerToBrowser =
   | { type: "patchRequest"; id: string; method: PatchMethod; params?: Record<string, unknown> }
   // Mix-analysis RPC (expects a matching analysisReply): the tab renders the project, since it holds
   // the project's own samples and recordings (AGENT-4.9). With `device`, one track's sound alone (AGENT-4.6).
-  | { type: "analysisRequest"; id: string; device?: DeviceAnalysisRequest; mix?: MixAnalysisRequest };
+  | { type: "analysisRequest"; id: string; device?: DeviceAnalysisRequest; mix?: MixAnalysisRequest }
+  // A device edit that expects a matching deviceReply: the tab keeps the device in the library before
+  // the edit lands (COMM-1.11.2), and says if it couldn't, so the agent never builds on a device
+  // that isn't there.
+  | { type: "deviceRequest"; id: string; edit: DeviceEdit };
+
+/**
+ * The edits that add or change a custom device. Add and update are the same store call; the edit
+ * stays distinct for history. Updating replaces a device's def under its type: tracks and slots
+ * using it keep the values of params it still has. Once the device is kept in the library,
+ * `library` says which version it is (COMM-1.11.2).
+ */
+export type DeviceEdit = {
+  [Type in DeviceEditType]: { type: Type; def: CustomDevice; library?: DeviceRef };
+}[DeviceEditType];
+
+type DeviceEditType = "addCustomInstrument" | "addCustomEffect" | "updateCustomInstrument" | "updateCustomEffect";
 
 export const DEFAULT_WS_PORT = 8765;

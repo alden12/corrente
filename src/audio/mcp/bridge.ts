@@ -165,8 +165,7 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
 
   /**
    * The agent's edits and live messages, in the order sent. A device edit waits for its device to be
-   * kept in the library (COMM-1.11.2), and whatever came after it, say a track that plays the device,
-   * waits with it rather than land first.
+   * kept in the library (COMM-1.11.2), and whatever came after it waits with it rather than land first.
    */
   let inbound: Promise<void> = Promise.resolve();
   const inOrder = (land: () => Promise<void> | void) => {
@@ -177,6 +176,15 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     if (msg.type === "historyRequest") void handleHistoryRequest(msg);
     else if (msg.type === "patchRequest") void handlePatchRequest(msg);
     else if (msg.type === "analysisRequest") void handleAnalysisRequest(msg);
+    else if (msg.type === "deviceRequest")
+      inOrder(async () => {
+        try {
+          editLog.dispatchAsAgent(await withLibraryRef(msg.edit, editLog.agentAuthor));
+          send({ type: "deviceReply", id: msg.id, ok: true });
+        } catch (err) {
+          send({ type: "deviceReply", id: msg.id, ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
     else if (liveTypes.has(msg.type)) inOrder(() => (live[msg.type as LiveType] as (m: ServerToBrowser) => void)(msg));
     else inOrder(async () => editLog.dispatchAsAgent(await withLibraryRef(msg as EditCommand, editLog.agentAuthor)));
   };

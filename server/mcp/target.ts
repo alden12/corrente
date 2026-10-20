@@ -4,7 +4,7 @@
  * a project stored on the sync service, where nobody is listening but the room.
  */
 import type { ProjectStore } from "../../src/audio/project/projectStore";
-import type { HistoryMethod, PatchMethod, ServerToBrowser } from "../../src/audio/mcp/protocol";
+import type { DeviceEdit, HistoryMethod, PatchMethod, ServerToBrowser } from "../../src/audio/mcp/protocol";
 import type { DeviceAnalysisRequest } from "../../src/audio/analysis/deviceAlone";
 import type { MixAnalysisRequest } from "../../src/audio/analysis/mixScope";
 
@@ -19,6 +19,11 @@ export interface DawTarget {
    * notes, transport, feed notes) are the tab's business. False when nothing could take it.
    */
   send(message: ServerToBrowser): boolean;
+  /**
+   * Land a device edit, and say whether it landed. The tab keeps the device in the library first
+   * (COMM-1.11.2) and answers with why it couldn't, if it couldn't.
+   */
+  landDevice(edit: DeviceEdit): Promise<Reply>;
   /** Whether `send` has somewhere to go right now. */
   connected(): boolean;
   /** Version history, which the tab keeps and the hosted target answers from the log. */

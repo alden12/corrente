@@ -4,6 +4,7 @@ import { parseCustomDevice, type CustomKind } from "../../../src/audio/definitio
 import { DEVICE_COLOR_NAMES, type DeviceColor } from "../../../src/audio/deviceColors";
 import { makeCustomInstrumentId, makeCustomEffectId, deviceFormatDoc, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
+import type { DeviceEdit } from "../../../src/audio/mcp/protocol";
 import { checkEffect, checkInstrument } from "../../../src/audio/render/deviceCheck";
 import { DeviceRenderError } from "../../../src/audio/render/renderDevice";
 import { nodeRenderSetup } from "../../render/nodeRender";
@@ -83,10 +84,21 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     }
   };
 
+  /** Land a device edit, waiting until it has; a failure to tell the agent if it didn't. */
+  const land = async (edit: DeviceEdit) => {
+    try {
+      const reply = await target.landDevice(edit);
+      return reply.ok ? undefined : fail(`The device didn't land: ${reply.error ?? "no reason given"}.`);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const create = async (kind: CustomKind, type: string, input: DeviceInput) => {
     const result = parseCustomDevice({ type, ...input }, kind);
     if (!result.ok) return invalid(kind, result.errors);
-    if (!target.send({ type: KINDS[kind].add, def: result.device })) return fail("No DAW tab connected.");
+    const landed = await land({ type: KINDS[kind].add, def: result.device });
+    if (landed) return landed;
     KINDS[kind].store(result.device);
     return ok(
       `Created ${kind} "${input.label ?? type}" (type ${type}). Use ${KINDS[kind].use} "${type}".${await check(kind, type)}`,
@@ -101,7 +113,8 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
       kind,
     );
     if (!result.ok) return invalid(kind, result.errors);
-    if (!target.send({ type: KINDS[kind].update, def: result.device })) return fail("No DAW tab connected.");
+    const landed = await land({ type: KINDS[kind].update, def: result.device });
+    if (landed) return landed;
     KINDS[kind].store(result.device);
     return ok(
       `Updated ${kind} "${result.device.label ?? deviceType}" (type ${deviceType}).${await check(kind, deviceType)}`,

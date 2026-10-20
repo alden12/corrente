@@ -29,11 +29,22 @@ describe("MCP server (tracks)", () => {
   const parse = (r: TextResult) => JSON.parse(r.content[0].text);
   const typesOf = (msgs: unknown[]) => msgs.map((m) => (m as { type: string }).type);
 
-  async function connectTab(): Promise<unknown[]> {
+  /**
+   * Connect a fake tab, recording what it's sent. It lands device edits as the real tab does, after
+   * keeping the device in the library, answering each request; `refuseDevices` is a library that
+   * can't keep them.
+   */
+  async function connectTab(options: { refuseDevices?: string } = {}): Promise<unknown[]> {
     const messages: unknown[] = [];
     const socket = new WebSocket(URL);
     tab = socket;
-    socket.on("message", (data) => messages.push(JSON.parse(data.toString())));
+    socket.on("message", (data) => {
+      const msg = JSON.parse(data.toString()) as { type: string; id?: string; edit?: unknown };
+      if (msg.type !== "deviceRequest") return void messages.push(msg);
+      if (!options.refuseDevices) messages.push(msg.edit);
+      const reply = options.refuseDevices ? { ok: false, error: options.refuseDevices } : { ok: true };
+      socket.send(JSON.stringify({ type: "deviceReply", id: msg.id, ...reply }));
+    });
     await new Promise<void>((resolve, reject) => {
       socket.on("open", () => resolve());
       socket.on("error", reject);
@@ -123,6 +134,14 @@ describe("MCP server (tracks)", () => {
     expect(list.instruments[0].label).toBe("Test Synth");
 
     await call("remove_custom_device", { deviceType: created }); // cleanup (global catalog)
+  });
+
+  it("create_instrument says so when the tab couldn't keep the device, storing nothing", async () => {
+    await connectTab({ refuseDevices: "the library is full" });
+    const res = await call("create_instrument", { label: "Nowhere", schema: [level], definition: synth() });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain("the library is full");
+    expect(parse(await call("list_custom_devices")).instruments).toEqual([]);
   });
 
   it("create_instrument plays the device alone and says how it went (AGENT-4.8)", async () => {

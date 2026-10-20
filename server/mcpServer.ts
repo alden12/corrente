@@ -52,6 +52,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     historyReply: (msg) => resolvePending(msg),
     patchReply: (msg) => resolvePending(msg),
     analysisReply: (msg) => resolvePending(msg),
+    deviceReply: (msg) => resolvePending(msg),
   };
 
   // Both RPC paths (history, patches) correlate by a shared id and resolve here.
@@ -124,6 +125,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
   const target: DawTarget = {
     project: mirror,
     send: sendToTab,
+    landDevice: (edit) => awaitReply((id) => sendToTab({ type: "deviceRequest", id, edit })),
     connected,
     requestHistory: requestTab,
     requestPatch,
