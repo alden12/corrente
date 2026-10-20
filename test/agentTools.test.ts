@@ -3,6 +3,9 @@ import { ProjectStore } from "../src/audio/project/projectStore";
 import { EditLog } from "../src/audio/commands/editLog";
 import { createAgentTools } from "../src/audio/agent/tools";
 import type { AgentTool } from "../src/audio/agent/types";
+import type { CustomDevice } from "../src/audio/definitions/custom";
+import { memoryBackend } from "../src/audio/library/backend";
+import { newPatchId, openLibrary, savePatch } from "../src/audio/patches/library";
 import type { Scheduler } from "../src/audio/sequencer/scheduler";
 
 // Transport tools only need play/stop/isPlaying; a stub avoids standing up Web Audio.
@@ -215,6 +218,40 @@ describe("createAgentTools - arrangement + structure + library", () => {
     const factory = patches.patches.find((patch) => patch.builtin)!;
     const applied = (await tool("apply_patch").run({ patch: factory.name })) as { trackId: string };
     expect(store.getTrack(applied.trackId)?.kind).toBe("instrument");
+  });
+
+  it("apply_patch brings in the custom devices a patch carries", async () => {
+    const synth: CustomDevice = {
+      type: "ci-agent001",
+      label: "Agent Synth",
+      schema: [{ id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
+      definition: {
+        format: 1,
+        nodes: {
+          osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
+          envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
+          amp: { block: "mul", voice: true, inputs: { a: "osc", b: "envelope" } },
+          left: { block: "mul", inputs: { a: "voices.left", b: { param: "level" } } },
+          right: { block: "mul", inputs: { a: "voices.right", b: { param: "level" } } },
+        },
+        voice: "amp",
+        output: ["left", "right"],
+      },
+    };
+    await openLibrary(memoryBackend());
+    const saved = await savePatch({
+      id: newPatchId(),
+      name: "Carried",
+      author: "you",
+      instrumentType: synth.type,
+      params: {},
+      effects: [],
+      createdAt: 1,
+      devices: { instruments: [synth] },
+    });
+    const applied = (await tool("apply_patch").run({ patch: saved.id })) as { trackId: string };
+    expect(store.customInstruments.map((device) => device.type)).toEqual([synth.type]);
+    expect(store.getTrack(applied.trackId)).toMatchObject({ instrumentType: synth.type });
   });
 
   it("set_groove rejects an unknown groove", async () => {

@@ -9,18 +9,21 @@ import type { ParamSpec } from "../../params/types";
 import type { ParamStore } from "../../params/store";
 import type { ProjectStore } from "../../project/projectStore";
 import { defineTool, describeParam, type ToolContext } from "./factory";
-import { newEffectId, newMidiDeviceId, newTrackId } from "../../commands/ids";
+import { newEffectId } from "../../commands/ids";
 import { effectInfos, effectSchema, hasEffect } from "../../effects/catalog";
 import { instrumentSchema } from "../../instruments/catalog";
 import { readParamValue, validateParam } from "../../params/validate";
 import { pitchName } from "../../params/noteName";
 import { BUILTIN_SAMPLES, assetRef, builtinRef } from "../../samples/catalog";
-import { findPatch } from "../../patches/factory";
 import {
+  APPLY_PATCH_DOC,
+  GET_PATCH_DOC,
   LIST_PATCHES_DOC,
-  MAX_PATCH_PAGE,
+  PATCH_TOOL_ARGS,
   SAVE_PATCH_DOC,
   listPatchesFor,
+  patchDetails,
+  patchTrackCommand,
   savePatchFromTrack,
 } from "../../patches/patchTools";
 
@@ -193,75 +196,32 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
     defineTool({
       name: "list_patches",
       description: LIST_PATCHES_DOC,
-      schema: z.object({
-        tags: z.array(z.string()).optional(),
-        mine: z.boolean().optional(),
-        limit: z.number().int().min(1).max(MAX_PATCH_PAGE).optional(),
-        cursor: z.string().optional(),
-      }),
+      schema: z.object(PATCH_TOOL_ARGS.list_patches),
       run: (listing) => listPatchesFor(listing),
     }),
 
     defineTool({
       name: "get_patch",
-      description: "Get a patch's full recipe (instrument, params, effects) by id or name.",
-      schema: z.object({ patch: z.string() }),
-      run: ({ patch }) => {
-        const found = findPatch(patch);
-        if (!found) throw new Error(`No patch matching "${patch}". Call list_patches.`);
-        return {
-          id: found.id,
-          name: found.name,
-          instrument: found.instrumentType,
-          params: found.params,
-          midiDevices: found.midiDevices ?? [],
-          effects: found.effects,
-        };
-      },
+      description: GET_PATCH_DOC,
+      schema: z.object(PATCH_TOOL_ARGS.get_patch),
+      run: ({ patch }) => patchDetails(patch),
     }),
 
     defineTool({
       name: "apply_patch",
-      description:
-        "Create a new track from a saved patch (by id or name), with its instrument, params, and effect chain.",
-      schema: z.object({ patch: z.string(), name: z.string().optional() }),
+      description: APPLY_PATCH_DOC,
+      schema: z.object(PATCH_TOOL_ARGS.apply_patch),
       run: ({ patch, name }) => {
-        const found = findPatch(patch);
-        if (!found) throw new Error(`No patch matching "${patch}". Call list_patches.`);
-        const id = newTrackId();
-        dispatch({
-          type: "createTrackFromPatch",
-          id,
-          name: name ?? found.name,
-          instrumentType: found.instrumentType,
-          params: found.params,
-          midiDevices: (found.midiDevices ?? []).map((device) => ({
-            id: newMidiDeviceId(),
-            type: device.type,
-            bypassed: device.bypassed,
-            params: device.params,
-          })),
-          effects: found.effects.map((effect) => ({
-            id: newEffectId(),
-            type: effect.type,
-            bypassed: effect.bypassed,
-            params: effect.params,
-          })),
-        });
-        return { ok: true, trackId: id, patch: found.name };
+        const command = patchTrackCommand(patch, name);
+        dispatch(command);
+        return { ok: true, trackId: command.id, patch: command.name };
       },
     }),
 
     defineTool({
       name: "save_patch",
       description: SAVE_PATCH_DOC,
-      schema: z.object({
-        name: z.string().min(1).optional(),
-        track: z.string().optional(),
-        tags: z.array(z.string().min(1)).optional(),
-        description: z.string().optional(),
-        patch: z.string().optional(),
-      }),
+      schema: z.object(PATCH_TOOL_ARGS.save_patch),
       run: async ({ track, ...options }) => {
         const saved = await savePatchFromTrack(resolveInstrumentTrack(track), author, projectStore, options);
         return { ok: true, patchId: saved.id, name: saved.name, version: saved.version };

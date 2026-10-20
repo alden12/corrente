@@ -1,10 +1,15 @@
 /** MCP tools: Patches (saved instrument presets, in your library: the tab's on the device, or your account's when hosted). */
-import { z } from "zod";
 import type { PatchMethod } from "../../../src/audio/mcp/protocol";
 import { ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 import type { Reply } from "../target";
-import { LIST_PATCHES_DOC, MAX_PATCH_PAGE, SAVE_PATCH_DOC } from "../../../src/audio/patches/patchTools";
+import {
+  APPLY_PATCH_DOC,
+  GET_PATCH_DOC,
+  LIST_PATCHES_DOC,
+  PATCH_TOOL_ARGS,
+  SAVE_PATCH_DOC,
+} from "../../../src/audio/patches/patchTools";
 
 export function registerPatchesTools({ server, target }: ToolContext): void {
   const runPatch = async (
@@ -23,12 +28,7 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
     {
       title: "List patches",
       description: LIST_PATCHES_DOC,
-      inputSchema: {
-        tags: z.array(z.string()).optional().describe("words for the sound wanted; every patch when absent"),
-        mine: z.boolean().optional().describe("only the user's own patches"),
-        limit: z.number().int().min(1).max(MAX_PATCH_PAGE).optional(),
-        cursor: z.string().optional().describe("the last page's `next`"),
-      },
+      inputSchema: PATCH_TOOL_ARGS.list_patches,
     },
     async ({ tags, mine, limit, cursor }) => {
       const r = await runPatch("list", { tags, mine, limit, cursor });
@@ -42,11 +42,8 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
     "get_patch",
     {
       title: "Get patch",
-      description:
-        "Get the full specifics of one patch (by name or id from list_patches): its instrument, every parameter value, and its effect chain with per-effect params. Works for both factory and user patches - useful for inspecting a sound or promoting a user patch into the factory bank.",
-      inputSchema: {
-        patch: z.string().min(1).describe("patch name or id (from list_patches)"),
-      },
+      description: GET_PATCH_DOC,
+      inputSchema: PATCH_TOOL_ARGS.get_patch,
     },
     async ({ patch }) => {
       const r = await runPatch("get", { patch });
@@ -61,13 +58,7 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
     {
       title: "Save patch",
       description: SAVE_PATCH_DOC,
-      inputSchema: {
-        name: z.string().min(1).max(60).optional().describe("its name (default: the track's, or the patch's)"),
-        track: z.string().optional().describe("instrument track id (default: the selected track)"),
-        tags: z.array(z.string().min(1).max(40)).max(12).optional(),
-        description: z.string().max(500).optional(),
-        patch: z.string().optional().describe("one of the user's patches (id or name) to save a new version of"),
-      },
+      inputSchema: PATCH_TOOL_ARGS.save_patch,
     },
     async ({ name, track, tags, description, patch }) => {
       const r = await runPatch("save", { name, trackId: track, tags, description, patch });
@@ -82,12 +73,8 @@ export function registerPatchesTools({ server, target }: ToolContext): void {
     "apply_patch",
     {
       title: "Apply patch",
-      description:
-        "Add a new instrument track from a patch - factory or user (by name or id from list_patches). One undoable edit; the track files into the main group.",
-      inputSchema: {
-        patch: z.string().min(1).describe("patch name or id (from list_patches)"),
-        name: z.string().optional().describe("name for the new track (default: the patch name)"),
-      },
+      description: APPLY_PATCH_DOC,
+      inputSchema: PATCH_TOOL_ARGS.apply_patch,
     },
     async ({ patch, name }) => {
       const r = await runPatch("apply", { patch, name });
