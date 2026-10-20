@@ -49,40 +49,41 @@ const syncingOnSave = (library: Library): Library => ({
 });
 
 let inFlight: Promise<void> | null = null;
-let rerun = false;
+let again = false;
+
+/** One sync: anything saved signed out into the account, then the account's queue out and its changes back. */
+async function syncOnce(): Promise<void> {
+  const current = open;
+  if (!current || !canSync(current.owner)) return;
+  const stillCurrent = () => open === current;
+  try {
+    if (signedOut && current.owner !== SIGNED_OUT) {
+      const refused = await drainLibrary(signedOut, current.library, send, stillCurrent);
+      // Saves the account refused stay where they were, with the rest of signed out's library.
+      if (refused === 0 && stillCurrent()) {
+        await signedOut.clear();
+        signedOut = undefined;
+      }
+    }
+    await drainLibrary(current.library, current.library, send, stillCurrent);
+  } catch (error) {
+    console.warn("[corrente] the library didn't sync; saves stay queued", error);
+  }
+}
 
 /**
- * Move anything saved signed out into the account, then send the account's queue and take back what
- * changed. One at a time: a call while one runs asks it to go round again, so the last save is sent.
+ * Sync the library with the account. One at a time: asked while one runs, it starts another once
+ * that one is done, so a save made mid-sync is sent.
  */
 export function syncLibrary(): Promise<void> {
   if (inFlight) {
-    rerun = true;
+    again = true;
     return inFlight;
   }
-  inFlight = (async () => {
-    do {
-      rerun = false;
-      const current = open;
-      if (!current || !canSync(current.owner)) return;
-      const stillCurrent = () => open === current;
-      try {
-        if (signedOut && current.owner !== SIGNED_OUT) {
-          const refused = await drainLibrary(signedOut, current.library, send, stillCurrent);
-          // Saves the account refused stay where they were, with the rest of signed out's library.
-          if (refused === 0 && stillCurrent()) {
-            await signedOut.clear();
-            signedOut = undefined;
-          }
-        }
-        await drainLibrary(current.library, current.library, send, stillCurrent);
-      } catch (error) {
-        console.warn("[corrente] the library didn't sync; saves stay queued", error);
-        return;
-      }
-    } while (rerun);
-  })().finally(() => {
+  again = false;
+  inFlight = syncOnce().finally(() => {
     inFlight = null;
+    if (again) void syncLibrary();
   });
   return inFlight;
 }

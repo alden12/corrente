@@ -52,6 +52,12 @@ function saveOf({ item, version }: QueuedSave): LibrarySave {
 }
 
 /**
+ * The most requests one drain makes. Each round sends a full batch or sets aside one refused save,
+ * so a drain always gets somewhere; what's left past this waits for the next sync.
+ */
+const MAX_ROUNDS = 20;
+
+/**
  * Send `from`'s queue to the account and store what comes back in `into`: the same library for a
  * sync, the account's for a sign-in merge. `stillCurrent` says whether the account is still the one
  * signed in; an answer that arrives after it isn't is left alone. Returns how many saves the account
@@ -65,7 +71,7 @@ export async function drainLibrary(
 ): Promise<number> {
   let size = MAX_LIBRARY_SAVES;
   let refused = 0;
-  for (;;) {
+  for (let round = 0; round < MAX_ROUNDS; round += 1) {
     await libraryWritten();
     const mark = libraryMark();
     const batch = await from.queued(size);
@@ -90,4 +96,5 @@ export async function drainLibrary(
     receiveEntries(await into.settle(from === into ? sent : [], answer.entries, answer.cursor), mark);
     if (batch.length < size) return refused;
   }
+  return refused;
 }
