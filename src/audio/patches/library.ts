@@ -21,9 +21,9 @@ import {
   saveItem,
   subscribeLibrary,
 } from "../library/store";
-import { keepDevice } from "../library/devices";
+import { keepDevice, libraryDevice } from "../library/devices";
 import type { InstrumentTrack } from "../project/projectStore";
-import { patchDocumentOf, patchOf, type Patch } from "./patch";
+import { patchDocumentOf, patchOf, withLatestDevices, type Patch } from "./patch";
 import { patchFromTrack } from "./patchTools";
 import type { DeviceSource } from "./sound";
 import type { SaveOptions } from "./toolSpec";
@@ -36,8 +36,12 @@ const OLD_STORAGE_KEY = "corrente:patches:v1";
 
 export { libraryWritten };
 
-/** Every saved patch, newest first, deleted ones left out. Empty until the library opens. */
-export const listPatches = (): Patch[] => libraryEntries("patch").map(patchOf);
+/**
+ * Every saved patch, newest first, deleted ones left out, each carrying the library's latest version
+ * of its custom devices. Empty until the library opens.
+ */
+export const listPatches = (): Patch[] =>
+  libraryEntries("patch").map((entry) => withLatestDevices(patchOf(entry), libraryDevice));
 
 /**
  * Save a patch: a new one, or a new version of one already saved (by id), its tags and description

@@ -5,6 +5,7 @@ import { applyEdit } from "../src/audio/commands/applyEdit";
 import type { EditCommand } from "../src/audio/commands/types";
 import { memoryBackend } from "../src/audio/library/backend";
 import {
+  keepDevice,
   libraryDevice,
   libraryDevices,
   offeredUpdate,
@@ -12,7 +13,7 @@ import {
   withLibraryRef,
 } from "../src/audio/library/devices";
 import { EditLog } from "../src/audio/commands/editLog";
-import { libraryEntry } from "../src/audio/library/store";
+import { hideItem, libraryEntry } from "../src/audio/library/store";
 import { listPatches, openLibrary, savePatchFromTrack } from "../src/audio/patches/library";
 import { patchTrackCommand } from "../src/audio/patches/patchTools";
 import { SoundPreview, type PreviewEngine } from "../src/audio/live/preview";
@@ -62,6 +63,30 @@ describe("custom devices travel with patches (COMM-1.11.1)", () => {
 
     addFrom(elsewhere, saved.id, "t-second");
     expect(elsewhere.customInstruments).toHaveLength(1);
+  });
+
+  it("brings the library's latest version of a device, not the one the patch was saved with", async () => {
+    const { project, track } = madeWithDevices();
+    const saved = await savePatchFromTrack(track, "you", project, { name: "Custom" });
+    const newer: CustomDevice = { ...synth, label: "Newer Synth" };
+    await keepDevice("instrument", newer, "agent");
+
+    const elsewhere = new ProjectStore(false);
+    addFrom(elsewhere, saved.id, "t-latest");
+    expect(elsewhere.customInstruments).toEqual([newer]);
+    // The same as the library's, so the rack has nothing to offer.
+    expect(offeredUpdate(libraryEntry(synth.type), elsewhere.customInstruments[0], undefined)).toBeUndefined();
+  });
+
+  it("brings the device as the patch carried it once it's deleted from the library", async () => {
+    const { project, track } = madeWithDevices();
+    const saved = await savePatchFromTrack(track, "you", project, { name: "Custom" });
+    await keepDevice("instrument", { ...synth, label: "Gone Synth" }, "you");
+    hideItem(synth.type);
+
+    const elsewhere = new ProjectStore(false);
+    addFrom(elsewhere, saved.id, "t-carried");
+    expect(elsewhere.customInstruments).toEqual([synth]);
   });
 
   it("plays the project's own version where it already has the device, changing nothing it plays", async () => {

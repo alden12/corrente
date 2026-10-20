@@ -14,6 +14,7 @@ import { randomUuid } from "../randomUuid";
 import type { Tag } from "../tags";
 import type { LibraryEntry } from "../library/backend";
 import type { SoundDevices } from "./sound";
+import type { CustomDevice } from "../definitions/custom";
 
 /** One effect in a saved patch: its type, bypass state, and parameter values. */
 export interface PatchEffect {
@@ -75,6 +76,26 @@ export const patchOf = ({ item, current }: LibraryEntry): Patch => ({
   ...(current.description ? { description: current.description } : {}),
   ...(current.document as PatchDocument),
 });
+
+/**
+ * A patch carrying the library's latest version of each custom device it plays, where the library
+ * has one (Alden, 2026-10-21): taking a patch into a project that lacks a device gives it the device
+ * as it is now, not as it was when the patch was saved. A project that already has the device keeps
+ * its own (`adoptDevices`), and the rack offers anything newer. A device deleted from the library, or
+ * never in it, plays as the patch carried it.
+ */
+export function withLatestDevices(patch: Patch, latest: (type: string) => CustomDevice | undefined): Patch {
+  if (!patch.devices) return patch;
+  const refresh = (devices: CustomDevice[] | undefined) => devices?.map((device) => latest(device.type) ?? device);
+  const { instruments, effects } = patch.devices;
+  return {
+    ...patch,
+    devices: {
+      ...(instruments ? { instruments: refresh(instruments) } : {}),
+      ...(effects ? { effects: refresh(effects) } : {}),
+    },
+  };
+}
 
 /** A fresh patch id. */
 export function newPatchId(): string {
