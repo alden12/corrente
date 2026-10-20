@@ -38,4 +38,5 @@ export const customEffect = (type = "ce-test0001", label?: string): CustomDevice
 });
 
 /** What create_instrument / create_effect take: a device without its type, which the server mints. */
-export const authored = ({ type: _type, ...device }: CustomDevice) => device;
+export const authored = (device: CustomDevice): Omit<CustomDevice, "type"> =>
+  Object.fromEntries(Object.entries(device).filter(([key]) => key !== "type")) as Omit<CustomDevice, "type">;
