@@ -11,7 +11,7 @@ import { useState, type KeyboardEvent } from "react";
 import type { InstrumentTrack, ProjectStore, Track } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
 import type { SampleAsset } from "../../audio/samples/catalog";
-import { savePatchFromTrack } from "../../audio/patches/patchTools";
+import { savePatchFromTrack } from "../../audio/patches/library";
 import { parseTags } from "../../audio/tags";
 import { EMPTY_INSTRUMENT, pickableInstrumentInfos } from "../../audio/instruments/catalog";
 import { MidiDeviceChain } from "../MidiDeviceChain";

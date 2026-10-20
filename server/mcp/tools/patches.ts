@@ -9,7 +9,7 @@ import {
   LIST_PATCHES_DOC,
   PATCH_TOOL_ARGS,
   SAVE_PATCH_DOC,
-} from "../../../src/audio/patches/patchTools";
+} from "../../../src/audio/patches/toolSpec";
 
 export function registerPatchesTools({ server, target }: ToolContext): void {
   const runPatch = async (

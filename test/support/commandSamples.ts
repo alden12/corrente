@@ -11,36 +11,10 @@
 import { ProjectStore } from "../../src/audio/project/projectStore";
 import { EditLog } from "../../src/audio/commands/editLog";
 import type { EditCommand } from "../../src/audio/commands/types";
-import type { CustomDevice } from "../../src/audio/definitions/custom";
+import { customEffect, customInstrument } from "./customDevices";
 
-const CUSTOM_INSTRUMENT: CustomDevice = {
-  type: "ci-invert",
-  label: "Invert Synth",
-  schema: [{ id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
-  definition: {
-    format: 1,
-    nodes: {
-      osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
-      envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
-      amp: { block: "mul", voice: true, inputs: { a: "osc", b: { from: "envelope", scale: { param: "level" } } } },
-    },
-    voice: "amp",
-  },
-};
-
-const CUSTOM_EFFECT: CustomDevice = {
-  type: "ce-invert",
-  label: "Invert Effect",
-  schema: [{ id: "mix", label: "Mix", kind: "number", min: 0, max: 1, default: 0.5 }],
-  definition: {
-    format: 1,
-    nodes: {
-      left: { block: "mul", inputs: { a: "input.left", b: { param: "mix" } } },
-      right: { block: "mul", inputs: { a: "input.right", b: { param: "mix" } } },
-    },
-    output: ["left", "right"],
-  },
-};
+const CUSTOM_INSTRUMENT = customInstrument("ci-invert", "Invert Synth");
+const CUSTOM_EFFECT = customEffect("ce-invert", "Invert Effect");
 
 /**
  * One command per covered type, with the edits needed to put the project somewhere non-default

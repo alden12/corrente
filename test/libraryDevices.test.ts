@@ -4,44 +4,23 @@ import { ProjectStore, type InstrumentTrack } from "../src/audio/project/project
 import { applyEdit } from "../src/audio/commands/applyEdit";
 import type { EditCommand } from "../src/audio/commands/types";
 import { memoryBackend } from "../src/audio/library/backend";
-import { libraryDevice, libraryDevices, settingsReset, withLibraryRef } from "../src/audio/library/devices";
+import {
+  libraryDevice,
+  libraryDevices,
+  offeredUpdate,
+  settingsReset,
+  withLibraryRef,
+} from "../src/audio/library/devices";
 import { EditLog } from "../src/audio/commands/editLog";
 import { libraryEntry } from "../src/audio/library/store";
-import { openLibrary, listPatches } from "../src/audio/patches/library";
-import { patchTrackCommand, savePatchFromTrack } from "../src/audio/patches/patchTools";
+import { listPatches, openLibrary, savePatchFromTrack } from "../src/audio/patches/library";
+import { patchTrackCommand } from "../src/audio/patches/patchTools";
 import { SoundPreview, type PreviewEngine } from "../src/audio/live/preview";
 import { instrumentSchema } from "../src/audio/instruments/catalog";
+import { customEffect, customInstrument } from "./support/customDevices";
 
-const synth: CustomDevice = {
-  type: "ci-lib00001",
-  label: "Library Synth",
-  schema: [{ id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
-  definition: {
-    format: 1,
-    nodes: {
-      osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
-      envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
-      amp: { block: "mul", voice: true, inputs: { a: "osc", b: "envelope" } },
-      left: { block: "mul", inputs: { a: "voices.left", b: { param: "level" } } },
-      right: { block: "mul", inputs: { a: "voices.right", b: { param: "level" } } },
-    },
-    voice: "amp",
-    output: ["left", "right"],
-  },
-};
-
-const gain: CustomDevice = {
-  type: "ce-lib00001",
-  schema: [{ id: "gain", label: "Gain", kind: "number", min: 0, max: 2, default: 1 }],
-  definition: {
-    format: 1,
-    nodes: {
-      left: { block: "mul", inputs: { a: "input.left", b: { param: "gain" } } },
-      right: { block: "mul", inputs: { a: "input.right", b: { param: "gain" } } },
-    },
-    output: ["left", "right"],
-  },
-};
+const synth = customInstrument("ci-lib00001", "Library Synth");
+const gain = customEffect("ce-lib00001");
 
 /** A project with a track playing the custom synth through the custom effect. */
 function madeWithDevices() {
@@ -55,7 +34,7 @@ function madeWithDevices() {
 
 /** Add a track from a library patch, as the patch tools do. */
 const addFrom = (project: ProjectStore, patch: string, id: string) =>
-  applyEdit(project, { ...patchTrackCommand(patch), id } as EditCommand, "you");
+  applyEdit(project, { ...patchTrackCommand(patch, listPatches()), id } as EditCommand, "you");
 
 describe("custom devices travel with patches (COMM-1.11.1)", () => {
   beforeEach(() => openLibrary(memoryBackend()));
@@ -101,7 +80,7 @@ describe("custom devices travel with patches (COMM-1.11.1)", () => {
   it("replays the same: two projects in the same state end the same", async () => {
     const { project, track } = madeWithDevices();
     const saved = await savePatchFromTrack(track, "you", project, { name: "Custom" });
-    const command = { ...patchTrackCommand(saved.id), id: "t-replay" } as EditCommand;
+    const command = { ...patchTrackCommand(saved.id, listPatches()), id: "t-replay" } as EditCommand;
     const [left, right] = [new ProjectStore(false), new ProjectStore(false)];
     [left, right].forEach((store) => {
       store.addCustomInstrument({ ...synth, label: "Edited Synth" });
@@ -183,6 +162,40 @@ describe("custom devices travel with patches (COMM-1.11.1)", () => {
     await expect(withLibraryRef({ type: "addCustomInstrument", def: synth }, "you")).rejects.toThrow(
       "the library is full",
     );
+  });
+
+  it("offers an update only to a newer version: never one the project is ahead of", () => {
+    const louder: CustomDevice = { ...synth, label: "Louder" };
+    const entry = (version: number, document: CustomDevice, hiddenAt?: number) => ({
+      item: {
+        id: synth.type,
+        kind: "instrument" as const,
+        name: "Synth",
+        version,
+        createdAt: 1,
+        updatedAt: 1,
+        ...(hiddenAt ? { hiddenAt } : {}),
+      },
+      current: {
+        itemId: synth.type,
+        version,
+        createdAt: 1,
+        author: "you",
+        tags: [],
+        document,
+        hash: `hash-${version}`,
+      },
+    });
+    // The project's on version 1; the library has 2: offered.
+    expect(offeredUpdate(entry(2, louder), synth, { version: 1, hash: "hash-1" })).toEqual(louder);
+    // The same version, or the library behind the project (an agent's edit not yet synced here): not.
+    expect(offeredUpdate(entry(1, synth), synth, { version: 1, hash: "hash-1" })).toBeUndefined();
+    expect(offeredUpdate(entry(4, synth), louder, { version: 5, hash: "hash-5" })).toBeUndefined();
+    // Deleted from the library: not.
+    expect(offeredUpdate(entry(2, louder, 9), synth, { version: 1, hash: "hash-1" })).toBeUndefined();
+    // A project from before references: by content.
+    expect(offeredUpdate(entry(2, louder), synth, undefined)).toEqual(louder);
+    expect(offeredUpdate(entry(2, synth), synth, undefined)).toBeUndefined();
   });
 
   it("keeps an identical device as the version it already is", async () => {

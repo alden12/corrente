@@ -11,8 +11,8 @@
  * one refused stays on this device, unsent.
  */
 import { MAX_LIBRARY_SAVES } from "../../contract/http";
-import type { LibraryEntry, LibraryOutbox, QueuedSave } from "./backend";
-import type { LibrarySave } from "./schema";
+import type { LibraryEntry, LibraryOutbox } from "./backend";
+import { librarySaveOf, type LibrarySave } from "./schema";
 import { libraryMark, libraryWritten, receiveEntries } from "./store";
 
 /** One request to the account: the saves, and where to read changes from. */
@@ -25,31 +25,6 @@ export interface LibrarySyncRequest {
 export type LibrarySyncAnswer = { cursor: string; entries: LibraryEntry[] } | { refused: string };
 
 export type SendLibrary = (request: LibrarySyncRequest) => Promise<LibrarySyncAnswer>;
-
-/** A queued save as the account takes it: no version number on the item, no hash (it works that out). */
-function saveOf({ item, version }: QueuedSave): LibrarySave {
-  return {
-    item: {
-      id: item.id,
-      kind: item.kind,
-      name: item.name,
-      createdAt: item.createdAt,
-      ...(item.hiddenAt === undefined ? {} : { hiddenAt: item.hiddenAt }),
-    },
-    ...(version
-      ? {
-          version: {
-            version: version.version,
-            createdAt: version.createdAt,
-            author: version.author,
-            tags: version.tags,
-            ...(version.description ? { description: version.description } : {}),
-            document: version.document,
-          },
-        }
-      : {}),
-  };
-}
 
 /**
  * The most requests one drain makes. Each round sends a full batch or sets aside one refused save,
@@ -77,7 +52,10 @@ export async function drainLibrary(
     const batch = await from.queued(size);
     // A merge with nothing left to send is done; a sync still reads what changed.
     if (!batch.length && from !== into) return refused;
-    const answer = await send({ since: await into.cursor(), saves: batch.map(saveOf) });
+    const since = await into.cursor();
+    // Signed out or switched meanwhile: this queue isn't the signed-in account's to send.
+    if (!stillCurrent()) return refused;
+    const answer = await send({ since, saves: batch.map(({ item, version }) => librarySaveOf(item, version)) });
     if (!stillCurrent()) return refused;
     if ("refused" in answer) {
       if (batch.length === 1) {
@@ -93,7 +71,9 @@ export async function drainLibrary(
     }
     const sent = batch.map((save) => save.key);
     if (from !== into) await from.settle(sent, []);
-    receiveEntries(await into.settle(from === into ? sent : [], answer.entries, answer.cursor), mark);
+    const stored = await into.settle(from === into ? sent : [], answer.entries, answer.cursor);
+    // Stored in its own library either way; shown only while that library is the one open.
+    if (stillCurrent()) receiveEntries(stored, mark);
     if (batch.length < size) return refused;
   }
   return refused;

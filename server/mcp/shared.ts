@@ -4,6 +4,9 @@
  */
 import { DEVICE_COLOR_NAMES } from "../../src/audio/deviceColors";
 import { z } from "zod";
+import type { ProjectStore } from "../../src/audio/project/projectStore";
+import { catalogEntry, hasInstrument, pickableInstrumentInfos } from "../../src/audio/instruments/catalog";
+import { effectCatalogEntry, effectInfos, hasEffect } from "../../src/audio/effects/catalog";
 import { definitionFormatDoc } from "../../src/audio/definitions/describe";
 import { paramSpecSchema } from "../../src/audio/params/declaration";
 
@@ -51,3 +54,23 @@ export type ToolResult = {
 };
 export const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 export const fail = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
+
+/**
+ * The instruments and effects a project can use: the built-ins, and its own custom devices. The
+ * catalogs are process-wide, and the hosted server loads many people's projects, so another
+ * project's custom device can still be registered there (one registry per project is its own work);
+ * it must never be offered, or taken, here.
+ */
+const owns = (devices: readonly { type: string }[], type: string) => devices.some((device) => device.type === type);
+
+export const instrumentsFor = (project: ProjectStore) =>
+  pickableInstrumentInfos().filter((info) => !info.custom || owns(project.customInstruments, info.type));
+export const effectsFor = (project: ProjectStore) =>
+  effectInfos().filter((info) => !info.custom || owns(project.customEffects, info.type));
+
+/** Whether a project can play an instrument type: a built-in (hidden ones too), or its own custom one. */
+export const projectHasInstrument = (project: ProjectStore, type: string) =>
+  hasInstrument(type) && (!catalogEntry(type).custom || owns(project.customInstruments, type));
+/** Whether a project can use an effect type: a built-in, or its own custom one. */
+export const projectHasEffect = (project: ProjectStore, type: string) =>
+  hasEffect(type) && (!effectCatalogEntry(type).custom || owns(project.customEffects, type));

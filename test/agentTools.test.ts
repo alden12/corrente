@@ -3,7 +3,7 @@ import { ProjectStore } from "../src/audio/project/projectStore";
 import { EditLog } from "../src/audio/commands/editLog";
 import { createAgentTools } from "../src/audio/agent/tools";
 import type { AgentTool } from "../src/audio/agent/types";
-import type { CustomDevice } from "../src/audio/definitions/custom";
+import { customInstrument } from "./support/customDevices";
 import { memoryBackend } from "../src/audio/library/backend";
 import { newPatchId, openLibrary, savePatch } from "../src/audio/patches/library";
 import type { Scheduler } from "../src/audio/sequencer/scheduler";
@@ -221,23 +221,7 @@ describe("createAgentTools - arrangement + structure + library", () => {
   });
 
   it("apply_patch brings in the custom devices a patch carries", async () => {
-    const synth: CustomDevice = {
-      type: "ci-agent001",
-      label: "Agent Synth",
-      schema: [{ id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8 }],
-      definition: {
-        format: 1,
-        nodes: {
-          osc: { block: "saw", voice: true, inputs: { frequency: "voice.frequency" } },
-          envelope: { block: "adsr", voice: true, inputs: { gate: "voice.gate" } },
-          amp: { block: "mul", voice: true, inputs: { a: "osc", b: "envelope" } },
-          left: { block: "mul", inputs: { a: "voices.left", b: { param: "level" } } },
-          right: { block: "mul", inputs: { a: "voices.right", b: { param: "level" } } },
-        },
-        voice: "amp",
-        output: ["left", "right"],
-      },
-    };
+    const synth = customInstrument("ci-agent001", "Agent Synth");
     await openLibrary(memoryBackend());
     const saved = await savePatch({
       id: newPatchId(),

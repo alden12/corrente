@@ -6,7 +6,7 @@
 import { newEffectId, newMidiDeviceId } from "../commands/ids";
 import type { CustomDevice } from "../definitions/custom";
 import type { InstrumentTrack, ProjectStore } from "../project/projectStore";
-import type { Patch } from "./library";
+import type { Patch } from "./patch";
 
 /**
  * The custom devices a sound plays, carried with it (COMM-1.11.1): a custom instrument or effect

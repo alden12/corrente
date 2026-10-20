@@ -5,6 +5,7 @@
  */
 import type { Author } from "../commands/types";
 import { documentHash } from "../contentHash";
+import { sameVersion } from "./schema";
 import {
   memoryBackend,
   type LibraryBackend,
@@ -42,8 +43,8 @@ const changedAt = new Map<string, number>();
 let writes: Promise<void> = Promise.resolve();
 
 /** Queue a write; the returned promise says whether it landed, and a failure doesn't stop the queue. */
-function write(item: LibraryItem, version?: LibraryVersion): Promise<void> {
-  const written = writes.then(() => backend.save(item, version));
+function write(target: LibraryBackend, item: LibraryItem, version?: LibraryVersion): Promise<void> {
+  const written = writes.then(() => target.save(item, version));
   writes = written.catch((error: unknown) => console.warn("[corrente] the library couldn't save:", error));
   return written;
 }
@@ -103,21 +104,22 @@ export const libraryEntries = (kind: LibraryKind): LibraryEntry[] =>
     .filter(({ item }) => item.kind === kind && item.hiddenAt === undefined)
     .sort((left, right) => right.item.updatedAt - left.item.updatedAt);
 
-/** Whether a save says nothing the item's current version doesn't: the account's rule too (its db/library.ts). */
-const sameVersion = (current: LibraryVersion, hash: string, draft: ItemDraft) =>
-  current.hash === hash &&
-  (current.description || undefined) === (draft.description || undefined) &&
-  current.tags.join("\n") === (draft.tags ?? []).join("\n");
-
 /**
  * Save an item as its next version (its first, if new), resolving once its document is hashed and
  * the save stored. A save that changes nothing about the current version adds none: a new name, or
  * bringing back a deleted item, rewrites the item alone, and an identical save is the current entry.
  */
 export async function saveItem(draft: ItemDraft, at = Date.now()): Promise<LibraryEntry> {
+  // The library it was made in, even if another account's opens while it's hashed.
+  const target = backend;
   const hash = await documentHash(draft.document);
-  const existing = entries.get(draft.id);
-  const unchanged = existing !== undefined && sameVersion(existing.current, hash, draft);
+  // Switched meanwhile: memory is the other account's now, so the save goes to its own library
+  // alone, numbered as a first guess (the account numbers it).
+  const switched = backend !== target;
+  const existing = switched ? undefined : entries.get(draft.id);
+  const unchanged =
+    existing !== undefined &&
+    sameVersion(existing.current, { hash, tags: draft.tags ?? [], description: draft.description });
   if (unchanged && existing.item.name === draft.name && existing.item.hiddenAt === undefined) return existing;
   const version = unchanged ? existing.item.version : (existing?.item.version ?? 0) + 1;
   const item: LibraryItem = {
@@ -141,10 +143,22 @@ export async function saveItem(draft: ItemDraft, at = Date.now()): Promise<Libra
         hash,
       };
   const entry = { item, current };
-  entries.set(draft.id, entry);
-  changedAt.set(draft.id, ++changes);
-  notify();
-  await write(item, unchanged ? undefined : current);
+  if (!switched) {
+    entries.set(draft.id, entry);
+    changedAt.set(draft.id, ++changes);
+    notify();
+  }
+  try {
+    await write(target, item, unchanged ? undefined : current);
+  } catch (error) {
+    // Not stored, so not shown as saved: back to what was there, unless a later save replaced it.
+    if (!switched && entries.get(draft.id) === entry) {
+      if (existing) entries.set(draft.id, existing);
+      else entries.delete(draft.id);
+      notify();
+    }
+    throw error;
+  }
   return entry;
 }
 
@@ -155,7 +169,7 @@ export function hideItem(id: string): void {
   const item = { ...entry.item, hiddenAt: Date.now() };
   entries.set(id, { ...entry, item });
   changedAt.set(id, ++changes);
-  void write(item).catch(() => {}); // the queue has warned
+  void write(backend, item).catch(() => {}); // the queue has warned
   notify();
 }
 

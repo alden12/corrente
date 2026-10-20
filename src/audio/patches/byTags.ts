@@ -8,10 +8,10 @@
 import { pickableInstrumentInfos } from "../instruments/catalog";
 import { byTagOrder } from "../tags";
 import { nearestTags, resolveTags } from "../tagMatch";
-import type { Patch } from "./library";
+import type { Patch } from "./patch";
 
 /** How many tags a word that matched none is answered with: the most used. */
-export const KNOWN_TAGS = 40;
+export const MOST_USED_TAGS_SHOWN = 40;
 
 /** How a patch is listed. */
 export const patchSummary = (patch: Patch) => ({
@@ -25,8 +25,18 @@ export const patchSummary = (patch: Patch) => ({
   effects: patch.effects.map((effect) => effect.type),
 });
 
+/** An instrument's default settings, listed as its patch. */
+export const defaultSettingsEntry = (instrument: string, label: string, tags: readonly string[]) => ({
+  instrument,
+  name: `${label} (default settings)`,
+  tags,
+});
+
 /** The tags most used across `entries`, most used first, `limit` of them. */
-export const mostUsedTags = (entries: readonly { tags: readonly string[] }[], limit = KNOWN_TAGS): string[] => {
+export const mostUsedTags = (
+  entries: readonly { tags: readonly string[] }[],
+  limit = MOST_USED_TAGS_SHOWN,
+): string[] => {
   const counts = new Map<string, number>();
   entries.flatMap((entry) => entry.tags).forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1));
   return [...counts]
@@ -52,11 +62,11 @@ export const instrumentTags = (defaults: readonly string[], patches: readonly { 
 export function patchesByTags(words: string[], patches: readonly Patch[], withDefaults = true) {
   const summaries = patches.map(patchSummary);
   const defaults = withDefaults
-    ? pickableInstrumentInfos().map((info) => ({
-        instrument: info.type,
-        name: `${info.label} (default settings)`,
-        tags: info.tags ?? [],
-      }))
+    ? // Built-ins only: the catalog is process-wide, and on the hosted server can hold other
+      // people's custom instruments (theirs carry no tags of their own anyway).
+      pickableInstrumentInfos()
+        .filter((info) => !info.custom)
+        .map((info) => defaultSettingsEntry(info.type, info.label, info.tags ?? []))
     : [];
   const inUse = new Set<string>([...summaries, ...defaults].flatMap((entry) => entry.tags));
   const { tags, readAs, unknown } = resolveTags(

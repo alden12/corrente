@@ -94,3 +94,52 @@ export type LibrarySave = z.infer<typeof librarySaveSchema>;
 
 /** An item with its current version, as the account sends it back. */
 export const libraryEntrySchema = z.object({ item: libraryItemSchema, current: libraryVersionSchema });
+
+/** What makes a version: its content's hash, and the tags and description written with it. */
+type VersionContent = { hash: string; tags: readonly string[]; description?: string | null };
+
+/**
+ * Whether a save says nothing the current version doesn't, so it adds none: the one rule the device
+ * (library/store.ts) and the account (its db/library.ts) both apply. An empty description is none.
+ */
+export const sameVersion = (current: VersionContent, next: VersionContent): boolean =>
+  current.hash === next.hash &&
+  (current.description || undefined) === (next.description || undefined) &&
+  current.tags.join("\n") === next.tags.join("\n");
+
+/**
+ * A save as the account takes it: the item without its version number, and the version saved, if
+ * one was, without its hash (the account works that out) and numbered as the saver guessed (the
+ * account numbers it). Shared by the device's sync, the hosted MCP and the built-ins.
+ */
+export const librarySaveOf = (
+  item: { id: string; kind: LibraryKind; name: string; createdAt: number; hiddenAt?: number },
+  version?: {
+    version?: number;
+    createdAt: number;
+    author: string;
+    tags: readonly string[];
+    description?: string;
+    document: unknown;
+  },
+): LibrarySave => ({
+  item: {
+    id: item.id,
+    kind: item.kind,
+    name: item.name,
+    createdAt: item.createdAt,
+    ...(item.hiddenAt === undefined ? {} : { hiddenAt: item.hiddenAt }),
+  },
+  ...(version
+    ? {
+        version: {
+          version: version.version ?? 1,
+          createdAt: version.createdAt,
+          author: version.author,
+          tags: [...version.tags],
+          ...(version.description ? { description: version.description } : {}),
+          document: version.document,
+        },
+      }
+    : {}),
+});

@@ -29,7 +29,8 @@ const client = apiUrl ? createApiClient({ baseUrl: apiUrl, token: getAccessToken
 const send: SendLibrary = (request) => client!.syncLibrary(request);
 
 /** The database an account's library lives in. */
-const databaseOf = (owner: string) => (owner === SIGNED_OUT ? "corrente-library" : `corrente-library:${owner}`);
+export const libraryDatabase = (owner: string) =>
+  owner === SIGNED_OUT ? "corrente-library" : `corrente-library:${owner}`;
 
 /** Whether `owner` has an account to sync with: an API, and (when auth is on) someone signed in to it. */
 const canSync = (owner: string) => client !== null && (!authEnabled || owner !== SIGNED_OUT);
@@ -55,12 +56,13 @@ let again = false;
 async function syncOnce(): Promise<void> {
   const current = open;
   if (!current || !canSync(current.owner)) return;
-  const stillCurrent = () => open === current;
+  // The library still open, and its owner still the one signed in (the token `send` uses).
+  const stillCurrent = () => open === current && accountOwner() === current.owner;
   try {
     if (signedOut && current.owner !== SIGNED_OUT) {
-      const refused = await drainLibrary(signedOut, current.library, send, stillCurrent);
-      // Saves the account refused stay where they were, with the rest of signed out's library.
-      if (refused === 0 && stillCurrent()) {
+      await drainLibrary(signedOut, current.library, send, stillCurrent);
+      // Only once every save has gone: refused ones, and any past the drain's rounds, stay where they were.
+      if (stillCurrent() && (await signedOut.isEmpty())) {
         await signedOut.clear();
         signedOut = undefined;
       }
@@ -72,6 +74,15 @@ async function syncOnce(): Promise<void> {
 }
 
 /**
+ * Run `sync` holding this account's library lock, so two tabs never send one queue twice (the
+ * account would keep the resent save as a newer version). Where Web Locks are missing, as is.
+ */
+const holdingLock = (owner: string, sync: () => Promise<void>): Promise<void> =>
+  typeof navigator !== "undefined" && navigator.locks
+    ? navigator.locks.request(`${libraryDatabase(owner)}:sync`, sync)
+    : sync();
+
+/**
  * Sync the library with the account. One at a time: asked while one runs, it starts another once
  * that one is done, so a save made mid-sync is sent.
  */
@@ -81,7 +92,7 @@ export function syncLibrary(): Promise<void> {
     return inFlight;
   }
   again = false;
-  inFlight = syncOnce().finally(() => {
+  inFlight = (open ? holdingLock(open.owner, syncOnce) : syncOnce()).finally(() => {
     inFlight = null;
     if (again) void syncLibrary();
   });
@@ -96,10 +107,10 @@ function followAccount(): void {
     .then(async () => {
       const owner = accountOwner();
       if (open?.owner === owner) return;
-      const library = await indexedDbBackend(databaseOf(owner));
+      const library = await indexedDbBackend(libraryDatabase(owner));
       // No IndexedDB: the library stays in memory for the session.
       if (!library) return;
-      signedOut = owner === SIGNED_OUT ? undefined : await indexedDbBackend(databaseOf(SIGNED_OUT));
+      signedOut = owner === SIGNED_OUT ? undefined : await indexedDbBackend(libraryDatabase(SIGNED_OUT));
       open = { owner, library: syncingOnSave(library) };
       await openLibrary(open.library);
       void syncLibrary();

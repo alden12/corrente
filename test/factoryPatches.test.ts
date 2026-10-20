@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FACTORY_PATCHES, allPatches, findPatch } from "../src/audio/patches/factory";
-import { newPatchId, openLibrary, savePatch } from "../src/audio/patches/library";
+import { listPatches, newPatchId, openLibrary, savePatch } from "../src/audio/patches/library";
 import { memoryBackend } from "../src/audio/library/backend";
 import { hasInstrument, instrumentSchema } from "../src/audio/instruments/catalog";
 import { hasEffect, effectSchema } from "../src/audio/effects/catalog";
@@ -52,7 +52,7 @@ describe("patch lookup across factory + user (allPatches / findPatch)", () => {
   beforeEach(() => openLibrary(memoryBackend()));
 
   it("allPatches merges factory presets and user patches", async () => {
-    expect(allPatches()).toHaveLength(FACTORY_PATCHES.length);
+    expect(allPatches(listPatches())).toHaveLength(FACTORY_PATCHES.length);
     await savePatch({
       id: newPatchId(),
       name: "My Sound",
@@ -62,14 +62,14 @@ describe("patch lookup across factory + user (allPatches / findPatch)", () => {
       effects: [],
       createdAt: 1,
     });
-    expect(allPatches()).toHaveLength(FACTORY_PATCHES.length + 1);
+    expect(allPatches(listPatches())).toHaveLength(FACTORY_PATCHES.length + 1);
   });
 
   it("findPatch resolves a factory preset by name and by id, case-insensitively", () => {
     const preset = FACTORY_PATCHES[0];
-    expect(findPatch(preset.id)?.id).toBe(preset.id);
-    expect(findPatch(preset.name.toUpperCase())?.id).toBe(preset.id);
-    expect(findPatch("no-such-patch")).toBeUndefined();
+    expect(findPatch(preset.id, listPatches())?.id).toBe(preset.id);
+    expect(findPatch(preset.name.toUpperCase(), listPatches())?.id).toBe(preset.id);
+    expect(findPatch("no-such-patch", listPatches())).toBeUndefined();
   });
 
   it("findPatch resolves a user patch too", async () => {
@@ -83,6 +83,6 @@ describe("patch lookup across factory + user (allPatches / findPatch)", () => {
       effects: [],
       createdAt: 1,
     });
-    expect(findPatch("nimbus 4")?.id).toBe(id);
+    expect(findPatch("nimbus 4", listPatches())?.id).toBe(id);
   });
 });

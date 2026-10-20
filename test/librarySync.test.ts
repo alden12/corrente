@@ -132,6 +132,48 @@ describe("the library's queue for the account", () => {
     expect(account.requests.at(-1)?.saves).toEqual([]);
   });
 
+  it("drops a refused save once a newer save of the same item is accepted", async () => {
+    const account = fakeAccount((save) => save.item.name === "Broken");
+    const saved = patch(1, { name: "Broken" });
+    await savePatch(saved);
+    await drainLibrary(library, library, account.send, always);
+    await savePatch({ ...saved, name: "Fixed", params: { "filter.cutoff": 2 } });
+    await drainLibrary(library, library, account.send, always);
+
+    expect(await library.isEmpty()).toBe(true);
+    // A reload reads the account's version, not the refused one.
+    await openLibrary(await freshLibrary());
+    await openLibrary(library);
+    expect(listPatches()).toMatchObject([{ name: "Fixed", params: { "filter.cutoff": 2 } }]);
+  });
+
+  it("keeps a refused save that is still the item's latest, whatever the account sends back", async () => {
+    const account = fakeAccount((save) => save.item.name === "Broken");
+    const saved = patch(1, { name: "Fine" });
+    await savePatch(saved);
+    await drainLibrary(library, library, account.send, always);
+    await savePatch({ ...saved, name: "Broken", params: { "filter.cutoff": 9 } });
+    await drainLibrary(library, library, account.send, always);
+    // The account sends "Fine" back again (a cursor's overlap): the device keeps the refused edit.
+    await drainLibrary(library, library, () => account.send({ saves: [] }), always);
+
+    expect(await library.isEmpty()).toBe(false);
+    await openLibrary(await freshLibrary());
+    await openLibrary(library);
+    expect(listPatches()).toMatchObject([{ name: "Broken", params: { "filter.cutoff": 9 } }]);
+  });
+
+  it("writes a save into the library it was made in, though another opens before it lands", async () => {
+    const other = await freshLibrary();
+    const saving = savePatch(patch(5, { name: "Mine" }));
+    const switching = openLibrary(other);
+    await Promise.all([saving, switching]);
+    expect(await other.queued(10)).toEqual([]);
+    expect((await library.queued(10)).map((save) => save.item.name)).toEqual(["Mine"]);
+    // Nor does it show in the library now open.
+    expect(listPatches()).toEqual([]);
+  });
+
   it("leaves an answer alone once the account it was for isn't signed in", async () => {
     const account = fakeAccount();
     await savePatch(patch(800));

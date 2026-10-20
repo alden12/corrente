@@ -12,7 +12,12 @@
 export const TAG_SIMILARITY = 0.3;
 
 /** The most near tags offered for a word that matched none. */
-const NEAREST = 5;
+export const NEAREST_TAGS = 5;
+
+/** The words a lookup was given, each once, trimmed and lower-cased. */
+export const askedWords = (words: readonly string[]): string[] => [
+  ...new Set(words.map((word) => word.trim().toLowerCase()).filter(Boolean)),
+];
 
 /** A string's trigrams as pg_trgm takes them: per word, padded with two spaces before and one after. */
 function trigrams(text: string): Set<string> {
@@ -38,7 +43,7 @@ export function similarity(left: string, right: string): number {
 }
 
 /** The tags most like `word`, best first, that count as a match. */
-export const nearestTags = (word: string, vocabulary: Iterable<string>, limit = NEAREST): string[] =>
+export const nearestTags = (word: string, vocabulary: Iterable<string>, limit = NEAREST_TAGS): string[] =>
   [...vocabulary]
     .map((tag) => ({ tag, score: similarity(word, tag) }))
     .filter(({ score }) => score >= TAG_SIMILARITY)
@@ -65,7 +70,7 @@ export function resolveTags(
   isTag: (word: string) => boolean,
   nearest: (word: string) => string[],
 ): ResolvedTags {
-  const asked = [...new Set(words.map((word) => word.trim().toLowerCase()).filter(Boolean))];
+  const asked = askedWords(words);
   const resolved = asked.map((word) => ({ word, tag: isTag(word) ? word : nearest(word)[0] }));
   const readAs = Object.fromEntries(
     resolved.flatMap(({ word, tag }) => (tag !== undefined && tag !== word ? [[word, tag]] : [])),

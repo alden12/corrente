@@ -28,10 +28,6 @@ interface LibrarySchema extends DBSchema {
 
 const STORES = ["items", "versions", "queue", "meta"] as const;
 
-/** The database an account's library lives in; `local` is signed out's. */
-export const libraryDatabase = (owner: string): string =>
-  owner === "local" ? "corrente-library" : `corrente-library:${owner}`;
-
 function backendOf(database: IDBPDatabase<LibrarySchema>): LibraryBackend & LibraryOutbox {
   return {
     load: async () => {
@@ -77,8 +73,20 @@ function backendOf(database: IDBPDatabase<LibrarySchema>): LibraryBackend & Libr
     settle: async (sent, received, cursor) => {
       const transaction = database.transaction(["items", "versions", "queue", "meta"], "readwrite");
       const queue = transaction.objectStore("queue");
+      // Each item's newest save just sent: a refused save older than it has been superseded.
+      const sentRows = await Promise.all(sent.map(async (key) => ({ key, row: await queue.get(key) })));
+      const newestSent = new Map(sentRows.flatMap(({ key, row }) => (row ? [[row.itemId, key] as const] : [])));
       await Promise.all(sent.map((key) => queue.delete(key)));
-      const stillQueued = new Set((await queue.getAll()).map((row) => row.itemId));
+      const [keys, rows] = await Promise.all([queue.getAllKeys(), queue.getAll()]);
+      const remaining = rows.map((row, index) => ({ key: keys[index], row }));
+      const superseded = remaining.filter(
+        ({ key, row }) => row.refused !== undefined && (newestSent.get(row.itemId) ?? -1) > key,
+      );
+      await Promise.all(superseded.map(({ key }) => queue.delete(key)));
+      // An item with a save still to go (or a refused one that is still its latest) keeps this device's copy.
+      const stillQueued = new Set(
+        remaining.filter((entry) => !superseded.includes(entry)).map(({ row }) => row.itemId),
+      );
       const kept = received.filter((entry) => !stillQueued.has(entry.item.id));
       await Promise.all([
         ...kept.flatMap((entry) => [
@@ -95,6 +103,7 @@ function backendOf(database: IDBPDatabase<LibrarySchema>): LibraryBackend & Libr
       const row = await transaction.store.get(key);
       await Promise.all([...(row ? [transaction.store.put({ ...row, refused: reason }, key)] : []), transaction.done]);
     },
+    isEmpty: async () => (await database.count("queue")) === 0,
     clear: async () => {
       const transaction = database.transaction(STORES, "readwrite");
       await Promise.all([...STORES.map((store) => transaction.objectStore(store).clear()), transaction.done]);
@@ -102,10 +111,8 @@ function backendOf(database: IDBPDatabase<LibrarySchema>): LibraryBackend & Libr
   };
 }
 
-/** An account's library on the device (signed out's by default), or undefined where IndexedDB is missing or refuses to open. */
-export async function indexedDbBackend(
-  name = libraryDatabase("local"),
-): Promise<(LibraryBackend & LibraryOutbox) | undefined> {
+/** An account's library on the device (`libraryDatabase` names it), or undefined where IndexedDB is missing or refuses to open. */
+export async function indexedDbBackend(name: string): Promise<(LibraryBackend & LibraryOutbox) | undefined> {
   if (typeof indexedDB === "undefined") return undefined;
   try {
     const database = await openDB<LibrarySchema>(name, 2, {
@@ -130,8 +137,12 @@ export async function indexedDbBackend(
         }
       },
     });
-    // Another tab opening a newer version (or deleting it) waits on this one: step aside.
-    database.addEventListener("versionchange", () => database.close());
+    // Another tab opening a newer version (or deleting it) waits on this one: step aside. Saves here
+    // fail from now on (and aren't shown as saved), so say what puts it right.
+    database.addEventListener("versionchange", () => {
+      database.close();
+      console.warn("[corrente] the library was updated in another tab: reload this one to keep saving.");
+    });
     return backendOf(database);
   } catch {
     return undefined;

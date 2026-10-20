@@ -15,17 +15,15 @@ import { instrumentSchema } from "../../instruments/catalog";
 import { readParamValue, validateParam } from "../../params/validate";
 import { pitchName } from "../../params/noteName";
 import { BUILTIN_SAMPLES, assetRef, builtinRef } from "../../samples/catalog";
+import { listPatchesFor, patchDetails, patchTrackCommand } from "../../patches/patchTools";
 import {
   APPLY_PATCH_DOC,
   GET_PATCH_DOC,
   LIST_PATCHES_DOC,
   PATCH_TOOL_ARGS,
   SAVE_PATCH_DOC,
-  listPatchesFor,
-  patchDetails,
-  patchTrackCommand,
-  savePatchFromTrack,
-} from "../../patches/patchTools";
+} from "../../patches/toolSpec";
+import { listPatches, savePatchFromTrack } from "../../patches/library";
 
 export function soundTools(ctx: ToolContext): AgentTool[] {
   const { projectStore, dispatch, author, resolveInstrumentTrack, resolveTrack, resolveEffect } = ctx;
@@ -197,14 +195,14 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
       name: "list_patches",
       description: LIST_PATCHES_DOC,
       schema: z.object(PATCH_TOOL_ARGS.list_patches),
-      run: (listing) => listPatchesFor(listing),
+      run: (listing) => listPatchesFor(listing, listPatches()),
     }),
 
     defineTool({
       name: "get_patch",
       description: GET_PATCH_DOC,
       schema: z.object(PATCH_TOOL_ARGS.get_patch),
-      run: ({ patch }) => patchDetails(patch),
+      run: ({ patch }) => patchDetails(patch, listPatches()),
     }),
 
     defineTool({
@@ -212,7 +210,7 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
       description: APPLY_PATCH_DOC,
       schema: z.object(PATCH_TOOL_ARGS.apply_patch),
       run: ({ patch, name }) => {
-        const command = patchTrackCommand(patch, name);
+        const command = patchTrackCommand(patch, listPatches(), name);
         dispatch(command);
         return { ok: true, trackId: command.id, patch: command.name };
       },

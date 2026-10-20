@@ -1,7 +1,7 @@
 /** MCP tools: Tracks. */
 import { z } from "zod";
-import { pickableInstrumentInfos, hasInstrument, instrumentFamily } from "../../../src/audio/instruments/catalog";
-import { makeTrackId, ok, fail } from "../shared";
+import { instrumentFamily } from "../../../src/audio/instruments/catalog";
+import { instrumentsFor, makeTrackId, ok, fail, projectHasInstrument } from "../shared";
 import type { ToolContext } from "../context";
 
 export function registerTracksTools({
@@ -29,7 +29,7 @@ export function registerTracksTools({
             timeSignature: target.project.timeSignature,
             lengthBeats: target.project.length,
             selectedTrackId: target.project.selectedId,
-            instruments: pickableInstrumentInfos().map((def) => ({
+            instruments: instrumentsFor(target.project).map((def) => ({
               id: def.type,
               label: def.label,
               family: def.family,
@@ -66,9 +66,9 @@ export function registerTracksTools({
       },
     },
     async ({ instrument, name, group }) => {
-      if (!hasInstrument(instrument)) {
+      if (!projectHasInstrument(target.project, instrument)) {
         return fail(
-          `Unknown instrument "${instrument}". Options: ${pickableInstrumentInfos()
+          `Unknown instrument "${instrument}". Options: ${instrumentsFor(target.project)
             .map((i) => i.type)
             .join(", ")}.`,
         );
@@ -104,9 +104,9 @@ export function registerTracksTools({
       inputSchema: { ...trackArg, instrument: z.string() },
     },
     async ({ track, instrument }) => {
-      if (!hasInstrument(instrument)) {
+      if (!projectHasInstrument(target.project, instrument)) {
         return fail(
-          `Unknown instrument "${instrument}". Options: ${pickableInstrumentInfos()
+          `Unknown instrument "${instrument}". Options: ${instrumentsFor(target.project)
             .map((info) => info.type)
             .join(", ")}.`,
         );

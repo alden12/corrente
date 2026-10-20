@@ -240,7 +240,8 @@ export function createApiClient(config: {
       // Saves it won't take: the caller sets them aside rather than retry them forever.
       if (LIBRARY_REFUSALS.has(res.status)) return { refused: `${res.status}: ${(await res.text()).slice(0, 500)}` };
       if (!res.ok) throw new Error(`sync: library failed (${res.status})`);
-      return (await res.json()) as LibrarySyncReply;
+      // Checked, as the other side's data: it goes into IndexedDB and on to projects.
+      return routes.syncLibrary.response.parse(await res.json());
     },
   };
 }

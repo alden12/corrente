@@ -19,6 +19,8 @@ import { makeToolContext } from "./mcp/context";
 import { registerDawTools } from "./mcp/tools";
 
 /** How long the tab gets to render and measure the song for analyze_mix. */
+/** How long a device edit may take to land in the tab, before the tool says it didn't answer. */
+const DEVICE_TIMEOUT_MS = 20_000;
 const ANALYSIS_TIMEOUT_MS = 120_000;
 
 export interface DawMcp {
@@ -125,7 +127,8 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
   const target: DawTarget = {
     project: mirror,
     send: sendToTab,
-    landDevice: (edit) => awaitReply((id) => sendToTab({ type: "deviceRequest", id, edit })),
+    // Behind any edits still landing and the library's own writes: give it longer than a lookup.
+    landDevice: (edit) => awaitReply((id) => sendToTab({ type: "deviceRequest", id, edit }), DEVICE_TIMEOUT_MS),
     connected,
     requestHistory: requestTab,
     requestPatch,

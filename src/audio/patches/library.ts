@@ -5,16 +5,9 @@
  * project: on the device in IndexedDB, as items with write-once versions (library/store.ts). Saving
  * over a patch adds a version; deleting one hides it. A patch made on a custom instrument, or with
  * custom effects, carries their definitions, so it plays in a project that doesn't have them.
- *
- * A patch stores effects *without* instance ids - ids are per-track and are minted
- * fresh when a patch is applied (see `createTrackFromPatch`), so the same patch can
- * be dropped onto many tracks. Applying a patch is one authored edit, so it is
- * undoable, two-voice, and replayable like any other.
+ * The shape and pure helpers are patch.ts, which the servers use without this store.
  */
 import type { Author } from "../commands/types";
-import type { PatchValues } from "../params/types";
-import { randomUuid } from "../randomUuid";
-import type { Tag } from "../tags";
 import { z } from "zod";
 import { authorSchema, patchValuesSchema } from "../project/schema";
 import { patchChainSchema } from "../library/schema";
@@ -27,73 +20,19 @@ import {
   openStore,
   saveItem,
   subscribeLibrary,
-  type LibraryEntry,
 } from "../library/store";
-import type { SoundDevices } from "./sound";
+import { keepDevice } from "../library/devices";
+import type { InstrumentTrack } from "../project/projectStore";
+import { patchDocumentOf, patchOf, type Patch } from "./patch";
+import { patchFromTrack } from "./patchTools";
+import type { DeviceSource } from "./sound";
+import type { SaveOptions } from "./toolSpec";
 
-/** One effect in a saved patch: its type, bypass state, and parameter values. */
-export interface PatchEffect {
-  type: string;
-  bypassed?: boolean;
-  params: PatchValues;
-}
-
-/** One MIDI device in a saved patch (same idless shape as PatchEffect). */
-export interface PatchMidiDevice {
-  type: string;
-  bypassed?: boolean;
-  params: PatchValues;
-}
-
-/** A saved instrument preset: instrument + params + MIDI-device + effect chains, named by the user. */
-export interface Patch {
-  id: string;
-  name: string;
-  author: Author;
-  instrumentType: string;
-  params: PatchValues;
-  effects: PatchEffect[];
-  /** MIDI-device chain (note transforms). Optional: patches saved before this default to none. */
-  midiDevices?: PatchMidiDevice[];
-  createdAt: number;
-  /** True for a shipped factory preset (read-only, in code - see factory.ts). */
-  builtin?: boolean;
-  /** What it sounds like: its role first ("pad"), then its character ("dark"). Any string. */
-  tags?: readonly Tag[];
-  /** Why it exists: the brief, the song, the part it was made for. Not how it sounds (that's tags). */
-  description?: string;
-  /** Which version of it this is: a library patch's count of saves. */
-  version?: number;
-  /** The custom devices it plays, carried so it plays in any project. */
-  devices?: SoundDevices;
-}
-
-/** What a library version holds for a patch: its sound, without the library's metadata. */
-export type PatchDocument = Pick<Patch, "instrumentType" | "params" | "effects" | "midiDevices" | "devices">;
-
-/** A patch's library document. */
-export const patchDocumentOf = (patch: Patch): PatchDocument => ({
-  instrumentType: patch.instrumentType,
-  params: patch.params,
-  effects: patch.effects,
-  midiDevices: patch.midiDevices ?? [],
-  ...(patch.devices ? { devices: patch.devices } : {}),
-});
+export type { Patch, PatchDocument, PatchEffect, PatchMidiDevice } from "./patch";
+export { newPatchId } from "./patch";
 
 /** Where patches were kept before the library, moved in on first open. */
 const OLD_STORAGE_KEY = "corrente:patches:v1";
-
-/** A library entry as a patch: wherever it came from, this device's library or an account's. */
-export const patchOf = ({ item, current }: LibraryEntry): Patch => ({
-  id: item.id,
-  name: item.name,
-  author: current.author,
-  createdAt: item.createdAt,
-  version: item.version,
-  tags: current.tags,
-  ...(current.description ? { description: current.description } : {}),
-  ...(current.document as PatchDocument),
-});
 
 export { libraryWritten };
 
@@ -114,9 +53,22 @@ export const removePatch = (id: string): void => hideItem(id);
 /** Subscribe to library changes (save/remove). Returns an unsubscribe fn. */
 export const subscribePatches = subscribeLibrary;
 
-/** A fresh patch id. */
-export function newPatchId(): string {
-  return `pt-${randomUuid().slice(0, 8)}`;
+/**
+ * Save a track's sound to the library on this device, as a new patch or a new version of one of the
+ * user's. Its custom devices go with it, and into the library on their own (COMM-1.11.1).
+ */
+export async function savePatchFromTrack(
+  track: InstrumentTrack,
+  author: Author,
+  project: DeviceSource,
+  options: SaveOptions = {},
+): Promise<Patch> {
+  const patch = patchFromTrack(track, author, project, listPatches(), options);
+  await Promise.all([
+    ...(patch.devices?.instruments ?? []).map((device) => keepDevice("instrument", device, author)),
+    ...(patch.devices?.effects ?? []).map((device) => keepDevice("effect", device, author)),
+  ]);
+  return savePatch(patch);
 }
 
 /** A patch as localStorage kept it, checked before it moves in: it was written by older builds. */

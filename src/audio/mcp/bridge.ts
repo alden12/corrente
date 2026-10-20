@@ -11,14 +11,9 @@ import type { Scheduler } from "../sequencer/scheduler";
 import type { EditLog } from "../commands/editLog";
 import type { EditCommand } from "../commands/types";
 import type { VersionStore } from "../commands/history";
-import {
-  listPatchesFor,
-  patchDetails,
-  patchTrackCommand,
-  savePatchFromTrack,
-  trackToSave,
-  type SaveOptions,
-} from "../patches/patchTools";
+import { listPatchesFor, patchDetails, patchTrackCommand, trackToSave } from "../patches/patchTools";
+import type { SaveOptions } from "../patches/toolSpec";
+import { listPatches, savePatchFromTrack } from "../patches/library";
 import { DEFAULT_WS_PORT } from "./protocol";
 import { analyzeProjectMix, analyzeTrackDevice } from "../engine/renderInWorker";
 import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
@@ -121,22 +116,22 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     }
   };
 
-  // Patch-library RPC. Patches live in this tab (localStorage), so the server can
-  // only reach them through us. `save` captures a track's live sound; `apply`
+  // Patch-library RPC. Patches live in this tab's library (IndexedDB, library/store.ts), so the
+  // server can only reach them through us. `save` captures a track's live sound; `apply`
   // dispatches a createTrackFromPatch edit authored as the agent (violet, undoable by the user
   // driving it, replayable - effect ids minted here and carried in the command).
   const patchMethods: { [K in PatchMethod]: (params: Record<string, unknown>) => unknown } = {
-    list: listPatchesFor,
+    list: (params) => listPatchesFor(params, listPatches()),
     // Full specifics of one patch (param values + per-effect params), for inspecting or
     // promoting a user patch into the factory bank. Searches factory + user by id/name.
-    get: (params) => patchDetails(String(params.patch ?? "")),
+    get: (params) => patchDetails(String(params.patch ?? ""), listPatches()),
     save: async (params) => {
       const track = trackToSave(projectStore, params.trackId as string | undefined);
       const saved = await savePatchFromTrack(track, editLog.agentAuthor, projectStore, params as SaveOptions);
       return { id: saved.id, name: saved.name, version: saved.version };
     },
     apply: (params) => {
-      const command = patchTrackCommand(String(params.patch ?? ""), params.name as string | undefined);
+      const command = patchTrackCommand(String(params.patch ?? ""), listPatches(), params.name as string | undefined);
       editLog.dispatchAsAgent(command);
       return { trackId: command.id, name: command.name };
     },
@@ -169,21 +164,32 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     inbound = inbound.then(land).catch((err: unknown) => console.warn("[mcp] an agent edit didn't land:", err));
   };
 
+  /** A device edit, landed once its device is kept in the library, and the tool told either way. */
+  const handleDeviceRequest = ({ id, edit }: Extract<ServerToBrowser, { type: "deviceRequest" }>) =>
+    inOrder(async () => {
+      try {
+        editLog.dispatchAsAgent(await withLibraryRef(edit, editLog.agentAuthor));
+        send({ type: "deviceReply", id, ok: true });
+      } catch (error) {
+        send({ type: "deviceReply", id, ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+  /** The requests, each answered by id; anything else is a live message or an edit, landed in order. */
+  const requests: Partial<{
+    [Type in ServerToBrowser["type"]]: (msg: Extract<ServerToBrowser, { type: Type }>) => void;
+  }> = {
+    historyRequest: (msg) => void handleHistoryRequest(msg),
+    patchRequest: (msg) => void handlePatchRequest(msg),
+    analysisRequest: (msg) => void handleAnalysisRequest(msg),
+    deviceRequest: handleDeviceRequest,
+  };
+
   const handle = (msg: ServerToBrowser) => {
-    if (msg.type === "historyRequest") void handleHistoryRequest(msg);
-    else if (msg.type === "patchRequest") void handlePatchRequest(msg);
-    else if (msg.type === "analysisRequest") void handleAnalysisRequest(msg);
-    else if (msg.type === "deviceRequest")
-      inOrder(async () => {
-        try {
-          editLog.dispatchAsAgent(await withLibraryRef(msg.edit, editLog.agentAuthor));
-          send({ type: "deviceReply", id: msg.id, ok: true });
-        } catch (err) {
-          send({ type: "deviceReply", id: msg.id, ok: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
+    const request = requests[msg.type] as ((msg: ServerToBrowser) => void) | undefined;
+    if (request) request(msg);
     else if (liveTypes.has(msg.type)) inOrder(() => (live[msg.type as LiveType] as (m: ServerToBrowser) => void)(msg));
-    else inOrder(async () => editLog.dispatchAsAgent(await withLibraryRef(msg as EditCommand, editLog.agentAuthor)));
+    else inOrder(() => editLog.dispatchAsAgent(msg as EditCommand));
   };
 
   // Per-track/group param/clip subscriptions, rebuilt whenever structure changes.

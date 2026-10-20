@@ -86,13 +86,15 @@ export interface LibraryOutbox {
   /** Where the last sync read up to. */
   cursor(): Promise<string | undefined>;
   /**
-   * Settle a sync: drop the saves sent, store what the account sent back, and the cursor to read
-   * from next. An item with saves still queued keeps this device's copy until those are sent too.
-   * Returns the entries it stored.
+   * Settle a sync: drop the saves sent, and any refused save of the same item they superseded; store
+   * what the account sent back, and the cursor to read from next. An item with saves still to go, or
+   * whose latest save was refused, keeps this device's copy. Returns the entries it stored.
    */
   settle(sent: readonly number[], received: readonly LibraryEntry[], cursor?: string): Promise<LibraryEntry[]>;
   /** Keep a save the account refused, unsent, so it stays here and stops blocking the rest. */
   refuse(key: number, reason: string): Promise<void>;
+  /** Whether nothing is queued, refused saves included: everything it held has reached an account. */
+  isEmpty(): Promise<boolean>;
   /** Empty it: once what it held has moved into an account. */
   clear(): Promise<void>;
 }

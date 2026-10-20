@@ -45,7 +45,7 @@ const samplePatch = (over: Partial<Parameters<typeof savePatch>[0]> = {}) => ({
 /** A fresh device: its own IndexedDB database. */
 const freshDevice = async (): Promise<LibraryBackend & LibraryOutbox> => {
   indexedDB.deleteDatabase("corrente-library");
-  return (await indexedDbBackend())!;
+  return (await indexedDbBackend("corrente-library"))!;
 };
 
 describe("the patch library (COMM-1.11.1)", () => {
@@ -109,6 +109,17 @@ describe("the patch library (COMM-1.11.1)", () => {
     await openLibrary(await freshDevice());
     expect(listPatches().map((p) => p.name)).toEqual(["Fine"]);
     expect(storage.has("corrente:patches:v1")).toBe(true);
+  });
+
+  it("doesn't show a save as made when the library couldn't store it", async () => {
+    const kept = samplePatch({ name: "Kept" });
+    await savePatch(kept);
+    await openLibrary({
+      load: async () => ({ items: [], current: [] }),
+      save: () => Promise.reject(new Error("closed")),
+    });
+    await expect(savePatch(samplePatch({ name: "Lost" }))).rejects.toThrow("closed");
+    expect(listPatches()).toEqual([]);
   });
 
   it("leaves the old patches where they were when storing them fails", async () => {

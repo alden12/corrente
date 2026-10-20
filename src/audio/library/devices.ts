@@ -8,9 +8,9 @@
  * stored (`withLibraryRef`), and carries `{ version, hash }`, so the project records exactly which
  * version its copy is, through undo, redo and replay, and never one the library doesn't have.
  */
-import type { Author, EditCommand } from "../commands/types";
+import type { Author } from "../commands/types";
 import type { DeviceEdit } from "../mcp/protocol";
-import type { CustomDevice, CustomKind } from "../definitions/custom";
+import { sameDevice, type CustomDevice, type CustomKind } from "../definitions/custom";
 import type { DeviceRef } from "./backend";
 import { libraryEntries, libraryEntry, saveItem, type LibraryEntry } from "./store";
 
@@ -40,14 +40,31 @@ export const DEVICE_EDIT_KINDS: Record<DeviceEdit["type"], CustomKind> = {
 };
 
 /**
- * An edit ready to land: a device edit once its device is kept in the library, carrying which
- * version it is; any other edit as it is. Rejects if the library couldn't keep the device, and then
- * the edit mustn't land: the project would hold a device the library doesn't.
+ * A device edit ready to land: once its device is kept in the library, carrying which version it
+ * is. Rejects if the library couldn't keep the device, and then the edit mustn't land: the project
+ * would hold a device the library doesn't.
  */
-export async function withLibraryRef(command: EditCommand, author: Author): Promise<EditCommand> {
-  const kind = (DEVICE_EDIT_KINDS as Partial<Record<EditCommand["type"], CustomKind>>)[command.type];
-  if (!kind || !("def" in command)) return command;
-  return { ...command, library: await keepDevice(kind, command.def, author) };
+export async function withLibraryRef(edit: DeviceEdit, author: Author): Promise<DeviceEdit> {
+  return { ...edit, library: await keepDevice(DEVICE_EDIT_KINDS[edit.type], edit.def, author) };
+}
+
+/**
+ * The newer version the library offers a project's copy of a device, if any: matched by hash where
+ * the project knows which version its copy is (`ref`), by content where it doesn't. Only a newer one:
+ * a library behind the project (an agent's edit made elsewhere, not yet synced here) mustn't offer
+ * to take the project back.
+ */
+export function offeredUpdate(
+  kept: LibraryEntry | undefined,
+  here: CustomDevice | undefined,
+  ref: DeviceRef | undefined,
+): CustomDevice | undefined {
+  if (!kept || kept.item.hiddenAt !== undefined || !here) return undefined;
+  const latest = kept.current.document as CustomDevice;
+  const current = ref
+    ? ref.hash === kept.current.hash || kept.current.version <= ref.version
+    : sameDevice(latest, here);
+  return current ? undefined : latest;
 }
 
 /** The library's latest version of a device, unless it was deleted. */

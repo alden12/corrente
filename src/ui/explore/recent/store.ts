@@ -8,7 +8,7 @@
  * "added" events for its catalogue-wide shelves, each take becomes one, and this list can be read
  * from them instead.
  */
-import { authEnabled, readAuthState, subscribeAuth } from "../../../auth/session";
+import { accountOwner as owner, subscribeAuth } from "../../../auth/session";
 import { readPersistent, writePersistent } from "../../persistentStore";
 
 /** How many the shelf keeps: a row's worth, and then some for scrolling. */
@@ -19,11 +19,6 @@ export const withUsed = (list: readonly string[], key: string, limit = RECENT_LI
   [key, ...list.filter((each) => each !== key)].slice(0, limit);
 
 const storageKey = (owner: string) => `corrente:recent:v1:${owner}`;
-
-function owner(): string {
-  const auth = readAuthState();
-  return authEnabled && auth.status === "signed-in" ? auth.user.id : "local";
-}
 
 function read(account: string): string[] {
   try {

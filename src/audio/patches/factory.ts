@@ -13,7 +13,7 @@
  * virtual-analog presets, and kept by ear. Names are our own.
  */
 import type { Tag } from "../tags";
-import { listPatches, type Patch, type PatchEffect } from "./library";
+import type { Patch, PatchEffect } from "./patch";
 
 /** Juno-style chorus settings for the lush presets (bundled as the one effect). */
 const chorusI: PatchEffect = { type: "chorus", params: { "chorus.rate": 0.7, "chorus.depth": 0.35, mix: 0.5 } };
@@ -309,15 +309,15 @@ export const FACTORY_PATCHES: Patch[] = [
 
 /**
  * Every patch the library can offer: the shipped factory presets plus the user's saved patches.
- * `mine` is the user's: this device's library by default, or what the hosted server read from
- * their account (COMM-1.11.2). Used by the MCP patch RPC (list / apply / get) and the UI.
+ * `mine` is the user's: this device's library in the tab, or what the hosted server read from their
+ * account (COMM-1.11.2). Used by the MCP patch RPC (list / apply / get) and the UI.
  */
-export function allPatches(mine: readonly Patch[] = listPatches()): Patch[] {
+export function allPatches(mine: readonly Patch[]): Patch[] {
   return [...FACTORY_PATCHES, ...mine];
 }
 
 /** Resolve a patch by exact id, else by case-insensitive name, across factory + user. */
-export function findPatch(query: string, mine?: readonly Patch[]): Patch | undefined {
+export function findPatch(query: string, mine: readonly Patch[]): Patch | undefined {
   const q = query.trim();
   const all = allPatches(mine);
   return all.find((patch) => patch.id === q) ?? all.find((patch) => patch.name.toLowerCase() === q.toLowerCase());

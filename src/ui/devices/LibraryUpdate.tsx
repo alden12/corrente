@@ -1,14 +1,13 @@
 /**
- * "Update" on a custom device whose library version isn't the project's copy (COMM-1.11): the device
- * was changed in another project, and this one still plays the version it has, so a finished song
- * keeps its sound until someone chooses otherwise. Matched by hash where the project knows which
- * version it has (COMM-1.11.2), by content where it doesn't. One edit, undoable; values carry over
- * for every param the new version still has, and the title says which settings won't.
+ * "Update" on a custom device the library has a newer version of (COMM-1.11, `offeredUpdate`): the
+ * device was changed in another project, and this one still plays the version it has, so a finished
+ * song keeps its sound until someone chooses otherwise. One edit, undoable; values carry over for
+ * every param the new version still has, and the title says which settings won't.
  */
 import { useSyncExternalStore } from "react";
 import type { Dispatch } from "../../audio/commands/types";
-import { sameDevice, type CustomDevice, type CustomKind } from "../../audio/definitions/custom";
-import { deviceRefOf, settingsReset } from "../../audio/library/devices";
+import type { CustomKind } from "../../audio/definitions/custom";
+import { deviceRefOf, offeredUpdate, settingsReset } from "../../audio/library/devices";
 import { libraryEntry, subscribeLibrary } from "../../audio/library/store";
 import type { ProjectStore } from "../../audio/project/projectStore";
 
@@ -29,10 +28,9 @@ export function LibraryUpdate({
   const here = (kind === "instrument" ? projectStore.customInstruments : projectStore.customEffects).find(
     (device) => device.type === type,
   );
-  if (!kept || kept.item.hiddenAt !== undefined || !here) return null;
-  const latest = kept.current.document as CustomDevice;
   const ref = projectStore.deviceRef(type);
-  if (ref ? ref.hash === kept.current.hash : sameDevice(latest, here)) return null;
+  const latest = offeredUpdate(kept, here, ref);
+  if (!kept || !here || !latest) return null;
   const reset = settingsReset(here, latest);
   const title =
     `Version ${kept.current.version} is in your library` +

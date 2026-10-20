@@ -1,8 +1,8 @@
 /** MCP tools: Effects (on a host: a track or a group bus). */
 import { z } from "zod";
-import { effectInfos, hasEffect, effectSchema } from "../../../src/audio/effects/catalog";
+import { effectSchema } from "../../../src/audio/effects/catalog";
 import { readParamValue, validateParam } from "../../../src/audio/params/validate";
-import { makeEffectId, ok, fail } from "../shared";
+import { effectsFor, makeEffectId, ok, fail, projectHasEffect } from "../shared";
 import type { ToolContext } from "../context";
 
 export function registerEffectsTools({ server, target, trackArg, resolveHost, resolveEffect }: ToolContext): void {
@@ -27,7 +27,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
         JSON.stringify(
           {
             host: r.hostId,
-            available: effectInfos().map((def) => ({ id: def.type, label: def.label })),
+            available: effectsFor(target.project).map((def) => ({ id: def.type, label: def.label })),
             effects: r.effects.map((fx) => ({ id: fx.id, type: fx.type, bypassed: fx.bypassed })),
           },
           null,
@@ -48,9 +48,9 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
     async ({ track, group, effect }) => {
       const r = resolveHost(track, group);
       if ("error" in r) return fail(r.error);
-      if (!hasEffect(effect)) {
+      if (!projectHasEffect(target.project, effect)) {
         return fail(
-          `Unknown effect "${effect}". Options: ${effectInfos()
+          `Unknown effect "${effect}". Options: ${effectsFor(target.project)
             .map((e) => e.type)
             .join(", ")}.`,
         );
