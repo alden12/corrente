@@ -1,12 +1,11 @@
 /**
- * Patches found by what they sound like (AGENT-4.16): a brief's words resolved to tags (directly, or
- * through a tag note's synonyms), and the patches carrying them, as worked examples to start from.
- * An instrument's default settings count as its default patch, carrying the instrument's own tags,
- * so an instrument with no patches still turns up. Each matched tag brings its note and check when
- * it has one (tagNotes.ts). Shared by both MCP servers and the in-app agent.
+ * Patches found by what they sound like (AGENT-4.16): the patches carrying a brief's tags, best match
+ * first, as worked examples to start from. An instrument's default settings count as its default
+ * patch, carrying the instrument's own tags, so an instrument with no patches still turns up. A word
+ * that isn't a tag comes back with the tags there are, for the model to pick its meaning from.
+ * Shared by both MCP servers and the in-app agent.
  */
 import { pickableInstrumentInfos } from "../instruments/catalog";
-import { TAG_NOTES } from "../tagNotes";
 import { allPatches } from "./factory";
 import type { Patch } from "./library";
 
@@ -24,29 +23,17 @@ export const patchSummary = (patch: Patch) => ({
   effects: patch.effects.map((effect) => effect.type),
 });
 
-const SYNONYMS = new Map(
-  Object.entries(TAG_NOTES).flatMap(([tag, { synonyms }]) => synonyms.map((synonym) => [synonym, tag] as const)),
-);
-
 export function patchesByTags(words: string[]) {
-  const patches = allPatches();
+  const patches = allPatches().map(patchSummary);
   const defaults = pickableInstrumentInfos().map((info) => ({
     instrument: info.type,
     name: `${info.label} (default settings)`,
     tags: info.tags ?? [],
   }));
-  const inUse = new Set<string>([
-    ...patches.flatMap((patch) => patch.tags ?? []),
-    ...defaults.flatMap((entry) => entry.tags),
-    ...Object.keys(TAG_NOTES),
-  ]);
-  // A word that is a tag stays itself; otherwise a synonym says which tag it means.
-  const resolved = words.map((word) => {
-    const plain = word.trim().toLowerCase();
-    return { word, tag: inUse.has(plain) ? plain : SYNONYMS.get(plain) };
-  });
-  const tags = [...new Set(resolved.flatMap(({ tag }) => (tag ? [tag] : [])))];
-  const unknown = resolved.filter(({ tag }) => !tag).map(({ word }) => word);
+  const inUse = new Set<string>([...patches, ...defaults].flatMap((entry) => entry.tags));
+  const asked = words.map((word) => word.trim().toLowerCase());
+  const tags = asked.filter((word) => inUse.has(word));
+  const unknown = asked.filter((word) => !inUse.has(word));
   const matching = <Entry extends { tags: readonly string[] }>(entries: Entry[]) =>
     entries
       .map((entry) => ({ entry, score: entry.tags.filter((tag) => tags.includes(tag)).length }))
@@ -55,13 +42,9 @@ export function patchesByTags(words: string[]) {
       .map(({ entry }) => entry);
 
   return {
-    tags: tags.map((tag) => {
-      const note = TAG_NOTES[tag];
-      return note ? { tag, note: note.note, check: note.check } : { tag };
-    }),
-    patches: matching(patches.map(patchSummary)).slice(0, MAX_PATCHES),
+    patches: matching(patches).slice(0, MAX_PATCHES),
     defaults: matching(defaults),
-    // Only when a word missed, so a retry has the words to choose from.
-    ...(unknown.length ? { unknown, knownTags: [...inUse, ...SYNONYMS.keys()].sort() } : {}),
+    // Only when a word missed, so a retry has the tags to choose from.
+    ...(unknown.length ? { unknown, knownTags: [...inUse].sort() } : {}),
   };
 }

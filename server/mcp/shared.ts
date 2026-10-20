@@ -41,9 +41,8 @@ export const deviceFormatDoc = () => ({
   paramKinds: paramKindsDoc,
   ...definitionFormatDoc(),
   designing:
-    'To design to a brief ("warm and a bit eerie"), look its words up with list_patches\' `tags` first: the ' +
-    "patches carrying them are worked examples, and a tag's note says how to build it on these blocks and what " +
-    "analyze_device shows when it landed.",
+    'To design to a brief ("warm and a bit glassy"), look it up with list_patches\' `tags` first: the patches ' +
+    "carrying those tags, and their instruments' definitions, are worked examples to start from.",
 });
 
 export type ToolResult = {

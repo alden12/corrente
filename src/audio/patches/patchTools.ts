@@ -14,11 +14,9 @@ import { patchesByTags, patchSummary } from "./byTags";
 export const LIST_PATCHES_DOC =
   "List the instrument patches (presets): id, name, author, instrument, tags, effect types, and `builtin` (a " +
   "shipped factory preset, or the user's own). Patches are shared across projects; get_patch gives one in full. " +
-  '`tags` looks sounds up by what they\'re like: give a brief\'s words ("warm", "eerie", "supersaw") and get ' +
-  "the patches carrying them, best match first, as starting points, plus each instrument whose default settings " +
-  "carry them. A tag can come with a note (how to build it on the engine's blocks) and a check (what " +
-  "analyze_device shows when it worked): follow the note when designing, and confirm the check after. A word " +
-  "it doesn't know comes back with the tags it does.";
+  '`tags` looks sounds up by what they\'re like: give tags ("warm", "glassy", "bass") and get the patches ' +
+  "carrying them, best match first, as starting points, plus each instrument whose default settings carry them. " +
+  "A word that isn't a tag comes back with the tags there are: pick the nearest and ask again.";
 
 /** list_patches: every patch, or those matching `tags`. */
 export const listPatchesFor = ({ tags }: { tags?: unknown }) =>
