@@ -8,7 +8,7 @@
  * touch layout (pinned transport, one view, bottom tabs). Everything above is shared,
  * so mobile is another projection of the same stores rather than a fork.
  */
-import { OnThisDeviceDetails } from "./hosting/OnThisDevice";
+import { FirstRunIntro } from "./hosting/FirstRunIntro";
 import { openProjectsPage } from "./projects/projectsPage";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ProjectStore } from "../audio/project/projectStore";
@@ -489,7 +489,7 @@ export function AppShell() {
           <StartDialog
             onStart={handleStart}
             error={startError}
-            intro={hosting.mode === "standalone" && !introSeen ? <OnThisDeviceDetails /> : undefined}
+            intro={hosting.mode === "standalone" && !introSeen ? <FirstRunIntro /> : undefined}
           />
         )}
         {!projectLoaded && <LoadingOverlay />}

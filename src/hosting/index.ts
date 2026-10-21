@@ -55,3 +55,6 @@ export function hostingFrom(env: HostingEnv): Hosting {
 
 /** This run's hosting. */
 export const hosting: Hosting = hostingFrom(import.meta.env ?? {});
+
+/** The open source's home: the app's own repository, so nothing private. */
+export const SOURCE_URL = "https://github.com/alden12/corrente";

@@ -13,7 +13,7 @@
  * and the details lead with which ones, each with its Export button: no banner, nothing that pops up.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { hosting } from "../../hosting";
+import { hosting, SOURCE_URL } from "../../hosting";
 import {
   installApp,
   readStorageRisk,
@@ -31,10 +31,7 @@ import { notNow, reminderDue, setReminderOff, useOpenProjectChanges, useReminder
 /** Whether this run keeps everything on the device, so the note and chip have something to say. */
 export const onThisDevice = hosting.mode === "standalone";
 
-const linkClass = "text-you underline underline-offset-2 hover:text-strong";
-
-/** The open source's home: the app's own repository, so nothing private. */
-const SOURCE_URL = "https://github.com/alden12/corrente";
+export const linkClass = "text-you underline underline-offset-2 hover:text-strong";
 
 const useStorageRisk = (): StorageRiskSnapshot =>
   useSyncExternalStore(subscribeStorageRisk, readStorageRisk, readStorageRisk);

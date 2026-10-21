@@ -115,13 +115,14 @@ test("the first run says where the files go in the start card, once, and Account
 }) => {
   await page.goto("/");
   const start = page.getByRole("dialog", { name: "Start the audio engine" });
-  await expect(start).toContainText("saved in this browser, on this device");
-  await expect(start.getByRole("link", { name: "source on GitHub" })).toBeVisible();
+  await expect(start).toContainText("Welcome to Corrente");
+  await expect(start.getByRole("region", { name: "Local only" })).toContainText("export your projects regularly");
+  await expect(start.getByRole("link", { name: "source", exact: true })).toBeVisible();
   await dismissStart(page);
 
   await page.reload();
   await expect(start).toBeVisible();
-  await expect(start).not.toContainText("saved in this browser");
+  await expect(start).not.toContainText("Welcome to Corrente");
   await dismissStart(page);
 
   await openSettingsPage(page, "Account");

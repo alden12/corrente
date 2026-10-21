@@ -21,16 +21,21 @@ export function StartDialog({ onStart, error, intro }: { onStart: () => void; er
       {/* Scrolls inside itself on a short screen (a phone on its side), so Start stays reachable. */}
       <div className="bg-panel border border-line rounded-2xl p-8 max-w-sm mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto text-center flex flex-col items-center gap-4 shadow-2xl">
         <BrandMark size={72} />
-        {/* The name, since this is the first thing anyone sees. The heading under it stays the
-         *task*, because that is what the dialog is asking for and what labels it. */}
-        <p className="-mt-1 text-2xl font-semibold tracking-tight text-strong">Corrente</p>
-        {intro && <div className="w-full text-left pb-4 border-b border-line">{intro}</div>}
+        {/* The name, since this is the first thing anyone sees (the intro welcomes by name instead).
+         The heading under it stays the *task*, because that is what the dialog is asking for and
+         what labels it. */}
+        {intro ? (
+          <div className="w-full text-left pb-4 border-b border-line">{intro}</div>
+        ) : (
+          <p className="-mt-1 text-2xl font-semibold tracking-tight text-strong">Corrente</p>
+        )}
         <h2 id="start-title" className={`${intro ? "" : "-mt-2"} text-base font-medium text-ink`}>
           Start the audio engine
         </h2>
         <p className="text-sm text-muted leading-relaxed">
-          Browsers won't play sound until you interact with the page. Click start to enable playback, the keyboard, and
-          anything an agent triggers over MCP.
+          {intro
+            ? "Browsers won't play sound until you've clicked on the page, so start here."
+            : "Browsers won't play sound until you interact with the page. Click start to enable playback, the keyboard, and anything an agent triggers over MCP."}
         </p>
         <button
           type="button"
