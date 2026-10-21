@@ -141,6 +141,9 @@ export class Recorder {
   }
   private set(patch: Partial<RecorderState>): void {
     this.state = { ...this.state, ...patch };
+    // While a take is counting in or recording, its track's own clips stay quiet: the take replaces
+    // them (punching in), so they'd only play under it.
+    this.scheduler.silence(this.isActive ? this.targetTrackId : null);
     for (const listener of this.listeners) listener();
   }
 

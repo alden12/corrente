@@ -100,6 +100,7 @@ export class Scheduler implements TransportClock {
    * playback, which remakes the audio context), or null to start at once.
    */
   private beforePlay: (() => Promise<void> | null) | null = null;
+  private silencedTrackId: string | null = null;
   /** Waiting on `beforePlay`, so a second press doesn't start twice; and which wait, so a stop cancels it. */
   private starting = false;
   private startToken = 0;
@@ -172,6 +173,15 @@ export class Scheduler implements TransportClock {
       this.begin();
     };
     void wait.then(done, done);
+  }
+
+  /**
+   * Leave one track's arrangement unplayed, or none with null: the track a take is recording into.
+   * Every take is a new clip that replaces what it overlaps, so hearing the old notes under the new
+   * ones only gets in the way. Live notes don't come through here, so what's played still sounds.
+   */
+  silence(trackId: string | null): void {
+    this.silencedTrackId = trackId;
   }
 
   /** Have something waited for before each plain play; null to stop. */
@@ -303,7 +313,7 @@ export class Scheduler implements TransportClock {
     }
 
     for (const track of this.project.getTracks()) {
-      if (track.muted) continue;
+      if (track.muted || track.id === this.silencedTrackId) continue;
       // A launched clip overrides the arrangement: play it as one full-region
       // placement, so the existing tiling loops it over the transport.
       const placements = track.launchedClipId

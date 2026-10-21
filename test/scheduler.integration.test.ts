@@ -173,3 +173,56 @@ describe("Scheduler before-play hook (INST-43)", () => {
     expect(scheduler.isPlaying).toBe(false);
   });
 });
+
+describe("Scheduler while a take records", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("leaves the recorded track's own clips unplayed, and the rest as they were", () => {
+    let clock = 0;
+    const calls: { trackId: string; midi: number }[] = [];
+    const engine = {
+      get started() {
+        return true;
+      },
+      get currentTime() {
+        return clock;
+      },
+      getNoteTarget: (id: string) => ({
+        playNote: (midi: number) => calls.push({ trackId: id, midi }),
+        allNotesOff: () => {},
+      }),
+      scheduleAudioClip: () => {},
+      stopAllAudio: () => {},
+      setTransport: () => {},
+    };
+    const project = new ProjectStore(false);
+    project.setTempo(120);
+    const recorded = project.addTrack("subtractive", { name: "Recorded" });
+    project.getClipStore(recorded.id)!.addNote({ pitch: 60, start: 0 });
+    const other = project.addTrack("fm", { name: "Other" });
+    project.getClipStore(other.id)!.addNote({ pitch: 36, start: 0 });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scheduler = new Scheduler(engine as any, project);
+    scheduler.silence(recorded.id);
+    scheduler.play();
+    for (let step = 0; step < 40; step++) {
+      clock += 0.025;
+      vi.advanceTimersByTime(25);
+    }
+    scheduler.stop();
+    expect(calls.map((call) => call.trackId)).toEqual([other.id]);
+
+    // Once the take is over, it plays again.
+    calls.length = 0;
+    scheduler.silence(null);
+    scheduler.play();
+    for (let step = 0; step < 40; step++) {
+      clock += 0.025;
+      vi.advanceTimersByTime(25);
+    }
+    scheduler.stop();
+    expect(calls.map((call) => call.trackId).sort()).toEqual([recorded.id, other.id].sort());
+  });
+});
