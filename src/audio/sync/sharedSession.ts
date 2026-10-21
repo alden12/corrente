@@ -206,6 +206,14 @@ export class SharedSession {
     const restored = saved.filter((op) => !held.has(op.opId));
     if (restored.length === 0) return;
     this.pending = restored.concat(this.pending);
+    // The log was restored from the authority, which has never seen these, so without them an undo
+    // after the reload named the wrong edit and rebuilt the held ones away (DAW-75). A commit
+    // marker was never a log entry, so it stays out.
+    this.editLog.restoreHeld(
+      restored
+        .filter((op) => op.command.type !== "commit")
+        .map((op) => ({ command: op.command, author: op.author, id: op.opId, kind: op.kind, undoes: op.undoes })),
+    );
     this.rebuildLive();
   }
 

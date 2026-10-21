@@ -197,3 +197,45 @@ describe("EditLog", () => {
     expect(log.getState().canRedo).toBe(false);
   });
 });
+
+// DAW-75: a hosted reload restores the log from the authority, so edits still held in the
+// session's offline queue come back through `restoreHeld` rather than through the log.
+describe("EditLog.restoreHeld", () => {
+  /** A page that made `t-1`, then `t-held` offline and undid it, reloaded with only `t-1` confirmed. */
+  function reloadedWithHeldUndo() {
+    const project = new ProjectStore(false);
+    let counter = 0;
+    const log = new EditLog(project, () => `e-${counter++}`);
+    log.dispatch({ type: "createTrack", instrumentType: "subtractive", id: "t-1" });
+    log.dispatch({ type: "createTrack", instrumentType: "subtractive", id: "t-held" });
+    log.undo();
+    const [confirmed, held, tombstone] = log.getEntries();
+
+    const authority = new ProjectStore(false);
+    authority.load(project.snapshot()); // t-1 only, which is all the authority has
+    const reloaded = new EditLog(authority);
+    reloaded.restore([confirmed]);
+    reloaded.setRebuildBase(new ProjectStore(false).snapshot(), -1);
+    reloaded.restoreCheckpoints(log.getCheckpoints());
+    reloaded.restoreHeld(
+      [held, tombstone].map((entry) => ({
+        command: entry.command,
+        author: entry.author,
+        id: entry.id as string,
+        ...(entry.kind === "undo" ? { kind: "undo" as const, undoes: entry.undoes } : {}),
+      })),
+    );
+    return { project: authority, log: reloaded };
+  }
+
+  it("puts back the steps the restored stacks named for the held edits", () => {
+    const { log } = reloadedWithHeldUndo();
+    expect(log.getCheckpoints()).toEqual({ undo: ["e-0"], redo: ["e-1"] });
+  });
+
+  it("can redo the held edit the page undid before it reloaded", () => {
+    const { project, log } = reloadedWithHeldUndo();
+    log.redo();
+    expect(project.snapshot().tracks.map((track) => track.id)).toEqual(["t-1", "t-held"]);
+  });
+});

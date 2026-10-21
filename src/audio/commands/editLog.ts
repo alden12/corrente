@@ -95,6 +95,10 @@ const COALESCABLE = new Set<EditCommand["type"]>([
   "resizePlacement",
 ]);
 
+/** The feed line for an undo or redo, naming the edit it took back or put back. */
+const reflogLabel = (kind: "undo" | "redo", command: EditCommand): string =>
+  `${kind === "undo" ? "Undid" : "Redid"}: ${describeCommand(command)}`;
+
 /** Identity of a command's edit target, so successive edits to it can coalesce. */
 function coalesceKey(command: EditCommand): string {
   switch (command.type) {
@@ -186,6 +190,9 @@ export class EditLog {
   /** Entry ids that can be taken back (most recent last), and ids taken back and re-appliable. */
   private undoStack: string[] = [];
   private redoStack: string[] = [];
+  /** The stacks as `restoreCheckpoints` was handed them, before it dropped the ids this log did not
+   *  hold. Kept for `restoreHeld`, which brings some of those entries back (DAW-75). */
+  private restoredStacks: UndoState = { undo: [], redo: [] };
   /** Entry ids currently left out of the project. The live project is always the base replayed with
    *  these excluded, which is what makes undo a rebuild rather than a reversal. */
   private undone = new Set<string>();
@@ -500,9 +507,7 @@ export class EditLog {
       time: Date.now(),
       kind: entry.kind ?? "edit",
       undoes: entry.undoes,
-      ...(tombstone
-        ? { label: `${entry.kind === "undo" ? "Undid" : "Redid"}: ${describeCommand(entry.command)}` }
-        : {}),
+      ...(tombstone ? { label: reflogLabel(entry.kind as "undo" | "redo", entry.command) } : {}),
     });
     // A peer's tombstone has to reach the excluded set too, not just the feed. The session has
     // already taken the edit out of the live project; without this the NEXT local undo would rebuild
@@ -725,6 +730,7 @@ export class EditLog {
       this.entries.filter((entry) => isReplayable(entry.kind) && entry.id !== undefined).map((entry) => entry.id),
     );
     const keep = (ids: string[] | undefined) => (ids ?? []).filter((id) => known.has(id));
+    this.restoredStacks = { undo: stored?.undo ?? [], redo: stored?.redo ?? [] };
     this.undoStack = keep(stored?.undo);
     this.redoStack = keep(stored?.redo);
     // What is taken back has two sources, and they are different things rather than a duplication.
@@ -741,6 +747,50 @@ export class EditLog {
     if (this.undone.size > 0) this.rebuildProject();
     this.emit();
   }
+
+  /**
+   * Bring back the edits a previous page made and the authority had not confirmed (DAW-75).
+   *
+   * In a shared session an edit made offline lives in two places: this log and the session's
+   * durable queue. A reload restores the log from the authority, which has not heard of the edit
+   * yet, so only the queue brings it back - and by then `restoreCheckpoints` has run and dropped its
+   * undo step as naming nothing. Undo then took back the edit BEFORE it instead, and the rebuild
+   * left the held edit out as well, since a rebuild replays this log and the log did not have it.
+   *
+   * So the session hands its restored queue here: each op becomes the entry it was, under its own
+   * id, and the steps the restored stacks named for it go back where they were. Not applied - the
+   * session rebuilds the live project from its queue straight after.
+   */
+  restoreHeld = (held: readonly ForwardedEdit[]): void => {
+    const known = new Set(this.entries.map((entry) => entry.id));
+    const fresh = held.filter((edit) => !known.has(edit.id));
+    if (fresh.length === 0) return;
+    const time = Date.now();
+    this.entries.push(
+      ...fresh.map((edit) => ({
+        seq: this.seq++,
+        id: edit.id,
+        command: edit.command,
+        author: edit.author,
+        time,
+        kind: edit.kind ?? ("edit" as const),
+        undoes: edit.undoes,
+        ...(edit.kind ? { label: reflogLabel(edit.kind, edit.command) } : {}),
+      })),
+    );
+    // Each stack in its stored order with these steps back in it. Anything pushed since the reload
+    // was pressed after them, so it stays on top.
+    const freshIds = new Set(fresh.map((edit) => edit.id));
+    const place = (stack: string[], stored: string[]): string[] => {
+      const onStack = new Set([...stack, ...stored.filter((id) => freshIds.has(id))]);
+      return [...stored.filter((id) => onStack.has(id)), ...stack.filter((id) => !stored.includes(id))];
+    };
+    this.undoStack = place(this.undoStack, this.restoredStacks.undo);
+    this.redoStack = place(this.redoStack, this.restoredStacks.redo);
+    this.undone = new Set([...tombstonedIds(this.entries), ...this.redoStack]);
+    this.dropUnreachable();
+    this.emit();
+  };
 
   /**
    * The edits in the log that this user could take back, oldest first (DAW-34 stage E).
@@ -784,6 +834,7 @@ export class EditLog {
     this.seq = notes.reduce((max, note) => Math.max(max, note.seq + 1), maxEntry);
     this.undoStack = [];
     this.redoStack = [];
+    this.restoredStacks = { undo: [], redo: [] };
     this.undone = new Set();
     // Everything restored is already reflected in the project, so that is the base until
     // `setRebuildBase` offers an older keyframe to reach further back from.
