@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart, openProjectList } from "./support/app";
+import { dismissStart } from "./support/app";
 
 /**
  * With no server configured (as this suite runs), the app says where its files are, calmly
@@ -21,8 +21,25 @@ test("a standalone run says its files are on this device, from the status bar an
   await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
 
-  await openProjectList(page);
+  // Its export line opens the project's page, whose Export button downloads it.
+  await page.getByRole("button", { name: "Saved in browser" }).click();
+  await details.getByRole("button", { name: "Export from the project page" }).click();
+  await expect(details).toBeHidden();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export", exact: true }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("untitled.daw.zip");
+
+  // Already on the project's page, so the list is one step up.
+  await page.getByRole("button", { name: "Back to Projects" }).click();
   const note = page.getByRole("region", { name: "Saved in browser" });
   await note.getByRole("button", { name: "Saved in browser" }).click();
-  await expect(note).toContainText("export a project from its ⋮ menu");
+  await expect(note).toContainText("To keep a copy, export your project.");
+  // And the open project's card exports it too.
+  const [fromCard] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export Untitled" }).click(),
+  ]);
+  expect(fromCard.suggestedFilename()).toBe("untitled.daw.zip");
 });

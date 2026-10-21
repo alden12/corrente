@@ -60,13 +60,20 @@ function StorageLine() {
 }
 
 /** Where the files are, how to keep a copy, and what the online app adds. */
-export function OnThisDeviceDetails() {
+export function OnThisDeviceDetails({ onShowProject }: { onShowProject?: () => void }) {
   const { interest, hostedApp } = hosting.links;
   return (
     <div className="flex flex-col gap-2 text-[12.5px] leading-snug text-ink">
       <p>Your projects, patches and favourites are saved in this browser, on this device.</p>
       <StorageLine />
-      <p className="text-muted">To keep a copy, export a project from its ⋮ menu in Projects.</p>
+      <p className="text-muted">
+        To keep a copy, export your project.{" "}
+        {onShowProject && (
+          <button type="button" onClick={onShowProject} className={`${linkClass} cursor-pointer`}>
+            Export from the project page
+          </button>
+        )}
+      </p>
       {(interest || hostedApp) && (
         <p className="text-muted">
           Corrente online adds sharing and live collaboration.{" "}
@@ -90,7 +97,8 @@ export function OnThisDeviceDetails() {
 }
 
 /** The desktop status bar's chip, in place of the sync chip: a click shows the details. */
-export function OnThisDeviceChip() {
+/** `onShowProject` opens the open project's page, where its Export button is. */
+export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -135,7 +143,12 @@ export function OnThisDeviceChip() {
         >
           {() => (
             <div className="w-72 px-3.5 py-2.5">
-              <OnThisDeviceDetails />
+              <OnThisDeviceDetails
+                onShowProject={() => {
+                  setOpen(false);
+                  onShowProject();
+                }}
+              />
             </div>
           )}
         </Popover>

@@ -17,6 +17,7 @@ import { ResizeHandle } from "../ResizeHandle";
 import { usePersistentNumber } from "../usePersistent";
 import type { ShellProps } from "./types";
 import { openExplorePage, requestExploreSearch } from "../explore/explorePage";
+import { openProjectsPage } from "../projects/projectsPage";
 import { KeysPanel } from "../keys/KeysPanel";
 import { useDesktopKeys } from "../keys/useDesktopKeys";
 
@@ -130,6 +131,10 @@ export function DesktopShell({
         onRevealSamples={() => {
           openExplorePage("samples");
           onSelectView("explore");
+        }}
+        onRevealProject={() => {
+          openProjectsPage("inside");
+          onSelectView("project");
         }}
         mcpStatus={mcpStatus}
         syncStatus={syncStatus}

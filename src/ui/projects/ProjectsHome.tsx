@@ -21,7 +21,7 @@ import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
 import { Menu, type MenuItem } from "../Menu";
 import { exportProjectFile, importProjectFile } from "../projectFile";
-import { ShareIcon } from "../shellIcons";
+import { ExportIcon, ShareIcon } from "../shellIcons";
 import { timeAgo, useNow } from "../timeAgo";
 import { ArrangementThumb } from "./ArrangementThumb";
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -179,6 +179,15 @@ export function ProjectsHome({
               <ShareIcon />
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => open && exportRow(open, openName)}
+            aria-label={`Export ${openName}`}
+            title="Export a copy (.daw.zip)"
+            className="shrink-0 w-11 h-11 grid place-items-center rounded-lg border border-line text-ink cursor-pointer"
+          >
+            <ExportIcon />
+          </button>
         </div>
       </section>
 

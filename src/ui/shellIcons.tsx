@@ -36,6 +36,25 @@ export function ShareIcon() {
   );
 }
 
+/** An arrow down into a tray: export (download) a project. */
+export function ExportIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4.5 h-4.5"
+    >
+      <path d="M8 2.5v7.5M4.8 7 8 10.2 11.2 7" />
+      <path d="M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2" />
+    </svg>
+  );
+}
+
 /** A laptop: kept on this device, where the sync chip would show a connection (HOST-23.2.5). */
 export function DeviceIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (

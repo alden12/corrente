@@ -39,6 +39,7 @@ export function CenterWorkbench({
   dispatch,
   selectedTrack,
   onRevealSamples,
+  onRevealProject,
   mcpStatus,
   syncStatus,
   agentCollapsed,
@@ -52,6 +53,8 @@ export function CenterWorkbench({
   selectedTrack: Track | undefined;
   /** Reveal the Samples library view (threaded to an empty Sampler's picker). */
   onRevealSamples?: () => void;
+  /** Open the open project's own page (its Export button), from the "Saved in browser" chip. */
+  onRevealProject?: () => void;
   /** MCP connection status - shown as a dot in the tab bar's indicator area. */
   mcpStatus: McpStatus;
   /** Sync-server connection status - shown as a chip beside MCP. `null` in local (no-sync) mode. */
@@ -67,7 +70,7 @@ export function CenterWorkbench({
   const indicators = (
     <div className="ml-auto self-center flex items-center gap-2 pr-2">
       {syncStatus && <SyncChip status={syncStatus} />}
-      {onThisDevice && <OnThisDeviceChip />}
+      {onThisDevice && onRevealProject && <OnThisDeviceChip onShowProject={onRevealProject} />}
       {/* MCP is a dev/local bridge; show it only when actually connected, so it doesn't sit as a
           second bare dot beside the sync chip (confusing) the rest of the time. Grey when the agent
           drives another tab. */}

@@ -8,7 +8,7 @@
  * projects have a key, and collaborator faces once the listing carries members. History is the
  * Activity feed for now; part 3 replaces it with the designed timeline.
  */
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { EditLog } from "../../audio/commands/editLog";
 import type { Dispatch } from "../../audio/commands/types";
@@ -19,6 +19,7 @@ import { renameProject } from "../../audio/projects/operations";
 import { summarizeProject } from "../../audio/projects/summary";
 import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
+import { exportProjectFile } from "../projectFile";
 import { usePersistentString } from "../usePersistent";
 import { TrackList } from "./TrackList";
 import { formatLength } from "./overviewData";
@@ -61,6 +62,14 @@ export function ProjectOverview({
     ...(spanBeats > 0 ? [{ label: formatLength(spanBeats, project.tempoBpm), title: "Length" }] : []),
   ];
 
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportProject = () => {
+    setExportError(null);
+    exportProjectFile(openId, name, { projectStore, editLog }).catch(() =>
+      setExportError(`Could not export “${name}”.`),
+    );
+  };
+
   const rename = (next: string) => {
     const trimmed = next.trim();
     if (!trimmed) return;
@@ -88,7 +97,16 @@ export function ProjectOverview({
               Share
             </button>
           )}
+          {/* A copy of the whole project as a .daw.zip: the way to keep one when it's only in this browser. */}
+          <button
+            type="button"
+            onClick={exportProject}
+            className="shrink-0 h-9 px-3 rounded-lg border border-line text-[13px] text-ink cursor-pointer hover:border-you"
+          >
+            Export
+          </button>
         </div>
+        {exportError && <p className="px-4 pt-1 text-[12px] text-hot">{exportError}</p>}
         <div className="flex flex-wrap gap-1.5 px-4 pt-3">
           {chips.map((chip) => (
             <button
