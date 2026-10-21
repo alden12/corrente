@@ -33,9 +33,7 @@ export function StartDialog({ onStart, error, intro }: { onStart: () => void; er
           Start the audio engine
         </h2>
         <p className="text-sm text-muted leading-relaxed">
-          {intro
-            ? "Browsers won't play sound until you've clicked on the page, so start here."
-            : "Browsers won't play sound until you interact with the page. Click start to enable playback, the keyboard, and anything an agent triggers over MCP."}
+          Browsers won&apos;t play sound until you&apos;ve clicked on the page, so start here.
         </p>
         <button
           type="button"
