@@ -170,6 +170,8 @@ export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void 
 export interface BackupActions {
   onBackUp: () => void;
   onRestore: () => void;
+  /** What the last restore did, or why it couldn't: shown under the buttons that did it. */
+  result?: { text: string; failed: boolean };
 }
 
 const actionClass =
@@ -205,7 +207,8 @@ export function OnThisDeviceNote({ backup }: { backup?: BackupActions }) {
           {backup && (
             <div className="flex flex-col gap-2">
               <p className="text-[12.5px] leading-snug text-muted">
-                Your patches, custom devices and favourites are kept apart from projects: back them up here.
+                A project keeps the sounds it uses. Your library (saved patches, custom devices and favourites) is kept
+                apart from projects, so back it up here.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={backup.onBackUp} className={actionClass}>
@@ -215,6 +218,14 @@ export function OnThisDeviceNote({ backup }: { backup?: BackupActions }) {
                   Restore library…
                 </button>
               </div>
+              {backup.result && (
+                <p
+                  role="status"
+                  className={`text-[12.5px] leading-snug ${backup.result.failed ? "text-hot" : "text-ink"}`}
+                >
+                  {backup.result.text}
+                </p>
+              )}
             </div>
           )}
         </div>

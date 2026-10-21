@@ -127,16 +127,18 @@ export function ProjectsHome({
     exportProjectFile(meta.id, name, deps).catch(() => setError(`Could not export “${name}”.`));
   };
   const [importing, setImporting] = useState<ImportPlan | null>(null);
-  /** What the last library restore did, said once under the toolbar. */
-  const [notice, setNotice] = useState<string | null>(null);
+  /** What the last library restore did, shown under its buttons. */
+  const [restored, setRestored] = useState<{ text: string; failed: boolean } | undefined>();
   const libraryInput = useRef<HTMLInputElement>(null);
   const restoreLibraryFrom = async (file: File) => {
-    setError(null);
-    setNotice(null);
+    setRestored(undefined);
     try {
-      setNotice(describeLibraryRestore(await restoreLibraryFile(file)));
+      setRestored({ text: describeLibraryRestore(await restoreLibraryFile(file)), failed: false });
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Could not read that library backup.");
+      setRestored({
+        text: failure instanceof Error ? failure.message : "Could not read that library backup.",
+        failed: true,
+      });
     }
   };
   const importFailed = (error: unknown) =>
@@ -182,7 +184,7 @@ export function ProjectsHome({
       )}
       {onThisDevice && (
         <OnThisDeviceNote
-          backup={{ onBackUp: downloadLibraryBackup, onRestore: () => libraryInput.current?.click() }}
+          backup={{ onBackUp: downloadLibraryBackup, onRestore: () => libraryInput.current?.click(), result: restored }}
         />
       )}
 
@@ -267,11 +269,6 @@ export function ProjectsHome({
         )}
       </div>
       {error && <p className="px-4 py-1 text-[12px] text-hot">{error}</p>}
-      {notice && (
-        <p role="status" className="px-4 py-1 text-[12px] text-muted">
-          {notice}
-        </p>
-      )}
 
       {listed.length === 0 ? (
         <p className="px-4 py-3 text-[12.5px] text-faint">{`No projects match “${filter.trim()}”.`}</p>
