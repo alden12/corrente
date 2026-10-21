@@ -41,7 +41,7 @@ export async function exportProjectFile(
   const zipped = new Blob([zipSync(files, { level: 6 })], { type: "application/zip" });
   download(zipped, exportFileName(name, new Date(), await versionHash(log, project)));
   // The copy now exists, so the backup reminder counts this project's changes from here.
-  recordExport(projectId, name, log);
+  recordExport(projectId, log);
 }
 
 /** Download the library and favourites (HOST-23.2.1.2): `corrente-library-<date>.json`. */

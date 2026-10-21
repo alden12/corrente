@@ -66,10 +66,10 @@ test("the chip asks to back up a week after a change, until it's exported, put o
   await expect(chip).toBeVisible();
   await page.clock.fastForward(week);
   await asking.click();
-  await expect(details).toContainText("1 change");
+  await expect(details).toContainText("This project has 1 change since you last exported it");
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    details.getByRole("button", { name: "Export Untitled" }).click(),
+    details.getByRole("button", { name: "Export this project" }).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(EXPORT_NAME);
   // Exported, so nothing to ask about.
@@ -96,17 +96,15 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("the top bar has the laptop, which opens the same details and asks to back up there", async ({ page }) => {
-    await page.addInitScript(() =>
-      localStorage.setItem(
-        "corrente:backup-reminder",
-        JSON.stringify({ projects: { gone: { name: "Deep house jam", exportedSeq: -1, changes: 312, since: 0 } } }),
-      ),
-    );
+    await page.clock.install();
     await page.goto("/");
     await dismissStart(page);
+    await page.getByRole("button", { name: "Group actions" }).first().tap();
+    await page.getByRole("menuitem", { name: "Add MIDI track" }).tap();
+    await page.clock.fastForward(8 * 24 * 60 * 60 * 1000);
     await page.getByRole("button", { name: "Back up?" }).tap();
     const details = page.getByRole("dialog", { name: "Saved in browser" });
-    await expect(details).toContainText("Deep house jam");
+    await expect(details).toContainText("since you last exported it");
     await details.getByRole("button", { name: "Not now" }).tap();
     await expect(page.getByRole("button", { name: "Saved in browser" })).toBeVisible();
   });

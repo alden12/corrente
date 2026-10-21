@@ -189,7 +189,7 @@ export function ProjectsHome({
       )}
       {onThisDevice && (
         <OnThisDeviceNote
-          onExport={exportProject}
+          reminder={{ editLog, onExport: () => exportProject(openId, openName) }}
           backup={{ onBackUp: downloadLibraryBackup, onRestore: () => libraryInput.current?.click(), result: restored }}
         />
       )}

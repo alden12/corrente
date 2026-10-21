@@ -7,6 +7,7 @@
  * Everything private to this file is geometry: the three resizable, persisted splits
  * and the measured body height that keeps the timeline from crowding out the workbench.
  */
+import { currentProjectId } from "../../audio/projectRepository";
 import { exportProjectFile } from "../projectFile";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ActivityRail } from "../ActivityRail";
@@ -28,6 +29,14 @@ import { useDesktopKeys } from "../keys/useDesktopKeys";
 // MIN_CENTER of the workbench remains.
 const RAIL_WIDTH = 48;
 const MIN_CENTER = 96;
+
+/** What the middle column keeps on a first open, before either side panel gets more. */
+const MIDDLE_MIN = 560;
+const PANEL_WIDTH = 350;
+
+/** Each side panel's width on a first open: 350px, shared down on a window too small for both. */
+const openingPanelWidth = (windowWidth: number): number =>
+  Math.max(150, Math.min(PANEL_WIDTH, Math.floor((windowWidth - MIDDLE_MIN) / 2)));
 
 export function DesktopShell({
   projectStore,
@@ -56,8 +65,11 @@ export function DesktopShell({
   onOpenTiming,
 }: ShellProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  const [libWidth, setLibWidth] = usePersistentNumber("corrente:lib-width", 350, 150, 420);
-  const [agentWidth, setAgentWidth] = usePersistentNumber("corrente:agent-width", 350, 240, 620);
+  // A first open gives each side panel 350px, or less on a small window so the middle keeps
+  // MIDDLE_MIN; a width you've dragged to is kept as it is.
+  const opening = openingPanelWidth(window.innerWidth);
+  const [libWidth, setLibWidth] = usePersistentNumber("corrente:lib-width", opening, 150, 420);
+  const [agentWidth, setAgentWidth] = usePersistentNumber("corrente:agent-width", Math.max(240, opening), 240, 620);
   const [timelineH, setTimelineH] = usePersistentNumber("corrente:timeline-height", 244, 120, 2000);
   const [dragging, setDragging] = useState(false);
   // The computer keyboard, played in key (DAW-12.1). Here rather than in the piano roll that shows
@@ -137,11 +149,13 @@ export function DesktopShell({
           openProjectsPage("inside");
           onSelectView("project");
         }}
-        onExportProject={(id, name) =>
-          void exportProjectFile(id, name, { projectStore, editLog }).catch((error: unknown) =>
-            console.warn("[corrente] export failed:", error),
-          )
-        }
+        backupReminder={{
+          editLog,
+          onExport: () =>
+            void exportProjectFile(currentProjectId(), projectStore.name, { projectStore, editLog }).catch(
+              (error: unknown) => console.warn("[corrente] export failed:", error),
+            ),
+        }}
         mcpStatus={mcpStatus}
         syncStatus={syncStatus}
         agentCollapsed={agentCollapsed}

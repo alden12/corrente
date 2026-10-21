@@ -34,6 +34,7 @@
  * only arrange - and so what makes it able to record, since they go out through the same
  * `LiveNotes` seam a MIDI keyboard does.
  */
+import { currentProjectId } from "../../audio/projectRepository";
 import { OnThisDeviceChip, onThisDevice } from "../hosting/OnThisDevice";
 import { exportProjectFile } from "../projectFile";
 import { useMemo, useRef, useState, type ReactNode } from "react";
@@ -364,11 +365,13 @@ export function MobileShell({
           <OnThisDeviceChip
             icon
             onShowProject={() => selectTab("projects")}
-            onExport={(id, name) =>
-              void exportProjectFile(id, name, { projectStore, editLog }).catch((error: unknown) =>
-                console.warn("[corrente] export failed:", error),
-              )
-            }
+            reminder={{
+              editLog,
+              onExport: () =>
+                void exportProjectFile(currentProjectId(), projectStore.name, { projectStore, editLog }).catch(
+                  (error: unknown) => console.warn("[corrente] export failed:", error),
+                ),
+            }}
           />
         )}
         <BarButton label="Agent" tint="agent" onClick={() => setAgentOpen(!agentOpen)} active={agentOpen}>
