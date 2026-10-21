@@ -57,6 +57,7 @@ export function DesktopShell({
   started,
   mcpStatus,
   syncStatus,
+  syncShared,
   hasApiKey,
   libView,
   onSelectView,
@@ -165,6 +166,7 @@ export function DesktopShell({
         }}
         mcpStatus={mcpStatus}
         syncStatus={syncStatus}
+        syncShared={syncShared}
         agentCollapsed={agentCollapsed}
         onExpandAgent={() => onSetAgentCollapsed(false)}
         keys={{ panel: <KeysPanel {...keys.panel} />, height: keys.height }}

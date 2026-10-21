@@ -43,7 +43,7 @@ import type { ConflictInfo } from "../audio/sync/conflict";
 import type { ProjectData } from "../audio/project/types";
 import { requestPersistentStorage } from "../audio/bundleStore";
 import type { WsStatus } from "../contract/client";
-import { OfflineBanner, LoadingOverlay } from "./ConnectionStatus";
+import { LoadingOverlay } from "./ConnectionStatus";
 import { useSettledSyncStatus } from "./settledSyncStatus";
 import { UpdateNotice } from "./UpdateNotice";
 import { applyUpdate, reloadOntoLatest, useUpdateWaiting } from "../pwa/serviceWorkerUpdate";
@@ -446,6 +446,7 @@ export function AppShell() {
     started,
     mcpStatus,
     syncStatus: shownSyncStatus,
+    syncShared: !!isSharedProject,
     hasApiKey: activeKey(agentConfig) !== "",
     libView,
     onSelectView: selectView,
@@ -463,15 +464,12 @@ export function AppShell() {
     <AuthorColorsProvider value={{ config: authorColors, self: currentUser, theme }}>
       {/* `dvh`, not `vh`: mobile browsers count their collapsing address bar in `vh`, so
           a `100vh` shell puts the bottom tabs under the chrome until the user scrolls. */}
-      <div className="relative flex flex-col h-dvh overflow-hidden bg-ground text-ink">
+      <div className="flex flex-col h-dvh overflow-hidden bg-ground text-ink">
         {outdated ? (
           <UpdateNotice required onReload={reloadOntoLatest} />
         ) : (
           updateWaiting && <UpdateNotice onReload={applyUpdate} />
         )}
-        {/* Out of date, it isn't reconnecting: the update notice above says what to do instead. Over
-            the shell rather than above it, so going offline never moves the app (HOST-16). */}
-        {shownSyncStatus === "offline" && !outdated && <OfflineBanner shared={!!isSharedProject} />}
         {deviceShape.tier === "desktop" ? (
           <DesktopShell {...shellProps} />
         ) : (

@@ -36,6 +36,7 @@
  */
 import { currentProjectId } from "../../audio/projectRepository";
 import { OnThisDeviceChip, onThisDevice } from "../hosting/OnThisDevice";
+import { SyncChip } from "../ConnectionStatus";
 import { exportProjectFile } from "../projectFile";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { LibraryPanel } from "../LibraryPanel";
@@ -151,6 +152,8 @@ export function MobileShell({
   selectedTrack,
   isPlaying,
   started,
+  syncStatus,
+  syncShared,
   hasApiKey,
   onSelectView,
   onOpenAgentSettings,
@@ -360,6 +363,8 @@ export function MobileShell({
         </BarButton>
         {addMenu}
         <div className="flex-1" />
+        {/* Signed in, whether this device is connected, as the desktop's chip says (HOST-16). */}
+        {syncStatus && <SyncChip icon status={syncStatus} shared={syncShared} />}
         {/* Where the files are, and the backup reminder: on the bar, since a phone rarely visits Projects. */}
         {onThisDevice && (
           <OnThisDeviceChip

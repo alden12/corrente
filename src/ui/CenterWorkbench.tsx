@@ -43,6 +43,7 @@ export function CenterWorkbench({
   backupReminder,
   mcpStatus,
   syncStatus,
+  syncShared = false,
   agentCollapsed,
   onExpandAgent,
   keys,
@@ -62,6 +63,8 @@ export function CenterWorkbench({
   mcpStatus: McpStatus;
   /** Sync-server connection status - shown as a chip beside MCP. `null` in local (no-sync) mode. */
   syncStatus: WsStatus | null;
+  /** The open project has collaborators, which the chip warns of while offline. */
+  syncShared?: boolean;
   /** The agent pane is collapsed away; the tab bar hosts its expand control. */
   agentCollapsed: boolean;
   onExpandAgent: () => void;
@@ -72,7 +75,7 @@ export function CenterWorkbench({
   // agent pane is collapsed away) its expand control - there is no idle rail.
   const indicators = (
     <div className="ml-auto self-center flex items-center gap-2 pr-2">
-      {syncStatus && <SyncChip status={syncStatus} />}
+      {syncStatus && <SyncChip status={syncStatus} shared={syncShared} />}
       {onThisDevice && onRevealProject && (
         <OnThisDeviceChip onShowProject={onRevealProject} reminder={backupReminder} />
       )}

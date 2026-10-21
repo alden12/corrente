@@ -154,3 +154,20 @@ export function GitHubIcon({ className = "w-4 h-4" }: { className?: string }) {
     </svg>
   );
 }
+
+/** A cloud: Corrente online, and whether this device is connected to it (the sync chip on a phone). */
+export function CloudIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M4.5 12.5h7.25a2.75 2.75 0 0 0 .4-5.47A4 4 0 0 0 4.4 6.6 3 3 0 0 0 4.5 12.5Z" />
+    </svg>
+  );
+}

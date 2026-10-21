@@ -42,6 +42,8 @@ export interface ShellProps {
   mcpStatus: McpStatus;
   /** `null` in local (no-sync) mode. */
   syncStatus: WsStatus | null;
+  /** The open project has collaborators, so being offline can conflict (the sync chip says so). */
+  syncShared: boolean;
   /** Whether a BYOK key is set; drives the agent panel's empty state. */
   hasApiKey: boolean;
 
