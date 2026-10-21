@@ -34,6 +34,8 @@
  * only arrange - and so what makes it able to record, since they go out through the same
  * `LiveNotes` seam a MIDI keyboard does.
  */
+import { OnThisDeviceChip, onThisDevice } from "../hosting/OnThisDevice";
+import { exportProjectFile } from "../projectFile";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { LibraryPanel } from "../LibraryPanel";
 import { AgentPanel } from "../AgentPanel";
@@ -357,6 +359,18 @@ export function MobileShell({
         </BarButton>
         {addMenu}
         <div className="flex-1" />
+        {/* Where the files are, and the backup reminder: on the bar, since a phone rarely visits Projects. */}
+        {onThisDevice && (
+          <OnThisDeviceChip
+            icon
+            onShowProject={() => selectTab("projects")}
+            onExport={(id, name) =>
+              void exportProjectFile(id, name, { projectStore, editLog }).catch((error: unknown) =>
+                console.warn("[corrente] export failed:", error),
+              )
+            }
+          />
+        )}
         <BarButton label="Agent" tint="agent" onClick={() => setAgentOpen(!agentOpen)} active={agentOpen}>
           <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" className="w-5 h-5">
             <path d="M8 1.75l1.6 4.15 4.15 1.6-4.15 1.6L8 13.25l-1.6-4.15L2.25 7.5l4.15-1.6z" />

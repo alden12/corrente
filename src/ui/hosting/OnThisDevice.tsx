@@ -52,8 +52,10 @@ function useBackupReminder() {
 }
 
 /** The chip's and the note's label: a question while the reminder is due, the place otherwise. */
+const usePlaceLabel = () => (useBackupReminder().due ? "Back up?" : "Saved in browser");
+
 function PlaceLabel() {
-  return <>{useBackupReminder().due ? "Back up?" : "Saved in browser"}</>;
+  return <>{usePlaceLabel()}</>;
 }
 
 /** What the browser may do with the files, and the way out. */
@@ -68,9 +70,9 @@ const RISK: Record<StorageRisk, string> = {
  * The laptop, amber only while Safari's week applies: the one case where the files will go unless
  * something is done, rather than might under storage pressure (Alden, 2026-10-21).
  */
-function PlaceIcon() {
+function PlaceIcon({ large = false }: { large?: boolean }) {
   const { risk } = useStorageRisk();
-  return <DeviceIcon className={`w-4 h-4 ${risk === "week" ? "text-warn" : ""}`} />;
+  return <DeviceIcon className={`${large ? "w-5 h-5" : "w-4 h-4"} ${risk === "week" ? "text-warn" : ""}`} />;
 }
 
 /** The browser's storage answer, and an Install button where the browser offers one. */
@@ -192,7 +194,20 @@ export function OnThisDeviceDetails({
 
 /** The desktop status bar's chip, in place of the sync chip: a click shows the details. */
 /** `onShowProject` opens the open project's page, where its Export button is. */
-export function OnThisDeviceChip({ onShowProject, onExport }: { onShowProject: () => void; onExport?: ExportProject }) {
+/**
+ * `icon` is the phone's top bar, where there's no room for words: the laptop alone, with a dot while
+ * the reminder is due. It's there rather than only in Projects because a phone rarely visits Projects.
+ */
+export function OnThisDeviceChip({
+  onShowProject,
+  onExport,
+  icon = false,
+}: {
+  onShowProject: () => void;
+  onExport?: ExportProject;
+  icon?: boolean;
+}) {
+  const label = usePlaceLabel();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -221,10 +236,26 @@ export function OnThisDeviceChip({ onShowProject, onExport }: { onShowProject: (
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((was) => !was)}
-        className="inline-flex items-center gap-1.5 h-6 px-1 font-mono text-[11px] text-muted hover:text-ink cursor-pointer"
+        {...(icon
+          ? {
+              "aria-label": label,
+              title: label,
+              className:
+                "relative shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-md text-muted hover:text-ink cursor-pointer",
+            }
+          : {
+              className:
+                "inline-flex items-center gap-1.5 h-6 px-1 font-mono text-[11px] text-muted hover:text-ink cursor-pointer",
+            })}
       >
-        <PlaceIcon />
-        <PlaceLabel />
+        <PlaceIcon large={icon} />
+        {icon ? (
+          label === "Back up?" && (
+            <span aria-hidden="true" className="absolute top-2 right-1.5 w-2 h-2 rounded-full bg-you" />
+          )
+        ) : (
+          <PlaceLabel />
+        )}
       </button>
       {open && (
         <Popover
