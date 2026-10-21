@@ -124,3 +124,15 @@ test("an empty Sampler picker reveals the Samples page", async ({ page }) => {
   await page.getByRole("button", { name: "Browse samples in the library" }).click();
   await expect(page.getByRole("heading", { name: "Samples", exact: true })).toBeVisible();
 });
+
+test("an unsized library panel opens narrower on a small window, and follows the window as it grows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.goto("/");
+  await dismissStart(page);
+  // 1024 leaves the middle 560px: each side panel gets (1024 - 560) / 2.
+  await expect.poll(() => libWidth(page)).toBe(232);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect.poll(() => libWidth(page)).toBe(350);
+});

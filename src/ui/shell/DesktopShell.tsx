@@ -9,7 +9,7 @@
  */
 import { currentProjectId } from "../../audio/projectRepository";
 import { exportProjectFile } from "../projectFile";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ActivityRail } from "../ActivityRail";
 import { LibraryPanel } from "../LibraryPanel";
 import { CenterWorkbench } from "../CenterWorkbench";
@@ -35,8 +35,13 @@ const MIDDLE_MIN = 560;
 const PANEL_WIDTH = 350;
 
 /** Each side panel's width on a first open: 350px, shared down on a window too small for both. */
-const openingPanelWidth = (windowWidth: number): number =>
-  Math.max(150, Math.min(PANEL_WIDTH, Math.floor((windowWidth - MIDDLE_MIN) / 2)));
+const readOpeningPanelWidth = (): number =>
+  Math.max(150, Math.min(PANEL_WIDTH, Math.floor((window.innerWidth - MIDDLE_MIN) / 2)));
+
+function subscribeResize(onChange: () => void): () => void {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
 
 export function DesktopShell({
   projectStore,
@@ -67,7 +72,9 @@ export function DesktopShell({
   const bodyRef = useRef<HTMLDivElement>(null);
   // A first open gives each side panel 350px, or less on a small window so the middle keeps
   // MIDDLE_MIN; a width you've dragged to is kept as it is.
-  const opening = openingPanelWidth(window.innerWidth);
+  // Read on every resize, so a panel you haven't sized follows the window rather than catching up
+  // on the next redraw.
+  const opening = useSyncExternalStore(subscribeResize, readOpeningPanelWidth);
   const [libWidth, setLibWidth] = usePersistentNumber("corrente:lib-width", opening, 150, 420);
   const [agentWidth, setAgentWidth] = usePersistentNumber("corrente:agent-width", Math.max(240, opening), 240, 620);
   const [timelineH, setTimelineH] = usePersistentNumber("corrente:timeline-height", 244, 120, 2000);
