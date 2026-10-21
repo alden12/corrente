@@ -73,7 +73,7 @@ export function registerTracksTools({
             .join(", ")}.`,
         );
       }
-      if (!target.connected()) return fail("No DAW tab connected.");
+      if (!target.connected()) return fail(target.whyNotConnected());
       let groupId: string;
       if (group !== undefined) {
         const g = resolveGroup(group);
@@ -114,7 +114,7 @@ export function registerTracksTools({
       const resolved = resolveTrack(track);
       if ("error" in resolved) return fail(resolved.error);
       if (!target.send({ type: "setInstrument", trackId: resolved.id, instrumentType: instrument }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.setInstrument(resolved.id, instrument);
       return ok(`Track ${resolved.id} now plays ${instrument}.`);
     },
@@ -126,7 +126,7 @@ export function registerTracksTools({
     async ({ track }) => {
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "removeTrack", trackId: r.id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "removeTrack", trackId: r.id })) return fail(target.whyNotConnected());
       target.project.removeTrack(r.id);
       return ok(`Removed track ${r.id}.`);
     },
@@ -142,7 +142,7 @@ export function registerTracksTools({
     async ({ track }) => {
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "selectTrack", trackId: r.id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "selectTrack", trackId: r.id })) return fail(target.whyNotConnected());
       target.project.selectTrack(r.id);
       return ok(`Selected track ${r.id}.`);
     },

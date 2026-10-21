@@ -40,6 +40,8 @@ describe("MCP server (tracks)", () => {
     tab = socket;
     socket.on("message", (data) => {
       const msg = JSON.parse(data.toString()) as { type: string; id?: string; edit?: unknown };
+      // Which tab the agent drives is the bridge's business (mcpTabs.test.ts), not an edit.
+      if (msg.type === "agentTarget" || msg.type === "resync") return;
       if (msg.type !== "deviceRequest") return void messages.push(msg);
       if (!options.refuseDevices) messages.push(msg.edit);
       const reply = options.refuseDevices ? { ok: false, error: options.refuseDevices } : { ok: true };

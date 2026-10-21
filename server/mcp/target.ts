@@ -26,6 +26,8 @@ export interface DawTarget {
   landDevice(edit: DeviceEdit): Promise<Reply>;
   /** Whether `send` has somewhere to go right now. */
   connected(): boolean;
+  /** Why it hasn't, for a tool to tell the agent. */
+  whyNotConnected(): string;
   /** Version history, which the tab keeps and the hosted target answers from the log. */
   requestHistory(method: HistoryMethod, params?: Record<string, unknown>): Promise<Reply>;
   /** The patch library. */

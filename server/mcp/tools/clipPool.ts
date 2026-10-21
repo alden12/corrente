@@ -67,7 +67,7 @@ export function registerClipPoolTools({
         empty,
         lengthBeats: length_beats,
       };
-      if (!target.send(msg)) return fail("No DAW tab connected.");
+      if (!target.send(msg)) return fail(target.whyNotConnected());
       // The mirror is this server's read-back copy; the real edit is authored in the tab, which is
       // the only side that knows which user is driving the agent. So the shadow stamp is an agent
       // with no driver recorded rather than a guess at one.
@@ -94,7 +94,7 @@ export function registerClipPoolTools({
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
       if (!r.track.clips.some((c) => c.id === clip_id)) return fail(`Unknown clip "${clip_id}" on ${r.id}.`);
-      if (!target.send({ type: "selectClip", trackId: r.id, clipId: clip_id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "selectClip", trackId: r.id, clipId: clip_id })) return fail(target.whyNotConnected());
       target.project.selectClip(r.id, clip_id);
       return ok(`Selected clip ${clip_id} on ${r.id}.`);
     },
@@ -112,7 +112,7 @@ export function registerClipPoolTools({
       if ("error" in r) return fail(r.error);
       if (r.track.clips.length <= 1) return fail(`Track ${r.id} has only one clip; cannot remove it.`);
       if (!r.track.clips.some((c) => c.id === clip_id)) return fail(`Unknown clip "${clip_id}" on ${r.id}.`);
-      if (!target.send({ type: "removeClip", trackId: r.id, clipId: clip_id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "removeClip", trackId: r.id, clipId: clip_id })) return fail(target.whyNotConnected());
       target.project.removeClip(r.id, clip_id);
       return ok(`Removed clip ${clip_id} from ${r.id}.`);
     },
@@ -130,7 +130,7 @@ export function registerClipPoolTools({
       if ("error" in r) return fail(r.error);
       if (!r.track.clips.some((c) => c.id === clip_id)) return fail(`Unknown clip "${clip_id}" on ${r.id}.`);
       if (!target.send({ type: "renameClip", trackId: r.id, clipId: clip_id, name }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.renameClip(r.id, clip_id, name);
       return ok(`Renamed clip ${clip_id} to "${name}" on ${r.id}.`);
     },

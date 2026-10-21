@@ -57,7 +57,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
       }
       const id = makeEffectId();
       if (!target.send({ type: "addEffect", hostId: r.hostId, effectType: effect, id }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.addEffect(r.hostId, effect, id);
       return ok(`Added ${effect} effect to ${r.label} (id ${id}).`);
     },
@@ -74,7 +74,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
       const r = resolveEffect(track, group, effect_id);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "removeEffect", hostId: r.hostId, effectId: effect_id }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.removeEffect(r.hostId, effect_id);
       return ok(`Removed effect ${effect_id} from ${r.label}.`);
     },
@@ -91,7 +91,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
       const r = resolveEffect(track, group, effect_id);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "moveEffect", hostId: r.hostId, effectId: effect_id, toIndex: to_index }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.moveEffect(r.hostId, effect_id, to_index);
       return ok(`Moved effect ${effect_id} to index ${to_index} on ${r.label}.`);
     },
@@ -108,7 +108,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
       const r = resolveEffect(track, group, effect_id);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "bypassEffect", hostId: r.hostId, effectId: effect_id, bypassed }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.setEffectBypass(r.hostId, effect_id, bypassed);
       return ok(`${bypassed ? "Bypassed" : "Enabled"} effect ${effect_id} on ${r.label}.`);
     },
@@ -157,7 +157,7 @@ export function registerEffectsTools({ server, target, trackArg, resolveHost, re
       const err = validateParam(spec, value);
       if (err) return fail(err);
       if (!target.send({ type: "setEffectParam", hostId: r.hostId, effectId: effect_id, id, value }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       r.effect.params.set(id, value);
       return ok(`Set ${id} = ${JSON.stringify(value)} on effect ${effect_id}.`);
     },

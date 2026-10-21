@@ -21,11 +21,13 @@ import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
 const MCP_DOT: Record<McpStatus, string> = {
   connected: "bg-good",
   connecting: "bg-faint",
+  standby: "bg-faint",
   disconnected: "bg-faint",
 };
 const MCP_TITLE: Record<McpStatus, string> = {
   connected: "MCP connected",
   connecting: "MCP connecting…",
+  standby: "MCP connected, but driving another tab: the one most recently in front",
   disconnected: "MCP disconnected",
 };
 
@@ -65,8 +67,9 @@ export function CenterWorkbench({
     <div className="ml-auto self-center flex items-center gap-2 pr-2">
       {syncStatus && <SyncChip status={syncStatus} />}
       {/* MCP is a dev/local bridge; show it only when actually connected, so it doesn't sit as a
-          second bare dot beside the sync chip (confusing) the rest of the time. */}
-      {mcpStatus === "connected" && (
+          second bare dot beside the sync chip (confusing) the rest of the time. Grey when the agent
+          drives another tab. */}
+      {(mcpStatus === "connected" || mcpStatus === "standby") && (
         <span
           className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted"
           title={MCP_TITLE[mcpStatus]}

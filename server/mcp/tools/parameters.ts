@@ -43,7 +43,7 @@ export function registerParametersTools({ server, target, trackArg, resolveInstr
       const value = readParamValue(spec, sent);
       const err = validateParam(spec, value);
       if (err) return fail(err);
-      if (!target.send({ type: "setParam", trackId: r.id, id, value })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "setParam", trackId: r.id, id, value })) return fail(target.whyNotConnected());
       r.track.params.set(id, value);
       return ok(`Set ${id} = ${JSON.stringify(value)} on ${r.id}.`);
     },

@@ -37,7 +37,7 @@ export function registerPlacementsTools({ server, target, trackArg, resolveTrack
       const id = makePlacementId();
       const clipId = clip ?? r.track.activeClipId;
       if (!target.send({ type: "addPlacement", trackId: r.id, id, clipId, startBeat: start_beat, length }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.addPlacement(r.id, { id, clipId, startBeat: start_beat, length });
       return ok(`Placed clip ${clipId} at beat ${start_beat} on ${r.id} (id ${id}).`);
     },
@@ -54,7 +54,7 @@ export function registerPlacementsTools({ server, target, trackArg, resolveTrack
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "movePlacement", trackId: r.id, placementId: placement_id, startBeat: start_beat }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.movePlacement(r.id, placement_id, start_beat);
       return ok(`Moved placement ${placement_id} to beat ${start_beat} on ${r.id}.`);
     },
@@ -71,7 +71,7 @@ export function registerPlacementsTools({ server, target, trackArg, resolveTrack
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "removePlacement", trackId: r.id, placementId: placement_id }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.removePlacement(r.id, placement_id);
       return ok(`Removed placement ${placement_id} from ${r.id}.`);
     },
@@ -89,7 +89,7 @@ export function registerPlacementsTools({ server, target, trackArg, resolveTrack
       if ("error" in r) return fail(r.error);
       const newId = makePlacementId();
       if (!target.send({ type: "splitPlacement", trackId: r.id, placementId: placement_id, atBeat: at_beat, newId }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.splitPlacement(r.id, placement_id, at_beat, newId);
       return ok(`Split placement ${placement_id} at beat ${at_beat} on ${r.id}.`);
     },
@@ -107,7 +107,7 @@ export function registerPlacementsTools({ server, target, trackArg, resolveTrack
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
       const clipId = clip_id ?? null;
-      if (!target.send({ type: "launchClip", trackId: r.id, clipId })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "launchClip", trackId: r.id, clipId })) return fail(target.whyNotConnected());
       target.project.launchClip(r.id, clipId);
       return ok(
         clipId
@@ -125,7 +125,7 @@ export function registerPlacementsTools({ server, target, trackArg, resolveTrack
       inputSchema: {},
     },
     async () => {
-      if (!target.send({ type: "stopAllClips" })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "stopAllClips" })) return fail(target.whyNotConnected());
       target.project.stopAllClips();
       return ok("Stopped all launched clips; back to the timeline arrangement.");
     },

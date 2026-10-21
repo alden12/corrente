@@ -27,7 +27,7 @@ export function registerLiveNotesTools({
       if ("error" in r) return fail(r.error);
       return target.send({ type: "noteOn", trackId: r.id, midi, velocity })
         ? ok(`noteOn ${midi} on ${r.id}`)
-        : fail("No DAW tab connected.");
+        : fail(target.whyNotConnected());
     },
   );
 
@@ -43,7 +43,7 @@ export function registerLiveNotesTools({
       if ("error" in r) return fail(r.error);
       return target.send({ type: "noteOff", trackId: r.id, midi })
         ? ok(`noteOff ${midi} on ${r.id}`)
-        : fail("No DAW tab connected.");
+        : fail(target.whyNotConnected());
     },
   );
 
@@ -62,7 +62,7 @@ export function registerLiveNotesTools({
     async ({ track, midi, durationMs, velocity }) => {
       const r = resolveInstrumentTrack(track);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "noteOn", trackId: r.id, midi, velocity })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "noteOn", trackId: r.id, midi, velocity })) return fail(target.whyNotConnected());
       const dur = durationMs ?? 500;
       setTimeout(() => target.send({ type: "noteOff", trackId: r.id, midi }), dur);
       return ok(`Played ${midi} for ${dur}ms on ${r.id}.`);
@@ -87,7 +87,7 @@ export function registerLiveNotesTools({
     async ({ track, notes, articulationMs }) => {
       const r = resolveInstrumentTrack(track);
       if ("error" in r) return fail(r.error);
-      if (!target.connected()) return fail("No DAW tab connected.");
+      if (!target.connected()) return fail(target.whyNotConnected());
       clearSequence();
       const gap = articulationMs ?? 30;
       let t = 0;

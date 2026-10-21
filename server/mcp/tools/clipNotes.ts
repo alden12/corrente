@@ -55,7 +55,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
       const r = resolveClip(track, clip);
       if ("error" in r) return fail(r.error);
       const note = makeNote({ pitch, start, length, velocity });
-      if (!target.send({ type: "addNote", trackId: r.id, clipId: clip, note })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "addNote", trackId: r.id, clipId: clip, note })) return fail(target.whyNotConnected());
       r.store.putNote(note);
       return ok(`Added note ${pitch} at beat ${start} to ${r.id} (id ${note.id}).`);
     },
@@ -74,7 +74,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
       // One addNotes message = one feed entry + one undo step (not one per note).
       const made = notes.map(makeNote);
       if (!target.send({ type: "addNotes", trackId: r.id, clipId: clip, notes: made }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       for (const note of made) r.store.putNote(note);
       return ok(`Added ${made.length} notes to ${r.id}.`);
     },
@@ -99,7 +99,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
       if ("error" in r) return fail(r.error);
       const edited: NoteEvent[] = notes.map((n) => ({ ...makeNote(n), id: n.id }));
       if (!target.send({ type: "editNotes", trackId: r.id, clipId: clip, notes: edited }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       for (const note of edited) r.store.putNote(note);
       return ok(`Edited ${edited.length} notes on ${r.id}.`);
     },
@@ -134,7 +134,8 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
         strength: strength ?? 1,
         ends: ends ?? false,
       });
-      if (!target.send({ type: "editNotes", trackId: r.id, clipId: clip, notes })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "editNotes", trackId: r.id, clipId: clip, notes }))
+        return fail(target.whyNotConnected());
       for (const note of notes) r.store.putNote(note);
       return ok(`Quantized ${notes.length} notes on ${r.id} to ${grid ?? "1/16"}.`);
     },
@@ -150,7 +151,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
     async ({ track, clip, id }) => {
       const r = resolveClip(track, clip);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "removeNote", trackId: r.id, clipId: clip, id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "removeNote", trackId: r.id, clipId: clip, id })) return fail(target.whyNotConnected());
       r.store.removeNote(id);
       return ok(`Removed note ${id} from ${r.id}.`);
     },
@@ -166,7 +167,8 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
     async ({ track, clip, ids }) => {
       const r = resolveClip(track, clip);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "removeNotes", trackId: r.id, clipId: clip, ids })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "removeNotes", trackId: r.id, clipId: clip, ids }))
+        return fail(target.whyNotConnected());
       for (const id of ids) r.store.removeNote(id);
       return ok(`Removed ${ids.length} notes from ${r.id}.`);
     },
@@ -178,7 +180,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
     async ({ track, clip }) => {
       const r = resolveClip(track, clip);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "clearClip", trackId: r.id, clipId: clip })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "clearClip", trackId: r.id, clipId: clip })) return fail(target.whyNotConnected());
       r.store.clear();
       return ok(`Cleared clip on ${r.id}.`);
     },
@@ -195,7 +197,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
       const r = resolveClip(track, clip);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "setClipLength", trackId: r.id, clipId: clip, lengthBeats }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       r.store.setLength(lengthBeats);
       return ok(`Set clip length to ${lengthBeats} beats on ${r.id}.`);
     },

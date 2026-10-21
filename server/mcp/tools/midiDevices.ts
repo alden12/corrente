@@ -63,7 +63,7 @@ export function registerMidiDevicesTools({
       }
       const id = makeMidiDeviceId();
       if (!target.send({ type: "addMidiDevice", trackId: r.id, deviceType: device, id }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.addMidiDevice(r.id, device, id);
       return ok(`Added ${device} MIDI device to track ${r.id} (id ${id}).`);
     },
@@ -80,7 +80,7 @@ export function registerMidiDevicesTools({
       const r = resolveMidiDevice(track, device_id);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "removeMidiDevice", trackId: r.trackId, deviceId: device_id }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.removeMidiDevice(r.trackId, device_id);
       return ok(`Removed MIDI device ${device_id} from ${r.label}.`);
     },
@@ -97,7 +97,7 @@ export function registerMidiDevicesTools({
       const r = resolveMidiDevice(track, device_id);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "moveMidiDevice", trackId: r.trackId, deviceId: device_id, toIndex: to_index }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.moveMidiDevice(r.trackId, device_id, to_index);
       return ok(`Moved MIDI device ${device_id} to index ${to_index} on ${r.label}.`);
     },
@@ -114,7 +114,7 @@ export function registerMidiDevicesTools({
       const r = resolveMidiDevice(track, device_id);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "bypassMidiDevice", trackId: r.trackId, deviceId: device_id, bypassed }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.setMidiDeviceBypass(r.trackId, device_id, bypassed);
       return ok(`${bypassed ? "Bypassed" : "Enabled"} MIDI device ${device_id} on ${r.label}.`);
     },
@@ -162,7 +162,7 @@ export function registerMidiDevicesTools({
       const err = validateParam(spec, value);
       if (err) return fail(err);
       if (!target.send({ type: "setMidiDeviceParam", trackId: r.trackId, deviceId: device_id, id, value }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       r.device.params.set(id, value);
       return ok(`Set ${id} = ${JSON.stringify(value)} on MIDI device ${device_id}.`);
     },

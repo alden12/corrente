@@ -22,7 +22,10 @@ import type { SoundDevices } from "../patches/sound";
 export type ReservedVoice = "you";
 export type Author = ReservedVoice | (string & {});
 
-/** Protocol messages that are NOT durable edits (navigation / live / transport / history RPC / feed note). */
+/**
+ * Protocol messages that are NOT durable edits (navigation / live / transport / history RPC / feed
+ * note / which tab the agent drives).
+ */
 type NonEditType =
   | "selectTrack"
   | "selectClip"
@@ -34,6 +37,8 @@ type NonEditType =
   | "patchRequest"
   | "analysisRequest"
   | "deviceRequest"
+  | "agentTarget"
+  | "resync"
   | "note";
 
 /** The durable-edit subset of the MCP protocol (shapes shared, never duplicated). */

@@ -15,7 +15,7 @@ export function registerTransportTools({ server, target }: ToolContext): void {
       inputSchema: { bpm: z.number().min(20).max(300) },
     },
     async ({ bpm }) => {
-      if (!target.send({ type: "setTempo", bpm })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "setTempo", bpm })) return fail(target.whyNotConnected());
       target.project.setTempo(bpm);
       return ok(`Tempo set to ${bpm} BPM.`);
     },
@@ -36,7 +36,7 @@ export function registerTransportTools({ server, target }: ToolContext): void {
     async ({ numerator, denominator }) => {
       const beatUnit = denominator ?? 4;
       if (!target.send({ type: "setTimeSignature", numerator, denominator: beatUnit }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       target.project.setTimeSignature(numerator, beatUnit);
       return ok(`Time signature set to ${numerator}/${beatUnit}.`);
     },
@@ -58,7 +58,7 @@ export function registerTransportTools({ server, target }: ToolContext): void {
     },
     async ({ groove, amount }) => {
       if (groove === undefined && amount === undefined) return fail("Pass a groove and/or an amount.");
-      if (!target.send({ type: "setGroove", grooveId: groove, amount })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "setGroove", grooveId: groove, amount })) return fail(target.whyNotConnected());
       target.project.setGroove(groove, amount);
       const g = target.project.getGroove();
       return ok(`Groove: ${grooveById(g.id).name} at ${Math.round(g.amount * 100)}%.`);
@@ -109,7 +109,7 @@ export function registerTransportTools({ server, target }: ToolContext): void {
       inputSchema: { lengthBeats: z.number().min(1).max(256) },
     },
     async ({ lengthBeats }) => {
-      if (!target.send({ type: "setLength", lengthBeats })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "setLength", lengthBeats })) return fail(target.whyNotConnected());
       target.project.setLength(lengthBeats);
       return ok(`Loop length set to ${lengthBeats} beats.`);
     },
@@ -123,16 +123,16 @@ export function registerTransportTools({ server, target }: ToolContext): void {
       inputSchema: { beats: z.number().min(0).max(256) },
     },
     async ({ beats }) => {
-      if (!target.send({ type: "setLoopStart", beats })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "setLoopStart", beats })) return fail(target.whyNotConnected());
       target.project.setLoopStart(beats);
       return ok(`Loop start set to ${beats} beats.`);
     },
   );
 
   server.registerTool("play", { title: "Play", description: "Start playback (loops all tracks)." }, async () =>
-    target.send({ type: "transport", action: "play" }) ? ok("Playing.") : fail("No DAW tab connected."),
+    target.send({ type: "transport", action: "play" }) ? ok("Playing.") : fail(target.whyNotConnected()),
   );
   server.registerTool("stop", { title: "Stop", description: "Stop playback." }, async () =>
-    target.send({ type: "transport", action: "stop" }) ? ok("Stopped.") : fail("No DAW tab connected."),
+    target.send({ type: "transport", action: "stop" }) ? ok("Stopped.") : fail(target.whyNotConnected()),
   );
 }

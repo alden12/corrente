@@ -219,12 +219,12 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     },
     async ({ deviceType }) => {
       if (target.project.customInstruments.some((def) => def.type === deviceType)) {
-        if (!target.send({ type: "removeCustomInstrument", deviceType })) return fail("No DAW tab connected.");
+        if (!target.send({ type: "removeCustomInstrument", deviceType })) return fail(target.whyNotConnected());
         target.project.removeCustomInstrument(deviceType);
         return ok(`Removed custom instrument ${deviceType}.`);
       }
       if (target.project.customEffects.some((def) => def.type === deviceType)) {
-        if (!target.send({ type: "removeCustomEffect", deviceType })) return fail("No DAW tab connected.");
+        if (!target.send({ type: "removeCustomEffect", deviceType })) return fail(target.whyNotConnected());
         target.project.removeCustomEffect(deviceType);
         return ok(`Removed custom effect ${deviceType}.`);
       }
@@ -249,7 +249,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "setTrack", trackId: r.id, muted, solo, volume, name }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       if (muted !== undefined) target.project.setMuted(r.id, muted);
       if (solo !== undefined) target.project.setSolo(r.id, solo);
       if (volume !== undefined) target.project.setVolume(r.id, volume);

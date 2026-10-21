@@ -13,6 +13,6 @@ export function registerFeedTools({ server, target }: ToolContext): void {
       inputSchema: { text: z.string().min(1).max(200) },
     },
     async ({ text }) =>
-      target.send({ type: "note", text }) ? ok("Noted in the feed.") : fail("No DAW tab connected."),
+      target.send({ type: "note", text }) ? ok("Noted in the feed.") : fail(target.whyNotConnected()),
   );
 }

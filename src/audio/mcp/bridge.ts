@@ -14,11 +14,22 @@ import type { VersionStore } from "../commands/history";
 import { listPatchesFor, patchDetails, patchTrackCommand, trackToSave } from "../patches/patchTools";
 import type { SaveOptions } from "../patches/toolSpec";
 import { listPatches, savePatchFromTrack } from "../patches/library";
-import { DEFAULT_WS_PORT } from "./protocol";
+import { DEFAULT_WS_PORT, LOCAL_HOSTNAMES } from "./protocol";
 import { analyzeProjectMix, analyzeTrackDevice } from "../engine/renderInWorker";
 import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
 
-export type McpStatus = "connecting" | "connected" | "disconnected";
+/** `standby`: connected, but another tab was in front more recently, so the agent drives that one. */
+export type McpStatus = "connecting" | "connected" | "standby" | "disconnected";
+
+/** When this tab last had the user's attention, kept per tab (sessionStorage) so a reload keeps it. */
+const ATTENTION_KEY = "corrente.mcp.attention";
+const lastAttention = (): number => {
+  try {
+    return Number(sessionStorage.getItem(ATTENTION_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+};
 
 export interface McpBridgeDeps {
   projectStore: ProjectStore;
@@ -44,7 +55,7 @@ export interface McpBridgeHandle {
  * console with refused connections - its agents use the hosted `/mcp` instead.
  */
 export const localBridgeReachable = (hostname: string = location.hostname): boolean =>
-  ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname);
+  LOCAL_HOSTNAMES.includes(hostname);
 
 export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions = {}): McpBridgeHandle {
   const { projectStore, engine, scheduler, editLog, versionStore } = deps;
@@ -175,7 +186,10 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
       }
     });
 
-  /** The requests, each answered by id; anything else is a live message or an edit, landed in order. */
+  /**
+   * The requests, each answered by id, and the bridge's own messages; anything else is a live message
+   * or an edit, landed in order.
+   */
   const requests: Partial<{
     [Type in ServerToBrowser["type"]]: (msg: Extract<ServerToBrowser, { type: Type }>) => void;
   }> = {
@@ -183,6 +197,8 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     patchRequest: (msg) => void handlePatchRequest(msg),
     analysisRequest: (msg) => void handleAnalysisRequest(msg),
     deviceRequest: handleDeviceRequest,
+    agentTarget: (msg) => setStatus(msg.active ? "connected" : "standby"),
+    resync: () => send({ type: "projectSnapshot", project: projectStore.snapshot() }),
   };
 
   const handle = (msg: ServerToBrowser) => {
@@ -232,7 +248,25 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     ];
   };
 
+  /** Tell the server this tab is in front now, so the agent drives it rather than another (AGENT-32). */
+  const noteAttention = () => {
+    const at = Date.now();
+    try {
+      sessionStorage.setItem(ATTENTION_KEY, String(at));
+    } catch {
+      // Storage refused (a private window): the server still hears it while connected.
+    }
+    send({ type: "attention", at });
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === "visible") noteAttention();
+  };
+  window.addEventListener("focus", noteAttention);
+  document.addEventListener("visibilitychange", onVisibility);
+
   const wireOutbound = () => {
+    if (document.hasFocus()) noteAttention();
+    else send({ type: "attention", at: lastAttention() });
     send({ type: "projectSnapshot", project: projectStore.snapshot() });
     structureUnsub = projectStore.subscribe(() => {
       resubscribeTracks();
@@ -254,9 +288,9 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     const socket = new WebSocket(url);
     ws = socket;
 
+    // The server says whether it drives this tab (agentTarget) as soon as it's connected.
     socket.onopen = () => {
       backoff = 500;
-      setStatus("connected");
       wireOutbound();
     };
 
@@ -286,6 +320,8 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
     dispose() {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      window.removeEventListener("focus", noteAttention);
+      document.removeEventListener("visibilitychange", onVisibility);
       teardownOutbound();
       ws?.close();
       ws = null;

@@ -48,7 +48,7 @@ export function registerGroupsTools({ server, target, trackArg, resolveTrack, re
       },
     },
     async ({ name, parent }) => {
-      if (!target.connected()) return fail("No DAW tab connected.");
+      if (!target.connected()) return fail(target.whyNotConnected());
       if (parent !== undefined && "error" in resolveGroup(parent)) {
         return fail(`Unknown parent group "${parent}". Use list_groups.`);
       }
@@ -71,7 +71,7 @@ export function registerGroupsTools({ server, target, trackArg, resolveTrack, re
     async ({ group }) => {
       const r = resolveGroup(group);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "removeGroup", groupId: r.id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "removeGroup", groupId: r.id })) return fail(target.whyNotConnected());
       target.project.removeGroup(r.id);
       return ok(`Removed group ${r.id} and its contents.`);
     },
@@ -96,7 +96,7 @@ export function registerGroupsTools({ server, target, trackArg, resolveTrack, re
       const r = resolveGroup(group);
       if ("error" in r) return fail(r.error);
       if (!target.send({ type: "setGroup", groupId: r.id, name, muted, solo, volume, collapsed }))
-        return fail("No DAW tab connected.");
+        return fail(target.whyNotConnected());
       if (name !== undefined) target.project.renameGroup(r.id, name);
       if (muted !== undefined) target.project.setGroupMuted(r.id, muted);
       if (solo !== undefined) target.project.setGroupSolo(r.id, solo);
@@ -118,7 +118,7 @@ export function registerGroupsTools({ server, target, trackArg, resolveTrack, re
       if ("error" in r) return fail(r.error);
       const g = resolveGroup(group);
       if ("error" in g) return fail(g.error);
-      if (!target.send({ type: "moveTrack", trackId: r.id, groupId: g.id })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "moveTrack", trackId: r.id, groupId: g.id })) return fail(target.whyNotConnected());
       target.project.moveTrack(r.id, g.id);
       return ok(`Moved track ${r.id} into group ${g.id}.`);
     },
@@ -140,7 +140,7 @@ export function registerGroupsTools({ server, target, trackArg, resolveTrack, re
       if (parent !== undefined && "error" in resolveGroup(parent))
         return fail(`Unknown parent group "${parent}". Use list_groups.`);
       const parentId = parent ?? null;
-      if (!target.send({ type: "moveGroup", groupId: r.id, parentId })) return fail("No DAW tab connected.");
+      if (!target.send({ type: "moveGroup", groupId: r.id, parentId })) return fail(target.whyNotConnected());
       target.project.moveGroup(r.id, parentId);
       return ok(`Moved group ${r.id} under ${parentId ?? "master"}.`);
     },

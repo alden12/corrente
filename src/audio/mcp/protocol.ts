@@ -41,7 +41,12 @@ export type BrowserToServer =
   | { type: "historyReply"; id: string; ok: boolean; result?: unknown; error?: string }
   | { type: "patchReply"; id: string; ok: boolean; result?: unknown; error?: string }
   | { type: "analysisReply"; id: string; ok: boolean; result?: unknown; error?: string }
-  | { type: "deviceReply"; id: string; ok: boolean; result?: unknown; error?: string };
+  | { type: "deviceReply"; id: string; ok: boolean; result?: unknown; error?: string }
+  // When this tab last had the user's attention (focus, or shown), in epoch ms: the server drives the
+  // tab with the latest, so the agent edits the project in front of the user (AGENT-32).
+  | { type: "attention"; at: number }
+  // Not from a tab: a newer server, started by another Claude Code session, asking for the port.
+  | { type: "takeover" };
 
 /** Sent by the server to the browser tab (commands). */
 export type ServerToBrowser =
@@ -167,7 +172,11 @@ export type ServerToBrowser =
   // A device edit that expects a matching deviceReply: the tab keeps the device in the library before
   // the edit lands (COMM-1.11.2), and says if it couldn't, so the agent never builds on a device
   // that isn't there.
-  | { type: "deviceRequest"; id: string; edit: DeviceEdit };
+  | { type: "deviceRequest"; id: string; edit: DeviceEdit }
+  // Whether the agent drives this tab: with several open, only the one most recently in front does.
+  | { type: "agentTarget"; active: boolean }
+  // Send a whole projectSnapshot: the server has just started driving this tab.
+  | { type: "resync" };
 
 /**
  * The edits that add or change a custom device. Add and update are the same store call; the edit
@@ -182,3 +191,9 @@ export type DeviceEdit = {
 type DeviceEditType = "addCustomInstrument" | "addCustomEffect" | "updateCustomInstrument" | "updateCustomEffect";
 
 export const DEFAULT_WS_PORT = 8765;
+
+/**
+ * The hostnames of this machine. Only a page served from one can reach the local MCP server, and the
+ * server takes tabs only from such pages, so a website open in the same browser can't pose as the tab.
+ */
+export const LOCAL_HOSTNAMES = ["localhost", "127.0.0.1", "::1", "[::1]"];
