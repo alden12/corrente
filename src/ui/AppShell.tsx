@@ -466,7 +466,8 @@ export function AppShell() {
         ) : (
           updateWaiting && <UpdateNotice onReload={applyUpdate} />
         )}
-        {syncStatus === "offline" && <OfflineBanner shared={!!isSharedProject} />}
+        {/* Out of date, it isn't reconnecting: the update notice above says what to do instead. */}
+        {syncStatus === "offline" && !outdated && <OfflineBanner shared={!!isSharedProject} />}
         {deviceShape.tier === "desktop" ? (
           <DesktopShell {...shellProps} />
         ) : (
