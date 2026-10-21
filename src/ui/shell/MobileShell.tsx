@@ -334,7 +334,7 @@ export function MobileShell({
       {/* The insets are padding, not margin, so `bg-rail` still runs up behind the status bar
           and the notch reads as part of the app rather than as a letterbox. */}
       <div
-        className="shrink-0 flex items-center gap-2 py-1.5 border-b border-line bg-rail"
+        className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 border-b border-line bg-rail"
         style={{
           paddingTop: atLeast("0.375rem", SAFE_TOP),
           paddingLeft: atLeast("0.5rem", SAFE_LEFT),
@@ -362,38 +362,41 @@ export function MobileShell({
           <UndoIcon flip />
         </BarButton>
         {addMenu}
-        <div className="flex-1" />
-        {/* Signed in, whether this device is connected, as the desktop's chip says (HOST-16). */}
-        {syncStatus && <SyncChip icon status={syncStatus} shared={syncShared} />}
-        {/* Where the files are, and the backup reminder: on the bar, since a phone rarely visits Projects. */}
-        {onThisDevice && (
-          <OnThisDeviceChip
-            icon
-            onShowProject={() => selectTab("projects")}
-            reminder={{
-              editLog,
-              onExport: () =>
-                void exportProjectFile(currentProjectId(), projectStore.name, { projectStore, editLog }).catch(
-                  (error: unknown) => console.warn("[corrente] export failed:", error),
-                ),
-            }}
-          />
-        )}
-        <BarButton label="Agent" tint="agent" onClick={() => setAgentOpen(!agentOpen)} active={agentOpen}>
-          <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" className="w-5 h-5">
-            <path d="M8 1.75l1.6 4.15 4.15 1.6-4.15 1.6L8 13.25l-1.6-4.15L2.25 7.5l4.15-1.6z" />
-          </svg>
-        </BarButton>
-        {/* You, as your initials: the way into account and settings. */}
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          aria-label="Account and settings"
-          title="Account and settings"
-          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full cursor-pointer focus-visible:outline-2 focus-visible:outline-you"
-        >
-          <AccountAvatar size={30} />
-        </button>
+        {/* "You" stay together at the right, and as a last resort (a 320px phone) wrap onto a second
+            row as one group, rather than running off the edge with the settings button. */}
+        <div className="ml-auto flex items-center gap-2">
+          {/* Signed in, whether this device is connected, as the desktop's chip says (HOST-16). */}
+          {syncStatus && <SyncChip icon status={syncStatus} shared={syncShared} />}
+          {/* Where the files are, and the backup reminder: on the bar, since a phone rarely visits Projects. */}
+          {onThisDevice && (
+            <OnThisDeviceChip
+              icon
+              onShowProject={() => selectTab("projects")}
+              reminder={{
+                editLog,
+                onExport: () =>
+                  void exportProjectFile(currentProjectId(), projectStore.name, { projectStore, editLog }).catch(
+                    (error: unknown) => console.warn("[corrente] export failed:", error),
+                  ),
+              }}
+            />
+          )}
+          <BarButton label="Agent" tint="agent" onClick={() => setAgentOpen(!agentOpen)} active={agentOpen}>
+            <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" className="w-5 h-5">
+              <path d="M8 1.75l1.6 4.15 4.15 1.6-4.15 1.6L8 13.25l-1.6-4.15L2.25 7.5l4.15-1.6z" />
+            </svg>
+          </BarButton>
+          {/* You, as your initials: the way into account and settings. */}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            aria-label="Account and settings"
+            title="Account and settings"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full cursor-pointer focus-visible:outline-2 focus-visible:outline-you"
+          >
+            <AccountAvatar size={30} />
+          </button>
+        </div>
       </div>
 
       {/* The middle band: whichever tab is in front, with the agent docked beside it on a

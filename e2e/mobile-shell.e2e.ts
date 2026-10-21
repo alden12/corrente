@@ -1776,3 +1776,15 @@ test.describe("phone (backgrounding)", () => {
     await expect.poll(calls, { message: "the audio thread woke again" }).toContain("resume");
   });
 });
+
+test.describe("phone, the narrowest", () => {
+  test.use({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
+
+  test("the top bar wraps rather than running its last buttons off the edge", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    const settings = (await page.getByRole("button", { name: "Account and settings" }).boundingBox())!;
+    expect(settings.x + settings.width).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  });
+});
