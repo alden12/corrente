@@ -19,7 +19,7 @@ import { ClipPreview } from "./shell/ClipPreview";
 import { beatsPerBar as beatsPerBarOf } from "../audio/project/schema";
 import { clipContentOf as clipContentOfTrack } from "./clipContent";
 import { CLIP_DND_TYPE, clipDndKindType, clearDraggedClip, setDraggedClip } from "./clipDnd";
-import { getClipClipboard, setClipClipboard } from "./clipClipboard";
+import { copiedClip, copyClip as copyToClipboard } from "./clipboard";
 import { authorDotStyle, authorLabel } from "./authorStyle";
 import { useAuthorPresence } from "./authorColorsContext";
 import { PagedStrip } from "./controls/PagedStrip";
@@ -101,7 +101,7 @@ export function ClipRail({
   /** Copy a clip, and say whether there was one to copy. */
   const copyClip = (clipId: string): boolean => {
     const content = clipContentOf(clipId);
-    if (content) setClipClipboard(content);
+    if (content) copyToClipboard({ content, source: { trackId, clipId } });
     return Boolean(content);
   };
   /** Cut keeps a track's last clip: there's always one to edit. */
@@ -112,7 +112,7 @@ export function ClipRail({
   };
   /** What the clipboard holds, if this track can take it (a MIDI clip on a MIDI track, and so on). */
   const pasteable = () => {
-    const content = getClipClipboard();
+    const content = copiedClip()?.content;
     return content?.kind === track.kind ? content : undefined;
   };
   const pasteClip = (): boolean => {

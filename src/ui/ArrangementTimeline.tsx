@@ -23,10 +23,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProjectStore } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { Recorder } from "../audio/recording/recorder";
-import type { ClipContent, GroupMeta, Placement, TrackMeta } from "../audio/project/types";
+import type { GroupMeta, Placement, TrackMeta } from "../audio/project/types";
 import type { Dispatch } from "../audio/commands/types";
 import { newClipId, newPlacementId } from "../audio/commands/ids";
 import { clipContentOf } from "./clipContent";
+import { copiedClip, copyClip } from "./clipboard";
 import { Menu } from "./Menu";
 import { useCountInBars } from "./countIn";
 import { useProject } from "../audio/project/useProject";
@@ -154,13 +155,6 @@ export function ArrangementTimeline({
     beat: number;
   } | null>(null);
   const [viewportW, setViewportW] = useState(0);
-  /** A copied placement: its window, and its clip's content so a paste can land on another track. */
-  const clipboard = useRef<{
-    clipId: string;
-    offset: number;
-    length: number;
-    content: ClipContent;
-  } | null>(null);
 
   const beatsPerBar = beatsPerBarOf(project.timeSignature);
   const lengthBeats = project.lengthBeats;
@@ -236,13 +230,16 @@ export function ArrangementTimeline({
     const placement = projectStore.getTrack(trackId)?.placements.find((candidate) => candidate.id === placementId);
     const content = placement && clipContentOf(projectStore, trackId, placement.clipId);
     if (!placement || !content) return false;
-    clipboard.current = { clipId: placement.clipId, offset: placement.offset, length: placement.length, content };
+    copyClip({
+      content,
+      source: { trackId, clipId: placement.clipId },
+      window: { offset: placement.offset, length: placement.length },
+    });
     return true;
   };
 
   /** Whether a paste can land on this track: any track of the same kind as the copied clip. */
-  const canPasteTo = (trackId: string): boolean =>
-    !!clipboard.current && projectStore.getTrack(trackId)?.kind === clipboard.current.content.kind;
+  const canPasteTo = (trackId: string): boolean => projectStore.getTrack(trackId)?.kind === copiedClip()?.content.kind;
 
   /**
    * Place the clipboard on a track: at `beat` when there is one (the marker), else after `anchorId`'s
@@ -250,10 +247,11 @@ export function ArrangementTimeline({
    *
    * On the clip's own track it places the same clip, so an edit to it shows everywhere it plays.
    * On another track it copies the clip into that track's pool first - the same thing a rail drop
-   * onto another lane does - since a placement can only play a clip its own track holds.
+   * onto another lane does - since a placement can only play a clip its own track holds. A clip
+   * copied from the rail has no window, so it's placed whole.
    */
   const pasteTo = (trackId: string, beat: number | null, anchorId?: string): boolean => {
-    const copied = clipboard.current;
+    const copied = copiedClip();
     const track = projectStore.getTrack(trackId);
     if (!copied || !track || !canPasteTo(trackId)) return false;
     const anchor = anchorId ? track.placements.find((placement) => placement.id === anchorId) : undefined;
@@ -262,8 +260,8 @@ export function ArrangementTimeline({
       0,
     );
     const startBeat = beat ?? (anchor ? anchor.startBeat + anchor.length : trackEnd);
-    const ownClip = track.clips.some((clip) => clip.id === copied.clipId);
-    const clipId = ownClip ? copied.clipId : newClipId();
+    const ownClip = track.clips.some((clip) => clip.id === copied.source.clipId);
+    const clipId = ownClip ? copied.source.clipId : newClipId();
     if (!ownClip) dispatch({ type: "pasteClip", trackId: track.id, id: clipId, content: copied.content });
     const id = newPlacementId();
     dispatch({
@@ -272,8 +270,7 @@ export function ArrangementTimeline({
       id,
       clipId,
       startBeat,
-      offset: copied.offset,
-      length: copied.length,
+      ...copied.window,
     });
     setMarker(null);
     setSelection({ trackId: track.id, id });

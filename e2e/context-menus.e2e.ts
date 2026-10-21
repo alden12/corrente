@@ -52,3 +52,28 @@ test("a clip in the rail duplicates, copies and pastes from its right-click menu
   await page.getByRole("menuitem", { name: "Paste" }).click();
   await expect(chips(page)).toHaveCount(3);
 });
+
+test("one clipboard: a clip copied in the rail pastes on the timeline, and one copied there pastes in the rail", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(placements(page)).toHaveCount(1);
+  await expect(chips(page)).toHaveCount(1);
+
+  // Rail to timeline: placed whole, just past the last clip.
+  await chips(page).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy" }).click();
+  const last = (await placements(page).last().boundingBox())!;
+  await page.mouse.click(last.x + last.width + 30, last.y + last.height / 2, { button: "right" });
+  await page.getByRole("menuitem", { name: "Paste" }).click();
+  await expect(placements(page)).toHaveCount(2);
+
+  // Timeline to rail: a new clip in the pool.
+  await placements(page).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Copy" }).click();
+  await chips(page).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Paste" }).click();
+  await expect(chips(page)).toHaveCount(2);
+});

@@ -50,6 +50,7 @@ import { beatToX, floorBeat, snapBeat, snapDelta, xToBeat } from "./timeline/tim
 import { anchorZoomX, anchorZoomY } from "./timeline/anchoredZoom";
 import { usePinchZoom, type PinchGesture } from "./usePinchZoom";
 import { GRID_DIVISIONS, quantizeNotes } from "../audio/sequencer/quantize";
+import { copiedNotes, copyNotes } from "./clipboard";
 import {
   STRENGTH_OPTIONS,
   useQuantizeEnds,
@@ -246,7 +247,6 @@ export function PianoRoll({
 
   const [selection, setSelection] = useState<Set<string>>(() => new Set());
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const clipboard = useRef<{ relStart: number; pitch: number; length: number; velocity: number }[]>([]);
   const lastLen = useRef(1);
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -472,20 +472,22 @@ export function PianoRoll({
         e.preventDefault();
         const picked = clip.notes.filter((note) => selection.has(note.id));
         const base = Math.min(...picked.map((note) => note.start));
-        clipboard.current = picked.map((note) => ({
-          relStart: note.start - base,
-          pitch: note.pitch,
-          length: note.length,
-          velocity: note.velocity,
-        }));
+        copyNotes(
+          picked.map((note) => ({
+            relStart: note.start - base,
+            pitch: note.pitch,
+            length: note.length,
+            velocity: note.velocity,
+          })),
+        );
         if (e.key === "x") {
           dispatch({ type: "removeNotes", trackId, clipId, ids });
           setSelection(new Set());
         }
-      } else if (mod && e.key === "v" && clipboard.current.length) {
+      } else if (mod && e.key === "v" && copiedNotes().length) {
         e.preventDefault();
         const at = snapB(scheduler.getPositionBeats());
-        const notes: NoteEvent[] = clipboard.current.map((entry) => ({
+        const notes: NoteEvent[] = copiedNotes().map((entry) => ({
           id: newNoteId(),
           pitch: clampPitch(entry.pitch),
           start: clampStart(at + entry.relStart),
