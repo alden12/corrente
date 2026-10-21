@@ -8,7 +8,7 @@ import {
   type BufferEngine,
   type BufferStore,
 } from "../src/audio/engine/bufferControl";
-import { QUIET_FOR_MS, canChange, wantedSize, type BufferSize } from "../src/audio/engine/bufferSize";
+import { QUIET_FOR_MS, SETTLE_MS, canChange, wantedSize, type BufferSize } from "../src/audio/engine/bufferSize";
 import type { RecorderStatus } from "../src/audio/recording/recorder";
 
 /**
@@ -45,6 +45,7 @@ const setUp = (saved: Record<string, string> = {}) => {
   const engine = {
     started: true,
     bufferSize: "interactive" as BufferSize,
+    startedAt: 0,
     changes: [] as BufferSize[],
     async setBufferSize(size: BufferSize) {
       this.bufferSize = size;
@@ -160,6 +161,17 @@ describe("BufferControl", () => {
     wait(QUIET_FOR_MS);
     await control.tick();
     expect(engine.bufferSize).toBe("interactive");
+  });
+
+  it("ignores slow blocks while the engine settles after starting, as on a fresh install", () => {
+    const { engine, control, slow, wait, now } = setUp();
+    engine.startedAt = now();
+    slow(10);
+    wait(SETTLE_MS);
+    slow(3);
+    expect(control.snapshot.liveSize).toBe("interactive");
+    slow(1);
+    expect(control.snapshot.liveSize).toBe("balanced");
   });
 
   it("ignores slow blocks spread over more than a minute", () => {

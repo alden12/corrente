@@ -10,6 +10,7 @@ import {
   BUFFER_SETTINGS,
   BUFFER_SIZES,
   SLOW_BLOCKS_TO_GROW,
+  SETTLE_MS,
   SLOW_WINDOW_MS,
   canChange,
   liveSize,
@@ -24,6 +25,8 @@ import { createListeners } from "../../listeners";
 export interface BufferEngine {
   readonly started: boolean;
   readonly bufferSize: BufferSize;
+  /** When the running context was made, on the same clock as `now` (Date.now). */
+  readonly startedAt: number;
   setBufferSize(size: BufferSize): Promise<void>;
   onSlowBlocks(listener: (blocks: number) => void): () => void;
 }
@@ -177,15 +180,16 @@ export class BufferControl {
 
   /**
    * Slow blocks, picked for you: enough of them within a minute grow the size they were heard at a
-   * step, for good on this device. Heard while playing back, that's the playback size; else the live
+   * step, for good on this device, once the engine has settled after starting. Heard while playing back, that's the playback size; else the live
    * one.
    */
   private heardSlow(blocks: number): void {
     if (this.setting !== "auto") return;
+    const now = this.now();
+    if (now - this.engine.startedAt < SETTLE_MS) return;
     const playing = this.activity.transport.isPlaying;
     const size = playing ? playbackSize(this.steps) : liveSize(this.steps);
     if (this.engine.bufferSize !== size || size === BUFFER_SIZES[BUFFER_SIZES.length - 1]) return;
-    const now = this.now();
     this.slow = [...this.slow.filter((report) => now - report.at < SLOW_WINDOW_MS), { at: now, blocks }];
     if (this.slow.reduce((sum, report) => sum + report.blocks, 0) < SLOW_BLOCKS_TO_GROW) return;
     this.slow = [];

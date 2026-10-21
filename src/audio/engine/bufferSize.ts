@@ -27,6 +27,12 @@ export const QUIET_FOR_MS = 1500;
 /** Slow blocks within a minute, at a size, that grow it a step on this device. */
 export const SLOW_BLOCKS_TO_GROW = 4;
 export const SLOW_WINDOW_MS = 60_000;
+/**
+ * How long after audio starts (or the buffer changes) slow blocks don't count. The engine is still
+ * compiling and loading then, and its stalls say nothing about what this device can play: heard on a
+ * fresh install, they grew the buffer for good before anything had been played.
+ */
+export const SETTLE_MS = 15_000;
 
 /** How far each size has grown on this device: steps up BUFFER_SIZES from the smallest. */
 export interface Steps {

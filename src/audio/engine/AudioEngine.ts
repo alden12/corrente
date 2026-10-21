@@ -116,6 +116,8 @@ export class AudioEngine {
   private readonly playedCustomDefs = new Map<string, string>();
   /** The output buffer the context is made with (INST-36.9); `setBufferSize` remakes it. */
   private size: BufferSize = "interactive";
+  /** When the running context was made (BufferControl ignores slow blocks while it settles). */
+  private contextMadeAt = -Infinity;
   /** What a remade context restores: the output device picked, the input open, the sound tried. */
   private sinkId: string | null = null;
   private inputDeviceId: string | null = null;
@@ -223,6 +225,7 @@ export class AudioEngine {
     }
     const ctx = new AudioContext({ latencyHint: this.size });
     this.ctx = ctx;
+    this.contextMadeAt = Date.now();
     this.stopSlow = onSlowBlocks(ctx, (blocks) => this.slowListeners.emit(blocks));
     setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
     this.master = masterBus(ctx);
@@ -244,6 +247,11 @@ export class AudioEngine {
   /** The output buffer size the context runs with. */
   get bufferSize(): BufferSize {
     return this.size;
+  }
+
+  /** When the running context was made. */
+  get startedAt(): number {
+    return this.contextMadeAt;
   }
 
   /** Hear how many blocks rendered late, about once a second while there are any. Returns a stop. */
