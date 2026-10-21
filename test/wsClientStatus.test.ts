@@ -158,3 +158,19 @@ describe("createWsClient and the protocol version (HOST-23.1)", () => {
     expect(isOutdated()).toBe(true);
   });
 });
+
+describe("createWsClient waking from an idle pause", () => {
+  it("reopens a socket paused for idleness when woken, as a send would", () => {
+    const statuses: WsStatus[] = [];
+    const client = createWsClient({ baseUrl: "ws://x", idleMs: 1000 });
+    client.onStatus((status) => statuses.push(status));
+    FakeWebSocket.instances[0].open();
+    vi.advanceTimersByTime(1000); // nothing sent for the idle window: paused
+    expect(statuses.at(-1)).toBe("idle");
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    client.wake(); // an edit held by the session
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(statuses.at(-1)).toBe("connecting");
+  });
+});

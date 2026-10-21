@@ -299,6 +299,8 @@ export function createWsClient(config: {
   onClose(handler: () => void): void;
   /** Subscribe to connection-state changes; the handler fires immediately with the current status. */
   onStatus(handler: (status: WsStatus) => void): void;
+  /** Count it as activity: reopens a socket suspended for idleness, or restarts the idle countdown. */
+  wake(): void;
   close(): void;
 } {
   const base = `${config.baseUrl.replace(/\/$/, "")}${channels.main.path}`;
@@ -465,6 +467,9 @@ export function createWsClient(config: {
     },
     onClose(handler) {
       closeHandlers.push(handler);
+    },
+    wake() {
+      idle.activity();
     },
     onStatus(handler) {
       statusHandlers.push(handler);

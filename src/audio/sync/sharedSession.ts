@@ -42,6 +42,9 @@ export interface SyncTransport {
    *  so edits made while disconnected are HELD locally (not handed to the transport backlog) until a
    *  reconnect can conflict-check them against any peer edits missed in the meantime. */
   onClose(handler: () => void): void;
+  /** An edit was made while the session is holding them: reopen the socket if it was only paused for
+   *  idleness, as a send would. Held edits never reach `send`, so without this nothing woke it. */
+  wake(): void;
   close(): void;
 }
 
@@ -253,6 +256,9 @@ export class SharedSession {
     // Send only when synced with the authority. While disconnected (or awaiting a conflict choice) the op
     // stays held in `pending` and is flushed by `onSnapshot` on the next reconnect, after conflict-checking.
     if (this.flushable && !this.conflictHold) this.sendEdit(op);
+    // Held because the socket is closed: if that's an idle pause, an edit is exactly the activity that
+    // ends it. Otherwise the edit sat on the device until the tab was next hidden and shown.
+    else if (!this.flushable) this.transport.wake();
   }
 
   /**
