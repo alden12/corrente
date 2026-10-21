@@ -1111,8 +1111,9 @@ test.describe("phone", () => {
     await expect(page.getByRole("button", { name: "Zoom in (time)" })).toHaveCount(0);
 
     // ...and nor is a tools menu in its place (MOBILE-19.4): its settings are the settings panel's
-    // Piano roll page, zoom is the pinch, and Quantize is on a selected note's own menu.
+    // Piano roll page and zoom is the pinch. Quantize is there, for the whole clip at once.
     await expect(page.getByRole("button", { name: "Notes tools" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Quantize/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Arrangement tools" })).toHaveCount(0);
   });
 

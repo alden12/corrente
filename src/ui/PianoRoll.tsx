@@ -863,14 +863,14 @@ export function PianoRoll({
   ];
 
   // Touch has no menu of its own beside the roll (MOBILE-19.4): the settings are on the settings
-  // panel's Piano roll page, zoom is the pinch gesture (MOBILE-2), and Quantize is on the selected
-  // note's own menu, where the note it acts on is.
+  // panel's Piano roll page and zoom is the pinch gesture (MOBILE-2). Quantize is the header's button
+  // there too, for the whole clip at once, as well as on a selected note's own menu.
 
   return (
     // No frame of its own: the workbench column divides it from the clips and devices with rules.
     <div ref={rootRef} className="h-full flex flex-col bg-stage overflow-hidden">
-      {/* The header: its fold and title everywhere, and the tools only with a mouse. On touch the
-          sheet's column needs the fold (MOBILE-24), and the tools have their own homes (see above). */}
+      {/* The header: its fold, title and Quantize everywhere, and the other tools only with a mouse. On
+          touch the sheet's column needs the fold (MOBILE-24), and the tools have their own homes (see above). */}
       {(!compact || fold) && (
         <SectionHeader
           title="Piano roll"
@@ -918,28 +918,27 @@ export function PianoRoll({
         >
           {(!fold || fold.open) && headerControls}
           {!compact && (
-            <>
-              <Menu
-                items={rollControls}
-                label="Notes tools"
-                align="left"
-                triggerClassName={iconButtonClass({ size: "sm", className: "shrink-0" })}
-                trigger={<ToolsIcon className="w-4 h-4" />}
-              />
-              {/* Quantize keeps a button as well as its menu entry: it is the one action here
-            you repeat, and it reads the selection, so its label is worth seeing. */}
-              <Button
-                variant="ghost"
-                size="sm"
-                title={selection.size ? "Quantize selected notes to the grid" : "Quantize all notes to the grid"}
-                className="font-mono"
-                disabled={!targets.length}
-                onClick={quantize}
-              >
-                Quantize{selection.size ? " sel" : ""}
-              </Button>
-            </>
+            <Menu
+              items={rollControls}
+              label="Notes tools"
+              align="left"
+              triggerClassName={iconButtonClass({ size: "sm", className: "shrink-0" })}
+              trigger={<ToolsIcon className="w-4 h-4" />}
+            />
           )}
+          {/* Quantize keeps a button as well as its menu entry: it is the one action here you repeat,
+              and it reads the selection, so its label is worth seeing. On touch too, where without it
+              a whole clip could only be quantized a note at a time. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            title={selection.size ? "Quantize selected notes to the grid" : "Quantize all notes to the grid"}
+            className="font-mono pointer-coarse:h-9 pointer-coarse:px-3"
+            disabled={!targets.length}
+            onClick={quantize}
+          >
+            Quantize{selection.size ? " sel" : ""}
+          </Button>
           {fold && !fold.open && foldedPreview && <div className="flex-1 min-w-0 h-5 ml-2">{foldedPreview}</div>}
         </SectionHeader>
       )}
