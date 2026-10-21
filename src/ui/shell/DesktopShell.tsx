@@ -56,7 +56,7 @@ export function DesktopShell({
 }: ShellProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [libWidth, setLibWidth] = usePersistentNumber("corrente:lib-width", 200, 150, 420);
-  const [agentWidth, setAgentWidth] = usePersistentNumber("corrente:agent-width", 320, 240, 620);
+  const [agentWidth, setAgentWidth] = usePersistentNumber("corrente:agent-width", 350, 240, 620);
   const [timelineH, setTimelineH] = usePersistentNumber("corrente:timeline-height", 244, 120, 2000);
   const [dragging, setDragging] = useState(false);
   // The computer keyboard, played in key (DAW-12.1). Here rather than in the piano roll that shows

@@ -66,7 +66,7 @@ export function WorkbenchColumn({
   // The roll's height is yours to drag, but never more than the column shows with the clips line
   // above it and the devices' heading below: a height saved on a big window would otherwise leave a
   // roll you can't see all of. It is the grid's height; the keys add theirs rather than eat into it.
-  const [rollH, setRollH] = usePersistentNumber("corrente:roll-height", 380, 200, 1200);
+  const [rollH, setRollH] = usePersistentNumber("corrente:roll-height", 300, 200, 1200);
   const [clipsOpen, setClipsOpen] = usePersistentBoolean("corrente:clips-open", false);
   const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:devices-open", true);
   const [rollOpen, setRollOpen] = usePersistentBoolean("corrente:roll-open", true);
