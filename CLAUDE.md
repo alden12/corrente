@@ -22,6 +22,9 @@ treat these as labels that tie related code together, not as links to follow.
   for a `for` loop only where it genuinely reads better or matters for performance -
   the realtime hot paths (the scheduler `tick`, the worklet `process()` sample loops)
   are the legitimate exceptions, not the rule.
+- **No unbounded loops (`for (;;)`, `while (true)`)** where a bounded one can say the same thing.
+  Put the exit in the loop's condition (`while (!found && Date.now() < deadline)`), so a reader sees
+  at a glance when it stops, rather than hunting the body for the `return` or `break`.
 - **Use full, descriptive variable names, including in iterators and short lambdas**
   (`tracks.map((track) => ...)`, not `(t) =>`; `clip`, `placement`, `effect`, `note`,
   not `c`/`p`/`fx`/`n`). Existing single-letter code is grandfathered; write new code
