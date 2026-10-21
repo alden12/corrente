@@ -1,7 +1,7 @@
 /**
  * The remote project storage backend: the sync server behind the same
- * `BundleStore`/`ProjectStorage` seam as OPFS. Selected by `getProjectStorage()` when
- * `VITE_DAW_API_URL` is set, so nothing above the seam (repository, library, autosave)
+ * `BundleStore`/`ProjectStorage` seam as OPFS. Selected by `getProjectStorage()` when hosted
+ * (`src/hosting`), so nothing above the seam (repository, library, autosave)
  * changes - it just reads/writes bundle files over HTTP instead of to OPFS.
  *
  * These are thin adapters over `createApiClient` (src/contract/client.ts), the typed

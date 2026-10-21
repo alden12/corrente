@@ -8,15 +8,8 @@
  * and when the tab is looked at again (changes made on other devices arrive then). A failed sync
  * leaves the queue for the next one; nothing on screen waits for it.
  */
-import {
-  accountOwner,
-  authEnabled,
-  getAccessToken,
-  onUnauthorized,
-  SIGNED_OUT,
-  subscribeAuth,
-} from "../../auth/session";
-import { createApiClient } from "../../contract/client";
+import { accountOwner, authEnabled, SIGNED_OUT, subscribeAuth } from "../../auth/session";
+import { apiClient as client } from "../../hosting/api";
 import { openLibrary } from "../patches/library";
 import type { LibraryBackend, LibraryOutbox } from "./backend";
 import { indexedDbBackend } from "./indexedDb";
@@ -24,8 +17,6 @@ import { drainLibrary, type SendLibrary } from "./sync";
 
 type Library = LibraryBackend & LibraryOutbox;
 
-const apiUrl = import.meta.env?.VITE_DAW_API_URL;
-const client = apiUrl ? createApiClient({ baseUrl: apiUrl, token: getAccessToken, onUnauthorized }) : null;
 const send: SendLibrary = (request) => client!.syncLibrary(request);
 
 /** The database an account's library lives in. */

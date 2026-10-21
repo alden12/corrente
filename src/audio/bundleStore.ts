@@ -14,6 +14,7 @@ import { projectSummarySchema, type ProjectSummary } from "./projects/summary";
 import { RemoteProjectStorage } from "./remoteStore";
 import { CachedProjectStorage } from "./cachedStore";
 import { getAccessToken, onUnauthorized } from "../auth/session";
+import { hosting } from "../hosting";
 import type { EditEntry } from "./commands/types";
 
 export interface BundleStore {
@@ -365,18 +366,17 @@ export class MemoryProjectStorage implements ProjectStorage {
 let storageSingleton: ProjectStorage | null = null;
 
 /**
- * The app-wide project storage. Precedence: the remote sync server when
- * `VITE_DAW_API_URL` is set (the durable, deployable backend), else OPFS in the browser,
- * else shared in-memory (tests / no-OPFS). The seam is identical, so callers don't care.
+ * The app-wide project storage. Precedence: the remote sync server when hosted (the durable,
+ * deployable backend), else OPFS in the browser, else shared in-memory (tests / no-OPFS). The seam is
+ * identical, so callers don't care.
  */
 export function getProjectStorage(): ProjectStorage {
   if (!storageSingleton) {
-    const apiUrl = import.meta.env?.VITE_DAW_API_URL;
     const hasOpfs = typeof navigator !== "undefined" && !!navigator.storage?.getDirectory;
-    if (apiUrl) {
+    if (hosting.mode === "hosted") {
       // Pass the token *getter* (not a snapshot) so a live Supabase session token is read per request;
       // it yields undefined when auth is off (the dev-stub server is open).
-      const remote = new RemoteProjectStorage(apiUrl, getAccessToken, onUnauthorized);
+      const remote = new RemoteProjectStorage(hosting.apiUrl, getAccessToken, onUnauthorized);
       // Front the remote with an OPFS read-through cache so a seen project loads / renders offline. With
       // no OPFS (old browser) fall back to remote-only, exactly as before.
       storageSingleton = hasOpfs ? new CachedProjectStorage(remote, new OpfsProjectStorage(REMOTE_CACHE_DIR)) : remote;
@@ -402,9 +402,8 @@ export function setProjectStorage(storage: ProjectStorage): void {
  * OPFS mode (local mode already persists to OPFS directly; no-OPFS has nowhere durable to mirror).
  */
 export function getLocalCacheBundle(projectId: string): BundleStore | null {
-  const apiUrl = import.meta.env?.VITE_DAW_API_URL;
   const hasOpfs = typeof navigator !== "undefined" && !!navigator.storage?.getDirectory;
-  if (!apiUrl || !hasOpfs) return null;
+  if (hosting.mode !== "hosted" || !hasOpfs) return null;
   // A distinct instance from the read-through cache's bundle for this project, but writes to the same
   // underlying files (pending.json, edits.json) still serialize: `OpfsBundleStore` keys its write chain
   // by absolute OPFS path, shared module-wide, so both instances share one chain per file.

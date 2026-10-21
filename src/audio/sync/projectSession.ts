@@ -29,7 +29,7 @@ export interface ProjectSessionDeps {
   projectStore: ProjectStore;
   editLog: EditLog;
   versionStore: VersionStore;
-  /** The sync API's base URL (`VITE_DAW_API_URL`). */
+  /** The sync API's base URL (`hosting.apiUrl`). */
   apiUrl: string;
 }
 

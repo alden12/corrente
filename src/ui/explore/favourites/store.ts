@@ -10,16 +10,9 @@
  * **When it syncs:** on start, on signing in, when the browser comes back online, and after every
  * tap. A failed sync leaves the queue for the next one; the hearts on screen never wait for it.
  */
-import { createApiClient, type ApiClient } from "../../../contract/client";
 import { MAX_FAVOURITE_CHANGES } from "../../../contract/http";
-import {
-  accountOwner as owner,
-  authEnabled,
-  getAccessToken,
-  onUnauthorized,
-  SIGNED_OUT,
-  subscribeAuth,
-} from "../../../auth/session";
+import { accountOwner as owner, authEnabled, SIGNED_OUT, subscribeAuth } from "../../../auth/session";
+import { apiClient as client } from "../../../hosting/api";
 import { readPersistent, writePersistent } from "../../persistentStore";
 import {
   applyServerList,
@@ -29,11 +22,6 @@ import {
   toggleFavourite as toggled,
   type FavouritesState,
 } from "./state";
-
-const apiUrl = import.meta.env?.VITE_DAW_API_URL;
-const client: ApiClient | null = apiUrl
-  ? createApiClient({ baseUrl: apiUrl, token: getAccessToken, onUnauthorized })
-  : null;
 
 const storageKey = (owner: string) => `corrente:favourites:v1:${owner}`;
 

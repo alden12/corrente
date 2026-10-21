@@ -73,6 +73,7 @@ import { readAutoQuantize } from "./quantizeSettings";
 import { readRecordOffsetMs } from "./recordOffset";
 import { readOutputDeviceId } from "./outputDevice";
 import { isTypingTarget } from "./typingTarget";
+import { hosting } from "../hosting";
 
 const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
 
@@ -255,11 +256,10 @@ export function AppShell() {
         // client no longer appends over HTTP): open a shared session and route each dispatched edit to it.
         // Local-only backend keeps the HTTP/OPFS autosave. Version-history checkpoints stay client-side
         // either way until Phase B moves them server-side.
-        const apiUrl = import.meta.env?.VITE_DAW_API_URL;
-        if (apiUrl) {
+        if (hosting.mode === "hosted") {
           // One session per open project, replaced on every switch (HOST-24): see projectSession.ts.
           disposePersistence = followProjectSessions(
-            { projectStore, editLog, versionStore, apiUrl },
+            { projectStore, editLog, versionStore, apiUrl: hosting.apiUrl },
             {
               onStatus: (status) => {
                 if (active) setSyncStatus(status);

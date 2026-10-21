@@ -6,18 +6,16 @@
  * the current token + a small `AuthState` off those events. Keeping all of that behind this one module
  * is what makes the provider swappable later (only this file imports `@supabase/supabase-js`).
  *
- * Auth is OPT-IN via env: with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` unset the app runs exactly
+ * Auth is OPT-IN via env (read in `src/hosting`): with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` unset the app runs exactly
  * as before real auth (no gate, no credential - the dev-stub server is open, a single "local" owner). No
  * React here - the UI bridges this store to `currentUser` and renders the gate.
  */
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { isTrustedRedirect } from "./trustedRedirect";
-
-const url = import.meta.env?.VITE_SUPABASE_URL;
-const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+import { hosting } from "../hosting";
 
 /** True when Supabase auth is configured. When false the app skips the login gate entirely. */
-export const authEnabled = Boolean(url && anonKey);
+export const authEnabled = hosting.auth !== undefined;
 
 export interface AuthUser {
   id: string;
@@ -38,7 +36,7 @@ export type AuthState =
   | { status: "refused"; user: AuthUser };
 
 const listeners = new Set<() => void>();
-const supabase: SupabaseClient | null = authEnabled ? createClient(url as string, anonKey as string) : null;
+const supabase: SupabaseClient | null = hosting.auth ? createClient(hosting.auth.url, hosting.auth.anonKey) : null;
 
 // A fresh object per change so `readAuthState` is a stable snapshot between notifications (useSyncExternalStore).
 let state: AuthState = authEnabled ? { status: "loading" } : { status: "signed-out" };
