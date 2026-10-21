@@ -38,6 +38,7 @@ import { ArrangementThumb } from "./ArrangementThumb";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { nameMatches } from "./nameMatches";
 import { OnThisDeviceNote, onThisDevice } from "../hosting/OnThisDevice";
+import { HostedOnlyButton } from "../hosting/HostedOnly";
 import { forgetProject } from "../hosting/backupReminder";
 
 /** Two heads: a project someone else shared with you. */
@@ -63,6 +64,8 @@ function metaLine(modifiedAt: string, summary: ProjectSummary | null | undefined
   const meter = `${summary.timeSignature.numerator}/${summary.timeSignature.denominator}`;
   return [edited, `${Math.round(summary.tempoBpm)} BPM`, meter, tracks].filter(Boolean).join(" · ");
 }
+
+const iconButtonClass = "shrink-0 w-11 h-11 grid place-items-center rounded-lg border border-line cursor-pointer";
 
 export function ProjectsHome({
   projectStore,
@@ -219,17 +222,23 @@ export function ProjectsHome({
               type="button"
               onClick={() => onOpenShare(openId, openName)}
               aria-label={`Share ${openName}`}
-              className="shrink-0 w-11 h-11 grid place-items-center rounded-lg border border-line text-ink cursor-pointer"
+              className={`${iconButtonClass} text-ink`}
             >
               <ShareIcon />
             </button>
+          )}
+          {/* Shown on a standalone run too, saying what it needs (HOST-23.2.7). */}
+          {onThisDevice && (
+            <HostedOnlyButton feature="Sharing" label={`Share ${openName}`} className={iconButtonClass}>
+              <ShareIcon />
+            </HostedOnlyButton>
           )}
           <button
             type="button"
             onClick={() => open && exportRow(open, openName)}
             aria-label={`Export ${openName}`}
             title="Export a copy (.daw.zip)"
-            className="shrink-0 w-11 h-11 grid place-items-center rounded-lg border border-line text-ink cursor-pointer"
+            className={`${iconButtonClass} text-ink`}
           >
             <ExportIcon />
           </button>

@@ -12,7 +12,7 @@
  * When projects have changed enough since their last export (`backupReminder`), both read "Back up?"
  * and the details lead with which ones, each with its Export button: no banner, nothing that pops up.
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { hosting, SOURCE_URL } from "../../hosting";
 import {
   installApp,
@@ -22,7 +22,7 @@ import {
   type StorageRiskSnapshot,
 } from "../../hosting/storageRisk";
 import { Popover } from "../Menu";
-import { insideMenu } from "../insideMenu";
+import { useDismiss } from "../useDismiss";
 import { DeviceIcon } from "../shellIcons";
 import { useNow } from "../timeAgo";
 import type { EditLog } from "../../audio/commands/editLog";
@@ -193,22 +193,8 @@ export function OnThisDeviceChip({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Closes on a click elsewhere or Escape, as the app's menus do.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: PointerEvent) => {
-      if (!insideMenu(event.target) && !triggerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, triggerRef);
 
   return (
     <>

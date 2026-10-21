@@ -127,3 +127,19 @@ test("the start card welcomes a standalone run, every load, and Account settings
     "saved in this browser, on this device",
   );
 });
+
+test("Share is still there on a standalone run, and says it needs Corrente online", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Saved in browser" }).click();
+  await page
+    .getByRole("dialog", { name: "Saved in browser" })
+    .getByRole("button", { name: "Export from the project page" })
+    .click();
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Sharing is part of Corrente online" })).toContainText(
+    "Sharing is part of Corrente online",
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Sharing is part of Corrente online" })).toBeHidden();
+});

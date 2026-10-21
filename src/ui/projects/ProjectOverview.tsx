@@ -8,6 +8,8 @@
  * projects have a key, and collaborator faces once the listing carries members. History is the
  * Activity feed for now; part 3 replaces it with the designed timeline.
  */
+import { HostedOnlyButton } from "../hosting/HostedOnly";
+import { onThisDevice } from "../hosting/OnThisDevice";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { EditLog } from "../../audio/commands/editLog";
@@ -27,6 +29,8 @@ import { formatLength } from "./overviewData";
 const TABS = ["tracks", "history"] as const;
 type ProjectTab = (typeof TABS)[number];
 const TAB_LABEL: Record<ProjectTab, string> = { tracks: "Tracks", history: "History" };
+
+const shareClass = "shrink-0 h-9 px-3 rounded-lg border border-line text-[13px] cursor-pointer hover:border-you";
 
 export function ProjectOverview({
   projectStore,
@@ -89,13 +93,15 @@ export function ProjectOverview({
             className="flex-1 min-w-0 text-[22px] font-semibold text-strong"
           />
           {canShare && (
-            <button
-              type="button"
-              onClick={() => onOpenShare(openId, name)}
-              className="shrink-0 h-9 px-3 rounded-lg border border-line text-[13px] text-ink cursor-pointer hover:border-you"
-            >
+            <button type="button" onClick={() => onOpenShare(openId, name)} className={`${shareClass} text-ink`}>
               Share
             </button>
+          )}
+          {/* Shown on a standalone run too, saying what it needs (HOST-23.2.7). */}
+          {onThisDevice && (
+            <HostedOnlyButton feature="Sharing" className={shareClass}>
+              Share
+            </HostedOnlyButton>
           )}
           {/* A copy of the whole project as a .daw.zip: the way to keep one when it's only in this browser. */}
           <button
