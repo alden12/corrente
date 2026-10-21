@@ -28,7 +28,8 @@ import { summarizeProject, type ProjectSummary } from "../../audio/projects/summ
 import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
 import { Menu, type MenuItem } from "../Menu";
-import { exportProjectFile, readProjectFile } from "../projectFile";
+import { downloadLibraryBackup, exportProjectFile, readProjectFile, restoreLibraryFile } from "../projectFile";
+import { describeLibraryRestore } from "../../audio/library/backup";
 import { NewerFileError } from "../../audio/projectRepository";
 import { ImportDialog } from "./ImportDialog";
 import { ExportIcon, ShareIcon } from "../shellIcons";
@@ -126,6 +127,18 @@ export function ProjectsHome({
     exportProjectFile(meta.id, name, deps).catch(() => setError(`Could not export “${name}”.`));
   };
   const [importing, setImporting] = useState<ImportPlan | null>(null);
+  /** What the last library restore did, said once under the toolbar. */
+  const [notice, setNotice] = useState<string | null>(null);
+  const libraryInput = useRef<HTMLInputElement>(null);
+  const restoreLibraryFrom = async (file: File) => {
+    setError(null);
+    setNotice(null);
+    try {
+      setNotice(describeLibraryRestore(await restoreLibraryFile(file)));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not read that library backup.");
+    }
+  };
   const importFailed = (error: unknown) =>
     setError(error instanceof NewerFileError ? error.message : "Could not open that .daw.zip file.");
   /** Open a file: at once when it's a project not here (a restore, or a copy), else after asking (HOST-23.2.1.2). */
@@ -167,7 +180,11 @@ export function ProjectsHome({
       ) : (
         <div className="h-3" />
       )}
-      {onThisDevice && <OnThisDeviceNote />}
+      {onThisDevice && (
+        <OnThisDeviceNote
+          backup={{ onBackUp: downloadLibraryBackup, onRestore: () => libraryInput.current?.click() }}
+        />
+      )}
 
       <section aria-label="Open project" className="mx-4 rounded-xl border border-line bg-stage overflow-hidden">
         <button
@@ -250,6 +267,11 @@ export function ProjectsHome({
         )}
       </div>
       {error && <p className="px-4 py-1 text-[12px] text-hot">{error}</p>}
+      {notice && (
+        <p role="status" className="px-4 py-1 text-[12px] text-muted">
+          {notice}
+        </p>
+      )}
 
       {listed.length === 0 ? (
         <p className="px-4 py-3 text-[12.5px] text-faint">{`No projects match “${filter.trim()}”.`}</p>
@@ -322,6 +344,18 @@ export function ProjectsHome({
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) void importFile(file);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={libraryInput}
+        type="file"
+        accept=".json,application/json"
+        aria-label="Restore library file"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void restoreLibraryFrom(file);
           event.target.value = "";
         }}
       />

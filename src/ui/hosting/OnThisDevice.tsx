@@ -166,8 +166,17 @@ export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void 
   );
 }
 
-/** The line at the top of Projects, opening the details in place. */
-export function OnThisDeviceNote() {
+/** Back up the library, or restore it, where Projects has the means to (HOST-23.2.1.2). */
+export interface BackupActions {
+  onBackUp: () => void;
+  onRestore: () => void;
+}
+
+const actionClass =
+  "h-8 pointer-coarse:h-10 px-3 rounded-md border border-line bg-ground text-[12.5px] text-ink hover:border-you cursor-pointer";
+
+/** The line at the top of Projects, opening the details in place, with the library's backup beneath them. */
+export function OnThisDeviceNote({ backup }: { backup?: BackupActions }) {
   const [open, setOpen] = useState(false);
   return (
     <section aria-label="Saved in browser" className="mx-4 mb-3">
@@ -191,8 +200,23 @@ export function OnThisDeviceNote() {
         </svg>
       </button>
       {open && (
-        <div className="mt-1 rounded-lg border border-line bg-stage px-3.5 py-3">
+        <div className="mt-1 flex flex-col gap-3 rounded-lg border border-line bg-stage px-3.5 py-3">
           <OnThisDeviceDetails />
+          {backup && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[12.5px] leading-snug text-muted">
+                Your patches, custom devices and favourites are kept apart from projects: back them up here.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={backup.onBackUp} className={actionClass}>
+                  Back up library
+                </button>
+                <button type="button" onClick={backup.onRestore} className={actionClass}>
+                  Restore library…
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
