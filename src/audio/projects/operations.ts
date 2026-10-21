@@ -18,10 +18,14 @@ import {
   currentProjectId,
   markProjectLoaded,
   ProjectRepository,
+  readExport,
   type BundleFiles,
+  type ExportContents,
 } from "../projectRepository";
 import { getProjectStorage, type ProjectStorage } from "../bundleStore";
-import { newProjectId, refreshProjects } from "./library";
+import { listProjects, newProjectId, refreshProjects } from "./library";
+import { editKeys, relationOf, type ImportRelation } from "./projectVersions";
+import { hosting } from "../../hosting";
 import { restoreProject } from "../persistence";
 import { clearUndoSession } from "../undoSession";
 
@@ -174,12 +178,118 @@ export async function importProject(
   deps: ProjectDeps,
   files: BundleFiles,
   storage: ProjectStorage = getProjectStorage(),
+  name?: string,
 ): Promise<string> {
   const id = newProjectId();
   const repo = new ProjectRepository(storage.bundle(id), id);
   const { project } = await repo.importBundle(files);
-  await repo.setName(project.name || repo.getName());
+  await repo.setName(name ?? (project.name || repo.getName()));
   await switchProject(deps, id, storage);
+  return id;
+}
+
+/**
+ * What opening an exported project can do (HOST-23.2.1.2), the first being the one to suggest:
+ * restore it under its own id, open the copy already here, roll the one here back to it, bring the
+ * one here up to it, or make a new project of it.
+ */
+export type ImportAction = "restore" | "open" | "rollback" | "update" | "copy";
+
+const ACTIONS: Record<ImportRelation, ImportAction[]> = {
+  absent: ["restore"],
+  same: ["open", "copy"],
+  earlier: ["rollback", "copy"],
+  newer: ["update", "copy"],
+  // Each has edits the other lacks, and two histories aren't merged: only a copy keeps both.
+  diverged: ["copy"],
+};
+
+/** An exported project read, and how it relates to the project of the same id here. */
+export interface ImportPlan {
+  relation: ImportRelation;
+  /** Its own id, kept by everything but a copy. Undefined when it isn't to be kept. */
+  projectId?: string;
+  name: string;
+  /** What to offer. One choice needs no question. */
+  actions: ImportAction[];
+  contents: ExportContents;
+  files: BundleFiles;
+}
+
+/** The edit ids of the project here with this id, or undefined when there isn't one. */
+async function localEditKeys(deps: ProjectDeps, id: string, storage: ProjectStorage) {
+  if (id === currentProjectId()) return editKeys(deps.editLog.getEntries());
+  if (!listProjects().some((meta) => meta.id === id)) return undefined;
+  const saved = await new ProjectRepository(storage.bundle(id), id).load();
+  return saved ? editKeys(saved.log) : undefined;
+}
+
+/**
+ * Read an exported project and work out what opening it can do, writing nothing. Ids are kept only
+ * where the projects are this device's own (standalone): on a server, a file's id could be anyone's
+ * project, so there it is always a new one.
+ */
+export async function planImport(
+  deps: ProjectDeps,
+  files: BundleFiles,
+  storage: ProjectStorage = getProjectStorage(),
+  keepIds: boolean = hosting.mode === "standalone",
+): Promise<ImportPlan> {
+  const contents = readExport(files);
+  const projectId = keepIds ? contents.projectId : undefined;
+  const relation = projectId
+    ? relationOf(await localEditKeys(deps, projectId, storage), editKeys(contents.log))
+    : "absent";
+  const name = contents.name || contents.project.name || "Untitled";
+  return { relation, projectId, name, actions: projectId ? ACTIONS[relation] : ["copy"], contents, files };
+}
+
+/** Write a bundle under its own id. */
+async function writeBundle(id: string, plan: ImportPlan, storage: ProjectStorage): Promise<void> {
+  const repo = new ProjectRepository(storage.bundle(id), id);
+  await repo.importBundle(plan.files);
+  await repo.setName(plan.name);
+}
+
+/** Do one of a plan's actions, and open the project it leaves. Returns that project's id. */
+export async function applyImport(
+  deps: ProjectDeps,
+  plan: ImportPlan,
+  action: ImportAction,
+  storage: ProjectStorage = getProjectStorage(),
+): Promise<string> {
+  const id = plan.projectId;
+  if (action === "copy" || !id)
+    // Beside one of the same name, a copy says so, as a fork does.
+    return importProject(deps, plan.files, storage, plan.relation === "absent" ? undefined : `${plan.name} (copy)`);
+  const handlers: Record<Exclude<ImportAction, "copy">, () => Promise<void>> = {
+    restore: async () => {
+      await writeBundle(id, plan, storage);
+      await switchProject(deps, id, storage);
+    },
+    open: () => switchProject(deps, id, storage),
+    // An edit, so it can be undone, and the history up to now stays.
+    rollback: async () => {
+      await switchProject(deps, id, storage);
+      deps.editLog.dispatch({
+        type: "loadSnapshot",
+        project: plan.contents.project,
+        message: "Roll back to an exported version",
+      });
+    },
+    // The one here is an earlier part of the file, so writing the file over it loses nothing.
+    update: async () => {
+      if (id !== currentProjectId()) {
+        await writeBundle(id, plan, storage);
+        return switchProject(deps, id, storage);
+      }
+      await flush(deps);
+      await getRepository().importBundle(plan.files);
+      await loadCurrentInto(deps);
+      await refreshProjects(storage);
+    },
+  };
+  await handlers[action]();
   return id;
 }
 

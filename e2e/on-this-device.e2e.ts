@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { dismissStart } from "./support/app";
 
+/** `<name>-<date>-<version>.daw.zip` (HOST-23.2.1.2). */
+const EXPORT_NAME = /^untitled-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
+
 /**
  * With no server configured (as this suite runs), the app says where its files are, calmly
  * (HOST-23.2.5): a chip in the status bar, and a line at the top of Projects, each opening the same
@@ -29,7 +32,7 @@ test("a standalone run says its files are on this device, from the status bar an
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export", exact: true }).click(),
   ]);
-  expect(download.suggestedFilename()).toBe("untitled.daw.zip");
+  expect(download.suggestedFilename()).toMatch(EXPORT_NAME);
 
   // Already on the project's page, so the list is one step up.
   await page.getByRole("button", { name: "Back to Projects" }).click();
@@ -41,5 +44,5 @@ test("a standalone run says its files are on this device, from the status bar an
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export Untitled" }).click(),
   ]);
-  expect(fromCard.suggestedFilename()).toBe("untitled.daw.zip");
+  expect(fromCard.suggestedFilename()).toMatch(EXPORT_NAME);
 });

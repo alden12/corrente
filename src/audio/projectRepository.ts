@@ -18,7 +18,7 @@
 import { projectSummarySchema, summarizeProject, type ProjectSummary } from "./projects/summary";
 import { ProjectStore } from "./project/projectStore";
 import type { ProjectData } from "./project/types";
-import { projectDataSchema } from "./project/schema";
+import { manifestSchema, projectDataSchema } from "./project/schema";
 import type { Author, EditCommand, EditEntry } from "./commands/types";
 import type { FeedNote } from "./commands/editLog";
 import { type BundleStore, getProjectStorage } from "./bundleStore";
@@ -159,6 +159,50 @@ export class UnreadableProjectError extends Error {
 
 /** A bundle as a flat path -> bytes map (what gets zipped into a `.daw.zip`). */
 export type BundleFiles = Record<string, Uint8Array>;
+
+/** What an exported bundle holds, read and brought up to this app's document version. */
+export interface ExportContents extends StoredProject {
+  /** The exported project's id, when its manifest names a usable one. */
+  projectId?: string;
+  name?: string;
+}
+
+/** A file from a newer app than this one: its message is for the user. */
+export class NewerFileError extends Error {
+  constructor() {
+    super("This file was made by a newer version of Corrente. Update the app to open it.");
+  }
+}
+
+/** A project id safe to use as a folder name: the shape `newProjectId` makes, and the server's. */
+const PROJECT_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+/**
+ * Read an exported bundle (an unzipped `.daw.zip`), an untrusted file. The document is upcast from the
+ * version its manifest names, as a stored project is on load, so an older export opens as it was made
+ * rather than being saved as though it were current. A file from a newer app is refused (HOST-23.1).
+ */
+export function readExport(files: BundleFiles): ExportContents {
+  const parse = (path: string): unknown => (files[path] ? JSON.parse(text(files[path])) : undefined);
+  const manifest = manifestSchema.safeParse(parse("manifest.json"));
+  const fromVersion = manifest.success ? manifest.data.projectSchema : PROJECT_SCHEMA;
+  if (fromVersion > PROJECT_SCHEMA) throw new NewerFileError();
+  const raw = parse("project.json");
+  if (!raw || typeof raw !== "object" || !("tracks" in raw)) throw new Error("bundle: missing project.json");
+  const { data, version } = migrateDocument(raw, fromVersion, PROJECT_SCHEMA);
+  if (version < PROJECT_SCHEMA) throw new Error(`bundle: can't bring a version ${fromVersion} project up to date`);
+  const stream = Array.isArray(parse("edits.json")) ? (parse("edits.json") as EditEntry[]) : [];
+  const { entries: log, notes } = fromStream(stream);
+  const id = manifest.success ? manifest.data.projectId : undefined;
+  const meta = parse("meta.json") as { name?: unknown } | undefined;
+  return {
+    project: data as ProjectData,
+    log,
+    notes,
+    projectId: id && PROJECT_ID.test(id) ? id : undefined,
+    name: typeof meta?.name === "string" ? meta.name : undefined,
+  };
+}
 
 /**
  * One node in the version-history DAG: the authored edits it bundles and a pointer
@@ -664,10 +708,7 @@ export class ProjectRepository {
   /** Load a bundle file map (from an unzipped `.daw.zip`), replacing the project. Reads the unified
    *  `edits.json` stream (edits + feed notes). */
   async importBundle(files: BundleFiles): Promise<StoredProject> {
-    const project = JSON.parse(text(files["project.json"])) as ProjectData;
-    if (!project?.tracks) throw new Error("bundle: missing project.json");
-    const stream = files["edits.json"] ? (JSON.parse(text(files["edits.json"])) as EditEntry[]) : [];
-    const { entries: log, notes } = fromStream(stream);
+    const { project, log, notes, projectId } = readExport(files);
     for (const [path, bytes] of Object.entries(files)) {
       if (!path.startsWith("samples/")) continue;
       const id = path.slice("samples/".length).replace(/\.[^.]*$/, ""); // strip dir + extension -> content hash
@@ -676,13 +717,7 @@ export class ProjectRepository {
     }
     // A repository made for a project keeps its own id, so importing a file makes a new project from
     // it rather than a second one under the exported project's id. Only a bare one adopts the file's.
-    if (!this.projectId) {
-      try {
-        this.projectId = (JSON.parse(text(files["manifest.json"])) as Manifest).projectId;
-      } catch {
-        this.projectId = null;
-      }
-    }
+    if (!this.projectId) this.projectId = projectId ?? null;
     try {
       this.name = (JSON.parse(text(files["meta.json"])) as { name?: string }).name ?? this.name;
     } catch {

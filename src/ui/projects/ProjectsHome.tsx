@@ -14,13 +14,23 @@ import type { VersionStore } from "../../audio/commands/history";
 import { useProject } from "../../audio/project/useProject";
 import { currentProjectId, subscribeCurrentProject } from "../../audio/projectRepository";
 import { listProjects, subscribeProjects, type ProjectMeta } from "../../audio/projects/library";
-import { createProject, deleteProject, renameProject, switchProject } from "../../audio/projects/operations";
+import {
+  applyImport,
+  createProject,
+  deleteProject,
+  planImport,
+  renameProject,
+  switchProject,
+  type ImportPlan,
+} from "../../audio/projects/operations";
 import { reportUnreadableProject } from "../../audio/projects/recovery";
 import { summarizeProject, type ProjectSummary } from "../../audio/projects/summary";
 import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
 import { Menu, type MenuItem } from "../Menu";
-import { exportProjectFile, importProjectFile } from "../projectFile";
+import { exportProjectFile, readProjectFile } from "../projectFile";
+import { NewerFileError } from "../../audio/projectRepository";
+import { ImportDialog } from "./ImportDialog";
 import { ExportIcon, ShareIcon } from "../shellIcons";
 import { timeAgo, useNow } from "../timeAgo";
 import { ArrangementThumb } from "./ArrangementThumb";
@@ -115,9 +125,19 @@ export function ProjectsHome({
     setError(null);
     exportProjectFile(meta.id, name, deps).catch(() => setError(`Could not export “${name}”.`));
   };
-  const importFile = (file: File) => {
+  const [importing, setImporting] = useState<ImportPlan | null>(null);
+  const importFailed = (error: unknown) =>
+    setError(error instanceof NewerFileError ? error.message : "Could not open that .daw.zip file.");
+  /** Open a file: at once when it's a project not here (a restore, or a copy), else after asking (HOST-23.2.1.2). */
+  const importFile = async (file: File) => {
     setError(null);
-    importProjectFile(file, deps).catch(() => setError("Could not open that .daw.zip file."));
+    try {
+      const plan = await planImport(deps, await readProjectFile(file));
+      if (plan.relation === "absent") await applyImport(deps, plan, plan.actions[0]);
+      else setImporting(plan);
+    } catch (error) {
+      importFailed(error);
+    }
   };
   const renamePrompt = (name: string) => {
     const next = window.prompt("Rename project", name);
@@ -301,10 +321,20 @@ export function ProjectsHome({
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) importFile(file);
+          if (file) void importFile(file);
           event.target.value = "";
         }}
       />
+      {importing && importing.relation !== "absent" && (
+        <ImportDialog
+          plan={{ ...importing, relation: importing.relation }}
+          onCancel={() => setImporting(null)}
+          onChoose={(action) => {
+            setImporting(null);
+            applyImport(deps, importing, action).catch(importFailed);
+          }}
+        />
+      )}
       {naming && (
         <NewProjectDialog
           onCancel={() => setNaming(false)}
