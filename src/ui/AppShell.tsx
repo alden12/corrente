@@ -322,8 +322,10 @@ export function AppShell() {
   );
 
   useEffect(() => {
-    // Only where the local MCP server could be listening; elsewhere it is refusals and retries.
-    if (!localBridgeReachable()) return;
+    // Only where the local MCP server could be listening; elsewhere it is refusals and retries. Not
+    // in a test build either: an end-to-end run's page would reach the developer's own server and,
+    // being in front, take the agent from the tab they're working in (AGENT-32).
+    if (!localBridgeReachable() || import.meta.env?.MODE === "test") return;
     const handle = connectMcpBridge(
       { projectStore, engine, scheduler, editLog, versionStore },
       { onStatus: setMcpStatus },

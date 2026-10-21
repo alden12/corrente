@@ -14,6 +14,7 @@ import { SyncChip } from "./ConnectionStatus";
 import { EMPTY_INSTRUMENT } from "../audio/instruments/catalog";
 import { InlineRename } from "./InlineRename";
 import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
+import { OnThisDeviceChip, onThisDevice } from "./hosting/OnThisDevice";
 
 // The built-in agent does not need MCP, so a missing connection is not a warning:
 // only "connected" is called out (green + label); otherwise it is a quiet grey dot
@@ -66,6 +67,7 @@ export function CenterWorkbench({
   const indicators = (
     <div className="ml-auto self-center flex items-center gap-2 pr-2">
       {syncStatus && <SyncChip status={syncStatus} />}
+      {onThisDevice && <OnThisDeviceChip />}
       {/* MCP is a dev/local bridge; show it only when actually connected, so it doesn't sit as a
           second bare dot beside the sync chip (confusing) the rest of the time. Grey when the agent
           drives another tab. */}

@@ -38,10 +38,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { placeMenu, type Placed } from "./menuPlacement";
+import { insideMenu } from "./insideMenu";
 import { Fader } from "./controls/Fader";
-
-/** Marks every popover in the tree, so "did this click land inside the menu?" is one query. */
-const POPOVER_ATTR = "data-menu-popover";
 
 /** How long a flyout survives the pointer leaving its row, so the gap to it is crossable. */
 const HOVER_GRACE_MS = 140;
@@ -98,25 +96,27 @@ const itemClass = (danger?: boolean) =>
  */
 const isHover = (event: ReactPointerEvent) => event.pointerType !== "touch";
 
-/** True if the event landed inside any popover of any open menu. */
-const insideMenu = (target: EventTarget | null) =>
-  target instanceof Element && Boolean(target.closest(`[${POPOVER_ATTR}]`));
-
 /**
  * A portaled popover anchored to an element, measured and placed before paint so it never
  * flashes at the unplaced position. It reports `maxHeight`, so a list too long for the room
- * scrolls inside itself rather than off the edge.
+ * scrolls inside itself rather than off the edge. A menu's by default; a popover of text (the
+ * "On this device" panel) is a `dialog`.
  */
-function Popover({
+export function Popover({
   anchorRef,
   strategy,
   side,
   onDetached,
   onPointerEnter,
   onPointerLeave,
+  role = "menu",
+  label,
   children,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
+  role?: "menu" | "dialog";
+  /** Accessible name, for a dialog. */
+  label?: string;
   strategy: "below" | "beside";
   side: "left" | "right";
   /** The anchor has left the viewport, so there is nothing left to hang off. */
@@ -186,7 +186,8 @@ function Popover({
   return createPortal(
     <div
       ref={ref}
-      role="menu"
+      role={role}
+      aria-label={label}
       data-menu-popover=""
       // Stop pointerdown from bubbling to document: the popover is portaled to
       // document.body, so an ancestor popover's outside-click handler would otherwise

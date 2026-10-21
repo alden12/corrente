@@ -26,6 +26,7 @@ import { timeAgo, useNow } from "../timeAgo";
 import { ArrangementThumb } from "./ArrangementThumb";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { nameMatches } from "./nameMatches";
+import { OnThisDeviceNote, onThisDevice } from "../hosting/OnThisDevice";
 
 /** Two heads: a project someone else shared with you. */
 function SharedIcon() {
@@ -146,6 +147,7 @@ export function ProjectsHome({
       ) : (
         <div className="h-3" />
       )}
+      {onThisDevice && <OnThisDeviceNote />}
 
       <section aria-label="Open project" className="mx-4 rounded-xl border border-line bg-stage overflow-hidden">
         <button
