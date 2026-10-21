@@ -8,7 +8,7 @@
  * The same details in two places: on desktop behind a chip where the sync chip sits, and on both
  * shells as a line at the top of Projects, where people look for their files. The storage steps
  * (HOST-23.2.1) add to the details: whether the browser may clear them (`storageRisk`), and backups.
- * The chip looks the same whatever the browser said: the risk is told in the details, not by colour.
+ * The risk is told in the details; only Safari's week, where the files will go, turns the icon amber.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { hosting } from "../../hosting";
@@ -38,6 +38,15 @@ const RISK: Record<StorageRisk, string> = {
     "This browser may clear them if the device runs short of space. Installing Corrente asks it to keep them.",
   week: "Safari deletes them after 7 days without a visit. Add Corrente to your Dock (File menu) or Home Screen (Share menu) to keep them.",
 };
+
+/**
+ * The laptop, amber only while Safari's week applies: the one case where the files will go unless
+ * something is done, rather than might under storage pressure (Alden, 2026-10-21).
+ */
+function PlaceIcon() {
+  const { risk } = useStorageRisk();
+  return <DeviceIcon className={`w-4 h-4 ${risk === "week" ? "text-warn" : ""}`} />;
+}
 
 /** The browser's storage answer, and an Install button where the browser offers one. */
 function StorageLine() {
@@ -129,7 +138,7 @@ export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void 
         onClick={() => setOpen((was) => !was)}
         className="inline-flex items-center gap-1.5 h-6 px-1 font-mono text-[11px] text-muted hover:text-ink cursor-pointer"
       >
-        <DeviceIcon />
+        <PlaceIcon />
         Saved in browser
       </button>
       {open && (
@@ -168,7 +177,7 @@ export function OnThisDeviceNote() {
         onClick={() => setOpen((was) => !was)}
         className="flex items-center gap-2 min-h-9 pointer-coarse:min-h-11 text-[12.5px] text-muted hover:text-ink cursor-pointer"
       >
-        <DeviceIcon />
+        <PlaceIcon />
         Saved in browser
         <svg
           viewBox="0 0 16 16"
