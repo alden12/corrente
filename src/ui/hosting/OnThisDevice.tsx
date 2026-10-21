@@ -1,8 +1,9 @@
 /**
  * "On this device" (HOST-23.2.5): what a standalone run says about where its files are, calmly and
- * once in each place rather than as a warning. Standalone is a mode, not a fault, so it shows a place
- * (a laptop icon) rather than a status dot, and never the warning colour the offline banner uses
- * (that's for hosted but unreachable).
+ * once in each place rather than as a warning. Labelled "Saved in browser" rather than "on this
+ * device", because the browser is the fragile part and the label should hint at it. Standalone is a
+ * mode, not a fault, so it shows a place (a laptop icon) rather than a status dot, and never the
+ * warning colour the offline banner uses (that's for hosted but unreachable).
  *
  * The same details in two places: on desktop behind a chip where the sync chip sits, and on both
  * shells as a line at the top of Projects, where people look for their files. The storage steps
@@ -121,7 +122,7 @@ export function OnThisDeviceChip() {
         className="inline-flex items-center gap-1.5 h-6 px-1 font-mono text-[11px] text-muted hover:text-ink cursor-pointer"
       >
         <DeviceIcon />
-        On this device
+        Saved in browser
       </button>
       {open && (
         <Popover
@@ -129,7 +130,7 @@ export function OnThisDeviceChip() {
           strategy="below"
           side="right"
           role="dialog"
-          label="On this device"
+          label="Saved in browser"
           onDetached={() => setOpen(false)}
         >
           {() => (
@@ -147,7 +148,7 @@ export function OnThisDeviceChip() {
 export function OnThisDeviceNote() {
   const [open, setOpen] = useState(false);
   return (
-    <section aria-label="On this device" className="mx-4 mb-3">
+    <section aria-label="Saved in browser" className="mx-4 mb-3">
       <button
         type="button"
         aria-expanded={open}
@@ -155,7 +156,7 @@ export function OnThisDeviceNote() {
         className="flex items-center gap-2 min-h-9 pointer-coarse:min-h-11 text-[12.5px] text-muted hover:text-ink cursor-pointer"
       >
         <DeviceIcon />
-        Saved on this device
+        Saved in browser
         <svg
           viewBox="0 0 16 16"
           aria-hidden="true"

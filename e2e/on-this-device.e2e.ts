@@ -13,8 +13,8 @@ test("a standalone run says its files are on this device, from the status bar an
   await page.goto("/");
   await dismissStart(page);
 
-  await page.getByRole("button", { name: "On this device" }).click();
-  const details = page.getByRole("dialog", { name: "On this device" });
+  await page.getByRole("button", { name: "Saved in browser" }).click();
+  const details = page.getByRole("dialog", { name: "Saved in browser" });
   await expect(details).toContainText("saved in this browser, on this device");
   // And what the browser may do with them (HOST-23.2.1.1): headless Chromium answers either way.
   await expect(details).toContainText(/may clear them|has agreed to keep them/);
@@ -22,7 +22,7 @@ test("a standalone run says its files are on this device, from the status bar an
   await expect(details).toBeHidden();
 
   await openProjectList(page);
-  const note = page.getByRole("region", { name: "On this device" });
-  await note.getByRole("button", { name: "Saved on this device" }).click();
+  const note = page.getByRole("region", { name: "Saved in browser" });
+  await note.getByRole("button", { name: "Saved in browser" }).click();
   await expect(note).toContainText("export a project from its ⋮ menu");
 });
