@@ -33,6 +33,9 @@ export const onThisDevice = hosting.mode === "standalone";
 
 const linkClass = "text-you underline underline-offset-2 hover:text-strong";
 
+/** The open source's home: the app's own repository, so nothing private. */
+const SOURCE_URL = "https://github.com/alden12/corrente";
+
 const useStorageRisk = (): StorageRiskSnapshot =>
   useSyncExternalStore(subscribeStorageRisk, readStorageRisk, readStorageRisk);
 
@@ -126,7 +129,11 @@ function BackupReminder({ reminder }: { reminder?: Reminder }) {
   );
 }
 
-/** Where the files are, how to keep a copy, and what the online app adds. */
+/**
+ * Where the files are, how to keep a copy, what the online app adds, and where the source is. Also
+ * the first-run intro (HOST-23.2.6, in the start card) and the Account settings page, so dismissing
+ * the intro never hides where the files went.
+ */
 export function OnThisDeviceDetails({ onShowProject, reminder }: { onShowProject?: () => void; reminder?: Reminder }) {
   const { interest, hostedApp } = hosting.links;
   return (
@@ -160,6 +167,13 @@ export function OnThisDeviceDetails({ onShowProject, reminder }: { onShowProject
           )}
         </p>
       )}
+      <p className="text-muted">
+        Corrente is open source. Run it on your own computer and an AI agent such as Claude can play it with you:{" "}
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className={linkClass}>
+          source on GitHub
+        </a>
+        .
+      </p>
     </div>
   );
 }

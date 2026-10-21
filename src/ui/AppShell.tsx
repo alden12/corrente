@@ -8,6 +8,7 @@
  * touch layout (pinned transport, one view, bottom tabs). Everything above is shared,
  * so mobile is another projection of the same stores rather than a fork.
  */
+import { OnThisDeviceDetails } from "./hosting/OnThisDevice";
 import { openProjectsPage } from "./projects/projectsPage";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ProjectStore } from "../audio/project/projectStore";
@@ -170,6 +171,8 @@ export function AppShell() {
   const [libCollapsed, setLibCollapsed] = usePersistentBoolean("corrente:lib-collapsed", false);
   const [libView, setLibView] = usePersistentString<LibraryView>("corrente:lib-view", "explore", LIBRARY_VIEWS);
   const [agentCollapsed, setAgentCollapsed] = usePersistentBoolean("corrente:agent-collapsed", true);
+  // The first-run intro (HOST-23.2.6), in the start card until the engine has once started.
+  const [introSeen, setIntroSeen] = usePersistentBoolean("corrente:intro-seen", false);
   const deviceShape = useDeviceShape();
   // Null when the settings panel is closed. Open, it names the tab to show when a caller means one
   // (the agent panel's link asks for Agent); the logo names none, and gets the tab you left it on.
@@ -415,6 +418,7 @@ export function AppShell() {
     }
     setStartError(undefined);
     setStarted(true);
+    setIntroSeen(true);
     // Route to the remembered output device (if any) now that the context exists.
     const outputId = readOutputDeviceId();
     if (outputId) void engine.setOutputDevice(outputId);
@@ -481,7 +485,13 @@ export function AppShell() {
           />
         )}
         {share && <SharePanel projectId={share.id} projectName={share.name} onClose={() => setShare(null)} />}
-        {!started && <StartDialog onStart={handleStart} error={startError} />}
+        {!started && (
+          <StartDialog
+            onStart={handleStart}
+            error={startError}
+            intro={hosting.mode === "standalone" && !introSeen ? <OnThisDeviceDetails /> : undefined}
+          />
+        )}
         {!projectLoaded && <LoadingOverlay />}
         {recovery && (
           <RecoveryDialog

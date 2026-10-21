@@ -19,6 +19,7 @@ import type { EditLog } from "../audio/commands/editLog";
 import { type AuthorColorConfig } from "./authorColors";
 import { readCurrentUser, subscribeCurrentUser, writeCurrentUser, DEFAULT_USER } from "./currentUser";
 import { AccountAvatar } from "./AccountAvatar";
+import { OnThisDeviceDetails, onThisDevice } from "./hosting/OnThisDevice";
 
 export function AccountSettings({
   config,
@@ -35,6 +36,12 @@ export function AccountSettings({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* No account here: where the files are instead, the first-run intro's permanent home (HOST-23.2.6). */}
+      {onThisDevice && (
+        <section aria-label="Saved in browser" className="rounded-lg border border-line bg-stage px-3.5 py-3">
+          <OnThisDeviceDetails />
+        </section>
+      )}
       {signedIn ? (
         <SignedInIdentity
           name={authState.status === "signed-in" ? authState.user.name : ""}

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart } from "./support/app";
+import { dismissStart, openSettingsPage } from "./support/app";
 
 /** `<name>-<date>-<version>.daw.zip` (HOST-23.2.1.2). */
 const EXPORT_NAME = /^untitled-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
@@ -108,4 +108,24 @@ test.describe("on a phone", () => {
     await details.getByRole("button", { name: "Not now" }).tap();
     await expect(page.getByRole("button", { name: "Saved in browser" })).toBeVisible();
   });
+});
+
+test("the first run says where the files go in the start card, once, and Account settings keeps saying it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const start = page.getByRole("dialog", { name: "Start the audio engine" });
+  await expect(start).toContainText("saved in this browser, on this device");
+  await expect(start.getByRole("link", { name: "source on GitHub" })).toBeVisible();
+  await dismissStart(page);
+
+  await page.reload();
+  await expect(start).toBeVisible();
+  await expect(start).not.toContainText("saved in this browser");
+  await dismissStart(page);
+
+  await openSettingsPage(page, "Account");
+  await expect(page.getByRole("region", { name: "Saved in browser" })).toContainText(
+    "saved in this browser, on this device",
+  );
 });
