@@ -13,7 +13,7 @@ import { linkClass } from "./OnThisDevice";
 /** The README's section on driving the app from Claude Code over MCP. */
 const AGENT_GUIDE_URL = `${SOURCE_URL}#working-with-an-ai-assistant`;
 
-export const External = ({ href, children }: { href: string; children: string }) => (
+const External = ({ href, children }: { href: string; children: string }) => (
   <a href={href} target="_blank" rel="noreferrer" className={linkClass}>
     {children}
   </a>

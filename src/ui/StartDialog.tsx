@@ -6,7 +6,7 @@
 import type { ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
 import { SOURCE_URL } from "../hosting";
-import { External } from "./hosting/Welcome";
+import { GitHubIcon } from "./shellIcons";
 
 /**
  * `intro` is what a standalone run needs to know (HOST-23.2.6): said here, in the card that's shown
@@ -29,7 +29,17 @@ export function StartDialog({ onStart, error, intro }: { onStart: () => void; er
         <div className="flex flex-col gap-1">
           <p className="text-2xl font-semibold tracking-tight text-strong">Welcome to Corrente</p>
           <p className="text-[13px] text-muted leading-snug">
-            An open source music studio and instrument builder (<External href={SOURCE_URL}>source</External>).
+            An open source music studio and instrument builder{" "}
+            <a
+              href={SOURCE_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Source on GitHub"
+              title="Source on GitHub"
+              className="inline-flex align-[-3px] text-muted hover:text-ink"
+            >
+              <GitHubIcon />
+            </a>
           </p>
         </div>
         {intro && <div className="w-full text-left">{intro}</div>}

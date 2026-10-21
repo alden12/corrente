@@ -115,7 +115,7 @@ test("the start card welcomes a standalone run, every load, and Account settings
   const start = page.getByRole("dialog", { name: "Start the audio engine" });
   await expect(start).toContainText("Welcome to Corrente");
   await expect(start.getByRole("region", { name: "Local only" })).toContainText("export your projects regularly");
-  await expect(start.getByRole("link", { name: "source", exact: true })).toBeVisible();
+  await expect(start.getByRole("link", { name: "Source on GitHub" })).toBeVisible();
   await dismissStart(page);
 
   await page.reload();
