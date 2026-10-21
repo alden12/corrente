@@ -74,6 +74,7 @@ import { readRecordOffsetMs } from "./recordOffset";
 import { readOutputDeviceId } from "./outputDevice";
 import { isTypingTarget } from "./typingTarget";
 import { hosting } from "../hosting";
+import { refreshStorageRisk } from "../hosting/storageRisk";
 
 const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
 
@@ -247,8 +248,12 @@ export function AppShell() {
     let disposePersistence = () => {};
     let disposeUndo = () => {};
     let disposeCheckpoints = () => {};
+    let disposeAskAgain = () => {};
     // Best-effort: keep the offline cache + write-queue from being evicted under storage pressure.
-    void requestPersistentStorage();
+    // Asked at once, and again after the first edit once the project is open, when the browser is
+    // likelier to grant it (Chrome goes by engagement); the "On this device" panel shows what it
+    // said (HOST-23.2.1.1).
+    void requestPersistentStorage().then(refreshStorageRisk);
     void initProjects({ projectStore, editLog, versionStore }, { preferId: linkedProjectId.current })
       .then(() => {
         if (!active) return;
@@ -292,6 +297,10 @@ export function AppShell() {
         // happened to leave behind.
         disposeUndo = attachUndoPersistence(editLog);
         disposeCheckpoints = versionStore.attach();
+        disposeAskAgain = editLog.subscribe(() => {
+          disposeAskAgain();
+          void requestPersistentStorage().then(refreshStorageRisk);
+        });
       })
       .catch((error) => {
         // A project that cannot be read is a question for the user, not a line in the console: the
@@ -308,6 +317,7 @@ export function AppShell() {
       disposePersistence();
       disposeUndo();
       disposeCheckpoints();
+      disposeAskAgain();
     };
   }, [projectStore, editLog, versionStore]);
 

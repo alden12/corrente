@@ -5,10 +5,18 @@
  *
  * The same details in two places: on desktop behind a chip where the sync chip sits, and on both
  * shells as a line at the top of Projects, where people look for their files. The storage steps
- * (HOST-23.2.1) add to the details: whether the browser may clear them, and backups.
+ * (HOST-23.2.1) add to the details: whether the browser may clear them (`storageRisk`), and backups.
+ * At risk, the dot turns amber: a state of the chip, never a banner that comes back.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { hosting } from "../../hosting";
+import {
+  installApp,
+  readStorageRisk,
+  subscribeStorageRisk,
+  type StorageRisk,
+  type StorageRiskSnapshot,
+} from "../../hosting/storageRisk";
 import { Popover } from "../Menu";
 import { insideMenu } from "../insideMenu";
 
@@ -17,12 +25,44 @@ export const onThisDevice = hosting.mode === "standalone";
 
 const linkClass = "text-you underline underline-offset-2 hover:text-strong";
 
+const useStorageRisk = (): StorageRiskSnapshot =>
+  useSyncExternalStore(subscribeStorageRisk, readStorageRisk, readStorageRisk);
+
+/** What the browser may do with the files, and the way out. */
+const RISK: Record<StorageRisk, string> = {
+  kept: "This browser has agreed to keep them; only clearing this site's data removes them.",
+  "may-clear":
+    "This browser may clear them if the device runs short of space. Installing Corrente asks it to keep them.",
+  week: "Safari deletes them after 7 days without a visit. Add Corrente to your Dock (File menu) or Home Screen (Share menu) to keep them.",
+};
+
+/** The browser's storage answer, and an Install button where the browser offers one. */
+function StorageLine() {
+  const { risk, canInstall } = useStorageRisk();
+  if (!risk) return null;
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <p className={risk === "kept" ? "text-muted" : "text-ink"}>{RISK[risk]}</p>
+      {canInstall && risk !== "kept" && (
+        <button
+          type="button"
+          onClick={() => void installApp()}
+          className="h-8 pointer-coarse:h-10 px-3 rounded-md border border-line bg-ground text-ink hover:border-you cursor-pointer"
+        >
+          Install Corrente
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Where the files are, how to keep a copy, and what the online app adds. */
 export function OnThisDeviceDetails() {
   const { interest, hostedApp } = hosting.links;
   return (
     <div className="flex flex-col gap-2 text-[12.5px] leading-snug text-ink">
       <p>Your projects, patches and favourites are saved in this browser, on this device.</p>
+      <StorageLine />
       <p className="text-muted">To keep a copy, export a project from its ⋮ menu in Projects.</p>
       {(interest || hostedApp) && (
         <p className="text-muted">
@@ -46,7 +86,12 @@ export function OnThisDeviceDetails() {
   );
 }
 
-const Dot = () => <span aria-hidden="true" className="w-2 h-2 rounded-full bg-faint" />;
+/** Grey, or amber while the browser may clear the files. */
+function Dot() {
+  const { risk } = useStorageRisk();
+  const atRisk = risk !== undefined && risk !== "kept";
+  return <span aria-hidden="true" className={`w-2 h-2 rounded-full ${atRisk ? "bg-warn" : "bg-faint"}`} />;
+}
 
 /** The desktop status bar's chip, in place of the sync chip: a click shows the details. */
 export function OnThisDeviceChip() {
