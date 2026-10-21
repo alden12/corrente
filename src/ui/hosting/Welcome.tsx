@@ -48,7 +48,7 @@ export function Welcome() {
         </p>
       )}
 
-      <p>
+      <p className="pt-3 border-t border-line">
         <strong className="font-semibold text-strong">With an agent.</strong> Run Corrente from its source and Claude
         Code connects to it over MCP, to build instruments and mix with you.{" "}
         <External href={AGENT_GUIDE_URL}>How to set it up</External>
