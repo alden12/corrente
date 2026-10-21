@@ -46,3 +46,48 @@ test("a standalone run says its files are on this device, from the status bar an
   ]);
   expect(fromCard.suggestedFilename()).toMatch(EXPORT_NAME);
 });
+
+test("the chip asks to back up a week after a change, until it's exported, put off or turned off", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/");
+  await dismissStart(page);
+  const chip = page.getByRole("button", { name: "Saved in browser" });
+  const asking = page.getByRole("button", { name: "Back up?" });
+  const details = page.getByRole("dialog", { name: "Saved in browser" });
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const change = async () => {
+    await page.getByTestId("placement").first().click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Duplicate" }).click();
+  };
+
+  // A change, then a week without an export: the chip asks, and names the project.
+  await change();
+  await page.clock.fastForward(5000);
+  await expect(chip).toBeVisible();
+  await page.clock.fastForward(week);
+  await asking.click();
+  await expect(details).toContainText("1 change");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    details.getByRole("button", { name: "Export Untitled" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(EXPORT_NAME);
+  // Exported, so nothing to ask about.
+  await expect(chip).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Not now puts it away until the next week.
+  await change();
+  await page.clock.fastForward(week + 5000);
+  await asking.click();
+  await details.getByRole("button", { name: "Not now" }).click();
+  await expect(chip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.clock.fastForward(week + 60_000);
+
+  // Don't ask me again turns it off, and says how to turn it back on.
+  await asking.click();
+  await details.getByRole("button", { name: "Don't ask me again" }).click();
+  await expect(details).toContainText("Backup reminders are off.");
+  await expect(chip).toBeVisible();
+});

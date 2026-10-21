@@ -75,6 +75,7 @@ import { readOutputDeviceId } from "./outputDevice";
 import { isTypingTarget } from "./typingTarget";
 import { hosting } from "../hosting";
 import { refreshStorageRisk } from "../hosting/storageRisk";
+import { attachChangeCounter } from "./hosting/backupReminder";
 
 const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
 
@@ -249,6 +250,7 @@ export function AppShell() {
     let disposeUndo = () => {};
     let disposeCheckpoints = () => {};
     let disposeAskAgain = () => {};
+    let disposeChanges = () => {};
     // Best-effort: keep the offline cache + write-queue from being evicted under storage pressure.
     // Asked at once, and again after the first edit once the project is open, when the browser is
     // likelier to grant it (Chrome goes by engagement); the "On this device" panel shows what it
@@ -289,6 +291,8 @@ export function AppShell() {
           );
         } else {
           disposePersistence = attachAutosave(projectStore, editLog);
+          // Kept only in this browser, so count what an export would save (HOST-23.2.1.2).
+          if (hosting.mode === "standalone") disposeChanges = attachChangeCounter(projectStore, editLog);
         }
         // Both modes, deliberately (DAW-8.15). The project itself is saved by whichever branch ran
         // above - autosave locally, the shared session when hosted - but the undo stacks belong to
@@ -318,6 +322,7 @@ export function AppShell() {
       disposeUndo();
       disposeCheckpoints();
       disposeAskAgain();
+      disposeChanges();
     };
   }, [projectStore, editLog, versionStore]);
 

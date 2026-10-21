@@ -5,7 +5,7 @@
  * that differs between the two gates on `hosting.mode` rather than reading the build's settings itself.
  *
  * It's a value read once at startup, not a build-time constant, because the mode will also be a
- * choice: the hosted site's sign-in screen is to offer "Continue on this device" (HOST-23.2.8), which
+ * choice: the hosted site's sign-in screen is to offer "Continue signed out" (HOST-23.2.8), which
  * runs this same client standalone. That choice is read here too when it lands, beside the build's.
  */
 

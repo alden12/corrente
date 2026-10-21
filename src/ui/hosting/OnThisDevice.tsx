@@ -9,6 +9,8 @@
  * shells as a line at the top of Projects, where people look for their files. The storage steps
  * (HOST-23.2.1) add to the details: whether the browser may clear them (`storageRisk`), and backups.
  * The risk is told in the details; only Safari's week, where the files will go, turns the icon amber.
+ * When projects have changed enough since their last export (`backupReminder`), both read "Back up?"
+ * and the details lead with which ones, each with its Export button: no banner, nothing that pops up.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { hosting } from "../../hosting";
@@ -22,6 +24,15 @@ import {
 import { Popover } from "../Menu";
 import { insideMenu } from "../insideMenu";
 import { DeviceIcon } from "../shellIcons";
+import { useNow } from "../timeAgo";
+import {
+  changedProjects,
+  notNow,
+  readReminder,
+  reminderDue,
+  setReminderOff,
+  subscribeReminder,
+} from "./backupReminder";
 
 /** Whether this run keeps everything on the device, so the note and chip have something to say. */
 export const onThisDevice = hosting.mode === "standalone";
@@ -30,6 +41,20 @@ const linkClass = "text-you underline underline-offset-2 hover:text-strong";
 
 const useStorageRisk = (): StorageRiskSnapshot =>
   useSyncExternalStore(subscribeStorageRisk, readStorageRisk, readStorageRisk);
+
+/** Export one project, from wherever the details are shown. */
+export type ExportProject = (id: string, name: string) => void;
+
+/** The reminder's state, and whether it's showing now. */
+function useBackupReminder() {
+  const state = useSyncExternalStore(subscribeReminder, readReminder, readReminder);
+  return { state, due: reminderDue(state, useNow(60_000)) };
+}
+
+/** The chip's and the note's label: a question while the reminder is due, the place otherwise. */
+function PlaceLabel() {
+  return <>{useBackupReminder().due ? "Back up?" : "Saved in browser"}</>;
+}
 
 /** What the browser may do with the files, and the way out. */
 const RISK: Record<StorageRisk, string> = {
@@ -68,11 +93,71 @@ function StorageLine() {
   );
 }
 
+/** Which projects changed since their last export, each with Export, then Not now and Don't ask me again. */
+function BackupReminder({ onExport }: { onExport?: ExportProject }) {
+  const { state, due } = useBackupReminder();
+  if (state.off) {
+    return (
+      <p className="text-muted">
+        Backup reminders are off.{" "}
+        <button type="button" onClick={() => setReminderOff(false)} className={`${linkClass} cursor-pointer`}>
+          Turn them on
+        </button>
+      </p>
+    );
+  }
+  if (!due) return null;
+  const changed = changedProjects(state);
+  return (
+    <section aria-label="Back up" className="flex flex-col gap-2 rounded-md border border-line bg-ground px-3 py-2.5">
+      <p>
+        {changed.length === 1 ? "This project has" : "These projects have"} changed since you last exported{" "}
+        {changed.length === 1 ? "it" : "them"}. An export is the copy that survives this browser.
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        {changed.map((project) => (
+          <li key={project.id} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{project.name}</span>
+            <span className="font-mono text-[11px] text-muted tabular-nums">
+              {project.changes} {project.changes === 1 ? "change" : "changes"}
+            </span>
+            {onExport && (
+              <button
+                type="button"
+                onClick={() => onExport(project.id, project.name)}
+                aria-label={`Export ${project.name}`}
+                className={actionClass}
+              >
+                Export
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <button type="button" onClick={() => notNow()} className={`${linkClass} cursor-pointer`}>
+          Not now
+        </button>
+        <button type="button" onClick={() => setReminderOff(true)} className={`${linkClass} cursor-pointer`}>
+          Don&apos;t ask me again
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /** Where the files are, how to keep a copy, and what the online app adds. */
-export function OnThisDeviceDetails({ onShowProject }: { onShowProject?: () => void }) {
+export function OnThisDeviceDetails({
+  onShowProject,
+  onExport,
+}: {
+  onShowProject?: () => void;
+  onExport?: ExportProject;
+}) {
   const { interest, hostedApp } = hosting.links;
   return (
     <div className="flex flex-col gap-2 text-[12.5px] leading-snug text-ink">
+      <BackupReminder onExport={onExport} />
       <p>Your projects, patches and favourites are saved in this browser, on this device.</p>
       <StorageLine />
       <p className="text-muted">
@@ -107,7 +192,7 @@ export function OnThisDeviceDetails({ onShowProject }: { onShowProject?: () => v
 
 /** The desktop status bar's chip, in place of the sync chip: a click shows the details. */
 /** `onShowProject` opens the open project's page, where its Export button is. */
-export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void }) {
+export function OnThisDeviceChip({ onShowProject, onExport }: { onShowProject: () => void; onExport?: ExportProject }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -139,7 +224,7 @@ export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void 
         className="inline-flex items-center gap-1.5 h-6 px-1 font-mono text-[11px] text-muted hover:text-ink cursor-pointer"
       >
         <PlaceIcon />
-        Saved in browser
+        <PlaceLabel />
       </button>
       {open && (
         <Popover
@@ -153,6 +238,7 @@ export function OnThisDeviceChip({ onShowProject }: { onShowProject: () => void 
           {() => (
             <div className="w-72 px-3.5 py-2.5">
               <OnThisDeviceDetails
+                onExport={onExport}
                 onShowProject={() => {
                   setOpen(false);
                   onShowProject();
@@ -178,7 +264,7 @@ const actionClass =
   "h-8 pointer-coarse:h-10 px-3 rounded-md border border-line bg-ground text-[12.5px] text-ink hover:border-you cursor-pointer";
 
 /** The line at the top of Projects, opening the details in place, with the library's backup beneath them. */
-export function OnThisDeviceNote({ backup }: { backup?: BackupActions }) {
+export function OnThisDeviceNote({ backup, onExport }: { backup?: BackupActions; onExport?: ExportProject }) {
   const [open, setOpen] = useState(false);
   return (
     <section aria-label="Saved in browser" className="mx-4 mb-3">
@@ -189,7 +275,7 @@ export function OnThisDeviceNote({ backup }: { backup?: BackupActions }) {
         className="flex items-center gap-2 min-h-9 pointer-coarse:min-h-11 text-[12.5px] text-muted hover:text-ink cursor-pointer"
       >
         <PlaceIcon />
-        Saved in browser
+        <PlaceLabel />
         <svg
           viewBox="0 0 16 16"
           aria-hidden="true"
@@ -203,7 +289,7 @@ export function OnThisDeviceNote({ backup }: { backup?: BackupActions }) {
       </button>
       {open && (
         <div className="mt-1 flex flex-col gap-3 rounded-lg border border-line bg-stage px-3.5 py-3">
-          <OnThisDeviceDetails />
+          <OnThisDeviceDetails onExport={onExport} />
           {backup && (
             <div className="flex flex-col gap-2">
               <p className="text-[12.5px] leading-snug text-muted">

@@ -12,6 +12,7 @@ import { readProjectBundle, type ProjectDeps } from "../audio/projects/operation
 import { exportFileName, versionHash } from "../audio/projects/projectVersions";
 import { libraryBackup, libraryBackupFileName, readLibraryBackup, restoreLibrary } from "../audio/library/backup";
 import { readFavourites, toggleFavourite } from "./explore/favourites/store";
+import { recordExport } from "./hosting/backupReminder";
 
 /** Hand the browser a file to save as `name`. */
 function download(blob: Blob, name: string): void {
@@ -39,6 +40,8 @@ export async function exportProjectFile(
   const { log, project } = readExport(files);
   const zipped = new Blob([zipSync(files, { level: 6 })], { type: "application/zip" });
   download(zipped, exportFileName(name, new Date(), await versionHash(log, project)));
+  // The copy now exists, so the backup reminder counts this project's changes from here.
+  recordExport(projectId, name, log);
 }
 
 /** Download the library and favourites (HOST-23.2.1.2): `corrente-library-<date>.json`. */

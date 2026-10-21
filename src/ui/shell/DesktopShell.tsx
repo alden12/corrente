@@ -7,6 +7,7 @@
  * Everything private to this file is geometry: the three resizable, persisted splits
  * and the measured body height that keeps the timeline from crowding out the workbench.
  */
+import { exportProjectFile } from "../projectFile";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ActivityRail } from "../ActivityRail";
 import { LibraryPanel } from "../LibraryPanel";
@@ -136,6 +137,11 @@ export function DesktopShell({
           openProjectsPage("inside");
           onSelectView("project");
         }}
+        onExportProject={(id, name) =>
+          void exportProjectFile(id, name, { projectStore, editLog }).catch((error: unknown) =>
+            console.warn("[corrente] export failed:", error),
+          )
+        }
         mcpStatus={mcpStatus}
         syncStatus={syncStatus}
         agentCollapsed={agentCollapsed}

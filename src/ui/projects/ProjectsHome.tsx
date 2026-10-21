@@ -38,6 +38,7 @@ import { ArrangementThumb } from "./ArrangementThumb";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { nameMatches } from "./nameMatches";
 import { OnThisDeviceNote, onThisDevice } from "../hosting/OnThisDevice";
+import { forgetProject } from "../hosting/backupReminder";
 
 /** Two heads: a project someone else shared with you. */
 function SharedIcon() {
@@ -122,10 +123,11 @@ export function ProjectsHome({
         if (!reportUnreadableProject(error)) console.warn("[corrente] project switch failed:", error);
       });
   };
-  const exportRow = (meta: ProjectMeta, name: string) => {
+  const exportProject = (id: string, name: string) => {
     setError(null);
-    exportProjectFile(meta.id, name, deps).catch(() => setError(`Could not export “${name}”.`));
+    exportProjectFile(id, name, deps).catch(() => setError(`Could not export “${name}”.`));
   };
+  const exportRow = (meta: ProjectMeta, name: string) => exportProject(meta.id, name);
   const [importing, setImporting] = useState<ImportPlan | null>(null);
   /** What the last library restore did, shown under its buttons. */
   const [restored, setRestored] = useState<{ text: string; failed: boolean } | undefined>();
@@ -159,7 +161,10 @@ export function ProjectsHome({
     if (next) rename(next);
   };
   const remove = (meta: ProjectMeta) => {
-    if (window.confirm(`Delete project "${meta.name}"? This cannot be undone.`)) void deleteProject(deps, meta.id);
+    if (window.confirm(`Delete project "${meta.name}"? This cannot be undone.`)) {
+      forgetProject(meta.id);
+      void deleteProject(deps, meta.id);
+    }
   };
   const rowItems = (meta: ProjectMeta, name: string): MenuItem[] => [
     { label: "Open", onClick: () => openRow(meta) },
@@ -184,6 +189,7 @@ export function ProjectsHome({
       )}
       {onThisDevice && (
         <OnThisDeviceNote
+          onExport={exportProject}
           backup={{ onBackUp: downloadLibraryBackup, onRestore: () => libraryInput.current?.click(), result: restored }}
         />
       )}
