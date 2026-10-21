@@ -5,6 +5,8 @@
  */
 import type { ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
+import { SOURCE_URL } from "../hosting";
+import { External } from "./hosting/Welcome";
 
 /**
  * `intro` is what a standalone run needs to know (HOST-23.2.6): said here, in the card that's shown
@@ -21,15 +23,17 @@ export function StartDialog({ onStart, error, intro }: { onStart: () => void; er
       {/* Scrolls inside itself on a short screen (a phone on its side), so Start stays reachable. */}
       <div className="bg-panel border border-line rounded-2xl p-8 max-w-sm mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto text-center flex flex-col items-center gap-4 shadow-2xl">
         <BrandMark size={72} />
-        {/* The name, since this is the first thing anyone sees (the intro welcomes by name instead).
-         The heading under it stays the *task*, because that is what the dialog is asking for and
-         what labels it. */}
-        {intro ? (
-          <div className="w-full text-left pb-4 border-b border-line">{intro}</div>
-        ) : (
-          <p className="-mt-1 text-2xl font-semibold tracking-tight text-strong">Corrente</p>
-        )}
-        <h2 id="start-title" className={`${intro ? "" : "-mt-2"} text-base font-medium text-ink`}>
+        {/* What Corrente is, since this is the first thing anyone sees, then what a standalone run
+         adds. The heading after them stays the *task*, because that is what the dialog is asking for
+         and what labels it. */}
+        <div className="flex flex-col gap-1">
+          <p className="text-2xl font-semibold tracking-tight text-strong">Welcome to Corrente</p>
+          <p className="text-[13px] text-muted leading-snug">
+            An open source music studio and instrument builder (<External href={SOURCE_URL}>source</External>).
+          </p>
+        </div>
+        {intro && <div className="w-full text-left">{intro}</div>}
+        <h2 id="start-title" className="w-full pt-4 border-t border-line text-base font-medium text-ink">
           Start the audio engine
         </h2>
         <p className="text-sm text-muted leading-relaxed">
