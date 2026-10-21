@@ -10,8 +10,8 @@ import { hosting, SOURCE_URL } from "../../hosting";
 import { readStorageRisk, subscribeStorageRisk } from "../../hosting/storageRisk";
 import { linkClass } from "./OnThisDevice";
 
-/** The README's section on driving the app from Claude Code over MCP. */
-const AGENT_GUIDE_URL = `${SOURCE_URL}#working-with-an-ai-assistant`;
+/** The guide to driving the app from Claude Code over MCP. */
+const AGENT_GUIDE_URL = `${SOURCE_URL}/blob/main/MCP.md`;
 
 const External = ({ href, children }: { href: string; children: string }) => (
   <a href={href} target="_blank" rel="noreferrer" className={linkClass}>

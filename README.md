@@ -63,7 +63,7 @@ browser.
 
 - **From Claude (or any MCP client):** `yarn mcp-server` is a local MCP server that drives the app
   open in your browser. It can make tracks, write and edit notes, set parameters, mix, and save versions. In
-  Claude Code, this repo's `.mcp.json` starts it for you.
+  Claude Code, this repo's `.mcp.json` starts it for you. [MCP.md](MCP.md) walks through setting it up.
 - **In the app:** an assistant panel that uses your own API key (Gemini, OpenAI or Anthropic).
 
 ## Architecture at a glance
