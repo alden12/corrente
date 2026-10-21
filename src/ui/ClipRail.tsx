@@ -23,6 +23,8 @@ import { getClipClipboard, setClipClipboard } from "./clipClipboard";
 import { authorDotStyle, authorLabel } from "./authorStyle";
 import { useAuthorPresence } from "./authorColorsContext";
 import { PagedStrip } from "./controls/PagedStrip";
+import type { MenuItem } from "./Menu";
+import { useContextMenu } from "./useContextMenu";
 
 export function ClipRail({
   projectStore,
@@ -63,6 +65,7 @@ export function ClipRail({
 }) {
   const project = useProject(projectStore);
   const presence = useAuthorPresence();
+  const { openAt, menu } = useContextMenu();
   const track = project.tracks.find((track) => track.id === trackId);
   if (!track) return null;
 
@@ -95,25 +98,60 @@ export function ClipRail({
   // Copy / cut / paste clips, like the timeline does for placements. Cut/copy take
   // the active clip; paste adds the clipboard clip to THIS track (refusing a
   // cross-type paste), so clips move within and across same-kind tracks.
+  /** Copy a clip, and say whether there was one to copy. */
+  const copyClip = (clipId: string): boolean => {
+    const content = clipContentOf(clipId);
+    if (content) setClipClipboard(content);
+    return Boolean(content);
+  };
+  /** Cut keeps a track's last clip: there's always one to edit. */
+  const cutClip = (clipId: string): boolean => {
+    const copied = copyClip(clipId);
+    if (copied && clips.length > 1) dispatch({ type: "removeClip", trackId, clipId });
+    return copied;
+  };
+  /** What the clipboard holds, if this track can take it (a MIDI clip on a MIDI track, and so on). */
+  const pasteable = () => {
+    const content = getClipClipboard();
+    return content?.kind === track.kind ? content : undefined;
+  };
+  const pasteClip = (): boolean => {
+    const content = pasteable();
+    if (content) dispatch({ type: "pasteClip", trackId, id: newClipId(), content });
+    return Boolean(content);
+  };
+  const shortcuts: Record<string, () => boolean> = {
+    c: () => copyClip(activeClipId),
+    x: () => cutClip(activeClipId),
+    v: pasteClip,
+  };
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!(e.metaKey || e.ctrlKey)) return;
     const el = e.target as HTMLElement;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return; // typing (rename) keeps normal copy/paste
-    const key = e.key.toLowerCase();
-    if (key === "c" || key === "x") {
-      const content = clipContentOf(activeClipId);
-      if (!content) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setClipClipboard(content);
-      if (key === "x" && clips.length > 1) dispatch({ type: "removeClip", trackId, clipId: activeClipId });
-    } else if (key === "v") {
-      const content = getClipClipboard();
-      if (!content || content.kind !== track.kind) return; // nothing, or wrong type
-      e.preventDefault();
-      e.stopPropagation();
-      dispatch({ type: "pasteClip", trackId, id: newClipId(), content });
-    }
+    if (!shortcuts[e.key.toLowerCase()]?.()) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  /** A clip's actions, from a right-click (DAW-74): the keys' copy, cut and paste, and the chip's buttons. */
+  const clipItems = (clipId: string): MenuItem[] => {
+    const launched = launchedClipId === clipId;
+    return [
+      { label: "Copy", onClick: () => void copyClip(clipId) },
+      { label: "Cut", disabled: clips.length <= 1, onClick: () => void cutClip(clipId) },
+      { label: "Paste", disabled: !pasteable(), onClick: () => void pasteClip() },
+      {
+        label: "Duplicate",
+        onClick: () => dispatch({ type: "addClip", trackId, id: newClipId(), fromClipId: clipId }),
+      },
+      { separator: true },
+      { label: launched ? "Stop" : "Launch", onClick: () => toggleLaunch(clipId) },
+      { separator: true },
+      ...(track.kind === "audio" && clips.length <= 1
+        ? []
+        : [{ label: clips.length > 1 ? "Delete" : "Clear", danger: true, onClick: () => deleteClip(clipId) }]),
+    ];
   };
 
   // The horizontal and grid layouts are the touch ones (MOBILE-1): roomier padding on
@@ -175,6 +213,10 @@ export function ClipRail({
               active ? "border-you/60 bg-you/15 text-strong" : "border-line bg-card text-muted hover:bg-ground"
             }`}
             onClick={() => projectStore.selectClip(trackId, clip.id)}
+            onContextMenu={(e) => {
+              projectStore.selectClip(trackId, clip.id);
+              openAt(e, () => clipItems(clip.id));
+            }}
             // The full name too: a long one is truncated on the chip.
             title={`${clip.name} · ${authorLabel(clip.author, presence.self)} - drag onto the lane to place`}
           >
@@ -269,6 +311,7 @@ export function ClipRail({
       {/* Vertical: the rail is full-height, so the record button belongs at its foot rather
           than trailing the last clip. Other orientations keep it inline (`contents`). */}
       {footer && !chipsOnly && <div className={vertical ? "mt-auto shrink-0 pt-2" : "contents"}>{footer}</div>}
+      {menu}
     </>
   );
   const keys = { "data-clip-rail": true, tabIndex: 0, onKeyDown };

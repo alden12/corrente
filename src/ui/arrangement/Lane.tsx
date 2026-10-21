@@ -23,6 +23,7 @@ import { beatToX, floorBeat, snapBeat, xToBeat } from "../timeline/timeGrid";
 import { ObjectHandles } from "../editing/ObjectHandles";
 import type { MenuItem } from "../Menu";
 import { MarkerMenu } from "./MarkerMenu";
+import { useContextMenu } from "../useContextMenu";
 import { ROW, ROW_PX, RULER_H, RESIZE_PX, DRAG_THRESH, type Selection } from "./shared";
 
 /** The block's `top-1.5 bottom-1.5` inset, as a number the handles can be placed against. */
@@ -41,6 +42,7 @@ function Block({
   selected,
   onPointerDown,
   onDoubleClick,
+  onContextMenu,
   children,
 }: {
   name?: string;
@@ -50,6 +52,7 @@ function Block({
   selected: boolean;
   onPointerDown: (e: React.PointerEvent) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
   children?: React.ReactNode;
 }) {
   const presence = useAuthorPresence();
@@ -58,6 +61,7 @@ function Block({
       data-testid="placement"
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
       // Square, unlike the pill-shaped clips on the rail. A block here is a span of time
       // whose ends are edges you line up against the grid, so it has to end where it ends;
       // a round cap would round off the only thing the shape is for.
@@ -320,6 +324,24 @@ export function Lane({
     beginPlacementDrag(p, isEdge ? "end" : "move", e);
   };
 
+  /** A clip's actions: on touch from its ⋮, with a mouse from a right-click (DAW-74). */
+  const placementItems = (placement: Placement): MenuItem[] => {
+    const remove = () => dispatch({ type: "removePlacement", trackId: track.id, placementId: placement.id });
+    return [
+      { label: "Copy", onClick: () => onCopy(placement) },
+      {
+        label: "Cut",
+        onClick: () => {
+          onCopy(placement);
+          remove();
+        },
+      },
+      { label: "Duplicate", onClick: () => duplicatePlacement(placement) },
+      { label: "Delete", danger: true, onClick: remove },
+    ];
+  };
+  const { openAt, menu } = useContextMenu();
+
   /** Place a second window over the same clip, immediately after this one. */
   const duplicatePlacement = (p: Placement) => {
     const id = newPlacementId();
@@ -449,6 +471,11 @@ export function Lane({
       onClick={onLaneClick}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      // Empty lane space offers what a tap's marker does there, at the beat clicked.
+      onContextMenu={(e) => {
+        const beat = Math.max(0, floorB(beatAt(e.clientX)));
+        openAt(e, () => markerMenuItems(beat));
+      }}
       className={`${ROW} relative border-b border-line-soft cursor-copy`}
       style={{ width, background: laneBg }}
     >
@@ -468,6 +495,10 @@ export function Lane({
             selected={selected}
             onPointerDown={(e) => onBlockDown(placement, e)}
             onDoubleClick={(e) => onBlockDouble(placement, e)}
+            onContextMenu={(e) => {
+              onSelect(track.id, placement);
+              openAt(e, placementItems(placement));
+            }}
           >
             {clip && "store" in clip ? (
               <NoteMinis
@@ -498,18 +529,10 @@ export function Lane({
           offsetX={headerW}
           scrollRef={scrollRef}
           onResize={(edge, e) => beginPlacementDrag(selectedPlacement, edge, e)}
-          menuItems={[
-            { label: "Copy", onClick: () => onCopy(selectedPlacement) },
-            { label: "Duplicate", onClick: () => duplicatePlacement(selectedPlacement) },
-            {
-              label: "Delete",
-              danger: true,
-              onClick: () =>
-                dispatch({ type: "removePlacement", trackId: track.id, placementId: selectedPlacement.id }),
-            },
-          ]}
+          menuItems={placementItems(selectedPlacement)}
         />
       )}
+      {menu}
       {draft && (
         <div
           className="absolute top-1.5 bottom-1.5 rounded border border-dashed border-you bg-you/15 pointer-events-none"

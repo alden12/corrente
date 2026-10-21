@@ -371,7 +371,15 @@ function Row({
 }
 
 /** The rows of one popover. Owns which single row has its submenu open. */
-function MenuList({ items, side, onDismiss }: { items: MenuItem[]; side: "left" | "right"; onDismiss: () => void }) {
+export function MenuList({
+  items,
+  side,
+  onDismiss,
+}: {
+  items: MenuItem[];
+  side: "left" | "right";
+  onDismiss: () => void;
+}) {
   const [openRow, setOpenRow] = useState<number | null>(null);
   const reserveCheck = items.some((item) => item.checked !== undefined);
   return (
