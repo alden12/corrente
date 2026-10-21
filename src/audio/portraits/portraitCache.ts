@@ -6,8 +6,9 @@
  *
  * Drawn on demand: a card asks while it's on screen (`wantPortrait`) and lets go when it scrolls
  * away, so a draw queued for a card no longer in view is dropped before it starts. Draws run on the
- * render worker one at a time, so a long list never queues up the engine. One that fails is not tried
- * again until reload; its card keeps the category's glyph.
+ * render worker one at a time, so a long list never queues up the engine. One that fails (offline in
+ * dev, where the worker's code comes over the network) keeps its card's glyph, and is tried again
+ * when the browser is back online, or when its card is next on screen after a pause.
  */
 import { openDB, type IDBPDatabase } from "idb";
 import { documentHash } from "../contentHash";
@@ -21,8 +22,12 @@ const DRAWING = 1;
 const DATABASE = "corrente-portraits";
 const STORE = "portraits";
 
-/** Each key's portrait once known; null for one that couldn't be drawn. */
-const known = new Map<string, Portrait | null>();
+/** Each key's portrait once known. */
+const known = new Map<string, Portrait>();
+/** Draws that failed: when, and what to draw, to try again. */
+const failed = new Map<string, { at: number; job: PortraitJob }>();
+/** How long a failed draw waits before a card on screen may ask for it again. */
+const RETRY_MS = 30_000;
 /** How many cards on screen want each key. */
 const wanted = new Map<string, number>();
 /** Keys being looked up or drawn, so asking twice does the work once. */
@@ -48,10 +53,11 @@ const openCache = () =>
 export const portraitKey = async (job: PortraitJob): Promise<string> => `${DRAWING}:${await documentHash(job)}`;
 
 /** A key's portrait, if it's been drawn or read this session. */
-export const knownPortrait = (key: string): Portrait | undefined => known.get(key) ?? undefined;
+export const knownPortrait = (key: string): Portrait | undefined => known.get(key);
 
-const settle = (key: string, portrait: Portrait | null) => {
+const settle = (key: string, portrait: Portrait) => {
   known.set(key, portrait);
+  failed.delete(key);
   working.delete(key);
   notify();
 };
@@ -75,7 +81,8 @@ async function drawNext(): Promise<void> {
     settle(next.key, portrait);
   } catch (error) {
     console.warn("[corrente] couldn't draw a portrait:", error);
-    settle(next.key, null);
+    failed.set(next.key, { at: Date.now(), job: next.job });
+    working.delete(next.key);
   } finally {
     drawing = false;
   }
@@ -101,7 +108,8 @@ async function fetchPortrait(key: string, job: PortraitJob): Promise<void> {
  */
 export function wantPortrait(key: string, job: PortraitJob): () => void {
   wanted.set(key, (wanted.get(key) ?? 0) + 1);
-  if (!known.has(key) && !working.has(key)) {
+  const waiting = (failed.get(key)?.at ?? -Infinity) > Date.now() - RETRY_MS;
+  if (!known.has(key) && !working.has(key) && !waiting) {
     working.add(key);
     void fetchPortrait(key, job);
   }
@@ -111,6 +119,16 @@ export function wantPortrait(key: string, job: PortraitJob): () => void {
     else wanted.delete(key);
   };
 }
+
+/** Back online: try again what failed and is still on screen. */
+const retryFailed = () =>
+  failed.forEach(({ job }, key) => {
+    if (!wanted.get(key) || working.has(key)) return;
+    failed.delete(key);
+    working.add(key);
+    void fetchPortrait(key, job);
+  });
+if (typeof window !== "undefined") window.addEventListener("online", retryFailed);
 
 /** Subscribe to portraits arriving. Returns an unsubscribe fn. */
 export function subscribePortraits(listener: () => void): () => void {
