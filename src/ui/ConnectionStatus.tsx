@@ -54,19 +54,30 @@ export function LoadingOverlay(): React.ReactElement {
   );
 }
 
-/** The offline banner, tiered by whether the current project is shared. Render only while offline. */
+/**
+ * The offline banner, tiered by whether the current project is shared. Render only while offline.
+ *
+ * It floats over the top of the app, as a pill under the top bar, rather than sitting in the column
+ * above it: in the column, every time it came or went it pushed the whole app down or pulled it back
+ * up, which is most of why going offline read as broken (HOST-16). Taps go through either side of it.
+ */
 export function OfflineBanner({ shared }: { shared: boolean }): React.ReactElement {
   return (
     <div
-      role="status"
-      className={`flex items-center justify-center gap-2 px-3 py-1.5 text-[12px] font-medium ${
-        shared ? "bg-warn/20 text-warn" : "bg-panel text-muted"
-      }`}
+      className="pointer-events-none absolute inset-x-0 z-40 flex justify-center px-3"
+      style={{ top: "calc(env(safe-area-inset-top) + 3.5rem)" }}
     >
-      <span className={`w-2 h-2 rounded-full ${shared ? "bg-warn" : "bg-faint"}`} />
-      {shared
-        ? "Offline - edits to this shared project may conflict when you reconnect."
-        : "Offline - reconnecting. Your edits are saved locally."}
+      <div
+        role="status"
+        className={`pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm text-[12px] font-medium ${
+          shared ? "bg-panel border-warn/50 text-warn" : "bg-panel border-line text-muted"
+        }`}
+      >
+        <span className={`w-2 h-2 shrink-0 rounded-full ${shared ? "bg-warn" : "bg-faint"}`} />
+        {shared
+          ? "Offline - edits to this shared project may conflict when you reconnect."
+          : "Offline - reconnecting. Your edits are saved locally."}
+      </div>
     </div>
   );
 }

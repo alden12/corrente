@@ -44,6 +44,7 @@ import type { ProjectData } from "../audio/project/types";
 import { requestPersistentStorage } from "../audio/bundleStore";
 import type { WsStatus } from "../contract/client";
 import { OfflineBanner, LoadingOverlay } from "./ConnectionStatus";
+import { useSettledSyncStatus } from "./settledSyncStatus";
 import { UpdateNotice } from "./UpdateNotice";
 import { applyUpdate, reloadOntoLatest, useUpdateWaiting } from "../pwa/serviceWorkerUpdate";
 import { isOutdated, subscribeOutdated } from "../contract/outdated";
@@ -147,6 +148,8 @@ export function AppShell() {
   // Sync-connection state (remote mode only; null in local/no-sync mode). `projectLoaded` gates the
   // load overlay; `sawPeerEdit` marks the project as collaborative so the offline banner warns.
   const [syncStatus, setSyncStatus] = useState<WsStatus | null>(null);
+  // What the chip and the banner show: the socket's status, without its blips (HOST-16).
+  const shownSyncStatus = useSettledSyncStatus(syncStatus);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [sawPeerEdit, setSawPeerEdit] = useState(false);
   // A reconnect conflict awaiting the user's choice (remote mode only). Held by the shared session; the
@@ -442,7 +445,7 @@ export function AppShell() {
     isPlaying,
     started,
     mcpStatus,
-    syncStatus,
+    syncStatus: shownSyncStatus,
     hasApiKey: activeKey(agentConfig) !== "",
     libView,
     onSelectView: selectView,
@@ -460,14 +463,15 @@ export function AppShell() {
     <AuthorColorsProvider value={{ config: authorColors, self: currentUser, theme }}>
       {/* `dvh`, not `vh`: mobile browsers count their collapsing address bar in `vh`, so
           a `100vh` shell puts the bottom tabs under the chrome until the user scrolls. */}
-      <div className="flex flex-col h-dvh overflow-hidden bg-ground text-ink">
+      <div className="relative flex flex-col h-dvh overflow-hidden bg-ground text-ink">
         {outdated ? (
           <UpdateNotice required onReload={reloadOntoLatest} />
         ) : (
           updateWaiting && <UpdateNotice onReload={applyUpdate} />
         )}
-        {/* Out of date, it isn't reconnecting: the update notice above says what to do instead. */}
-        {syncStatus === "offline" && !outdated && <OfflineBanner shared={!!isSharedProject} />}
+        {/* Out of date, it isn't reconnecting: the update notice above says what to do instead. Over
+            the shell rather than above it, so going offline never moves the app (HOST-16). */}
+        {shownSyncStatus === "offline" && !outdated && <OfflineBanner shared={!!isSharedProject} />}
         {deviceShape.tier === "desktop" ? (
           <DesktopShell {...shellProps} />
         ) : (
