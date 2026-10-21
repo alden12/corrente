@@ -10,6 +10,7 @@
  * API, which we detect and surface rather than crash.
  */
 import { parseMidiMessage, SUSTAIN_CC, type MidiMessage } from "./parseMidiMessage";
+import { createListeners } from "../../listeners";
 
 export type MidiAccessState = "idle" | "requesting" | "granted" | "denied" | "unsupported";
 
@@ -37,7 +38,7 @@ export interface MidiHandlers {
 
 export class MidiInput {
   private state: MidiInputState;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
   private readonly handlers: MidiHandlers;
   private access: MIDIAccess | null = null;
   private readonly ports = new Set<MIDIInput>();
@@ -48,14 +49,11 @@ export class MidiInput {
     this.state = { supported, access: supported ? "idle" : "unsupported", devices: [], error: null };
   }
 
-  subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
+  subscribe = this.listeners.subscribe;
   getState = (): MidiInputState => this.state;
   private set(patch: Partial<MidiInputState>): void {
     this.state = { ...this.state, ...patch };
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 
   /** Request access (from a user gesture) and start listening to all input ports. */

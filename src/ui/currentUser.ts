@@ -11,12 +11,14 @@
  * nothing downstream changes.
  */
 
+import { createListeners } from "../listeners";
+
 /** The default id for a user who has not set one (also the solo-mode author, coloured teal). */
 export const DEFAULT_USER = "you";
 
 const STORAGE_KEY = "corrente:current-user:v1";
 const MAX_LEN = 64;
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 
 function store(): Storage | null {
   try {
@@ -63,11 +65,8 @@ export function readCurrentUser(): string {
 export function writeCurrentUser(id: string): void {
   cached = clean(id) ?? DEFAULT_USER;
   store()?.setItem(STORAGE_KEY, cached);
-  for (const listener of listeners) listener();
+  listeners.emit();
 }
 
 /** Subscribe to current-user changes. Returns an unsubscribe fn. */
-export function subscribeCurrentUser(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeCurrentUser = listeners.subscribe;

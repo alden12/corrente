@@ -3,6 +3,7 @@
  * backend (`openStore`) so reads stay synchronous, and every change written through to the backend
  * in order. Patches (patches/library.ts) and custom devices (devices.ts) are views over it.
  */
+import { createListeners } from "../../listeners";
 import type { Author } from "../commands/types";
 import { documentHash } from "../contentHash";
 import { sameVersion } from "./schema";
@@ -30,8 +31,7 @@ export interface ItemDraft {
   createdAt: number;
 }
 
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((listener) => listener());
+const listeners = createListeners();
 
 let backend: LibraryBackend = memoryBackend();
 const entries = new Map<string, LibraryEntry>();
@@ -78,7 +78,7 @@ export async function openStore(chosen: LibraryBackend): Promise<void> {
     const version = currentOf.get(item.id);
     if (version) entries.set(item.id, { item, current: version });
   });
-  notify();
+  listeners.emit();
 }
 
 /**
@@ -92,7 +92,7 @@ export function receiveEntries(received: readonly LibraryEntry[], mark: number):
   const taken = received.filter((entry) => (changedAt.get(entry.item.id) ?? 0) <= mark);
   if (!taken.length) return;
   taken.forEach((entry) => entries.set(entry.item.id, entry));
-  notify();
+  listeners.emit();
 }
 
 /** One item, deleted or not. */
@@ -146,7 +146,7 @@ export async function saveItem(draft: ItemDraft, at = Date.now()): Promise<Libra
   if (!switched) {
     entries.set(draft.id, entry);
     changedAt.set(draft.id, ++changes);
-    notify();
+    listeners.emit();
   }
   try {
     await write(target, item, unchanged ? undefined : current);
@@ -155,7 +155,7 @@ export async function saveItem(draft: ItemDraft, at = Date.now()): Promise<Libra
     if (!switched && entries.get(draft.id) === entry) {
       if (existing) entries.set(draft.id, existing);
       else entries.delete(draft.id);
-      notify();
+      listeners.emit();
     }
     throw error;
   }
@@ -170,11 +170,8 @@ export function hideItem(id: string): void {
   entries.set(id, { ...entry, item });
   changedAt.set(id, ++changes);
   void write(backend, item).catch(() => {}); // the queue has warned
-  notify();
+  listeners.emit();
 }
 
 /** Subscribe to library changes. Returns an unsubscribe fn. */
-export function subscribeLibrary(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeLibrary = listeners.subscribe;

@@ -19,6 +19,7 @@ import type { Author, EditEntry } from "./types";
 import type { EditLog, FeedNote } from "./editLog";
 import { getRepository, type Commit, type ProjectRepository, type Refs } from "../projectRepository";
 import { randomUuid } from "../randomUuid";
+import { createListeners } from "../../listeners";
 
 /** A burst of edits within this window collapses into one auto-checkpoint. */
 const CHECKPOINT_DEBOUNCE_MS = 4000;
@@ -151,7 +152,7 @@ export class VersionStore {
   /** Delta commits written since the last keyframe (drives keyframe cadence). */
   private commitsSinceKeyframe = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
 
   /**
    * Remote mode (server-authoritative history). When set, history is derived from the authoritative log's
@@ -499,8 +500,7 @@ export class VersionStore {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   /**
@@ -574,7 +574,7 @@ export class VersionStore {
     return this.editLog.getEntries().reduce((highest, entry) => Math.max(highest, entry.seq), -1);
   }
   private emit(): void {
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 }
 

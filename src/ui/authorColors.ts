@@ -16,6 +16,7 @@
  * the hue); every other id (including a peer who happens to be the default `you`) gets its
  * configured or hashed hue.
  */
+import { createListeners } from "../listeners";
 import { DEFAULT_VOICE_COLORS } from "./authorVoice";
 import { isAgentAuthor } from "../audio/commands/authors";
 import { DEFAULT_USER } from "./currentUser";
@@ -50,7 +51,7 @@ export type AuthorColorConfig = Record<string, string>;
 
 const STORAGE_KEY = "corrente:author-colors:v1";
 const HEX = /^#[0-9a-fA-F]{6}$/;
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 
 function store(): Storage | null {
   try {
@@ -89,14 +90,11 @@ export function readAuthorColors(): AuthorColorConfig {
 export function writeAuthorColors(config: AuthorColorConfig): void {
   cached = cleanConfig(config);
   store()?.setItem(STORAGE_KEY, JSON.stringify(cached));
-  for (const listener of listeners) listener();
+  listeners.emit();
 }
 
 /** Subscribe to author-colour changes. Returns an unsubscribe fn. */
-export function subscribeAuthorColors(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeAuthorColors = listeners.subscribe;
 
 /** Stable non-negative hash of a string, for hashing unknown author ids into the palette. */
 function hashString(value: string): number {

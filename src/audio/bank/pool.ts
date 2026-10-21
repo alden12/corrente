@@ -18,6 +18,7 @@ import {
   type ToBank,
   type Transport,
 } from "./messages";
+import { createListeners, type Listeners } from "../../listeners";
 
 /** One device's place in a bank. */
 export interface BankSlot {
@@ -57,14 +58,13 @@ interface Pool {
 }
 
 /** Who hears each context's slow blocks (INST-36.9), from every bank on it. */
-const slowListeners = new WeakMap<BaseAudioContext, Set<(blocks: number) => void>>();
+const slowListeners = new WeakMap<BaseAudioContext, Listeners<[number]>>();
 
 /** Hear how many blocks each bank on `context` rendered late, about once a second; returns a stop. */
 export const onSlowBlocks = (context: BaseAudioContext, listener: (blocks: number) => void): (() => void) => {
-  const listeners = slowListeners.get(context) ?? new Set();
+  const listeners = slowListeners.get(context) ?? createListeners<[number]>();
   slowListeners.set(context, listeners);
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  return listeners.subscribe(listener);
 };
 
 /** Each context's transport as last told, for its banks now and any made later. */
@@ -113,7 +113,7 @@ const newBank = (context: BaseAudioContext, bytes: ArrayBuffer, stage: number): 
   });
   const bank: Bank = { node, stage, taken: Array.from({ length: TRACKS_PER_BANK }, () => false), listeners: [] };
   node.port.onmessage = ({ data }: MessageEvent<FromBank>) => {
-    if (data.type === "slow") slowListeners.get(context)?.forEach((listener) => listener(data.blocks));
+    if (data.type === "slow") slowListeners.get(context)?.emit(data.blocks);
     else bank.listeners[data.track]?.(data);
   };
   const transport = transports.get(context);

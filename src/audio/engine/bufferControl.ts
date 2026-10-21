@@ -19,6 +19,7 @@ import {
   type BufferSize,
   type Steps,
 } from "./bufferSize";
+import { createListeners } from "../../listeners";
 
 export interface BufferEngine {
   readonly started: boolean;
@@ -79,7 +80,7 @@ export class BufferControl {
   private slow: { at: number; blocks: number }[] = [];
   private changing = false;
   private snapshotCache: BufferSnapshot | null = null;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
 
   private readonly engine: BufferEngine;
   private readonly activity: BufferActivity;
@@ -155,8 +156,7 @@ export class BufferControl {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   private recording(): boolean {
@@ -201,6 +201,6 @@ export class BufferControl {
 
   private changed(): void {
     this.snapshotCache = null;
-    this.listeners.forEach((listener) => listener());
+    this.listeners.emit();
   }
 }

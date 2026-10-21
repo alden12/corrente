@@ -3,6 +3,7 @@
  * state, so it survives a reload or a trip to another tab, and so something outside Explore can
  * send you to a page - the Sampler's "reveal samples" link opens the Samples category.
  */
+import { createListeners } from "../../listeners";
 import { writePersistent } from "../persistentStore";
 import { CATEGORY_ORDER, type ExploreCategory } from "./exploreItems";
 
@@ -19,12 +20,12 @@ export const openExplorePage = (page: ExplorePage) => writePersistent(EXPLORE_PA
  * category page, at the moment it is asked.
  */
 let searchRequested = false;
-const searchListeners = new Set<() => void>();
+const searchListeners = createListeners();
 
 export function requestExploreSearch(): void {
   openExplorePage("home");
   searchRequested = true;
-  searchListeners.forEach((listener) => listener());
+  searchListeners.emit();
 }
 
 /** Whether a search was asked for since the last take; taking it clears it. */
@@ -34,7 +35,4 @@ export function takeExploreSearchRequest(): boolean {
   return requested;
 }
 
-export function subscribeExploreSearch(listener: () => void): () => void {
-  searchListeners.add(listener);
-  return () => searchListeners.delete(listener);
-}
+export const subscribeExploreSearch = searchListeners.subscribe;

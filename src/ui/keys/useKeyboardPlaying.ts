@@ -23,6 +23,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import { isTypingTarget } from "../typingTarget";
 import { padKey, type PadNoteTarget, type PadNotes } from "../pads/usePadTouch";
 import { OCTAVE_KEYS, type KeyPad } from "./keyLayout";
+import { createValueStore } from "../../listeners";
 
 interface HeldKey {
   /** What it is sounding, which the layout may have moved on from since. */
@@ -45,19 +46,8 @@ export interface HeldKeys {
 }
 
 function heldStore(): KeyboardPlaying & { set: (next: ReadonlyMap<string, HeldKey>) => void } {
-  let snapshot: ReadonlyMap<string, HeldKey> = new Map();
-  const listeners = new Set<() => void>();
-  return {
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    getSnapshot: () => snapshot,
-    set: (next) => {
-      snapshot = next;
-      listeners.forEach((listener) => listener());
-    },
-  };
+  const held = createValueStore<ReadonlyMap<string, HeldKey>>(new Map());
+  return { subscribe: held.subscribe, getSnapshot: held.read, set: held.set };
 }
 
 /** The held keys, for the component that draws them: only it re-renders as keys go down and up. */

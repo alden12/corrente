@@ -13,6 +13,7 @@
  * observer.
  */
 import { useEffect, useSyncExternalStore } from "react";
+import { createListeners } from "../listeners";
 import { usePersistentString } from "./usePersistent";
 
 export const THEME_CHOICES = ["system", "dark", "light"] as const;
@@ -73,13 +74,13 @@ export function useThemeChoice() {
 
 // --- the canvas signal ------------------------------------------------------
 
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 let version = 0;
 let watching = false;
 
 const bump = () => {
   version += 1;
-  listeners.forEach((listener) => listener());
+  listeners.emit();
 };
 
 /** One observer for the whole app, started lazily on the first subscription. */
@@ -103,8 +104,7 @@ export function useThemeVersion(): number {
   return useSyncExternalStore(
     (onStoreChange) => {
       watch();
-      listeners.add(onStoreChange);
-      return () => void listeners.delete(onStoreChange);
+      return listeners.subscribe(onStoreChange);
     },
     () => version,
     () => version,
@@ -131,8 +131,7 @@ export function useResolvedTheme(): "dark" | "light" {
   return useSyncExternalStore(
     (onStoreChange) => {
       watch();
-      listeners.add(onStoreChange);
-      return () => void listeners.delete(onStoreChange);
+      return listeners.subscribe(onStoreChange);
     },
     resolveTheme,
     () => "dark",

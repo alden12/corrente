@@ -15,6 +15,7 @@
  * that hash, so the same file imported twice is stored once and a clip's `fileId`
  * doubles as an integrity check.
  */
+import { createListeners } from "../listeners";
 import { projectSummarySchema, summarizeProject, type ProjectSummary } from "./projects/summary";
 import { ProjectStore } from "./project/projectStore";
 import type { ProjectData } from "./project/types";
@@ -815,20 +816,17 @@ function readCurrentId(): string {
   return stored || "default";
 }
 
-const currentListeners = new Set<() => void>();
+const currentListeners = createListeners();
 
 /** Point the app-wide repository at project `id` (rebuilds it over that bundle). */
 export function setCurrentProject(id: string): void {
   if (typeof localStorage !== "undefined") localStorage.setItem(CURRENT_PROJECT_KEY, id);
   current = { id, repo: new ProjectRepository(getProjectStorage().bundle(id), id) };
-  for (const listener of currentListeners) listener();
+  currentListeners.emit();
 }
 
 /** Subscribe to project switches. Returns an unsubscribe fn. */
-export function subscribeCurrentProject(listener: () => void): () => void {
-  currentListeners.add(listener);
-  return () => currentListeners.delete(listener);
-}
+export const subscribeCurrentProject = currentListeners.subscribe;
 
 /**
  * The project whose *contents* are in the live store, which is not the same thing as the
@@ -848,7 +846,7 @@ let loadedId: string | null = null;
 
 export function markProjectLoaded(id: string): void {
   loadedId = id;
-  for (const listener of currentListeners) listener();
+  currentListeners.emit();
 }
 
 /** The id of the project the live store actually holds, or null before the first load. */

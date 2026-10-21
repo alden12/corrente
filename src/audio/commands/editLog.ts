@@ -23,6 +23,7 @@ import { describeCommand, type DescribeContext } from "./describe";
 import type { Author, EditCommand, EditEntry } from "./types";
 import { randomUuid } from "../randomUuid";
 import { agentAuthor, isOwnWork } from "./authors";
+import { createListeners } from "../../listeners";
 
 /**
  * An undo step is the `id` of the log entry it takes back, and nothing else (DAW-34).
@@ -217,7 +218,7 @@ export class EditLog {
    *  end arrives. One entry, one authoritative edit - see `forward`. */
   private heldForward: { command: EditCommand; author: Author; id: string } | null = null;
   private forwardTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
   /** What hears each edit made here, by this user or their agent; never a peer's. */
   private cached: EditLogState | null = null;
   /** Optional realtime sink: when a shared session is live, each dispatched edit is forwarded to the
@@ -844,8 +845,7 @@ export class EditLog {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   /**
@@ -879,6 +879,6 @@ export class EditLog {
 
   private emit(): void {
     this.cached = null;
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 }

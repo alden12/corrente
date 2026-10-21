@@ -10,6 +10,7 @@
  * **When it syncs:** on start, on signing in, when the browser comes back online, and after every
  * tap. A failed sync leaves the queue for the next one; the hearts on screen never wait for it.
  */
+import { createListeners } from "../../../listeners";
 import { MAX_FAVOURITE_CHANGES } from "../../../contract/http";
 import { accountOwner as owner, authEnabled, SIGNED_OUT, subscribeAuth } from "../../../auth/session";
 import { apiClient as client } from "../../../hosting/api";
@@ -42,23 +43,20 @@ function read(key: string): FavouritesState {
   }
 }
 
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 let currentOwner = owner();
 let state = read(currentOwner);
 
 function write(next: FavouritesState): void {
   state = next;
   writePersistent(storageKey(currentOwner), JSON.stringify(next));
-  for (const listener of listeners) listener();
+  listeners.emit();
 }
 
 /** The current favourites (a stable snapshot between notifications, for `useSyncExternalStore`). */
 export const readFavourites = (): FavouritesState => state;
 
-export function subscribeFavourites(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeFavourites = listeners.subscribe;
 
 /** Heart or un-heart a device, at once, then tell the server. */
 export function toggleFavourite(ref: string): void {
@@ -121,7 +119,7 @@ function followAccount(): void {
     write(mergeSignedOut(account, signedOut));
   } else {
     state = account;
-    for (const listener of listeners) listener();
+    listeners.emit();
   }
   void syncFavourites();
 }

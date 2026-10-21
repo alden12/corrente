@@ -33,6 +33,7 @@ import { GRID, type NoteEvent } from "../sequencer/types";
 import { quantizeNotes, type QuantizeSettings } from "../sequencer/quantize";
 import { beatsPerSecond } from "../timing";
 import { encodeWav } from "./wav";
+import { createListeners } from "../../listeners";
 
 /** Returns the quantize settings to apply to a take as it's captured, or null to leave it raw. */
 export type AutoQuantize = () => QuantizeSettings | null;
@@ -95,7 +96,7 @@ export class Recorder {
     take: null,
     error: null,
   };
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
   private countInTimer: ReturnType<typeof setTimeout> | null = null;
   private preview: PreviewSource | null = null;
   /** The tried sound this take records onto a new track, fixed when the take starts. */
@@ -133,8 +134,7 @@ export class Recorder {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
   getState(): RecorderState {
     return this.state;
@@ -144,7 +144,7 @@ export class Recorder {
     // While a take is counting in or recording, its track's own clips stay quiet: the take replaces
     // them (punching in), so they'd only play under it.
     this.scheduler.silence(this.isActive ? this.targetTrackId : null);
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 
   get isActive(): boolean {

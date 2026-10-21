@@ -11,6 +11,7 @@
  * - `week`: Safari deletes a site's script-written storage after 7 days without a visit, unless the
  *   site is installed (added to the Dock or the Home Screen).
  */
+import { createListeners } from "../listeners";
 import { hosting } from ".";
 
 export type StorageRisk = "kept" | "may-clear" | "week";
@@ -59,11 +60,11 @@ export interface StorageRiskSnapshot {
 
 let snapshot: StorageRiskSnapshot = { canInstall: false };
 let installPrompt: InstallPrompt | null = null;
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 
 const update = (next: Partial<StorageRiskSnapshot>) => {
   snapshot = { ...snapshot, ...next };
-  listeners.forEach((listener) => listener());
+  listeners.emit();
 };
 
 /** Ask the browser again. */
@@ -97,9 +98,6 @@ export async function installApp(): Promise<void> {
   await refreshStorageRisk();
 }
 
-export const subscribeStorageRisk = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-};
+export const subscribeStorageRisk = listeners.subscribe;
 
 export const readStorageRisk = (): StorageRiskSnapshot => snapshot;

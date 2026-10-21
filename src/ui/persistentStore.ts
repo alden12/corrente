@@ -18,6 +18,7 @@
  * Pure data plus a subscribe seam, like the other small stores (`gridView.ts`,
  * `currentUser.ts`); the React binding is `usePersistent.ts`.
  */
+import { createListeners, type Listeners } from "../listeners";
 
 function readStorage(key: string): string | null {
   try {
@@ -36,7 +37,7 @@ function writeStorage(key: string, value: string): void {
 }
 
 const cache = new Map<string, string | null>();
-const listeners = new Map<string, Set<() => void>>();
+const listeners = new Map<string, Listeners>();
 
 /** The raw string stored under `key`, or null if never set. Loaded once, then cached. */
 export function readPersistent(key: string): string | null {
@@ -49,17 +50,13 @@ export function writePersistent(key: string, value: string): void {
   if (readPersistent(key) === value) return;
   cache.set(key, value);
   writeStorage(key, value);
-  listeners.get(key)?.forEach((listener) => listener());
+  listeners.get(key)?.emit();
 }
 
 export function subscribePersistent(key: string, listener: () => void): () => void {
-  const forKey = listeners.get(key) ?? new Set<() => void>();
+  const forKey = listeners.get(key) ?? createListeners();
   listeners.set(key, forKey);
-  forKey.add(listener);
-  return () => {
-    forKey.delete(listener);
-    if (!forKey.size) listeners.delete(key);
-  };
+  return forKey.subscribe(listener);
 }
 
 /** Drop the cache. Tests only - the app has no reason to forget a preference. */

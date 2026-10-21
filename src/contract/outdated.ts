@@ -5,18 +5,10 @@
  *
  * Client-side state, so not in the contract's barrel the server imports.
  */
-let outdated = false;
-const listeners = new Set<() => void>();
+import { createValueStore } from "../listeners";
 
-export function markOutdated(): void {
-  if (outdated) return;
-  outdated = true;
-  listeners.forEach((listener) => listener());
-}
+const outdated = createValueStore(false);
 
-export const isOutdated = (): boolean => outdated;
-
-export function subscribeOutdated(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const markOutdated = (): void => outdated.set(true);
+export const isOutdated = outdated.read;
+export const subscribeOutdated = outdated.subscribe;

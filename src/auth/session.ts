@@ -10,6 +10,7 @@
  * as before real auth (no gate, no credential - the dev-stub server is open, a single "local" owner). No
  * React here - the UI bridges this store to `currentUser` and renders the gate.
  */
+import { createListeners } from "../listeners";
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { isTrustedRedirect } from "./trustedRedirect";
 import { hosting } from "../hosting";
@@ -35,7 +36,7 @@ export type AuthState =
   | { status: "signed-in"; user: AuthUser }
   | { status: "refused"; user: AuthUser };
 
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 const supabase: SupabaseClient | null = hosting.auth ? createClient(hosting.auth.url, hosting.auth.anonKey) : null;
 
 // A fresh object per change so `readAuthState` is a stable snapshot between notifications (useSyncExternalStore).
@@ -51,8 +52,6 @@ function displayName(session: Session): string {
   return named ?? session.user.email ?? session.user.id;
 }
 
-const notify = (): void => listeners.forEach((listener) => listener());
-
 function apply(session: Session | null): void {
   if (session) resumeConsent();
   token = session?.access_token;
@@ -66,7 +65,7 @@ function apply(session: Session | null): void {
         user: { id: session.user.id, email: session.user.email ?? undefined, name: displayName(session) },
       }
     : { status: "signed-out" };
-  notify();
+  listeners.emit();
 }
 
 // One handler keeps the token + state current. `onAuthStateChange` fires an INITIAL_SESSION event on
@@ -100,7 +99,7 @@ export const onUnauthorized = {
   refused(): void {
     if (state.status !== "signed-in") return;
     state = { status: "refused", user: state.user };
-    notify();
+    listeners.emit();
   },
 };
 
@@ -110,10 +109,7 @@ export function readAuthState(): AuthState {
 }
 
 /** Subscribe to auth-state changes. Returns an unsubscribe fn. */
-export function subscribeAuth(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeAuth = listeners.subscribe;
 
 /** Whose data a signed-out device keeps, per account stores like favourites and the library. */
 export const SIGNED_OUT = "local";

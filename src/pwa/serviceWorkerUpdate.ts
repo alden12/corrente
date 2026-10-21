@@ -18,17 +18,17 @@
  */
 import { useSyncExternalStore } from "react";
 import { registerSW } from "virtual:pwa-register";
+import { createValueStore } from "../listeners";
 
 let applyWaitingUpdate: ((reload?: boolean) => Promise<void>) | null = null;
 let registration: ServiceWorkerRegistration | undefined;
-let waiting = false;
 /** A reload was asked for before the new version had downloaded: take it as soon as it has. */
 let reloadWhenReady = false;
-const listeners = new Set<() => void>();
+/** Whether a new version has finished downloading and is waiting to take over. */
+const waiting = createValueStore(false);
 
 const announce = () => {
-  waiting = true;
-  listeners.forEach((listener) => listener());
+  waiting.set(true);
   if (reloadWhenReady) applyUpdate();
 };
 
@@ -44,14 +44,7 @@ export function registerServiceWorker(): void {
 
 /** Whether a new version has finished downloading and is waiting to take over. */
 export function useUpdateWaiting(): boolean {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      listeners.add(onStoreChange);
-      return () => void listeners.delete(onStoreChange);
-    },
-    () => waiting,
-    () => false,
-  );
+  return useSyncExternalStore(waiting.subscribe, waiting.read, () => false);
 }
 
 /** Let the waiting worker take over, then reload onto it. */
@@ -69,7 +62,7 @@ const FETCH_UPDATE_MS = 10_000;
  * reload anyway.
  */
 export function reloadOntoLatest(): void {
-  if (waiting) return applyUpdate();
+  if (waiting.read()) return applyUpdate();
   if (!registration) return location.reload();
   reloadWhenReady = true;
   void registration.update().catch(() => location.reload());

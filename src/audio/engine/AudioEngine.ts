@@ -35,6 +35,7 @@ import { loadSampleBuffer } from "../samples/builtinUrls";
 import { soloMutedTrackIds } from "./mix";
 import { audioPlayWindow } from "./audioWindow";
 import { loadWorklets } from "../worklets";
+import { createListeners } from "../../listeners";
 
 interface TrackNode {
   instrument: Instrument;
@@ -120,7 +121,7 @@ export class AudioEngine {
   private inputDeviceId: string | null = null;
   private previewTrack: InstrumentTrack | null = null;
   /** Who hears the banks' slow blocks, across remade contexts; and the current context's stop. */
-  private readonly slowListeners = new Set<(blocks: number) => void>();
+  private readonly slowListeners = createListeners<[number]>();
   private stopSlow: (() => void) | null = null;
   private unsubscribe: (() => void) | null = null;
   /** The transport clock MIDI devices read (set by AppShell once the scheduler exists). */
@@ -222,7 +223,7 @@ export class AudioEngine {
     }
     const ctx = new AudioContext({ latencyHint: this.size });
     this.ctx = ctx;
-    this.stopSlow = onSlowBlocks(ctx, (blocks) => this.slowListeners.forEach((listener) => listener(blocks)));
+    this.stopSlow = onSlowBlocks(ctx, (blocks) => this.slowListeners.emit(blocks));
     setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
     this.master = masterBus(ctx);
     this.router = new MixRouter(ctx, (parentId) => this.parentInput(parentId), COMPENSATION_GLIDE_SECONDS);
@@ -247,8 +248,7 @@ export class AudioEngine {
 
   /** Hear how many blocks rendered late, about once a second while there are any. Returns a stop. */
   onSlowBlocks(listener: (blocks: number) => void): () => void {
-    this.slowListeners.add(listener);
-    return () => this.slowListeners.delete(listener);
+    return this.slowListeners.subscribe(listener);
   }
 
   /**

@@ -10,6 +10,7 @@
  * library store. A cached snapshot keeps `readAgentConfig` referentially stable between
  * writes, so it is safe as a `useSyncExternalStore` getSnapshot.
  */
+import { createListeners } from "../../listeners";
 import { PROVIDERS, toProviderId, type ProviderId } from "./providers";
 
 export interface AgentConfig {
@@ -23,7 +24,7 @@ export interface AgentConfig {
 
 const STORAGE_KEY = "corrente:agent-config:v2";
 const EMPTY: AgentConfig = { provider: "gemini", keys: {}, models: {} };
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 
 function store(): Storage | null {
   try {
@@ -67,7 +68,7 @@ export function readAgentConfig(): AgentConfig {
 export function writeAgentConfig(config: AgentConfig): void {
   cached = { provider: config.provider, keys: { ...config.keys }, models: { ...config.models } };
   store()?.setItem(STORAGE_KEY, JSON.stringify(cached));
-  for (const listener of listeners) listener();
+  listeners.emit();
 }
 
 /** The active provider's API key (trimmed), or "" if none is set. */
@@ -81,7 +82,4 @@ export function resolveModel(config: AgentConfig): string {
 }
 
 /** Subscribe to config changes. Returns an unsubscribe fn. */
-export function subscribeAgentConfig(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeAgentConfig = listeners.subscribe;

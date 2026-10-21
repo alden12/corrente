@@ -11,6 +11,7 @@
  * `projectRepository` (a shared localStorage key); the imperative flows
  * (create/switch/rename/delete) live in `operations.ts`.
  */
+import { createListeners } from "../../listeners";
 import { getProjectStorage, type ProjectListing, type ProjectStorage } from "../bundleStore";
 import { randomUuid } from "../randomUuid";
 
@@ -18,7 +19,7 @@ import { randomUuid } from "../randomUuid";
 export type ProjectMeta = ProjectListing;
 
 let cache: ProjectMeta[] = [];
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 
 /** The cached project list, newest-first. Call `refreshProjects` to (re)populate it. */
 export function listProjects(): ProjectMeta[] {
@@ -26,14 +27,7 @@ export function listProjects(): ProjectMeta[] {
 }
 
 /** Subscribe to library changes (refresh/create/rename/delete). Returns an unsubscribe fn. */
-export function subscribeProjects(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function emit(): void {
-  for (const listener of listeners) listener();
-}
+export const subscribeProjects = listeners.subscribe;
 
 /**
  * Patch one project's cached name in place (and notify subscribers). Used when a `renameProject` edit
@@ -47,14 +41,14 @@ export function patchProjectName(id: string, name: string): void {
   cache = cache.map((meta) =>
     meta.id === id && meta.name !== next ? ((changed = true), { ...meta, name: next }) : meta,
   );
-  if (changed) emit();
+  if (changed) listeners.emit();
 }
 
 /** Ask the storage for its listings, sort newest-first, update + notify the cache. */
 export async function refreshProjects(storage: ProjectStorage = getProjectStorage()): Promise<ProjectMeta[]> {
   const metas = await storage.listProjects();
   cache = [...metas].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
-  emit();
+  listeners.emit();
   return cache;
 }
 

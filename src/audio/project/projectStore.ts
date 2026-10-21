@@ -65,6 +65,7 @@ import type {
   MidiDeviceData,
   TimeSignature,
 } from "./types";
+import { createListeners } from "../../listeners";
 
 const { min: MIN_BPM, max: MAX_BPM } = TEMPO_BPM_RANGE;
 // Time-signature bounds are shared with the zod schema (the one source), so the store's coercion
@@ -212,7 +213,7 @@ export class ProjectStore {
   /** Custom devices this build could not read, kept as stored and written back out (parseCustomDevices). */
   private unreadableDevices: UnreadableDevices = { instruments: [], effects: [] };
   private selectedTrackId: string | null = null;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
   private cached: ProjectStructure | null = null;
 
   constructor(seedDefault = true) {
@@ -266,7 +267,7 @@ export class ProjectStore {
 
   private emit(): void {
     this.cached = null;
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 
   // --- reads ---
@@ -1438,8 +1439,7 @@ export class ProjectStore {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   // --- persistence / sync ---

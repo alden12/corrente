@@ -5,6 +5,7 @@
  * the schema and notifies subscribers.
  */
 import type { ParamSchema, ParamSpec, ParamValue, PatchValues } from "./types";
+import { createListeners } from "../../listeners";
 
 type Listener = (id: string, value: ParamValue) => void;
 type ByKind<K extends ParamSpec["kind"]> = Extract<ParamSpec, { kind: K }>;
@@ -31,7 +32,7 @@ function coerce(spec: ParamSpec, value: ParamValue): ParamValue {
 export class ParamStore {
   private readonly specs = new Map<string, ParamSpec>();
   private readonly values = new Map<string, ParamValue>();
-  private readonly listeners = new Set<Listener>();
+  private readonly listeners = createListeners<Parameters<Listener>>();
 
   constructor(schema: ParamSchema) {
     for (const spec of schema) {
@@ -67,13 +68,12 @@ export class ParamStore {
     const next = coerce(spec, value);
     if (this.values.get(id) === next) return;
     this.values.set(id, next);
-    for (const listener of this.listeners) listener(id, next);
+    this.listeners.emit(id, next);
   }
 
   /** Subscribe to every value change. Returns an unsubscribe function. */
   subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   /** Current value of every parameter, i.e. the patch. */
@@ -97,7 +97,7 @@ export class ParamStore {
       this.values.set(spec.id, previous.has(spec.id) ? coerce(spec, previous.get(spec.id)!) : spec.default);
     }
     for (const [id, value] of this.values) {
-      if (previous.get(id) !== value) for (const listener of this.listeners) listener(id, value);
+      if (previous.get(id) !== value) this.listeners.emit(id, value);
     }
   }
 

@@ -8,6 +8,7 @@
  * "added" events for its catalogue-wide shelves, each take becomes one, and this list can be read
  * from them instead.
  */
+import { createListeners } from "../../../listeners";
 import { accountOwner as owner, subscribeAuth } from "../../../auth/session";
 import { readPersistent, writePersistent } from "../../persistentStore";
 
@@ -29,25 +30,20 @@ function read(account: string): string[] {
   }
 }
 
-const listeners = new Set<() => void>();
+const listeners = createListeners();
 let currentOwner = owner();
 let recent: readonly string[] = read(currentOwner);
-
-const notify = () => listeners.forEach((listener) => listener());
 
 /** The current list (a stable snapshot between notifications, for `useSyncExternalStore`). */
 export const readRecent = (): readonly string[] => recent;
 
-export function subscribeRecent(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeRecent = listeners.subscribe;
 
 /** Something from Explore was taken into the project. */
 export function noteUsed(key: string): void {
   recent = withUsed(recent, key);
   writePersistent(storageKey(currentOwner), JSON.stringify(recent));
-  notify();
+  listeners.emit();
 }
 
 subscribeAuth(() => {
@@ -55,5 +51,5 @@ subscribeAuth(() => {
   if (next === currentOwner) return;
   currentOwner = next;
   recent = read(next);
-  notify();
+  listeners.emit();
 });

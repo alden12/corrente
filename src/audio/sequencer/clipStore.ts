@@ -8,6 +8,7 @@
 import { GRID, type ClipData, type NoteEvent } from "./types";
 import { clamp } from "../../util";
 import { randomUuid } from "../randomUuid";
+import { createListeners } from "../../listeners";
 
 const DEFAULT_LENGTH = 16;
 
@@ -32,7 +33,7 @@ export interface NoteInput {
 export class ClipStore {
   private readonly notes = new Map<string, NoteEvent>();
   private lengthBeats = DEFAULT_LENGTH;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
   private cached: ClipData | null = null;
 
   constructor(initial?: Partial<ClipData>) {
@@ -83,7 +84,7 @@ export class ClipStore {
 
   private emit(): void {
     this.cached = null;
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 
   /** Stable reference between mutations - safe for useSyncExternalStore. */
@@ -131,8 +132,7 @@ export class ClipStore {
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   snapshot(): ClipData {

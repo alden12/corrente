@@ -10,6 +10,7 @@
  * dev, where the worker's code comes over the network) keeps its card's glyph, and is tried again
  * when the browser is back online, or when its card is next on screen after a pause.
  */
+import { createListeners } from "../../listeners";
 import { openDB, type IDBPDatabase } from "idb";
 import { documentHash } from "../contentHash";
 import { drawPortraitInWorker } from "../engine/renderInWorker";
@@ -36,8 +37,7 @@ const working = new Set<string>();
 const queue: { key: string; job: PortraitJob }[] = [];
 let drawing = false;
 
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((listener) => listener());
+const listeners = createListeners();
 
 let database: Promise<IDBPDatabase | null> | undefined;
 /** The cache's database, or null where there's no IndexedDB (portraits then last until reload). */
@@ -59,7 +59,7 @@ const settle = (key: string, portrait: Portrait) => {
   known.set(key, portrait);
   failed.delete(key);
   working.delete(key);
-  notify();
+  listeners.emit();
 };
 
 /** Draw the next portrait still wanted, one at a time. */
@@ -131,7 +131,4 @@ const retryFailed = () =>
 if (typeof window !== "undefined") window.addEventListener("online", retryFailed);
 
 /** Subscribe to portraits arriving. Returns an unsubscribe fn. */
-export function subscribePortraits(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribePortraits = listeners.subscribe;

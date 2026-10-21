@@ -14,6 +14,7 @@
  * and it is right: someone in that position has been away long enough that a fresh start is close to
  * what they expected anyway.
  */
+import { createListeners } from "../../listeners";
 import { ProjectStore } from "../project/projectStore";
 import { getRepository, setCurrentProject, UnreadableProjectError, type ProjectRepository } from "../projectRepository";
 import { forkProjectFromSnapshot } from "./operations";
@@ -67,15 +68,12 @@ export async function startProjectBeside(name: string): Promise<string> {
  * callers report. Returns whether `error` was the unreadable-project one, so a caller can fall
  * through to its ordinary logging for anything else.
  */
-const listeners = new Set<(detail: string) => void>();
+const listeners = createListeners<[string]>();
 
-export function subscribeUnreadableProject(listener: (detail: string) => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const subscribeUnreadableProject = listeners.subscribe;
 
 export function reportUnreadableProject(error: unknown): boolean {
   if (!(error instanceof UnreadableProjectError)) return false;
-  for (const listener of listeners) listener(error.detail);
+  listeners.emit(error.detail);
   return true;
 }

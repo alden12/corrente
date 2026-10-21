@@ -13,6 +13,7 @@
 import { ProjectStore, type InstrumentTrack } from "../project/projectStore";
 import { soundChains, soundDevicesOf, type DeviceSource, type Sound } from "../patches/sound";
 import type { InstrumentTarget } from "./liveNotes";
+import { createListeners } from "../../listeners";
 
 export interface PreviewEngine {
   setPreview(track: InstrumentTrack | null): void;
@@ -35,7 +36,7 @@ const PREVIEW_TRACK_ID = "preview";
 
 export class SoundPreview {
   private state: PreviewState | null = null;
-  private readonly listeners = new Set<() => void>();
+  private readonly listeners = createListeners();
   private readonly engine: PreviewEngine;
   private readonly onTaken: (key: string) => void;
   private readonly project: DeviceSource;
@@ -55,10 +56,7 @@ export class SoundPreview {
     this.project = project;
   }
 
-  subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
+  subscribe = this.listeners.subscribe;
 
   getState = (): PreviewState | null => this.state;
 
@@ -124,6 +122,6 @@ export class SoundPreview {
 
   private set(state: PreviewState | null): void {
     this.state = state;
-    for (const listener of this.listeners) listener();
+    this.listeners.emit();
   }
 }
