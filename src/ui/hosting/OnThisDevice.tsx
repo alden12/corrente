@@ -6,7 +6,7 @@
  * The same details in two places: on desktop behind a chip where the sync chip sits, and on both
  * shells as a line at the top of Projects, where people look for their files. The storage steps
  * (HOST-23.2.1) add to the details: whether the browser may clear them (`storageRisk`), and backups.
- * At risk, the dot turns amber: a state of the chip, never a banner that comes back.
+ * The chip looks the same whatever the browser said: the risk is told in the details, not by colour.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { hosting } from "../../hosting";
@@ -86,12 +86,7 @@ export function OnThisDeviceDetails() {
   );
 }
 
-/** Grey, or amber while the browser may clear the files. */
-function Dot() {
-  const { risk } = useStorageRisk();
-  const atRisk = risk !== undefined && risk !== "kept";
-  return <span aria-hidden="true" className={`w-2 h-2 rounded-full ${atRisk ? "bg-warn" : "bg-faint"}`} />;
-}
+const Dot = () => <span aria-hidden="true" className="w-2 h-2 rounded-full bg-faint" />;
 
 /** The desktop status bar's chip, in place of the sync chip: a click shows the details. */
 export function OnThisDeviceChip() {
