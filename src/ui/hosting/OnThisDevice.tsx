@@ -1,7 +1,8 @@
 /**
  * "On this device" (HOST-23.2.5): what a standalone run says about where its files are, calmly and
- * once in each place rather than as a warning. Standalone is a mode, not a fault, so it is grey like
- * an idle chip, never the warning colour the offline banner uses (that's for hosted but unreachable).
+ * once in each place rather than as a warning. Standalone is a mode, not a fault, so it shows a place
+ * (a laptop icon) rather than a status dot, and never the warning colour the offline banner uses
+ * (that's for hosted but unreachable).
  *
  * The same details in two places: on desktop behind a chip where the sync chip sits, and on both
  * shells as a line at the top of Projects, where people look for their files. The storage steps
@@ -19,6 +20,7 @@ import {
 } from "../../hosting/storageRisk";
 import { Popover } from "../Menu";
 import { insideMenu } from "../insideMenu";
+import { DeviceIcon } from "../shellIcons";
 
 /** Whether this run keeps everything on the device, so the note and chip have something to say. */
 export const onThisDevice = hosting.mode === "standalone";
@@ -86,8 +88,6 @@ export function OnThisDeviceDetails() {
   );
 }
 
-const Dot = () => <span aria-hidden="true" className="w-2 h-2 rounded-full bg-faint" />;
-
 /** The desktop status bar's chip, in place of the sync chip: a click shows the details. */
 export function OnThisDeviceChip() {
   const [open, setOpen] = useState(false);
@@ -120,7 +120,7 @@ export function OnThisDeviceChip() {
         onClick={() => setOpen((was) => !was)}
         className="inline-flex items-center gap-1.5 h-6 px-1 font-mono text-[11px] text-muted hover:text-ink cursor-pointer"
       >
-        <Dot />
+        <DeviceIcon />
         On this device
       </button>
       {open && (
@@ -154,7 +154,7 @@ export function OnThisDeviceNote() {
         onClick={() => setOpen((was) => !was)}
         className="flex items-center gap-2 min-h-9 pointer-coarse:min-h-11 text-[12.5px] text-muted hover:text-ink cursor-pointer"
       >
-        <Dot />
+        <DeviceIcon />
         Saved on this device
         <svg
           viewBox="0 0 16 16"

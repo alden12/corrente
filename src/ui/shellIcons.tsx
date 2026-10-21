@@ -36,6 +36,24 @@ export function ShareIcon() {
   );
 }
 
+/** A laptop: kept on this device, where the sync chip would show a connection (HOST-23.2.5). */
+export function DeviceIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="3" y="3.5" width="10" height="7" rx="1" />
+      <path d="M1.5 12.5h13" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** A bin: delete things (the clips line's delete mode). */
 export function BinIcon() {
   return (
