@@ -36,7 +36,7 @@ export function StartDialog({ onStart, error, intro }: { onStart: () => void; er
               rel="noreferrer"
               aria-label="Source on GitHub"
               title="Source on GitHub"
-              className="inline-flex align-[-3px] text-muted hover:text-ink"
+              className="inline-flex mt-1 align-[-3px] text-muted hover:text-ink"
             >
               <GitHubIcon />
             </a>
