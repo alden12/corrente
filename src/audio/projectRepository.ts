@@ -23,6 +23,7 @@ import type { Author, EditCommand, EditEntry } from "./commands/types";
 import type { FeedNote } from "./commands/editLog";
 import { type BundleStore, getProjectStorage } from "./bundleStore";
 import { migrateDocument, PROJECT_SCHEMA } from "./project/documentMigration";
+import { markOutdated } from "../contract/outdated";
 import { headFromLog, rebuildWithout } from "./commands/replay";
 import { commitKeyframePath } from "./history/paths";
 import {
@@ -322,6 +323,8 @@ export class ProjectRepository {
     if (!projectRaw) return null;
     const raw = parseJson<unknown>(projectRaw, "project.json is not readable");
     const migrated = (await this.upcast(raw, manifest).catch((cause: unknown) => {
+      // Not damaged, only newer: rebuilding it from its log here would save it down all the same.
+      if (cause instanceof NewerFileError) throw cause;
       throw new UnreadableProjectError("project.json could not be brought up to date", { cause });
     })) as PersistedProject;
     const { headSeq, ...base } = migrated;
@@ -453,7 +456,13 @@ export class ProjectRepository {
    */
   private async upcast(rawDocument: unknown, manifest: Manifest): Promise<ProjectData> {
     const fromVersion = manifest.projectSchema ?? 0;
-    if (fromVersion >= PROJECT_SCHEMA) return rawDocument as ProjectData;
+    // Saved by a newer app (a tab left open across an update, HOST-23.1): opening it here would save
+    // it back down stamped with this older version. Refused, and the app asks for a reload instead.
+    if (fromVersion > PROJECT_SCHEMA) {
+      markOutdated();
+      throw new NewerFileError();
+    }
+    if (fromVersion === PROJECT_SCHEMA) return rawDocument as ProjectData;
     const { data, version } = migrateDocument(rawDocument, fromVersion, PROJECT_SCHEMA);
     if (version > fromVersion) {
       await this.store.writeText("project.json", JSON.stringify(data));

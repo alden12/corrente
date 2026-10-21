@@ -45,7 +45,8 @@ import { requestPersistentStorage } from "../audio/bundleStore";
 import type { WsStatus } from "../contract/client";
 import { OfflineBanner, LoadingOverlay } from "./ConnectionStatus";
 import { UpdateNotice } from "./UpdateNotice";
-import { applyUpdate, useUpdateWaiting } from "../pwa/serviceWorkerUpdate";
+import { applyUpdate, reloadOntoLatest, useUpdateWaiting } from "../pwa/serviceWorkerUpdate";
+import { isOutdated, subscribeOutdated } from "../contract/outdated";
 import { ConflictDialog } from "./ConflictDialog";
 import { RecoveryDialog } from "./RecoveryDialog";
 import { takeAuthReturnPath } from "../auth/session";
@@ -358,6 +359,8 @@ export function AppShell() {
   }, [editLog]);
 
   const updateWaiting = useUpdateWaiting();
+  // Too old for the server or for a project a newer version saved (HOST-23.1): a reload is required.
+  const outdated = useSyncExternalStore(subscribeOutdated, isOutdated, isOutdated);
 
   // Hiding a touch app stops the transport and parks the audio thread (DAW-33).
   useBackgroundAudio({ engine, scheduler, recorder, enabled: deviceShape.tier !== "desktop" });
@@ -458,7 +461,11 @@ export function AppShell() {
       {/* `dvh`, not `vh`: mobile browsers count their collapsing address bar in `vh`, so
           a `100vh` shell puts the bottom tabs under the chrome until the user scrolls. */}
       <div className="flex flex-col h-dvh overflow-hidden bg-ground text-ink">
-        {updateWaiting && <UpdateNotice onReload={applyUpdate} />}
+        {outdated ? (
+          <UpdateNotice required onReload={reloadOntoLatest} />
+        ) : (
+          updateWaiting && <UpdateNotice onReload={applyUpdate} />
+        )}
         {syncStatus === "offline" && <OfflineBanner shared={!!isSharedProject} />}
         {deviceShape.tier === "desktop" ? (
           <DesktopShell {...shellProps} />

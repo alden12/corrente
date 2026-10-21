@@ -15,6 +15,8 @@ import { routes } from "./http";
 import { channels, parseServerMessage, type ClientMessage, type ServerMessage } from "./ws";
 import type { ErrorBody } from "./errors";
 import { IdleController } from "./idleController";
+import { markOutdated } from "./outdated";
+import { CLOSE_CLIENT_OUTDATED, PROTOCOL_HEADER, PROTOCOL_PARAM, PROTOCOL_VERSION } from "./version";
 
 type ProjectList = z.infer<(typeof routes.listProjects)["response"]>;
 /** One project in the library listing (id + name + modifiedAt + the caller's role). */
@@ -96,8 +98,14 @@ export function createApiClient(config: {
 
   /** `fetch` with the credential, retried once on a 401 when the token can be renewed. */
   const send = async (url: string, init: RequestInit & { headers?: Record<string, string> } = {}) => {
-    const attempt = () => fetch(url, { ...init, headers: { ...authHeaders(), ...init.headers } });
+    const attempt = () =>
+      fetch(url, {
+        ...init,
+        headers: { ...authHeaders(), [PROTOCOL_HEADER]: String(PROTOCOL_VERSION), ...init.headers },
+      });
     const res = await attempt();
+    // The server no longer speaks this client's protocol (HOST-23.1): the app says to reload.
+    if (res.status === 426) markOutdated();
     const handler = config.onUnauthorized;
     if (res.status !== 401 || !handler) return res;
     const retried = (await handler.renew()) ? await attempt() : res;
@@ -397,7 +405,9 @@ export function createWsClient(config: {
     // Rebuild the URL per (re)connect so a refreshed token is picked up (the reconnect from slice 76
     // is also what re-applies it after a token rotation).
     const token = resolveToken(config.token);
-    const url = token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    const query = new URLSearchParams({ [PROTOCOL_PARAM]: String(PROTOCOL_VERSION) });
+    if (token) query.set("token", token);
+    const url = `${base}?${query}`;
     const ws = new WebSocket(url);
     socket = ws;
     // Each listener guards `socket !== ws`, so a *previous* socket firing a deferred event (a late close
@@ -423,8 +433,19 @@ export function createWsClient(config: {
       }
       for (const handler of messageHandlers) handler(parsed.data);
     });
-    ws.addEventListener("close", () => {
+    ws.addEventListener("close", (event) => {
       if (socket !== ws) return;
+      // Refused as too old (HOST-23.1): reconnecting would only be refused again, so stop and let
+      // the app ask for a reload. A server behind this client is mid-deploy, so that one retries.
+      if (event.code === CLOSE_CLIENT_OUTDATED) {
+        closed = true;
+        stopHeartbeat();
+        idle.dispose();
+        setStatus("offline");
+        for (const handler of closeHandlers) handler();
+        markOutdated();
+        return;
+      }
       drop();
     });
   };

@@ -5,6 +5,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWsClient, type WsStatus } from "../src/contract/client";
+import { isOutdated } from "../src/contract/outdated";
+import { CLOSE_CLIENT_OUTDATED, CLOSE_SERVER_BEHIND, PROTOCOL_VERSION } from "../src/contract/version";
 
 /** A minimal stand-in for the browser WebSocket: records instances and lets the test drive open/close. */
 class FakeWebSocket {
@@ -25,9 +27,9 @@ class FakeWebSocket {
   send(data: string): void {
     this.sent.push(data);
   }
-  close(): void {
+  close(code = 1000): void {
     this.readyState = 3;
-    if (!this.deferClose) this.emit("close");
+    if (!this.deferClose) this.emit("close", { code });
   }
   open(): void {
     this.readyState = 1;
@@ -128,5 +130,31 @@ describe("createWsClient heartbeat (dead-socket detection)", () => {
     vi.advanceTimersByTime(200); // the (cleared) deadline passes harmlessly
 
     expect(statuses).toEqual(["connecting", "online"]); // never went offline
+  });
+});
+
+describe("createWsClient and the protocol version (HOST-23.1)", () => {
+  it("states its version on the socket", () => {
+    createWsClient({ baseUrl: "ws://x" });
+    expect(new URL(FakeWebSocket.instances[0].url).searchParams.get("protocol")).toBe(String(PROTOCOL_VERSION));
+  });
+
+  it("retries a server that's behind it, as for any drop", () => {
+    createWsClient({ baseUrl: "ws://x" });
+    FakeWebSocket.instances[0].close(CLOSE_SERVER_BEHIND);
+    vi.advanceTimersByTime(600);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(isOutdated()).toBe(false);
+  });
+
+  it("stops reconnecting once refused as too old, and asks for a reload", () => {
+    const statuses: WsStatus[] = [];
+    createWsClient({ baseUrl: "ws://x" }).onStatus((status) => statuses.push(status));
+    FakeWebSocket.instances[0].open();
+    FakeWebSocket.instances[0].close(CLOSE_CLIENT_OUTDATED);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(statuses.at(-1)).toBe("offline");
+    expect(isOutdated()).toBe(true);
   });
 });

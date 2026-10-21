@@ -79,6 +79,11 @@ treat these as labels that tie related code together, not as links to follow.
   `ProjectRepository.load` chains them and heals the bundle.
 - Forward-only: no downgrades, no reading arbitrarily old shapes, and no `LEGACY_*` keys or
   `Legacy*` back-compat fields beside the upcasters.
+- **A change an older client or server would misread bumps `PROTOCOL_VERSION`**
+  (`src/contract/version.ts`): the HTTP routes, the socket messages, or the edit command set (a new
+  command kind counts, since the server replays commands). Additive changes both sides tolerate don't.
+  Raise `MIN_PROTOCOL_VERSION` only when the server can no longer serve older clients: they're then
+  asked to reload.
 
 ## The audio engine (engine/)
 

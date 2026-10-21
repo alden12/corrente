@@ -20,17 +20,26 @@ import { useSyncExternalStore } from "react";
 import { registerSW } from "virtual:pwa-register";
 
 let applyWaitingUpdate: ((reload?: boolean) => Promise<void>) | null = null;
+let registration: ServiceWorkerRegistration | undefined;
 let waiting = false;
+/** A reload was asked for before the new version had downloaded: take it as soon as it has. */
+let reloadWhenReady = false;
 const listeners = new Set<() => void>();
 
 const announce = () => {
   waiting = true;
   listeners.forEach((listener) => listener());
+  if (reloadWhenReady) applyUpdate();
 };
 
 /** Install the worker and start watching for a newer one. Called once, from `main.tsx`. */
 export function registerServiceWorker(): void {
-  applyWaitingUpdate = registerSW({ onNeedRefresh: announce });
+  applyWaitingUpdate = registerSW({
+    onNeedRefresh: announce,
+    onRegisteredSW: (_url, registered) => {
+      registration = registered;
+    },
+  });
 }
 
 /** Whether a new version has finished downloading and is waiting to take over. */
@@ -48,4 +57,21 @@ export function useUpdateWaiting(): boolean {
 /** Let the waiting worker take over, then reload onto it. */
 export function applyUpdate(): void {
   void applyWaitingUpdate?.(true);
+}
+
+/** How long to wait for a new version to download before reloading anyway. */
+const FETCH_UPDATE_MS = 10_000;
+
+/**
+ * Get onto the newest version, when this one is too old to go on (HOST-23.1). A plain reload would
+ * come back from the worker's cache as the same old app, so: take the waiting version if one has
+ * downloaded, or ask for it and take it once it has. Without a worker (dev), or if nothing arrives,
+ * reload anyway.
+ */
+export function reloadOntoLatest(): void {
+  if (waiting) return applyUpdate();
+  if (!registration) return location.reload();
+  reloadWhenReady = true;
+  void registration.update().catch(() => location.reload());
+  setTimeout(() => location.reload(), FETCH_UPDATE_MS);
 }

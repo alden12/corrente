@@ -13,9 +13,14 @@
 import { useState } from "react";
 import { Button } from "./controls/Button";
 
-export function UpdateNotice({ onReload }: { onReload: () => void }) {
+/**
+ * `required` is the other case (HOST-23.1): this version is too old for the server, or for a project
+ * a newer one saved, so it can't go on and there is no Later. Edits made meanwhile are held, as they
+ * are offline, and go up after the reload.
+ */
+export function UpdateNotice({ onReload, required = false }: { onReload: () => void; required?: boolean }) {
   const [dismissed, setDismissed] = useState(false);
-  if (dismissed) return null;
+  if (dismissed && !required) return null;
 
   return (
     <div
@@ -23,13 +28,15 @@ export function UpdateNotice({ onReload }: { onReload: () => void }) {
       className="flex items-center justify-center gap-3 px-3 py-1.5 text-[12px] font-medium bg-panel text-muted"
     >
       <span className="w-2 h-2 rounded-full bg-you" />
-      <span>A new version is ready.</span>
+      <span>{required ? "This version of Corrente is out of date." : "A new version is ready."}</span>
       <Button variant="solid" size="sm" onClick={onReload}>
         Reload
       </Button>
-      <Button variant="ghost" size="sm" onClick={() => setDismissed(true)}>
-        Later
-      </Button>
+      {!required && (
+        <Button variant="ghost" size="sm" onClick={() => setDismissed(true)}>
+          Later
+        </Button>
+      )}
     </div>
   );
 }
