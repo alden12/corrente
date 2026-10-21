@@ -128,8 +128,7 @@ function BackupReminder({ reminder }: { reminder?: Reminder }) {
 
 /**
  * Where the files are, how to keep a copy, what the online app adds, and where the source is. Also
- * the first-run intro (HOST-23.2.6, in the start card) and the Account settings page, so dismissing
- * the intro never hides where the files went.
+ * the Account settings page, the details behind the start card's welcome (HOST-23.2.6).
  */
 export function OnThisDeviceDetails({ onShowProject, reminder }: { onShowProject?: () => void; reminder?: Reminder }) {
   const { interest, hostedApp } = hosting.links;

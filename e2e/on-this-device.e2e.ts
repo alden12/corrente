@@ -110,9 +110,7 @@ test.describe("on a phone", () => {
   });
 });
 
-test("the first run says where the files go in the start card, once, and Account settings keeps saying it", async ({
-  page,
-}) => {
+test("the start card welcomes a standalone run, every load, and Account settings has the details", async ({ page }) => {
   await page.goto("/");
   const start = page.getByRole("dialog", { name: "Start the audio engine" });
   await expect(start).toContainText("Welcome to Corrente");
@@ -121,8 +119,7 @@ test("the first run says where the files go in the start card, once, and Account
   await dismissStart(page);
 
   await page.reload();
-  await expect(start).toBeVisible();
-  await expect(start).not.toContainText("Welcome to Corrente");
+  await expect(start).toContainText("Welcome to Corrente");
   await dismissStart(page);
 
   await openSettingsPage(page, "Account");

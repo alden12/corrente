@@ -1,5 +1,6 @@
 /**
- * The first-run intro (HOST-23.2.6), in the start card the first time a standalone run opens: what
+ * The welcome (HOST-23.2.6), in the start card every standalone load shows anyway (browsers need a
+ * click before audio), so it costs no extra step and the storage warning keeps being seen: what
  * Corrente is, that this copy keeps everything in the browser, where the online version is, and how
  * an agent joins in. Short, in a few labelled blocks, because a wall of text on a first screen goes
  * unread (Alden, 2026-10-21). The details stay in the "Saved in browser" panel and Account settings.
@@ -18,7 +19,7 @@ const External = ({ href, children }: { href: string; children: string }) => (
   </a>
 );
 
-export function FirstRunIntro() {
+export function Welcome() {
   const { risk } = useSyncExternalStore(subscribeStorageRisk, readStorageRisk, readStorageRisk);
   const { interest, hostedApp } = hosting.links;
   return (

@@ -7,8 +7,8 @@ import type { ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
 
 /**
- * `intro` is what a first standalone run needs to know (HOST-23.2.6): said here, in the card that's
- * shown anyway, rather than in a popup of its own, and shown once.
+ * `intro` is what a standalone run needs to know (HOST-23.2.6): said here, in the card that's shown
+ * anyway, rather than in a popup of its own.
  */
 export function StartDialog({ onStart, error, intro }: { onStart: () => void; error?: string; intro?: ReactNode }) {
   return (

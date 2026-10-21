@@ -36,7 +36,7 @@ export function AccountSettings({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* No account here: where the files are instead, the first-run intro's permanent home (HOST-23.2.6). */}
+      {/* No account here: where the files are instead, as the welcome says (HOST-23.2.6). */}
       {onThisDevice && (
         <section aria-label="Saved in browser" className="rounded-lg border border-line bg-stage px-3.5 py-3">
           <OnThisDeviceDetails />
