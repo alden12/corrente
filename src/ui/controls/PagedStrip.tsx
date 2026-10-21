@@ -27,8 +27,11 @@ export function PagedStrip({
   const row = useRef<HTMLDivElement>(null);
   const ends = useScrollEnds(row, count);
   const arrows = ends.back || ends.on;
+  // Only as wide as its chips (plus a little room), so the header's empty space past them still
+  // folds the section: a strip of one or two chips no longer takes the whole header.
   return (
-    <div className="flex-1 min-w-0 flex items-center">
+    // Swiped, so its gaps (and a 16px margin past the last chip) are not the header's to fold on.
+    <div data-no-fold className="min-w-0 flex items-center pr-4">
       {arrows && (
         <span className="hidden pointer-fine:flex shrink-0">
           <PageArrow label={`Back through ${label}`} flip shown={ends.back} onClick={() => pageRow(row, -1)} />
@@ -37,9 +40,7 @@ export function PagedStrip({
       <div
         {...scrollerProps}
         ref={row}
-        // Swiped, so its gaps are not the header's to fold on.
-        data-no-fold
-        className={`flex-1 min-w-0 flex items-center overflow-x-auto scrollbar-none ${className}`}
+        className={`min-w-0 flex items-center overflow-x-auto scrollbar-none ${className}`}
         style={{ maskImage: edgeFade(ends), WebkitMaskImage: edgeFade(ends) }}
       >
         {children}

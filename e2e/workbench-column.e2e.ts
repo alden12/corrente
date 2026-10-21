@@ -148,3 +148,21 @@ test("a tap anywhere on a section's header that is not a control folds it", asyn
     .click({ position: { x: 200, y: 10 } });
   await expect(device).toHaveAttribute("data-open", "false");
 });
+
+test("the clips header folds from its empty space past the chips, but not from just beside them", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const clips = page.getByRole("region", { name: "Clips" });
+  const header = clips.locator("> div").first();
+  const strip = (await header.locator("[data-no-fold]").first().boundingBox())!;
+  const add = (await page.getByRole("button", { name: "Add a new empty clip" }).boundingBox())!;
+  const middle = strip.y + strip.height / 2;
+
+  // Just past the last chip is still the strip's: nothing folds.
+  await page.mouse.click(strip.x + strip.width - 4, middle);
+  await expect(page.getByRole("button", { name: "Open the clips" })).toHaveAttribute("aria-expanded", "false");
+
+  // The empty space between the chips and the buttons opens the clips.
+  await page.mouse.click((strip.x + strip.width + add.x) / 2, middle);
+  await expect(page.getByRole("button", { name: "Fold the clips" })).toHaveAttribute("aria-expanded", "true");
+});

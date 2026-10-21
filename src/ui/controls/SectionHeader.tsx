@@ -48,7 +48,13 @@ export function SectionHeader({
         <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-faint shrink-0">{title}</span>
       )}
       <div className="flex-1 min-w-0 flex items-center gap-2">{children}</div>
-      {actions && <div className="shrink-0 flex items-center gap-1.5">{actions}</div>}
+      {/* The actions keep 16px before them that a tap doesn't fold on, so a near miss on the first
+          one isn't a fold. */}
+      {actions && (
+        <div data-no-fold className="shrink-0 flex items-center gap-1.5 pl-4 -ml-2">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
