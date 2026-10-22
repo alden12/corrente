@@ -137,7 +137,9 @@ test("tag chips narrow a category together, and search finds by #tag (COMM-1.9.1
 
   await page.getByRole("button", { name: "Back to Explore" }).click();
   await page.getByRole("searchbox", { name: "Search Explore" }).fill("#space");
-  await expect(page.getByRole("button", { name: "Reverb", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delay", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Chorus", exact: true })).toHaveCount(0);
+  // In the results' Effects group: the starter Micro VA has sections named Delay and Chorus too.
+  const effects = page.getByRole("region", { name: "Effects" });
+  await expect(effects.getByRole("button", { name: "Reverb", exact: true })).toBeVisible();
+  await expect(effects.getByRole("button", { name: "Delay", exact: true })).toBeVisible();
+  await expect(effects.getByRole("button", { name: "Chorus", exact: true })).toHaveCount(0);
 });
