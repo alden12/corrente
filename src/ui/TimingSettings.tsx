@@ -21,8 +21,7 @@ import { Segmented } from "./controls/Segmented";
 import { OnOff, SettingsRow } from "./SettingsRow";
 import { Select } from "./controls/Select";
 import { Fader } from "./controls/Fader";
-import { usePersistentBoolean } from "./usePersistent";
-import { LOOP_KEY } from "./TransportBar";
+import { useLooping, useMetronome } from "./transportPrefs";
 import { useCountInBars } from "./countIn";
 
 const COUNT_IN = [
@@ -33,8 +32,8 @@ const COUNT_IN = [
 
 export function TimingSettings({ projectStore, dispatch }: { projectStore: ProjectStore; dispatch: Dispatch }) {
   const project = useProject(projectStore);
-  const [metronome, setMetronome] = usePersistentBoolean("corrente:metronome", false);
-  const [looping, setLooping] = usePersistentBoolean(LOOP_KEY, true);
+  const [metronome, setMetronome] = useMetronome();
+  const [looping, setLooping] = useLooping();
   const [countInBars, setCountInBars] = useCountInBars();
   const meter = project.timeSignature;
 

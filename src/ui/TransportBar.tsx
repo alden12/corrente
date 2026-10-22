@@ -12,13 +12,11 @@ import type { Dispatch } from "../audio/commands/types";
 import { useProject } from "../audio/project/useProject";
 import { TEMPO_BPM_RANGE, TIME_SIGNATURE_NUMERATOR_RANGE } from "../audio/project/schema";
 import { useRecorder } from "./useRecorder";
-import { usePersistentBoolean } from "./usePersistent";
+import { LoopButton, MetronomeButton } from "./TransportToggles";
+import { useLooping, useMetronome } from "./transportPrefs";
 import { Button } from "./controls/Button";
 import { IconButton } from "./controls/IconButton";
 import { Select } from "./controls/Select";
-
-/** Whether play comes round the loop: a preference, read by this bar and the timing settings. */
-export const LOOP_KEY = "corrente:loop";
 
 export function TransportBar({
   projectStore,
@@ -43,8 +41,8 @@ export function TransportBar({
 }) {
   const project = useProject(projectStore);
   const rec = useRecorder(recorder);
-  const [metronome, setMetronome] = usePersistentBoolean("corrente:metronome", false);
-  const [looping, setLooping] = usePersistentBoolean(LOOP_KEY, true);
+  const [metronome] = useMetronome();
+  const [looping] = useLooping();
 
   // The scheduler reads this flag each tick; keep it in sync with the preference. The one
   // writer to the scheduler, whichever control (this button, or the Project settings page)
@@ -124,6 +122,8 @@ export function TransportBar({
           {isPlaying ? "■ Stop" : "▶ Play"}
         </Button>
       )}
+      {/* Snug between Play and Tempo: the bar's 12px gap either side read as padding round it. */}
+      <LoopButton hidden={compact} className="-mx-1.5" />
       {/* The word labels drop below `sm`: on a phone the transport is pinned above every
           view (MOBILE-1) and has to fit 390px without clipping. The fields keep their
           `aria-label` / `title`, so nothing is lost to assistive tech. */}
@@ -183,57 +183,7 @@ export function TransportBar({
           ))}
         </Select>
       </label>
-      <IconButton
-        label="Loop"
-        tone="you"
-        hidden={compact}
-        active={looping}
-        title={looping ? "Loop on: play comes round" : "Loop off: play stops at the end"}
-        onClick={() => setLooping(!looping)}
-      >
-        {/* two arrows chasing round */}
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          aria-hidden="true"
-        >
-          <path d="M3 7.5 V6.5 A2.5 2.5 0 0 1 5.5 4 H12.5" />
-          <path d="M10.5 2 L12.5 4 L10.5 6" />
-          <path d="M13 8.5 V9.5 A2.5 2.5 0 0 1 10.5 12 H3.5" />
-          <path d="M5.5 14 L3.5 12 L5.5 10" />
-        </svg>
-      </IconButton>
-      <IconButton
-        label="Metronome"
-        tone="you"
-        hidden={compact}
-        active={metronome}
-        title={metronome ? "Metronome on" : "Metronome off"}
-        onClick={() => setMetronome(!metronome)}
-      >
-        {/* a small metronome: trapezoid body + pendulum */}
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          aria-hidden="true"
-        >
-          <path d="M6 2 H10 L12.5 14 H3.5 Z" />
-          <line x1="4.3" y1="10" x2="11.7" y2="10" />
-          <line x1="8" y1="10" x2="11" y2="3.5" />
-        </svg>
-      </IconButton>
+      <MetronomeButton hidden={compact} />
     </div>
   );
 }

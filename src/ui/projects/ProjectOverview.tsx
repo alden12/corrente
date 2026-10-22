@@ -24,6 +24,7 @@ import { InlineRename } from "../InlineRename";
 import { exportProjectFile } from "../projectFile";
 import { usePersistentString } from "../usePersistent";
 import { TrackList } from "./TrackList";
+import { LoopButton, MetronomeButton } from "../TransportToggles";
 import { formatLength } from "./overviewData";
 
 const TABS = ["tracks", "history"] as const;
@@ -125,6 +126,11 @@ export function ProjectOverview({
               {chip.label}
             </button>
           ))}
+          {/* The transport's switches, here too so a phone reaches them (DAW-78). */}
+          <div className="ml-auto flex items-center gap-1">
+            <LoopButton />
+            <MetronomeButton />
+          </div>
         </div>
       </header>
 
