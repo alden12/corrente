@@ -306,10 +306,14 @@ export class Recorder {
 
   /**
    * Where a held note ends if it's let go now: its start plus how long it was held, counted
-   * unlooped, so a note held over the loop's end keeps its length rather than ending before it began.
+   * unlooped (read on the looped beat, a note held over the loop's end would end before it began),
+   * and no later than the end, where play comes round or stops. Past it, the clip would grow a bar,
+   * and the note would still be sounding when its pitch starts again on the next pass, and its
+   * note-off would cut that one short.
    */
   private endBeat(note: HeldNote): number {
-    return note.startBeat + this.scheduler.continuousBeatAtTime(this.engine.currentTime) - note.startCount;
+    const held = this.scheduler.continuousBeatAtTime(this.engine.currentTime) - note.startCount;
+    return Math.min(note.startBeat + held, this.project.length);
   }
 
   /** A snapshot of the take in flight (absolute beats), for the roll's live overlay. */
@@ -422,13 +426,18 @@ export class Recorder {
     // up to whole bars to cover the last note.
     const beatsPerBar = this.project.beatsPerBar;
     const clipStart = Math.max(0, Math.floor(this.startBeat / beatsPerBar) * beatsPerBar);
-    const captured0: NoteEvent[] = captured.map((note) => ({
-      id: newNoteId(),
-      pitch: note.pitch,
-      start: Math.max(0, note.startBeat - clipStart),
-      length: Math.max(GRID, note.endBeat - note.startBeat),
-      velocity: note.velocity,
-    }));
+    // A note can start a hair before the clip (the take wakes a moment ahead of its downbeat), so
+    // each is measured from where it lands, or its end would poke past the loop and add a bar.
+    const captured0: NoteEvent[] = captured.map((note) => {
+      const start = Math.max(0, note.startBeat - clipStart);
+      return {
+        id: newNoteId(),
+        pitch: note.pitch,
+        start,
+        length: Math.max(GRID, note.endBeat - clipStart - start),
+        velocity: note.velocity,
+      };
+    });
     // When auto-quantize is armed, tighten the take to the grid as it lands; otherwise
     // keep the performance exactly as played (the store no longer snaps).
     const autoQuantize = this.getAutoQuantize();

@@ -44,11 +44,12 @@ function setUp() {
     clock.now += seconds;
     vi.advanceTimersByTime(seconds * 1000);
   };
-  const takeNotes = () => {
-    const take = commands.find((command) => command.type === "addNoteClip");
-    return take && "notes" in take ? take.notes : [];
+  const take = () => {
+    const command = commands.find((each) => each.type === "addNoteClip");
+    return command?.type === "addNoteClip" ? command : undefined;
   };
-  return { recorder, project, wait, takeNotes };
+  const takeNotes = () => take()?.notes ?? [];
+  return { recorder, project, wait, take, takeNotes };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -74,8 +75,8 @@ describe("a MIDI take's edges", () => {
     expect(notes[0].length).toBeGreaterThan(0.9);
   });
 
-  it("keeps the length of a key held over the loop's end when the take stops", async () => {
-    const { recorder, project, wait, takeNotes } = setUp();
+  it("ends a key held over the loop's end at the end, rather than as a sliver, and keeps the clip to the loop", async () => {
+    const { recorder, project, wait, take, takeNotes } = setUp();
     recorder.setCountInBars(0);
     await recorder.start();
     wait((project.length - 1) / 2); // a beat before the loop comes round
@@ -83,10 +84,28 @@ describe("a MIDI take's edges", () => {
     wait(1); // two beats: over the end of the loop
     await recorder.stop();
     const [note] = takeNotes();
-    expect(note.length).toBeCloseTo(2, 5);
+    expect(note.start + note.length).toBeCloseTo(project.length, 5);
+    expect(take()?.lengthBeats).toBe(project.length);
   });
 
-  it("keeps the length of a key let go after the loop came round", async () => {
+  it("keeps a take that starts a hair early to the loop: a key held from the count-in to after the end", async () => {
+    const { recorder, project, wait, take } = setUp();
+    recorder.setCountInBars(1);
+    await recorder.start();
+    recorder.noteOn(60);
+    // The count-in's timer fires with the audio clock still 1ms short of its downbeat (a bar at
+    // 120 plus the 0.12s lead), as a timer can.
+    wait(2.119);
+    vi.advanceTimersByTime(1);
+    expect(recorder.getState().status).toBe("recording");
+    wait(9); // past the loop's end
+    await recorder.stop();
+    const [note] = take()?.notes ?? [];
+    expect(note.start + note.length).toBeLessThanOrEqual(project.length);
+    expect(take()?.lengthBeats).toBe(project.length);
+  });
+
+  it("ends a key let go after the loop came round at the end, too", async () => {
     const { recorder, project, wait, takeNotes } = setUp();
     recorder.setCountInBars(0);
     await recorder.start();
@@ -95,6 +114,6 @@ describe("a MIDI take's edges", () => {
     wait(1);
     recorder.noteOff(64);
     await recorder.stop();
-    expect(takeNotes()[0].length).toBeCloseTo(2, 5);
+    expect(takeNotes()[0].length).toBeCloseTo(1, 5);
   });
 });
