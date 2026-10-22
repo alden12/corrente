@@ -6,7 +6,7 @@ import { setCountIn } from "./support/app";
  * microphone and is verified manually), capturing live MIDI touches no media
  * devices, so the whole take can run in CI: arm the selected instrument track,
  * record with no count-in, play notes on the computer keyboard, stop, and confirm a
- * recorded clip lands on the track. The default seed track is a Micro VA.
+ * recorded clip lands on the track, launched. The default seed track is a Micro VA.
  */
 
 test.use({ viewport: { width: 1320, height: 900 } });
@@ -49,7 +49,7 @@ test("records live MIDI into the selected instrument track", async ({ page }) =>
   await expect(record).toHaveAttribute("aria-pressed", "false");
 
   // The take becomes a recorded clip: the activity feed reports it with its note
-  // count, and the clip lands on the track's arrangement lane.
+  // count, and it's launched, so the lane says it's playing (DAW-79).
   await expect(page.getByText('Recorded "Take 1" (2 notes)')).toBeVisible();
-  await expect(page.getByTestId("lane").getByText("Take 1")).toBeVisible();
+  await expect(page.getByTestId("lane").getByRole("button", { name: /Playing Take 1/ })).toBeVisible();
 });

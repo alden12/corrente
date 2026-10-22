@@ -92,6 +92,8 @@ export class Scheduler implements TransportClock {
   private endBeat = Infinity;
   /** Called when a play that doesn't loop reaches the end; stops the transport unless it says otherwise. */
   private onReachedEnd: (() => void) | null = null;
+  /** Something to do once, as scheduling reaches a beat on the continuous count (see `cueAt`). */
+  private cue: { beat: number; handler: () => void } | null = null;
 
   private anchorBeat = 0;
   private anchorTime = 0;
@@ -183,6 +185,20 @@ export class Scheduler implements TransportClock {
   }
 
   /**
+   * Call `handler` once, as play is about to be scheduled past `beat` on the continuous count
+   * (`continuousBeatAtTime`): a take ending itself after one pass of the loop. It comes a moment
+   * early, since the scheduler works `SCHEDULE_AHEAD_SEC` ahead, so what it changes (the take landing
+   * and launching) plays from `beat` itself rather than missing its first notes. A stop cancels it.
+   */
+  cueAt(beat: number, handler: () => void): void {
+    this.cue = { beat, handler };
+  }
+
+  cancelCue(): void {
+    this.cue = null;
+  }
+
+  /**
    * Start the transport. `atTime` anchors beat 0 to a specific AudioContext time
    * (defaults to now); the recorder passes the count-in's downbeat so the transport
    * metronome continues the count-in grid exactly in phase, free of setTimeout jitter.
@@ -205,8 +221,8 @@ export class Scheduler implements TransportClock {
 
   /**
    * Leave one track's arrangement unplayed, or none with null: the track a take is recording into.
-   * Every take is a new clip that replaces what it overlaps, so hearing the old notes under the new
-   * ones only gets in the way. Live notes don't come through here, so what's played still sounds.
+   * A take is a new go at the track's part, so hearing the old notes under the new ones only gets in
+   * the way. Live notes don't come through here, so what's played still sounds.
    */
   silence(trackId: string | null): void {
     this.silencedTrackId = trackId;
@@ -236,6 +252,7 @@ export class Scheduler implements TransportClock {
     // A play still waiting to start doesn't.
     this.startToken++;
     this.starting = false;
+    this.cue = null;
     if (this.timer === null) return;
     clearInterval(this.timer);
     this.timer = null;
@@ -309,6 +326,11 @@ export class Scheduler implements TransportClock {
       return;
     }
     const ahead = this.anchorBeat + (now + SCHEDULE_AHEAD_SEC - this.anchorTime) * bps;
+    if (this.cue && ahead >= this.cue.beat) {
+      const { handler } = this.cue;
+      this.cue = null;
+      handler();
+    }
     // Not looping, nothing past the end of this pass.
     const horizonBeats = Math.min(ahead, this.endBeat);
 

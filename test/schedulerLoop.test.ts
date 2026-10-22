@@ -6,13 +6,17 @@ import { ProjectStore } from "../src/audio/project/projectStore";
 function setUp() {
   const clock = { now: 0 };
   const played: number[] = [];
+  const pitches: number[] = [];
   const engine = {
     started: true,
     get currentTime() {
       return clock.now;
     },
     getNoteTarget: () => ({
-      playNote: (_pitch: number, _seconds: number, _velocity: number, when: number) => played.push(when),
+      playNote: (pitch: number, _seconds: number, _velocity: number, when: number) => {
+        played.push(when);
+        pitches.push(pitch);
+      },
       allNotesOff: () => {},
     }),
     scheduleAudioClip: () => {},
@@ -31,7 +35,7 @@ function setUp() {
       vi.advanceTimersByTime(25);
     }
   };
-  return { scheduler, played, run };
+  return { scheduler, project, track, played, pitches, run };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -75,5 +79,36 @@ describe("the loop switch", () => {
     scheduler.play();
     run(10);
     expect(reachedEnd).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a cue", () => {
+  it("comes a moment before its beat, so a clip launched then plays from the beat itself", () => {
+    const { scheduler, project, track, played, pitches, run } = setUp();
+    const cued = vi.fn(() => {
+      const clip = project.addClip(track.id, { empty: true })!;
+      clip.store.addNote({ pitch: 72, start: 0 });
+      project.launchClip(track.id, clip.id);
+    });
+    scheduler.play();
+    scheduler.cueAt(16, cued); // the end of the first pass
+    run(7.9);
+    expect(cued).toHaveBeenCalledTimes(1);
+    run(0.5);
+    expect(pitches).toEqual([60, 72]);
+    expect(played[1]).toBeCloseTo(8, 5);
+    scheduler.stop();
+  });
+
+  it("is cancelled by a stop", () => {
+    const { scheduler, run } = setUp();
+    const cued = vi.fn();
+    scheduler.play();
+    scheduler.cueAt(16, cued);
+    scheduler.stop();
+    scheduler.play();
+    run(9);
+    expect(cued).not.toHaveBeenCalled();
+    scheduler.stop();
   });
 });

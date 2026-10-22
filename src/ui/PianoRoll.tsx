@@ -1023,12 +1023,6 @@ export function PianoRoll({
               style={{ width, height, background: gridBg }}
               onPointerDown={onGridDown}
             >
-              {/* dim the grid past the clip's end (drag the ruler handle to extend) */}
-              <div
-                className="absolute top-0 bottom-0 bg-recess pointer-events-none"
-                style={{ left: beatToX(len, pxPerBeat), width: beatToX(viewBeats - len, pxPerBeat) }}
-              />
-
               {Array.from({ length: ROWS }, (_, row) => {
                 const pitch = MAX_PITCH - row;
                 const rowLabel = rows.label(pitch);
@@ -1044,6 +1038,18 @@ export function PianoRoll({
                   </div>
                 );
               })}
+
+              {/* Past the clip's end: room to drag the ruler's handle into, and clearly not the clip
+                  (DAW-79), so drawn over the rows' tints, hatched, behind a solid edge. */}
+              <div
+                data-testid="past-clip-end"
+                className="absolute top-0 bottom-0 bg-recess border-l-2 border-faint pointer-events-none"
+                style={{
+                  left: beatToX(len, pxPerBeat),
+                  width: beatToX(viewBeats - len, pxPerBeat),
+                  backgroundImage: "repeating-linear-gradient(135deg, var(--color-line) 0 1px, transparent 1px 8px)",
+                }}
+              />
 
               {clip.notes.map((note) => {
                 const selected = selection.has(note.id);

@@ -1,6 +1,7 @@
 /**
  * The edges of a MIDI take: a key already down when the count-in ends, and a key still down when
- * the take stops after the loop has come round.
+ * the take stops after the loop has come round. And how it ends (DAW-79): by itself after one pass,
+ * landing as a new clip that's launched, the arrangement left alone.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AudioEngine } from "../src/audio/engine/AudioEngine";
@@ -14,6 +15,7 @@ function setUp() {
   const clock = { now: 0 };
   const project = new ProjectStore();
   const transport = { playing: false, playAt: 0 };
+  let cue: { beat: number; handler: () => void } | null = null;
   const unlooped = (time: number) => (transport.playing ? (time - transport.playAt) * 2 : 0);
   const scheduler = {
     get isPlaying() {
@@ -22,6 +24,8 @@ function setUp() {
     play: (at?: number) => Object.assign(transport, { playing: true, playAt: at ?? clock.now }),
     stop: () => Object.assign(transport, { playing: false }),
     silence: () => {},
+    cueAt: (beat: number, handler: () => void) => void (cue = { beat, handler }),
+    cancelCue: () => void (cue = null),
     continuousBeatAtTime: unlooped,
     beatAtTime: (time: number) => unlooped(time) % project.length,
   };
@@ -31,6 +35,7 @@ function setUp() {
       return clock.now;
     },
     scheduleClick: () => {},
+    disableInput: () => {},
   };
   const commands: Command[] = [];
   const recorder = new Recorder(
@@ -39,17 +44,22 @@ function setUp() {
     project,
     (command) => void commands.push(command),
   );
-  /** Move the clock on, running the count-in's timer if it falls due. */
+  /** Move the clock on, running the count-in's timer and the cue if they fall due. */
   const wait = (seconds: number) => {
     clock.now += seconds;
     vi.advanceTimersByTime(seconds * 1000);
+    if (cue && unlooped(clock.now) >= cue.beat) {
+      const { handler } = cue;
+      cue = null;
+      handler();
+    }
   };
   const take = () => {
-    const command = commands.find((each) => each.type === "addNoteClip");
-    return command?.type === "addNoteClip" ? command : undefined;
+    const command = commands.find((each) => each.type === "pasteClip");
+    return command?.type === "pasteClip" && command.content.kind === "instrument" ? command.content : undefined;
   };
   const takeNotes = () => take()?.notes ?? [];
-  return { recorder, project, wait, take, takeNotes };
+  return { recorder, project, transport, commands, wait, take, takeNotes };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -114,6 +124,38 @@ describe("a MIDI take's edges", () => {
     await recorder.stop();
     const [note] = take()?.notes ?? [];
     expect(note.start + note.length).toBeCloseTo(project.length, 5);
+    expect(take()?.lengthBeats).toBe(project.length);
+  });
+
+  it("ends itself after one pass: the take is launched, play carries on, and the timeline is untouched", async () => {
+    const { recorder, project, transport, commands, wait, take } = setUp();
+    const trackId = project.selectedId!;
+    const placements = project.getTrack(trackId)?.placements;
+    recorder.setCountInBars(0);
+    await recorder.start();
+    wait(1);
+    recorder.noteOn(60);
+    wait(0.5);
+    recorder.noteOff(60);
+    wait(project.length / 2); // past the end of the pass
+    expect(recorder.getState().status).toBe("idle");
+    expect(transport.playing).toBe(true);
+    const id = commands.find((command) => command.type === "pasteClip")?.id;
+    expect(commands.map((command) => command.type)).toEqual(["pasteClip", "launchClip"]);
+    expect(commands[1]).toEqual({ type: "launchClip", trackId, clipId: id });
+    expect(take()?.notes.map((note) => note.start)).toEqual([2]);
+    expect(take()?.lengthBeats).toBe(project.length);
+    expect(project.getTrack(trackId)?.placements).toBe(placements);
+  });
+
+  it("lands a take stopped part way as the whole loop, and stops play", async () => {
+    const { recorder, project, transport, wait, take } = setUp();
+    recorder.setCountInBars(0);
+    await recorder.start();
+    recorder.noteOn(60);
+    wait(1);
+    await recorder.stop();
+    expect(transport.playing).toBe(false);
     expect(take()?.lengthBeats).toBe(project.length);
   });
 

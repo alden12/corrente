@@ -8,7 +8,15 @@ import { GitHubIcon } from "./shellIcons";
 export function WelcomeHeader() {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-2xl font-semibold tracking-tight text-strong">Welcome to Corrente</p>
+      <p className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight text-strong">
+        Welcome to Corrente
+        <span
+          title="Corrente is in beta: things move, and some will break"
+          className="font-mono text-[10px] font-medium uppercase tracking-wider text-you border border-you/50 bg-you/10 rounded px-1.5 py-0.5"
+        >
+          Beta
+        </span>
+      </p>
       <p className="text-[13px] text-muted leading-snug">
         An open source music studio and instrument builder{" "}
         <a

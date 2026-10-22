@@ -101,7 +101,10 @@ const DESCRIBE: DescribeMap = {
   addClip: (command) => `New clip${command.name ? ` ${command.name}` : ""}`,
   removeClip: () => "Removed clip",
   renameClip: (command) => `Renamed clip to ${command.name}`,
-  pasteClip: (command) => `Pasted clip ${command.content.name}`,
+  pasteClip: ({ content, recorded }) =>
+    recorded
+      ? `Recorded "${content.name}"${content.kind === "instrument" ? ` (${plural(content.notes.length)})` : ""}`
+      : `Pasted clip ${content.name}`,
   addPlacement: () => "Placed clip",
   movePlacement: () => "Moved clip",
   resizePlacement: () => "Resized clip",

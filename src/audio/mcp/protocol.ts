@@ -120,7 +120,8 @@ export type ServerToBrowser =
       empty?: boolean;
       lengthBeats?: number;
     }
-  | { type: "pasteClip"; trackId: string; id: string; content: ClipContent }
+  // `recorded`: the clip is a take just recorded (DAW-79), which the feed says rather than "pasted".
+  | { type: "pasteClip"; trackId: string; id: string; content: ClipContent; recorded?: boolean }
   | { type: "selectClip"; trackId: string; clipId: string }
   | { type: "removeClip"; trackId: string; clipId: string }
   | { type: "renameClip"; trackId: string; clipId: string; name: string }

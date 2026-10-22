@@ -1327,7 +1327,7 @@ test.describe("phone", () => {
 
     await record.tap();
     await expect(record).toHaveAttribute("aria-pressed", "false");
-    await expect(page.getByTestId("lane").getByText("Take 1")).toBeVisible();
+    await expect(page.getByTestId("lane").getByRole("button", { name: /Playing Take 1/ })).toBeVisible();
   });
 
   test("chords mode turns each pad into its chord, with the variations stacked above", async ({ page }) => {

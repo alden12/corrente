@@ -159,7 +159,6 @@ export function ArrangementTimeline({
   const beatsPerBar = beatsPerBarOf(project.timeSignature);
   const lengthBeats = project.lengthBeats;
   const rows = flattenRows(project.groups, project.tracks);
-  const clipMode = project.tracks.some((track) => track.launchedClipId);
 
   // The grid runs past the loop and the furthest placement (room to arrange into),
   // and never stops short of the visible panel, so the bar grid fills it at any zoom.
@@ -410,13 +409,8 @@ export function ArrangementTimeline({
   return (
     <div className="[grid-area:timeline] bg-ground border-t border-line flex flex-col flex-1 min-h-0">
       {/* The whole toolbar row goes when compact - the shell owns the transport, and the tools
-          menu sits in the ruler's corner -
-          except the clip-mode indicator, which is live state you need to be able to see. */}
-      <div
-        className={`flex items-center gap-3 px-2.5 border-b border-line bg-rail ${
-          compact ? (clipMode ? "py-1.5" : "hidden") : "py-1.5"
-        }`}
-      >
+          menu sits in the ruler's corner. */}
+      <div className={`flex items-center gap-3 px-2.5 border-b border-line bg-rail ${compact ? "hidden" : "py-1.5"}`}>
         {!compact && showTransport && (
           <>
             <TransportBar
@@ -438,19 +432,6 @@ export function ArrangementTimeline({
             triggerClassName={iconButtonClass({ size: "sm", className: "shrink-0" })}
             trigger="+"
           />
-        )}
-        {clipMode && (
-          <button
-            type="button"
-            onClick={() => dispatch({ type: "stopAllClips" })}
-            title="Stop all launched clips and play the timeline arrangement"
-            className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-wide text-you border border-you/50 bg-you/10 rounded px-2 py-1 cursor-pointer hover:bg-you/20"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-you animate-pulse" />
-            Clip mode
-            <span className="text-muted">·</span>
-            Back to timeline
-          </button>
         )}
         <div hidden={compact} className="ml-auto flex items-center gap-2 text-muted">
           <label className="flex items-center gap-1.5 font-mono text-[11px]">

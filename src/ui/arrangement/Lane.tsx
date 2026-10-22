@@ -23,6 +23,7 @@ import { beatToX, floorBeat, snapBeat, xToBeat } from "../timeline/timeGrid";
 import { ObjectHandles } from "../editing/ObjectHandles";
 import type { MenuItem } from "../Menu";
 import { MarkerMenu } from "./MarkerMenu";
+import { LaunchedClip } from "./LaunchedClip";
 import { useContextMenu } from "../useContextMenu";
 import { ROW, ROW_PX, RULER_H, RESIZE_PX, DRAG_THRESH, type Selection } from "./shared";
 
@@ -557,13 +558,7 @@ export function Lane({
       {markerBeat !== null && (
         <MarkerMenu left={beatToX(markerBeat, pxPerBeat)} items={() => markerMenuItems(markerBeat)} />
       )}
-      {track.launchedClipId && (
-        <div className="absolute inset-0 bg-ground/60 pointer-events-none flex items-center px-2 z-10">
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-you bg-ground/80 border border-you/50 rounded px-1.5 py-0.5">
-            ▶ {track.clips.find((clip) => clip.id === track.launchedClipId)?.name ?? "clip"}
-          </span>
-        </div>
-      )}
+      <LaunchedClip track={track} dispatch={dispatch} />
     </div>
   );
 }

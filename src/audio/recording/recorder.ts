@@ -10,13 +10,17 @@
  * captured here via noteOn/noteOff stamped against arrangement beats. Either way
  * the take ends in ONE durable edit (`addAudioTrack`/`addAudioClip` or
  * `addNoteClip`) of pure data, so replay/persistence come for free and stay
- * deterministic (the capture is a side effect; the edit is pure data). A take
+ * deterministic (the capture is a side effect; the edit is pure data). An audio take
  * punches in over the lane - its clip replaces whatever it overlaps.
+ *
+ * A MIDI take records one pass of the loop and ends itself (DAW-79): it lands as a new clip in the
+ * track's pool, the length of the loop, and is launched, so play carries on looping it and the
+ * arrangement is left as it was. Placing it on the timeline is up to you.
  *
  * Trying a sound in Explore (COMM-1.4.1): while a preview is open, a take records what you play on
  * it and lands as a NEW track carrying that sound and the take, in one edit (`createTrackFromPatch`
- * with a `take`). Otherwise it is an ordinary take: it starts at the playhead and runs until you
- * stop. The preview then closes, so the keys play the new track.
+ * with a `take`). Otherwise it is an ordinary take: it starts at the playhead and runs one pass of
+ * the loop, or until you stop. The preview then closes, so the keys play the new track.
  *
  * Count-in: before capture, schedule N bars of metronome clicks on the audio clock
  * and start the transport + capture when they finish, so the performer plays in
@@ -145,8 +149,8 @@ export class Recorder {
   }
   private set(patch: Partial<RecorderState>): void {
     this.state = { ...this.state, ...patch };
-    // While a take is counting in or recording, its track's own clips stay quiet: the take replaces
-    // them (punching in), so they'd only play under it.
+    // While a take is counting in or recording, its track's own clips stay quiet: the take is a new
+    // go at the track's part, so the old one would only play under it.
     this.scheduler.silence(this.isActive ? this.targetTrackId : null);
     this.listeners.emit();
   }
@@ -252,6 +256,12 @@ export class Recorder {
           for (const [pitch, velocity] of this.heldInCountIn)
             this.held.set(pitch, { startBeat: this.startBeat, startCount, velocity });
           this.heldInCountIn.clear();
+          // One pass of the loop on, the take ends itself. Play that doesn't loop reaches its end first.
+          const passLength = this.project.length - this.project.loopStart;
+          if (passLength > 0) {
+            const endCount = startCount + passLength;
+            this.scheduler.cueAt(endCount, () => this.finishPass(endCount));
+          }
         }
         this.set({ status: "recording", take: this.mode === "midi" ? this.liveTake() : null });
       };
@@ -311,8 +321,8 @@ export class Recorder {
    * and the note would still be sounding when its pitch starts again on the next pass, and its
    * note-off would cut that one short.
    */
-  private endBeat(note: HeldNote): number {
-    const held = this.scheduler.continuousBeatAtTime(this.engine.currentTime) - note.startCount;
+  private endBeat(note: HeldNote, atCount = this.scheduler.continuousBeatAtTime(this.engine.currentTime)): number {
+    const held = atCount - note.startCount;
     return Math.min(note.startBeat + held, this.project.length);
   }
 
@@ -332,12 +342,24 @@ export class Recorder {
       clearTimeout(this.countInTimer);
       this.countInTimer = null;
     }
+    this.scheduler.cancelCue();
     const wasCounting = this.state.status === "counting";
     if (this.mode === "midi") {
       this.finishMidiTake(wasCounting);
     } else {
       await this.finishAudioTake(wasCounting);
     }
+    this.endTake();
+  }
+
+  /** One pass of the loop is recorded, ending at `endCount`: land the take, and play carries on. */
+  private finishPass(endCount: number): void {
+    if (this.state.status !== "recording") return;
+    this.finishMidiTake(false, endCount);
+    this.endTake();
+  }
+
+  private endTake(): void {
     // The arm is one-shot: the next take defaults back to the selected track.
     this.set({ armedTrackId: null });
     this.targetTrackId = null;
@@ -392,11 +414,15 @@ export class Recorder {
     }
   }
 
-  /** Close any held notes, then place the captured notes as a new clip on the MIDI track. */
-  private finishMidiTake(wasCounting: boolean): void {
+  /**
+   * Close any held notes, then land the captured notes as a new clip on the MIDI track, launched.
+   * `passEnd` is where on the continuous count a take that ended itself ended: play carries on, and
+   * notes still held end there. Without it the take ends now, and play stops.
+   */
+  private finishMidiTake(wasCounting: boolean, passEnd?: number): void {
     // Where notes still held end, read before the transport stops.
-    const heldEnds = new Map([...this.held].map(([pitch, note]) => [pitch, this.endBeat(note)]));
-    if (this.scheduler.isPlaying) this.scheduler.stop();
+    const heldEnds = new Map([...this.held].map(([pitch, note]) => [pitch, this.endBeat(note, passEnd)]));
+    if (passEnd === undefined && this.scheduler.isPlaying) this.scheduler.stop();
     this.set({ status: "idle", take: null });
     this.heldInCountIn.clear();
     if (wasCounting) {
@@ -421,11 +447,10 @@ export class Recorder {
     const sound = this.takeSound;
     if (!captured.length || (!sound && (!target || target.kind !== "instrument"))) return;
 
-    // Anchor the clip at the bar the take began in, so notes keep their groove
-    // relative to the bar and the clip lines up with the grid. The clip is sized
-    // up to whole bars to cover the last note.
+    // The clip is the loop, from its start, in whole bars: launched, it plays back as it was played
+    // (a launched clip plays from the loop's start), wherever in the pass the take began.
     const beatsPerBar = this.project.beatsPerBar;
-    const clipStart = Math.max(0, Math.floor(this.startBeat / beatsPerBar) * beatsPerBar);
+    const clipStart = this.project.loopStart;
     // A note can start a hair before the clip (the take wakes a moment ahead of its downbeat), so
     // each is measured from where it lands. And none runs past the end, not even a note given the
     // shortest length because it was pressed just before the end, or it would add a bar.
@@ -444,19 +469,22 @@ export class Recorder {
     // keep the performance exactly as played (the store no longer snaps).
     const autoQuantize = this.getAutoQuantize();
     const notes = autoQuantize ? quantizeNotes(captured0, autoQuantize) : captured0;
-    const span = Math.max(...notes.map((note) => note.start + note.length));
+    const span = Math.max(room, ...notes.map((note) => note.start + note.length));
     const lengthBeats = Math.max(beatsPerBar, Math.ceil(span / beatsPerBar) * beatsPerBar);
-    const take = { id: newClipId(), placementId: newPlacementId(), name: this.nextTakeName(), notes, lengthBeats };
+    const id = newClipId();
+    const content = { kind: "instrument" as const, name: this.nextTakeName(), notes, lengthBeats };
     if (sound) {
+      // A new track, so there's nothing to overwrite: the take is placed on its timeline.
       this.dispatch({
         type: "createTrackFromPatch",
         id: newTrackId(),
         ...soundChains(sound),
-        take: { ...take, startBeat: clipStart },
+        take: { id, name: content.name, notes, lengthBeats, placementId: newPlacementId(), startBeat: clipStart },
       });
       this.preview?.taken();
     } else if (target) {
-      this.dispatch({ type: "addNoteClip", trackId: target.id, ...take, startBeat: clipStart });
+      this.dispatch({ type: "pasteClip", trackId: target.id, id, content, recorded: true });
+      this.dispatch({ type: "launchClip", trackId: target.id, clipId: id });
     }
   }
 
@@ -477,6 +505,7 @@ export class Recorder {
   dispose(): void {
     if (this.countInTimer) clearTimeout(this.countInTimer);
     this.countInTimer = null;
+    this.scheduler.cancelCue();
     this.engine.disableInput();
   }
 }
