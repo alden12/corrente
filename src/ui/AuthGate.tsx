@@ -79,6 +79,12 @@ function LoginScreen() {
     <GateCard>
       <WelcomeHeader />
       <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
+        <h2 id="auth-title" className="text-base font-medium text-ink">
+          Get started
+        </h2>
+        <p className="text-[11px] text-faint leading-relaxed">
+          No account needed. Your projects stay in this browser, and you can sign in later.
+        </p>
         <button
           type="button"
           onClick={continueSignedOut}
@@ -86,16 +92,10 @@ function LoginScreen() {
         >
           Continue signed out
         </button>
-        <p className="text-[11px] text-faint leading-relaxed">
-          No account needed. Your projects stay in this browser, and you can sign in later.
-        </p>
-      </div>
-      <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
-        <h2 id="auth-title" className="text-base font-medium text-ink">
-          Sign in
-        </h2>
-        <ProviderButton provider="google" label="Continue with Google" note="Invite only" />
-        {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" note="Invite only" />}
+        <div className="mt-3 flex flex-col gap-2">
+          <ProviderButton provider="google" label="Continue with Google" note="Invite only" />
+          {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" note="Invite only" />}
+        </div>
         <p className="text-[11px] text-faint leading-relaxed">
           The online version is in developer preview
           {hosting.links.interest ? (
