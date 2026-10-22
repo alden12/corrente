@@ -11,7 +11,8 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
 import { WelcomeHeader } from "./WelcomeHeader";
-import { continueSignedOut } from "../hosting";
+import { continueSignedOut, hosting } from "../hosting";
+import { linkClass } from "./hosting/OnThisDevice";
 import { authEnabled, readAuthState, subscribeAuth, signInWithProvider, signOut, type AuthUser } from "../auth/session";
 import { writeCurrentUser, DEFAULT_USER } from "./currentUser";
 
@@ -82,13 +83,21 @@ function LoginScreen() {
           Sign in
         </h2>
         <p className="text-sm text-muted leading-relaxed">
-          Your projects sync to your account, so you can pick up where you left off on any device.
+          The online version is in developer preview
+          {hosting.links.interest ? (
+            <>
+              :{" "}
+              <a href={hosting.links.interest} target="_blank" rel="noreferrer" className={linkClass}>
+                register interest
+              </a>
+              .
+            </>
+          ) : (
+            ", by invitation."
+          )}
         </p>
         <ProviderButton provider="google" label="Continue with Google" />
         {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" />}
-        <p className="text-[11px] text-faint leading-relaxed">
-          Sign-in is invite-only during development. Ask to have your Google account added to the test list.
-        </p>
       </div>
       <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
         <button
