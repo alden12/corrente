@@ -28,7 +28,7 @@
  */
 import type { Fold } from "./controls/FoldButton";
 import { SectionHeader } from "./controls/SectionHeader";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { noteKey } from "../audio/commands/authorship";
 import { authorNoteStyle } from "./authorStyle";
@@ -313,7 +313,9 @@ export function PianoRoll({
   const fittedAt = useRef(0);
   // The velocity lane sits over the bottom of the scroller, so the notes centre in what's above it.
   const velocityCover = useRef(0);
-  velocityCover.current = velOpen ? effVelH : 0;
+  useLayoutEffect(() => {
+    velocityCover.current = velOpen ? effVelH : 0;
+  });
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
