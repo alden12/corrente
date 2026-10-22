@@ -277,9 +277,10 @@ export function PianoRoll({
   const pitchAt = (clientY: number) =>
     MAX_PITCH - Math.floor((clientY - (gridRef.current?.getBoundingClientRect().top ?? 0)) / rowH);
 
-  // Fit the clip's notes into view on first load of this track (the component
-  // remounts per track, so this runs once each time). Scrolls only - zoom is the
-  // user's. Empty clip -> center on middle C.
+  // Fit the clip's notes into view when a clip opens: on first load of this track (the component
+  // remounts per track) and on switching to another of its clips. Scrolls only - zoom is the
+  // user's. Empty clip -> center on middle C, and fit again when its first notes arrive (a new
+  // device's example melody lands just after the roll mounts) unless you've scrolled.
   //
   // Re-fits on **every** resize until the user scrolls, rather than once on mount, because
   // under the editor sheet (MOBILE-5) the roll is never the right size at mount and is
@@ -310,9 +311,14 @@ export function PianoRoll({
   //   the roll uncentred.
   const handedOver = useRef(false);
   const fittedAt = useRef(0);
+  // The velocity lane sits over the bottom of the scroller, so the notes centre in what's above it.
+  const velocityCover = useRef(0);
+  velocityCover.current = velOpen ? effVelH : 0;
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    handedOver.current = false;
+    fittedAt.current = 0;
     let selfScroll = false;
     let settle = 0;
     let coalesce: ReturnType<typeof setTimeout> | undefined;
@@ -326,7 +332,9 @@ export function PianoRoll({
       const lo = pitches.length ? Math.min(...pitches) : rows.frame.lo;
       const centerRow = (MAX_PITCH - hi + (MAX_PITCH - lo)) / 2;
       selfScroll = true;
-      el.scrollTop = clamp(centerRow * rowH + rowH / 2 - el.clientHeight / 2, 0, height - el.clientHeight);
+      // The rows show between the ruler and the velocity lane; centre the notes in that band.
+      const band = el.clientHeight - RULER_H - velocityCover.current;
+      el.scrollTop = clamp(centerRow * rowH + rowH / 2 - band / 2, 0, height - el.clientHeight);
       // Our own write lands as a scroll event within the frame; anything after is the user.
       // Same tell as `useSharedGridScroll` uses to part a restore from a real scroll.
       cancelAnimationFrame(settle);
@@ -347,14 +355,25 @@ export function PianoRoll({
     const observer = new ResizeObserver(onResize);
     observer.observe(el);
     el.addEventListener("scroll", onScroll, { passive: true });
+    let wasEmpty = clipStore.getClip().notes.length === 0;
+    const unsubscribe = clipStore.subscribe(() => {
+      const count = clipStore.getClip().notes.length;
+      // Several at once is a clip arriving (a load, a paste); one is you drawing, which stays put.
+      if (wasEmpty && count > 1) {
+        fittedAt.current = 0;
+        fit();
+      }
+      wasEmpty = count === 0;
+    });
     return () => {
       clearTimeout(coalesce);
       cancelAnimationFrame(settle);
       observer.disconnect();
       el.removeEventListener("scroll", onScroll);
+      unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clipStore]);
 
   /**
    * Zoom the time axis about a fixed point. Beat 0 sits at content-x = `gutter` (the reserved

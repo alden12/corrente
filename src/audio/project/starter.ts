@@ -1,16 +1,21 @@
 /**
  * What a new project starts with (DAW-76): one track on the Micro VA's Classic Lead, the best first
  * sound the app has, rather than a bare default instrument. The very first project on a device (or
- * in a new account) also gets a short melody in its clip, so the first Play makes music.
+ * in a new account) also gets a few notes in its clip, so the first Play makes music.
  *
  * DOM-free and deterministic apart from the ids the store makes, so the browser and the local MCP's
  * mirror seed the same way.
  */
 import { FACTORY_PATCHES } from "../patches/factory";
+import { PORTRAIT_KEYS } from "../portraits/keys";
 import type { NoteInput } from "../sequencer/clipStore";
+import { randomUuid } from "../randomUuid";
 import type { ProjectStore, Track } from "./projectStore";
 
 export const STARTER_PATCH_ID = "factory:micro-va:classic-lead";
+
+/** What the starter plays, as Explore keys, oldest first: the patch ends up first on Recently used. */
+export const STARTER_RECENT_KEYS = [PORTRAIT_KEYS.instrument("micro-va"), PORTRAIT_KEYS.patch(STARTER_PATCH_ID)];
 
 const starterPatch = () => {
   const patch = FACTORY_PATCHES.find((candidate) => candidate.id === STARTER_PATCH_ID);
@@ -30,29 +35,14 @@ export function addStarterTrack(project: ProjectStore): Track {
 }
 
 /**
- * Four bars in A minor at the default tempo, A3 to A4 so it sits in the piano roll's opening view:
+ * The opening of Strauss's *Also sprach Zarathustra* (1896, long out of copyright), the 2001 theme:
+ * C, G, C stacked over four bars and held, a build that never resolves, so it asks for more.
  * [pitch, start beat, length in beats, velocity].
  */
 const MELODY: readonly (readonly [number, number, number, number])[] = [
-  [57, 0, 0.5, 0.9],
-  [60, 0.5, 0.5, 0.75],
-  [64, 1, 1, 0.85],
-  [62, 2, 0.5, 0.8],
-  [60, 2.5, 0.5, 0.75],
-  [62, 3, 1, 0.8],
-  [64, 4, 1.5, 0.9],
-  [67, 5.5, 0.5, 0.8],
-  [64, 6, 1, 0.85],
-  [62, 7, 1, 0.75],
-  [60, 8, 0.5, 0.9],
-  [62, 8.5, 0.5, 0.75],
-  [64, 9, 1, 0.85],
-  [69, 10, 1, 0.95],
-  [67, 11, 1, 0.8],
-  [64, 12, 1, 0.9],
-  [62, 13, 0.5, 0.75],
-  [60, 13.5, 0.5, 0.75],
-  [57, 14, 2, 0.85],
+  [48, 0, 14, 0.8],
+  [55, 4, 10, 0.85],
+  [60, 8, 6, 0.85],
 ];
 
 export const STARTER_MELODY: readonly NoteInput[] = MELODY.map(([pitch, start, length, velocity]) => ({
@@ -62,7 +52,7 @@ export const STARTER_MELODY: readonly NoteInput[] = MELODY.map(([pitch, start, l
   velocity,
 }));
 
-export const STARTER_CLIP_NAME = "Example melody";
+export const STARTER_CLIP_NAME = "Sunrise";
 
 /**
  * Put the example melody in the first track's clip, named so it reads as an example. Only into an
@@ -72,6 +62,7 @@ export function addStarterMelody(project: ProjectStore): void {
   const track = project.getTracks().find((candidate) => candidate.kind === "instrument");
   const clip = track && project.getClipStore(track.id);
   if (track?.kind !== "instrument" || !clip || clip.getClip().notes.length > 0) return;
-  STARTER_MELODY.forEach((note) => clip.addNote(note));
+  // In one change, so the roll sees a clip arrive rather than notes drawn one at a time.
+  clip.load({ notes: STARTER_MELODY.map((note) => ({ length: 1, velocity: 0.8, ...note, id: randomUuid() })) });
   project.renameClip(track.id, track.activeClipId, STARTER_CLIP_NAME);
 }

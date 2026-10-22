@@ -94,10 +94,11 @@ type InitProjectsOptions = {
  * live store) as the first project; otherwise open the project a link asked for, the
  * persisted current, or the newest.
  */
+/** Open the project to start on, seeding the first one when there are none. Resolves to whether it seeded. */
 export async function initProjects(
   deps: ProjectDeps,
   { storage = getProjectStorage(), preferId, exampleMelody = false }: InitProjectsOptions = {},
-): Promise<void> {
+): Promise<boolean> {
   const ids = (await storage.listProjects()).map((project) => project.id);
   if (ids.length === 0) {
     // Seed the first project under a *stable* id (the persisted current, or "default"),
@@ -113,6 +114,7 @@ export async function initProjects(
     // Marking it anyway is what lets the URL sync at all on a fresh install.
     markProjectLoaded(currentProjectId());
     await refreshProjects(storage);
+    return true;
   } else {
     // The library before the project: a project that cannot be read throws out of the load, and the
     // recovery dialog offers the rest of the library as the way out (DAW-68).
@@ -123,6 +125,7 @@ export async function initProjects(
     const ifPresent = (id: string | null | undefined): string | null => (id && ids.includes(id) ? id : null);
     setCurrentProject(ifPresent(preferId) ?? ifPresent(currentProjectId()) ?? ids[0]);
     await loadCurrentInto(deps);
+    return false;
   }
 }
 

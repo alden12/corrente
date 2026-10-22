@@ -20,6 +20,7 @@ import { LiveNotes } from "../audio/live/liveNotes";
 import { BufferControl } from "../audio/engine/bufferControl";
 import { SoundPreview } from "../audio/live/preview";
 import { noteUsed } from "./explore/recent/store";
+import { STARTER_RECENT_KEYS } from "../audio/project/starter";
 import { MidiInput } from "../audio/midi/midiInput";
 import { attachAutosave, attachUndoPersistence } from "../audio/persistence";
 import { initProjects, forkProjectFromSnapshot } from "../audio/projects/operations";
@@ -259,13 +260,16 @@ export function AppShell() {
     // likelier to grant it (Chrome goes by engagement); the "On this device" panel shows what it
     // said (HOST-23.2.1.1).
     void requestPersistentStorage().then(refreshStorageRisk);
+    // The starter's extras are for people; e2e starts every test on an empty first project.
+    const starterExtras = import.meta.env?.MODE !== "test";
     void initProjects(
       { projectStore, editLog, versionStore },
-      // The example melody is for people; e2e starts every test on an empty first project.
-      { preferId: linkedProjectId.current, exampleMelody: import.meta.env?.MODE !== "test" },
+      { preferId: linkedProjectId.current, exampleMelody: starterExtras },
     )
-      .then(() => {
+      .then((seeded) => {
         if (!active) return;
+        // A new device's Recently used shelf starts with what its first project plays (DAW-76).
+        if (seeded && starterExtras) STARTER_RECENT_KEYS.forEach(noteUsed);
         // With a remote backend, edits ride the live WS channel and the authority persists them (the
         // client no longer appends over HTTP): open a shared session and route each dispatched edit to it.
         // Local-only backend keeps the HTTP/OPFS autosave. Version-history checkpoints stay client-side
