@@ -56,7 +56,7 @@ type CaptureMode = "audio" | "midi";
 /** A note still held down mid-take (its onset beat, awaiting a note-off to close it). */
 interface HeldNote {
   startBeat: number;
-  /** Its onset on the unlooped count (`Scheduler.unloopedBeatAtTime`), to measure its length by. */
+  /** Its onset on the unlooped count (`Scheduler.continuousBeatAtTime`), to measure its length by. */
   startCount: number;
   velocity: number;
 }
@@ -248,7 +248,7 @@ export class Recorder {
           this.captured = [];
           this.startBeat = this.scheduler.beatAtTime(this.engine.currentTime);
           // A key pressed during the count-in and still down is part of the take, from its first beat.
-          const startCount = this.scheduler.unloopedBeatAtTime(this.engine.currentTime);
+          const startCount = this.scheduler.continuousBeatAtTime(this.engine.currentTime);
           for (const [pitch, velocity] of this.heldInCountIn)
             this.held.set(pitch, { startBeat: this.startBeat, startCount, velocity });
           this.heldInCountIn.clear();
@@ -282,7 +282,7 @@ export class Recorder {
     const now = this.engine.currentTime;
     this.held.set(midi, {
       startBeat: this.scheduler.beatAtTime(now),
-      startCount: this.scheduler.unloopedBeatAtTime(now),
+      startCount: this.scheduler.continuousBeatAtTime(now),
       velocity,
     });
     this.set({ take: this.liveTake() });
@@ -309,7 +309,7 @@ export class Recorder {
    * unlooped, so a note held over the loop's end keeps its length rather than ending before it began.
    */
   private endBeat(note: HeldNote): number {
-    return note.startBeat + this.scheduler.unloopedBeatAtTime(this.engine.currentTime) - note.startCount;
+    return note.startBeat + this.scheduler.continuousBeatAtTime(this.engine.currentTime) - note.startCount;
   }
 
   /** A snapshot of the take in flight (absolute beats), for the roll's live overlay. */

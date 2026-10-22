@@ -283,16 +283,8 @@ export class Scheduler implements TransportClock {
   beatAtTime(time: number): number {
     const loopStart = this.project.loopStart;
     const loopLen = this.project.length - loopStart;
-    const cont = this.unloopedBeatAtTime(time);
+    const cont = this.anchorBeat + (time - this.anchorTime) * this.lastBps;
     return loopLen > 0 ? loopStart + (cont % loopLen) : cont;
-  }
-
-  /**
-   * Beats counted on from the anchor without folding into the loop, so the distance between two
-   * times stays right across the loop's end (a note held over it).
-   */
-  unloopedBeatAtTime(time: number): number {
-    return this.anchorBeat + (time - this.anchorTime) * this.lastBps;
   }
 
   private reanchor(): void {

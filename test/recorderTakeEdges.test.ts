@@ -22,7 +22,7 @@ function setUp() {
     play: (at?: number) => Object.assign(transport, { playing: true, playAt: at ?? clock.now }),
     stop: () => Object.assign(transport, { playing: false }),
     silence: () => {},
-    unloopedBeatAtTime: unlooped,
+    continuousBeatAtTime: unlooped,
     beatAtTime: (time: number) => unlooped(time) % project.length,
   };
   const engine = {
