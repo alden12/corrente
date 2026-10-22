@@ -79,6 +79,18 @@ function LoginScreen() {
     <GateCard>
       <WelcomeHeader />
       <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={continueSignedOut}
+          className="w-full font-mono text-sm font-semibold px-5 py-2.5 rounded-lg bg-you text-ground cursor-pointer"
+        >
+          Continue signed out
+        </button>
+        <p className="text-[11px] text-faint leading-relaxed">
+          No account needed. Your projects stay in this browser, and you can sign in later.
+        </p>
+      </div>
+      <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
         <h2 id="auth-title" className="text-base font-medium text-ink">
           Sign in
         </h2>
@@ -97,18 +109,6 @@ function LoginScreen() {
           ) : (
             ", by invitation."
           )}
-        </p>
-      </div>
-      <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={continueSignedOut}
-          className="w-full font-mono text-sm font-semibold px-5 py-2.5 rounded-lg bg-you text-ground cursor-pointer"
-        >
-          Continue signed out
-        </button>
-        <p className="text-[11px] text-faint leading-relaxed">
-          No account needed. Your projects stay in this browser, and you can sign in later.
         </p>
       </div>
     </GateCard>
