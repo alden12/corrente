@@ -37,6 +37,7 @@ impl VoiceAllocator {
         VoiceAllocator {
             voices: voices.min(slots),
             cut: None,
+            // TS: new Array(slots).fill(undefined), and so on: `vec![x; n]` is n copies of x.
             notes: vec![None; slots],
             velocities: vec![0.0; slots],
             held: vec![false; slots],
@@ -47,6 +48,7 @@ impl VoiceAllocator {
     }
 
     /// Engine slots, spares included.
+    // TS: get slots() { return this.notes.length }
     pub fn slots(&self) -> usize {
         self.notes.len()
     }
@@ -54,12 +56,17 @@ impl VoiceAllocator {
     /// The slot to play `note` in from `time`, with `cut` set to a slot to cut first. `sounding` says
     /// whether the engine has a slot busy.
     pub fn note_on(&mut self, note: i32, velocity: f32, time: u64, sounding: impl Fn(usize) -> bool) -> usize {
+        // TS:
+        //   this.cut = this.toCut(note, sounding);
+        //   if (this.cut !== undefined) { cutting[cut] = true; held[cut] = false; notes[cut] = undefined; }
+        // `&sounding` lends the function rather than handing it over, so it can be used again below.
         self.cut = self.to_cut(note, &sounding);
         if let Some(cut) = self.cut {
             self.cutting[cut] = true;
             self.held[cut] = false;
             self.notes[cut] = None;
         }
+        // TS: const slot = this.freeSlot(sounding); notes[slot] = note; velocities[slot] = velocity; held[slot] = true; ...; return slot;
         let slot = self.free_slot(&sounding);
         self.notes[slot] = Some(note);
         self.velocities[slot] = velocity;
@@ -72,18 +79,21 @@ impl VoiceAllocator {
     /// The slot holding `note`, now released, or None if it isn't held (cut, or never started).
     // TS: const slot = slots.find((slot) => notes[slot] === note && held[slot]); if (slot === undefined) return -1; releaseSlot(slot, time); return slot;
     pub fn note_off(&mut self, note: i32, time: u64) -> Option<usize> {
+        // `(0..n).find(f)` tries each index from 0; `?` returns None from note_off if none matches.
         let slot = (0..self.slots()).find(|&slot| self.notes[slot] == Some(note) && self.held[slot])?;
         self.release_slot(slot, time);
         Some(slot)
     }
 
     /// Let go of a slot's key (all notes off).
+    // TS: held[slot] = false; releasedAt[slot] = time;
     pub fn release_slot(&mut self, slot: usize, time: u64) {
         self.held[slot] = false;
         self.released_at[slot] = time;
     }
 
     /// Whether a slot's key is down.
+    // TS: return held[slot]
     pub fn is_held(&self, slot: usize) -> bool {
         self.held[slot]
     }
@@ -96,6 +106,17 @@ impl VoiceAllocator {
     }
 
     /// The slot to cut before `note` starts: its own copy if it's sounding, or one over the limit.
+    // TS:
+    //   let playing = 0, released, oldest;
+    //   for (let slot = 0; slot < slots; slot++) {
+    //     if (cutting[slot] || !(held[slot] || sounding(slot))) continue;
+    //     if (notes[slot] === note) return slot;
+    //     playing++;
+    //     if (held[slot]) { if (oldest === undefined || startedAt[slot] < startedAt[oldest]) oldest = slot; }
+    //     else if (released === undefined || releasedAt[slot] < releasedAt[released]) released = slot;
+    //   }
+    //   return playing < this.voices ? undefined : released ?? oldest;
+    // `let mut` makes a variable that can change; plain `let` can't be reassigned. `released.or(oldest)` is `released ?? oldest`.
     fn to_cut(&self, note: i32, sounding: &impl Fn(usize) -> bool) -> Option<usize> {
         let mut playing = 0;
         let (mut released, mut oldest): (Option<usize>, Option<usize>) = (None, None);
@@ -119,6 +140,13 @@ impl VoiceAllocator {
     }
 
     /// A silent slot, or failing that the one cutting longest (taken over at once).
+    // TS:
+    //   let fading;
+    //   for (let slot = 0; slot < slots; slot++) {
+    //     if (!held[slot] && !sounding(slot) && slot !== this.cut) return slot;
+    //     if (cutting[slot] && slot !== this.cut && (fading === undefined || startedAt[slot] < startedAt[fading])) fading = slot;
+    //   }
+    //   return fading ?? this.cut ?? 0;
     fn free_slot(&self, sounding: &impl Fn(usize) -> bool) -> usize {
         let mut fading: Option<usize> = None;
         for slot in 0..self.slots() {

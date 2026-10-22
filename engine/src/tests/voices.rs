@@ -15,6 +15,7 @@ struct Allocator {
 }
 
 impl Allocator {
+    // TS: static create(slots, voices) { return { allocated: new VoiceAllocator(slots, voices), busy: new Set() } }
     fn new(slots: usize, voices: usize) -> Self {
         Allocator { allocated: VoiceAllocator::new(slots, voices), busy: RefCell::new(HashSet::new()) }
     }
@@ -22,12 +23,14 @@ impl Allocator {
     /// Play `note` at `time`: the slot it took, and the slot cut for it.
     // TS: const slot = allocated.noteOn(note, 1, time, (slot) => busy.has(slot)); busy.add(slot); return [slot, allocated.cut];
     fn play(&mut self, note: i32, time: u64) -> (usize, Option<usize>) {
+        // `busy.borrow()` reads the set inside the RefCell; `borrow_mut()` lends it to change.
         let busy = &self.busy;
         let slot = self.allocated.note_on(note, 1.0, time, |slot| busy.borrow().contains(&slot));
         busy.borrow_mut().insert(slot);
         (slot, self.allocated.cut)
     }
 
+    // TS: finish(slot) { busy.delete(slot) }
     fn finish(&mut self, slot: usize) {
         self.busy.borrow_mut().remove(&slot);
     }
@@ -45,6 +48,7 @@ fn takes_free_slots_and_cuts_a_sounding_notes_copy_to_start_it_again() {
 #[test]
 fn past_its_voices_cuts_the_one_released_longest_ago_then_the_oldest_held() {
     let mut allocator = Allocator::new(5, 3);
+    // TS: [60, 62, 64].forEach((note, time) => play(note, time)). `zip(0..)` pairs each note with 0, 1, 2.
     [60, 62, 64].into_iter().zip(0..).for_each(|(note, time)| {
         allocator.play(note, time);
     });
@@ -77,6 +81,7 @@ fn ignores_the_note_off_of_a_cut_note() {
 #[test]
 fn keeps_the_held_notes_with_their_velocities() {
     let mut allocator = Allocator::new(4, 4);
+    // `|_| false` is `() => false`: nothing is sounding.
     allocator.allocated.note_on(60, 0.5, 0, |_| false);
     allocator.allocated.note_on(64, 0.25, 1, |_| false);
     allocator.allocated.note_off(60, 2);
