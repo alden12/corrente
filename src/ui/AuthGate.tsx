@@ -82,7 +82,9 @@ function LoginScreen() {
         <h2 id="auth-title" className="text-base font-medium text-ink">
           Sign in
         </h2>
-        <p className="text-sm text-muted leading-relaxed">
+        <ProviderButton provider="google" label="Continue with Google" />
+        {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" />}
+        <p className="text-[11px] text-faint leading-relaxed">
           The online version is in developer preview
           {hosting.links.interest ? (
             <>
@@ -96,8 +98,6 @@ function LoginScreen() {
             ", by invitation."
           )}
         </p>
-        <ProviderButton provider="google" label="Continue with Google" />
-        {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" />}
       </div>
       <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
         <button

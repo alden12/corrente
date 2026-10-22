@@ -34,31 +34,32 @@ export function Welcome() {
         </p>
       </section>
 
-      {(interest || hostedApp || canSignInHere) && (
-        <p>
-          {interest && (
-            <>
-              The online version is in developer preview: <External href={interest}>register interest</External>.{" "}
-            </>
-          )}
-          {canSignInHere ? (
-            <>
-              Invited? <SignInHere>Sign in</SignInHere>.
-            </>
-          ) : (
-            hostedApp && (
+      <ul className="flex flex-col gap-1.5 list-disc pl-5 marker:text-faint">
+        {(interest || hostedApp || canSignInHere) && (
+          <li>
+            {interest && (
               <>
-                Developers: <External href={hostedApp}>sign in online</External>.
+                The online version is in developer preview: <External href={interest}>register interest</External>.{" "}
               </>
-            )
-          )}
-        </p>
-      )}
-
-      <p className="pt-3 border-t border-line">
-        <strong className="font-semibold text-strong">With an agent.</strong> To run the Corrente MCP, follow the{" "}
-        <External href={AGENT_GUIDE_URL}>setup instructions</External>.
-      </p>
+            )}
+            {canSignInHere ? (
+              <>
+                Invited? <SignInHere>Sign in</SignInHere>.
+              </>
+            ) : (
+              hostedApp && (
+                <>
+                  Developers: <External href={hostedApp}>sign in online</External>.
+                </>
+              )
+            )}
+          </li>
+        )}
+        <li>
+          To run the Corrente MCP with an agent, follow the{" "}
+          <External href={AGENT_GUIDE_URL}>setup instructions</External>.
+        </li>
+      </ul>
     </div>
   );
 }
