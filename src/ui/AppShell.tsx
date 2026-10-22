@@ -376,6 +376,12 @@ export function AppShell() {
   // Hiding a touch app stops the transport and parks the audio thread (DAW-33).
   useBackgroundAudio({ engine, scheduler, recorder, enabled: deviceShape.tier !== "desktop" });
 
+  // With loop off, play that reaches the end stops there, and a take in progress finishes itself.
+  useEffect(() => {
+    scheduler.setOnReachedEnd(() => (recorder.isActive ? void recorder.stop() : scheduler.stop()));
+    return () => scheduler.setOnReachedEnd(null);
+  }, [scheduler, recorder]);
+
   // Space anywhere toggles play/stop, unless typing in a field (scheduler.play
   // is a no-op until audio is started).
   useEffect(() => {

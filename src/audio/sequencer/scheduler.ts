@@ -83,6 +83,15 @@ export class Scheduler implements TransportClock {
   private unsubscribe: (() => void) | null = null;
   /** When true, the transport schedules a metronome click on every beat. */
   private metronomeEnabled = false;
+  /**
+   * Off, play runs once from the loop's start to the project's end and stops there, rather than
+   * coming round (default on). The loop maths stays the same: nothing is scheduled past the end.
+   */
+  private looping = true;
+  /** Where a play that doesn't loop ends, on the continuous count: the end of the pass it's in. */
+  private endBeat = Infinity;
+  /** Called when a play that doesn't loop reaches the end; stops the transport unless it says otherwise. */
+  private onReachedEnd: (() => void) | null = null;
 
   private anchorBeat = 0;
   private anchorTime = 0;
@@ -154,6 +163,25 @@ export class Scheduler implements TransportClock {
     this.metronomeEnabled = on;
   }
 
+  /** Loop the arrangement, or play it once and stop at its end. */
+  setLooping(on: boolean): void {
+    this.looping = on;
+    this.endBeat = on
+      ? Infinity
+      : this.endOfPass(this.isPlaying ? this.continuousBeatAtTime(this.engine.currentTime) : 0);
+  }
+
+  /** The end of the loop pass `beat` (continuous) is in: turned off mid-play, it finishes this one. */
+  private endOfPass(beat: number): number {
+    const passLength = this.project.length - this.project.loopStart;
+    return passLength > 0 ? (Math.floor(beat / passLength) + 1) * passLength : 0;
+  }
+
+  /** What happens when a play that doesn't loop reaches the end (a take finishes itself, say). */
+  setOnReachedEnd(handler: (() => void) | null): void {
+    this.onReachedEnd = handler;
+  }
+
   /**
    * Start the transport. `atTime` anchors beat 0 to a specific AudioContext time
    * (defaults to now); the recorder passes the count-in's downbeat so the transport
@@ -194,6 +222,7 @@ export class Scheduler implements TransportClock {
     this.anchorTime = atTime ?? this.engine.currentTime;
     this.anchorBeat = 0;
     this.scheduledUntilBeats = 0;
+    if (!this.looping) this.endBeat = this.endOfPass(0);
     this.lastBps = this.project.tempo / 60;
     this.unsubscribe = this.project.subscribe(() => this.reanchor());
     this.tick();
@@ -263,6 +292,8 @@ export class Scheduler implements TransportClock {
     this.anchorBeat += (now - this.anchorTime) * this.lastBps;
     this.anchorTime = now;
     this.lastBps = this.project.tempo / 60;
+    // A length or loop edit moves where this pass ends.
+    if (!this.looping) this.endBeat = this.endOfPass(this.anchorBeat);
     if (this.project.tempo !== this.toldTempo) this.tellTransport();
   }
 
@@ -272,7 +303,14 @@ export class Scheduler implements TransportClock {
     const loopStart = this.project.loopStart;
     const loopLen = this.project.length - loopStart;
     const now = this.engine.currentTime;
-    const horizonBeats = this.anchorBeat + (now + SCHEDULE_AHEAD_SEC - this.anchorTime) * bps;
+    if (this.anchorBeat + (now - this.anchorTime) * bps >= this.endBeat) {
+      if (this.onReachedEnd) this.onReachedEnd();
+      else this.stop();
+      return;
+    }
+    const ahead = this.anchorBeat + (now + SCHEDULE_AHEAD_SEC - this.anchorTime) * bps;
+    // Not looping, nothing past the end of this pass.
+    const horizonBeats = Math.min(ahead, this.endBeat);
 
     /**
      * **Never schedule the past** (DAW-32). `scheduledUntilBeats` is wherever the last tick

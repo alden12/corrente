@@ -17,6 +17,9 @@ import { Button } from "./controls/Button";
 import { IconButton } from "./controls/IconButton";
 import { Select } from "./controls/Select";
 
+/** Whether play comes round the loop: a preference, read by this bar and the timing settings. */
+export const LOOP_KEY = "corrente:loop";
+
 export function TransportBar({
   projectStore,
   scheduler,
@@ -41,6 +44,7 @@ export function TransportBar({
   const project = useProject(projectStore);
   const rec = useRecorder(recorder);
   const [metronome, setMetronome] = usePersistentBoolean("corrente:metronome", false);
+  const [looping, setLooping] = usePersistentBoolean(LOOP_KEY, true);
 
   // The scheduler reads this flag each tick; keep it in sync with the preference. The one
   // writer to the scheduler, whichever control (this button, or the Project settings page)
@@ -48,6 +52,9 @@ export function TransportBar({
   useEffect(() => {
     scheduler.setMetronomeEnabled(metronome);
   }, [scheduler, metronome]);
+  useEffect(() => {
+    scheduler.setLooping(looping);
+  }, [scheduler, looping]);
 
   const recording = rec.status === "recording" || rec.status === "counting";
 
@@ -176,6 +183,32 @@ export function TransportBar({
           ))}
         </Select>
       </label>
+      <IconButton
+        label="Loop"
+        tone="you"
+        hidden={compact}
+        active={looping}
+        title={looping ? "Loop on: play comes round" : "Loop off: play stops at the end"}
+        onClick={() => setLooping(!looping)}
+      >
+        {/* two arrows chasing round */}
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          aria-hidden="true"
+        >
+          <path d="M3 7.5 V6.5 A2.5 2.5 0 0 1 5.5 4 H12.5" />
+          <path d="M10.5 2 L12.5 4 L10.5 6" />
+          <path d="M13 8.5 V9.5 A2.5 2.5 0 0 1 10.5 12 H3.5" />
+          <path d="M5.5 14 L3.5 12 L5.5 10" />
+        </svg>
+      </IconButton>
       <IconButton
         label="Metronome"
         tone="you"
