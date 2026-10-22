@@ -1,0 +1,3 @@
+[alias]
+# nih-plug's bundler: `cargo xtask bundle webview-spike --release` makes the .clap and .vst3.
+xtask = "run --package xtask --release --"

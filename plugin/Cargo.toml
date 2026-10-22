@@ -1,0 +1,6 @@
+# The plugin (PLUGIN-1): Corrente's devices as a CLAP and VST3, built with nih-plug.
+# For now it holds PLUGIN-2.2's spike, a webview editor in a plugin window. Bundle with
+# `cargo xtask bundle <package> --release`, which writes target/bundled/.
+[workspace]
+resolver = "3"
+members = ["webview-spike", "xtask"]
