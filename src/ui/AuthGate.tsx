@@ -82,8 +82,8 @@ function LoginScreen() {
         <h2 id="auth-title" className="text-base font-medium text-ink">
           Sign in
         </h2>
-        <ProviderButton provider="google" label="Continue with Google" />
-        {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" />}
+        <ProviderButton provider="google" label="Continue with Google" note="Invite only" />
+        {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" note="Invite only" />}
         <p className="text-[11px] text-faint leading-relaxed">
           The online version is in developer preview
           {hosting.links.interest ? (
@@ -141,14 +141,16 @@ function RefusedScreen({ user }: { user: AuthUser }) {
   );
 }
 
-function ProviderButton({ provider, label }: { provider: "google" | "github"; label: string }) {
+/** `note` says who it's for, on the button itself, since a button gets pressed before its caption is read. */
+function ProviderButton({ provider, label, note }: { provider: "google" | "github"; label: string; note?: string }) {
   return (
     <button
       type="button"
       onClick={() => void signInWithProvider(provider)}
-      className="w-full font-mono text-sm font-semibold px-5 py-2.5 rounded-lg border border-line bg-card text-ink hover:border-faint cursor-pointer"
+      className="w-full flex flex-col items-center px-5 py-2.5 rounded-lg border border-line bg-card text-ink hover:border-faint cursor-pointer"
     >
-      {label}
+      <span className="font-mono text-sm font-semibold">{label}</span>
+      {note && <span className="text-[11px] text-muted">{note}</span>}
     </button>
   );
 }
