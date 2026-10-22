@@ -56,6 +56,8 @@ type CaptureMode = "audio" | "midi";
 /** A note still held down mid-take (its onset beat, awaiting a note-off to close it). */
 interface HeldNote {
   startBeat: number;
+  /** Its onset on the unlooped count (`Scheduler.unloopedBeatAtTime`), to measure its length by. */
+  startCount: number;
   velocity: number;
 }
 
@@ -108,6 +110,8 @@ export class Recorder {
   private mode: CaptureMode = "audio";
   private targetTrackId: string | null = null;
   private readonly held = new Map<number, HeldNote>();
+  /** Keys down during the count-in, by pitch: still down at the downbeat, they start the take. */
+  private readonly heldInCountIn = new Map<number, number>();
   private captured: { pitch: number; velocity: number; startBeat: number; endBeat: number }[] = [];
 
   private readonly engine: AudioEngine;
@@ -243,11 +247,17 @@ export class Recorder {
           this.held.clear();
           this.captured = [];
           this.startBeat = this.scheduler.beatAtTime(this.engine.currentTime);
+          // A key pressed during the count-in and still down is part of the take, from its first beat.
+          const startCount = this.scheduler.unloopedBeatAtTime(this.engine.currentTime);
+          for (const [pitch, velocity] of this.heldInCountIn)
+            this.held.set(pitch, { startBeat: this.startBeat, startCount, velocity });
+          this.heldInCountIn.clear();
         }
         this.set({ status: "recording", take: this.mode === "midi" ? this.liveTake() : null });
       };
 
       if (countUnits > 0) {
+        this.heldInCountIn.clear();
         this.set({ status: "counting" });
         // Wake at the downbeat itself (include the lead), not countUnits*step after now -
         // otherwise capture starts COUNT_IN_LEAD_SEC early and the take lands ahead of the grid.
@@ -266,20 +276,40 @@ export class Recorder {
    * onset is stamped against arrangement beats now; the matching note-off closes it.
    */
   noteOn(midi: number, velocity = 0.8): void {
-    if (this.state.status !== "recording" || this.mode !== "midi") return;
-    this.held.set(midi, { startBeat: this.scheduler.beatAtTime(this.engine.currentTime), velocity });
+    if (this.mode !== "midi") return;
+    if (this.state.status === "counting") return void this.heldInCountIn.set(midi, velocity);
+    if (this.state.status !== "recording") return;
+    const now = this.engine.currentTime;
+    this.held.set(midi, {
+      startBeat: this.scheduler.beatAtTime(now),
+      startCount: this.scheduler.unloopedBeatAtTime(now),
+      velocity,
+    });
     this.set({ take: this.liveTake() });
   }
 
   /** Close a held note at the current beat (a no-op if it was not being captured). */
   noteOff(midi: number): void {
     if (this.mode !== "midi") return;
+    this.heldInCountIn.delete(midi);
     const note = this.held.get(midi);
     if (!note) return;
     this.held.delete(midi);
-    const endBeat = this.scheduler.beatAtTime(this.engine.currentTime);
-    this.captured.push({ pitch: midi, velocity: note.velocity, startBeat: note.startBeat, endBeat });
+    this.captured.push({
+      pitch: midi,
+      velocity: note.velocity,
+      startBeat: note.startBeat,
+      endBeat: this.endBeat(note),
+    });
     if (this.state.status === "recording") this.set({ take: this.liveTake() });
+  }
+
+  /**
+   * Where a held note ends if it's let go now: its start plus how long it was held, counted
+   * unlooped, so a note held over the loop's end keeps its length rather than ending before it began.
+   */
+  private endBeat(note: HeldNote): number {
+    return note.startBeat + this.scheduler.unloopedBeatAtTime(this.engine.currentTime) - note.startCount;
   }
 
   /** A snapshot of the take in flight (absolute beats), for the roll's live overlay. */
@@ -360,9 +390,11 @@ export class Recorder {
 
   /** Close any held notes, then place the captured notes as a new clip on the MIDI track. */
   private finishMidiTake(wasCounting: boolean): void {
-    const stopBeat = this.scheduler.beatAtTime(this.engine.currentTime);
+    // Where notes still held end, read before the transport stops.
+    const heldEnds = new Map([...this.held].map(([pitch, note]) => [pitch, this.endBeat(note)]));
     if (this.scheduler.isPlaying) this.scheduler.stop();
     this.set({ status: "idle", take: null });
+    this.heldInCountIn.clear();
     if (wasCounting) {
       this.held.clear();
       this.captured = [];
@@ -374,7 +406,7 @@ export class Recorder {
         pitch,
         velocity: note.velocity,
         startBeat: note.startBeat,
-        endBeat: Math.max(stopBeat, note.startBeat + GRID),
+        endBeat: Math.max(heldEnds.get(pitch) ?? note.startBeat, note.startBeat + GRID),
       });
     }
     this.held.clear();
