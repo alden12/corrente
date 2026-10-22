@@ -30,9 +30,14 @@ mod faust;
 mod plan;
 mod router;
 
-use std::cell::RefCell;
+// For a native host linking the engine as a Rust library (the plugin, PLUGIN-2): the engine as a
+// value it owns, one per plugin instance, rather than the thread-local one the exports below share
+// (a host may run several instances on a thread, or move one between threads).
+// `pub use` re-exports: other crates reach these as `corrente_engine::Engine` and so on.
+pub use plan::{Plan, parse as parse_plan};
+pub use router::{BLOCK, Engine, Track};
 
-use router::{Engine, Track};
+use std::cell::RefCell;
 
 // TS: let ENGINE = new Engine(); let ALLOCATIONS: Int32Array[] = [];  (module-level state)
 // Rust won't let plain globals be changed freely (two threads could race), so mutable state goes in

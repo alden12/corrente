@@ -1,5 +1,7 @@
 # Build output and generated artifacts
 engine/catalogue.json
+**/target
+plugin/corrente/device.json
 dist
 coverage
 playwright-report

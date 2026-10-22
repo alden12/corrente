@@ -1,0 +1,19 @@
+[package]
+name = "corrente"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+publish = false
+
+# PLUGIN-2's proof of concept: one built-in instrument on the app's engine. See src/lib.rs.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# nice-plug, the maintained fork of nih-plug (which is in maintenance mode). assert_process_allocs: any
+# allocation on the audio thread fails loudly in a debug build.
+nice-plug = { version = "0.4.2", features = ["assert_process_allocs"] }
+# The app's engine as a Rust library (needs engine/gen/: `node engine/compile.ts --gen`).
+corrente-engine-native = { path = "../../engine/native" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

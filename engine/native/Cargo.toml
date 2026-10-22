@@ -1,0 +1,17 @@
+# The engine's same sources (../src) as a Rust library, for native hosts that link it: the plugin
+# (PLUGIN-2), which owns an Engine per instance. A package of its own because adding "rlib" to the
+# engine's crate types changes engine.wasm's bytes; this way the wasm build never sees it.
+# Needs ../gen/ (`node engine/compile.ts --gen`).
+[package]
+name = "corrente-engine-native"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "corrente_engine"
+path = "../src/lib.rs"
+crate-type = ["rlib"]
+
+[dependencies]

@@ -104,10 +104,10 @@ pub mod libm {
     }
 }
 
-/// Any block, behind a pointer: the router doesn't know which kind it runs.
+// Any block, behind a pointer: the router doesn't know which kind it runs.
 // TS: type Block = FaustDsp<number>. Plain TS interfaces are already "any implementation";
-// in Rust you say so with `dyn`.
-pub type Block = dyn FaustDsp<T = FaustFloat>;
+// in Rust you say so with `dyn`. Defined at the end of this file, whose line numbers engine.wasm's
+// bytes depend on (a panic's message carries its line), so nothing above moves.
 
 // The generated blocks, one module each, then FACTORIES, INPUTS, OUTPUTS, COUNT and NAMES.
 // No TS equivalent: `include!` pastes another file's text in here at compile time, like a C
@@ -194,3 +194,7 @@ pub fn ports(block: &Block) -> Ports {
     // TS: return collector[0]. The last expression without `;` is returned.
     collector.0
 }
+
+// `+ Send` says a block can move to another thread with its owner: a native host needs that (a
+// plugin is made on one thread and plays on another, PLUGIN-2), and every block is plain numbers.
+pub type Block = dyn FaustDsp<T = FaustFloat> + Send;
