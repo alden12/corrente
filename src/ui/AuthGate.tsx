@@ -10,6 +10,8 @@
  */
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
+import { WelcomeHeader } from "./WelcomeHeader";
+import { continueSignedOut } from "../hosting";
 import { authEnabled, readAuthState, subscribeAuth, signInWithProvider, signOut, type AuthUser } from "../auth/session";
 import { writeCurrentUser, DEFAULT_USER } from "./currentUser";
 
@@ -51,7 +53,7 @@ export function GateCard({ children }: { children: ReactNode }) {
       aria-modal="true"
       aria-labelledby="auth-title"
     >
-      <div className="bg-panel border border-line rounded-2xl p-8 max-w-sm mx-4 text-center flex flex-col items-center gap-4 shadow-2xl">
+      <div className="bg-panel border border-line rounded-2xl p-8 max-w-sm mx-4 max-h-[calc(100dvh-2rem)] overflow-y-auto text-center flex flex-col items-center gap-4 shadow-2xl">
         <BrandMark size={72} />
         {children}
       </div>
@@ -66,20 +68,38 @@ export function GateCard({ children }: { children: ReactNode }) {
 // flag AND re-enable the GitHub provider in the Supabase dashboard (both are needed).
 const GITHUB_ENABLED = false;
 
+/**
+ * The hosted site's first screen, so it says what Corrente is before asking anything. Signing in is
+ * invite-only, so anyone can instead continue signed out (HOST-23.2.8): the standalone app, with
+ * projects kept in this browser.
+ */
 function LoginScreen() {
   return (
     <GateCard>
-      <h2 id="auth-title" className="text-lg font-semibold text-strong">
-        Sign in to Corrente
-      </h2>
-      <p className="text-sm text-muted leading-relaxed">
-        Your projects sync to your account. Sign in to pick up where you left off, from any device.
-      </p>
-      <div className="mt-1 flex flex-col gap-2 w-full">
+      <WelcomeHeader />
+      <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
+        <h2 id="auth-title" className="text-base font-medium text-ink">
+          Sign in
+        </h2>
+        <p className="text-sm text-muted leading-relaxed">
+          Your projects sync to your account, so you can pick up where you left off on any device.
+        </p>
         <ProviderButton provider="google" label="Continue with Google" />
         {GITHUB_ENABLED && <ProviderButton provider="github" label="Continue with GitHub" />}
         <p className="text-[11px] text-faint leading-relaxed">
           Sign-in is invite-only during development. Ask to have your Google account added to the test list.
+        </p>
+      </div>
+      <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={continueSignedOut}
+          className="w-full font-mono text-sm font-semibold px-5 py-2.5 rounded-lg bg-you text-ground cursor-pointer"
+        >
+          Continue signed out
+        </button>
+        <p className="text-[11px] text-faint leading-relaxed">
+          No account needed. Your projects stay in this browser, and you can sign in later.
         </p>
       </div>
     </GateCard>

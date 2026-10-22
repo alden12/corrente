@@ -13,7 +13,7 @@
  * and the details lead with which ones, each with its Export button: no banner, nothing that pops up.
  */
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
-import { hosting, SOURCE_URL } from "../../hosting";
+import { canSignInHere, hosting, SOURCE_URL } from "../../hosting";
 import {
   installApp,
   readStorageRisk,
@@ -25,6 +25,7 @@ import { Popover } from "../Menu";
 import { useDismiss } from "../useDismiss";
 import { DeviceIcon } from "../shellIcons";
 import { useNow } from "../timeAgo";
+import { SignInHere } from "./SignInHere";
 import type { EditLog } from "../../audio/commands/editLog";
 import { notNow, reminderDue, setReminderOff, useOpenProjectChanges, useReminderState } from "./backupReminder";
 
@@ -145,7 +146,13 @@ export function OnThisDeviceDetails({ onShowProject, reminder }: { onShowProject
           </button>
         )}
       </p>
-      {(interest || hostedApp) && (
+      {canSignInHere && (
+        <p className="text-muted">
+          Signing in keeps your projects in your account instead, with sharing and live collaboration:{" "}
+          <SignInHere>sign in</SignInHere>. Projects saved here stay in this browser.
+        </p>
+      )}
+      {!canSignInHere && (interest || hostedApp) && (
         <p className="text-muted">
           Corrente online adds sharing and live collaboration.{" "}
           {interest ? (

@@ -5,8 +5,7 @@
  */
 import type { ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
-import { SOURCE_URL } from "../hosting";
-import { GitHubIcon } from "./shellIcons";
+import { WelcomeHeader } from "./WelcomeHeader";
 
 /**
  * `intro` is what a standalone run needs to know (HOST-23.2.6): said here, in the card that's shown
@@ -26,22 +25,7 @@ export function StartDialog({ onStart, error, intro }: { onStart: () => void; er
         {/* What Corrente is, since this is the first thing anyone sees, then what a standalone run
          adds. The heading after them stays the *task*, because that is what the dialog is asking for
          and what labels it. */}
-        <div className="flex flex-col gap-1">
-          <p className="text-2xl font-semibold tracking-tight text-strong">Welcome to Corrente</p>
-          <p className="text-[13px] text-muted leading-snug">
-            An open source music studio and instrument builder{" "}
-            <a
-              href={SOURCE_URL}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Source on GitHub"
-              title="Source on GitHub"
-              className="inline-flex mt-1 align-[-3px] text-muted hover:text-ink"
-            >
-              <GitHubIcon />
-            </a>
-          </p>
-        </div>
+        <WelcomeHeader />
         {intro && <div className="w-full text-left">{intro}</div>}
         <h2 id="start-title" className="w-full pt-4 border-t border-line text-base font-medium text-ink">
           Start the audio engine

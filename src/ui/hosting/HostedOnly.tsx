@@ -4,10 +4,11 @@
  * rather than hidden, so the standalone app reads as the same app, with the online parts pointed at.
  */
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { hosting } from "../../hosting";
+import { canSignInHere, hosting } from "../../hosting";
 import { Popover } from "../Menu";
 import { useDismiss } from "../useDismiss";
 import { linkClass } from "./OnThisDevice";
+import { SignInHere } from "./SignInHere";
 
 /** Where the online app is: the interest form while it's invite-only, the app itself once open. */
 function OnlineLink() {
@@ -20,8 +21,15 @@ function OnlineLink() {
           register interest
         </a>
         .
+        {canSignInHere && (
+          <>
+            {" "}
+            Invited? <SignInHere>Sign in</SignInHere>.
+          </>
+        )}
       </>
     );
+  if (canSignInHere) return <SignInHere>Sign in to use it</SignInHere>;
   if (hostedApp)
     return (
       <a href={hostedApp} target="_blank" rel="noreferrer" className={linkClass}>

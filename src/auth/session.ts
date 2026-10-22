@@ -13,7 +13,7 @@
 import { createListeners } from "../listeners";
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import { isTrustedRedirect } from "./trustedRedirect";
-import { hosting } from "../hosting";
+import { hosting, isConsentPath, OAUTH_CONSENT_PATH } from "../hosting";
 
 /** True when Supabase auth is configured. When false the app skips the login gate entirely. */
 export const authEnabled = hosting.auth !== undefined;
@@ -168,17 +168,6 @@ export async function signOut(): Promise<void> {
   if (!supabase) return;
   await supabase.auth.signOut();
 }
-
-/**
- * Where Supabase's OAuth server sends a person to approve an app, such as Claude, connecting to
- * Corrente's hosted MCP server (AGENT-28). The Supabase project's OAuth server settings point here.
- */
-export const OAUTH_CONSENT_PATH = "/oauth/consent";
-
-/** Whether a path is the consent page, forgiving a trailing or doubled slash: a Site URL ending in
- *  `/` joined to the authorization path gives `//oauth/consent`, which must not open the DAW. */
-export const isConsentPath = (pathname: string): boolean =>
-  pathname.replace(/\/{2,}/g, "/").replace(/\/$/, "") === OAUTH_CONSENT_PATH;
 
 /**
  * Back to a consent request that sent this tab off to sign in.

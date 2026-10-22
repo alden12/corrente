@@ -6,9 +6,10 @@
  * unread (Alden, 2026-10-21). The details stay in the "Saved in browser" panel and Account settings.
  */
 import { useSyncExternalStore } from "react";
-import { hosting, SOURCE_URL } from "../../hosting";
+import { canSignInHere, hosting, SOURCE_URL } from "../../hosting";
 import { readStorageRisk, subscribeStorageRisk } from "../../hosting/storageRisk";
 import { linkClass } from "./OnThisDevice";
+import { SignInHere } from "./SignInHere";
 
 /** The guide to driving the app from Claude Code over MCP. */
 const AGENT_GUIDE_URL = `${SOURCE_URL}/blob/main/MCP.md`;
@@ -33,17 +34,23 @@ export function Welcome() {
         </p>
       </section>
 
-      {(interest || hostedApp) && (
+      {(interest || hostedApp || canSignInHere) && (
         <p>
           {interest && (
             <>
               The online version is in developer preview: <External href={interest}>register interest</External>.{" "}
             </>
           )}
-          {hostedApp && (
+          {canSignInHere ? (
             <>
-              Developers: <External href={hostedApp}>sign in online</External>.
+              Invited? <SignInHere>Sign in</SignInHere>.
             </>
+          ) : (
+            hostedApp && (
+              <>
+                Developers: <External href={hostedApp}>sign in online</External>.
+              </>
+            )
           )}
         </p>
       )}

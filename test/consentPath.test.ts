@@ -3,7 +3,7 @@
  * authorization path spells it `//oauth/consent` - which opened the DAW instead of asking.
  */
 import { describe, expect, it } from "vitest";
-import { isConsentPath } from "../src/auth/session";
+import { isConsentPath } from "../src/hosting";
 
 describe("isConsentPath", () => {
   it("matches the consent page however the slashes fall", () => {

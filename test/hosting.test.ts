@@ -3,7 +3,7 @@ import { hostingFrom } from "../src/hosting";
 
 describe("hostingFrom", () => {
   it("is standalone with no API, keeping nothing else either", () => {
-    expect(hostingFrom({})).toEqual({ mode: "standalone", auth: undefined, links: {} });
+    expect(hostingFrom({})).toEqual({ mode: "standalone", canSignIn: false, auth: undefined, links: {} });
   });
 
   it("counts blank settings as unset, as the test build blanks them", () => {
@@ -21,6 +21,25 @@ describe("hostingFrom", () => {
       VITE_SUPABASE_ANON_KEY: "public-key",
     });
     expect(signedIn.auth).toEqual({ url: "https://auth.test", anonKey: "public-key" });
+  });
+
+  it("is standalone on a hosted build this device chose to continue signed out on, with sign-in a step away", () => {
+    const site = {
+      VITE_DAW_API_URL: "https://corrente.cloud",
+      VITE_SUPABASE_URL: "https://auth.test",
+      VITE_SUPABASE_ANON_KEY: "public-key",
+      VITE_INTEREST_URL: "https://forms.test/join",
+    };
+    expect(hostingFrom(site, true)).toEqual({
+      mode: "standalone",
+      canSignIn: true,
+      auth: undefined,
+      links: { hostedApp: undefined, interest: "https://forms.test/join" },
+    });
+  });
+
+  it("ignores the signed-out choice on a build with no server, where there's nothing to sign in to", () => {
+    expect(hostingFrom({}, true)).toMatchObject({ mode: "standalone", canSignIn: false });
   });
 
   it("carries the links in either mode", () => {
