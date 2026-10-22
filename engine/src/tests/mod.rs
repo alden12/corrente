@@ -21,6 +21,7 @@ mod reports;
 mod samples;
 mod signals;
 mod sections;
+mod voices;
 mod wavetables;
 
 use crate::faust;

@@ -21,6 +21,12 @@ unsafe extern "C" {
     fn eng_init(rate: i32, tracks: i32) -> i32;
     fn eng_load(track: i32, pointer: *const i32, length: i32) -> i32;
     fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32;
+    fn eng_bind(track: i32, pointer: *const i32, length: i32) -> i32;
+    fn eng_key_on(track: i32, offset: i32, note: i32, velocity: f64);
+    fn eng_key_off(track: i32, offset: i32, note: i32);
+    fn eng_keys_off(track: i32, offset: i32);
+    fn eng_set_value(track: i32, value: i32, raw: f64);
+    fn eng_init_value(track: i32, value: i32, raw: f64);
     fn eng_set_param(track: i32, source: i32, value: f32);
     fn eng_param_ramp(track: i32, source: i32, samples: i32);
     fn eng_init_param(track: i32, source: i32, value: f32);
@@ -98,11 +104,37 @@ fn replay(log: &str) -> (Vec<f32>, usize) {
                     tracks = count;
                     Some(eng_init(rate, count).into())
                 }
-                "eng_load" | "eng_carry" => {
+                "eng_load" | "eng_carry" | "eng_bind" => {
                     let words = int(args);
                     let (track, length) = (words[0], words[1]);
-                    let load = if name == "eng_load" { eng_load } else { eng_carry };
+                    let load = match name {
+                        "eng_load" => eng_load,
+                        "eng_carry" => eng_carry,
+                        _ => eng_bind,
+                    };
                     Some(with_words(&words[2..], |pointer| load(track, pointer, length)).into())
+                }
+                // Velocities and raw values stay doubles: these calls take f64s.
+                "eng_key_on" => {
+                    let values = int(&args[..3]);
+                    eng_key_on(values[0], values[1], values[2], args[3].parse::<f64>().expect("a velocity"));
+                    None
+                }
+                "eng_key_off" => {
+                    let values = int(args);
+                    eng_key_off(values[0], values[1], values[2]);
+                    None
+                }
+                "eng_keys_off" => {
+                    let values = int(args);
+                    eng_keys_off(values[0], values[1]);
+                    None
+                }
+                "eng_set_value" | "eng_init_value" => {
+                    let values = int(&args[..2]);
+                    let set = if name == "eng_set_value" { eng_set_value } else { eng_init_value };
+                    set(values[0], values[1], args[2].parse::<f64>().expect("a value"));
+                    None
                 }
                 "eng_set_param" | "eng_init_param" => {
                     let values = floats(args);

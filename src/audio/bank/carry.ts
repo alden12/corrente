@@ -34,6 +34,3 @@ export const carryWords = (
   const carried = voices || [...pre, ...post].some((index) => index >= 0);
   return carried ? Int32Array.from([voices ? 1 : 0, pre.length, ...pre, post.length, ...post]) : undefined;
 };
-
-/** Whether `carryWords` carries the voices. */
-export const carriesVoices = (words: Int32Array): boolean => words[0] === 1;

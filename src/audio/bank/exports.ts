@@ -18,6 +18,21 @@ export interface EngineExports {
    * How many nodes carried, or -1 if the words don't fit both plans (nothing changes).
    */
   eng_carry(track: number, words: number, length: number): number;
+  /**
+   * Straight after eng_load and eng_carry, the plan's param shaping, zones and values (binding.ts's
+   * words): sets every param and starts the held notes again. 0, or -1 if they don't fit the plan.
+   */
+  eng_bind(track: number, words: number, length: number): number;
+  /** A note by key, `offset` samples into the coming block: the engine picks the voice and zone. */
+  eng_key_on(track: number, offset: number, note: number, velocity: number): void;
+  eng_key_off(track: number, offset: number, note: number): void;
+  /** Releases every held note. */
+  eng_keys_off(track: number, offset: number): void;
+  /** Moves a param's raw value (numbered by binding.ts): each source reading it ramps to its shaped value. */
+  eng_set_value(track: number, value: number, raw: number): void;
+  /** Sets a param's raw value at once: a sample param's slot. */
+  eng_init_value(track: number, value: number, raw: number): void;
+  // Below are the calls the ones above make, by source and voice slot: tests drive the engine with them.
   eng_set_param(track: number, source: number, value: number): void;
   /** How many samples a param's changes ramp over, at least one (a block unless this says). */
   eng_param_ramp(track: number, source: number, samples: number): void;

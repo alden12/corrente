@@ -1,6 +1,7 @@
 //! The bank: the engine lib.rs drives, holding every track, the transport and the samples they share.
 //! What concerns one track is the track's: lib.rs looks it up with `track` and calls it.
 
+use super::binding::Binding;
 use super::sampler::{MAX_SAMPLES, Sample};
 use super::track::Track;
 use super::{BLOCK, SILENT_SLOT, Slot};
@@ -51,6 +52,23 @@ impl Engine {
         let Some(track) = self.tracks.get_mut(track) else { return false };
         track.load(plan, sample_rate);
         true
+    }
+
+    /// Bind the plan just loaded into a track (keys.rs) from `eng_bind`'s words. False if there is no
+    /// such track or plan, or the words don't make a binding for it (nothing changes).
+    // TS: const parsed = Binding.parse(words); return parsed !== undefined && this.tracks[track]?.bind(...parsed, this.sampleRate, this.samples)
+    pub fn bind(&mut self, track: usize, words: &[f64]) -> bool {
+        let (sample_rate, samples) = (self.sample_rate, &self.samples);
+        let (Some(track), Some((binding, from))) = (self.tracks.get_mut(track), Binding::parse(words)) else { return false };
+        track.bind(binding, &from, sample_rate, samples)
+    }
+
+    /// Start a note on a track by key (keys.rs), which needs the samples to measure a zone's trims.
+    // TS: this.tracks[track]?.keyOn(offset, note, velocity, this.samples)
+    pub fn key_on(&mut self, track: usize, offset: i32, note: i32, velocity: f64) {
+        if let Some(track) = self.tracks.get_mut(track) {
+            track.key_on(offset, note, velocity, &self.samples);
+        }
     }
 
     /// A track, to read: None if there is no such track. Only the tests read one without changing it.

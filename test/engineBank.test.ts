@@ -5,7 +5,6 @@ import { BLOCK } from "../src/audio/bank/exports";
 import { TEST_EFFECTS, TEST_INSTRUMENTS } from "./support/testDevices";
 import { ENGINE_EFFECTS } from "../src/audio/effects/engine";
 import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
-import { VoiceAllocator } from "../src/audio/bank/voices";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import { MAX_ZONES, type DeviceDefinition } from "../src/audio/definitions/format";
 import { builtinWavetable } from "../src/audio/dsp/wavetable";
@@ -13,8 +12,8 @@ import { tableOf } from "../src/audio/samples/tables";
 import { RATE, wasm } from "./support/engine";
 
 /**
- * The engine bank (INST-36.5): the audio thread's JavaScript beside engine.wasm. Its event queue and
- * voice allocator on their own, then the bank playing compiled definitions in the real engine:
+ * The engine bank (INST-36.5): the audio thread's JavaScript beside engine.wasm. Its event queue on
+ * its own (the voice allocator's tests are the engine's, in Rust), then the bank playing compiled definitions in the real engine:
  * notes on their exact sample, voices stolen in the right order, params, tracks kept apart.
  */
 const SAMPLE = 1 / RATE;
@@ -64,56 +63,6 @@ describe("EventQueue", () => {
       if (index >= 2) queue.next(Infinity);
     });
     expect(drain(queue).map(([target]) => target)).toEqual([18, 19]);
-  });
-});
-
-describe("VoiceAllocator", () => {
-  /** An allocator and a stand-in engine: a slot sounds from its note on until `finish`es it. */
-  const allocator = (slots: number, voices: number) => {
-    const allocated = new VoiceAllocator(slots, voices);
-    const busy = new Set<number>();
-    const sounding = (slot: number) => busy.has(slot);
-    const play = (note: number, time: number) => {
-      const slot = allocated.noteOn(note, 1, time, sounding);
-      busy.add(slot);
-      return { slot, cut: allocated.cut };
-    };
-    return { allocated, play, finish: (slot: number) => busy.delete(slot) };
-  };
-
-  it("takes free slots, and cuts a sounding note's copy to start it again", () => {
-    const { play } = allocator(4, 2);
-    expect(play(60, 0)).toEqual({ slot: 0, cut: -1 });
-    expect(play(64, 1)).toEqual({ slot: 1, cut: -1 });
-    // Slot 0 fades out while the note starts again in a spare.
-    expect(play(60, 2)).toEqual({ slot: 2, cut: 0 });
-  });
-
-  it("past its voices, cuts the one released longest ago, then the oldest held", () => {
-    const { allocated, play } = allocator(5, 3);
-    [60, 62, 64].forEach((note, time) => play(note, time));
-    allocated.noteOff(64, 3);
-    allocated.noteOff(62, 4);
-    expect(play(65, 5)).toEqual({ slot: 3, cut: 2 });
-    expect(play(67, 6)).toEqual({ slot: 4, cut: 1 });
-    // Every slot is busy or fading: the one cut longest ago is taken over.
-    expect(play(69, 7)).toEqual({ slot: 1, cut: 0 });
-  });
-
-  it("uses a slot again once its cut has finished", () => {
-    const { play, finish } = allocator(3, 1);
-    play(60, 0);
-    expect(play(62, 1)).toEqual({ slot: 1, cut: 0 });
-    finish(0);
-    expect(play(64, 2)).toEqual({ slot: 0, cut: 1 });
-  });
-
-  it("ignores the note off of a cut note", () => {
-    const { allocated, play } = allocator(2, 1);
-    play(60, 0);
-    play(62, 1);
-    expect(allocated.noteOff(60, 2)).toBe(-1);
-    expect(allocated.noteOff(62, 2)).toBe(1);
   });
 });
 

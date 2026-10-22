@@ -3,7 +3,7 @@
 //!
 //! Nothing changes with a click (INST-36.5):
 //! - **A new plan crossfades in.** The graph it replaces keeps rendering for one more block, fading
-//!   out while the new one fades in. JS restarts the held notes in the new plan.
+//!   out while the new one fades in. Binding the new plan (keys.rs) restarts the held notes in it.
 //! - **A stolen voice fades out** over CUT samples rather than stopping dead. Each graph has
 //!   SPARE_VOICES more slots than its plan asks for, so the new note starts in a free one on time
 //!   while the old one fades.
@@ -13,10 +13,12 @@
 //!   its state away: JS makes the change smooth itself (an effect added or removed is bypassed
 //!   around the load).
 
+use super::binding::Binding;
 use super::carry::{map_fits, section_map, same_node, take_over};
 use super::graph::{Graph, Output, SectionState, Voice};
 use super::params::ParamSource;
 use super::sampler::Sample;
+use super::voices::VoiceAllocator;
 use super::{BLOCK, SILENCE, SILENT_SLOT, SLOT, Slot};
 use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_VELOCITY, VOICE_SIGNALS};
 
@@ -24,7 +26,7 @@ use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_
 // `inputs` and `output` sit inside the track, so they stay at one address while the bank exists:
 // JS is handed pointers to them once.
 pub struct Track {
-    graph: Option<Graph>,
+    pub(super) graph: Option<Graph>,
     /// The graph the last load replaced. It fades out over the block after the load, then stays,
     /// silent, until the next load drops it: freed there rather than while rendering.
     outgoing: Option<Graph>,
@@ -42,6 +44,13 @@ pub struct Track {
     /// Whether last block was silent: no voice sounding and nothing above SILENCE out. A silent
     /// track can be skipped (DAW-57) until something changes.
     silent: bool,
+    /// The plan's param shaping, zones and values (keys.rs), from its last `bind`.
+    pub(super) binding: Binding,
+    pub(super) voices: VoiceAllocator,
+    /// Samples rendered since the track started: when each note began, for the voice allocator.
+    pub(super) clock: u64,
+    /// Whether the last load's voices carried on (`carry`), keeping their notes and allocator.
+    pub(super) voices_carried: bool,
 }
 
 impl Track {
@@ -58,6 +67,10 @@ impl Track {
             seeds: 0x9E37_79B9,
             peaks: [0.0; CHANNELS],
             silent: true,
+            binding: Binding::default(),
+            voices: VoiceAllocator::new(0, 0),
+            clock: 0,
+            voices_carried: false,
         }
     }
 
@@ -69,6 +82,7 @@ impl Track {
     // the graph that was fading before, here rather than while rendering.
     // TS: if (!this.fading) { this.outgoing = this.graph; this.fading = this.graph !== undefined; } this.graph = new Graph(plan, sampleRate);
     pub(super) fn load(&mut self, plan: Plan, sample_rate: i32) {
+        self.voices_carried = false;
         if !self.fading {
             self.outgoing = self.graph.take();
             self.fading = self.outgoing.is_some();
@@ -116,6 +130,7 @@ impl Track {
             // TS: [graph.voices, old.voices] = [old.voices, graph.voices]
             std::mem::swap(&mut graph.voices, &mut old.voices);
             carried += graph.plan.voice.nodes.len();
+            self.voices_carried = true;
         }
         // The old graph has given away what it would fade out with.
         if carried > 0 || voices == 1 {
@@ -148,6 +163,7 @@ impl Track {
         }
         self.fading = false;
         self.measure();
+        self.clock += BLOCK as u64;
     }
 
     /// Note the block's peaks, and whether it was silent.
@@ -170,7 +186,7 @@ impl Track {
     }
 
     /// Start a note in a voice slot, `offset` samples into the coming block. A busy slot is reset
-    /// at once: JS cuts a voice first and starts the note in another slot, so this only happens when
+    /// at once: the allocator cuts a voice first and starts the note in another slot, so this only happens when
     /// every slot is busy.
     // TS: const voice = this.voiceMut(slot); if (!voice) return; ...
     // `let Some(voice) = ... else { return };` is that, in one line.
@@ -208,8 +224,8 @@ impl Track {
         (x as f64 / 4_294_967_296.0) as f32
     }
 
-    /// Set one of a sounding voice's zone signals for the whole coming block: how JS gives a note the
-    /// sample zone it picked, right after its note on. The whole block, not from the note's sample on,
+    /// Set one of a sounding voice's zone signals for the whole coming block: how a note is given the
+    /// sample zone it plays, right after its note on (keys.rs). The whole block, not from the note's sample on,
     /// because controls read their inputs at the start of every CONTROL samples: a sampler must see
     /// its zone at the read before the gate rises. Nothing sounds before the gate, so nothing is lost.
     // TS: const voice = this.voiceMut(slot); if (voice?.active && signal >= SIGNAL_SAMPLE && signal < VOICE_SIGNALS) voice.fillSignal(signal, -1, value);

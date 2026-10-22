@@ -61,6 +61,12 @@ impl Sample {
         &mut self.data
     }
 
+    /// How long it plays at its own rate, in seconds: what a zone's trims in milliseconds measure.
+    // TS: return this.frames / this.rate
+    pub(super) fn seconds(&self) -> f64 {
+        self.frames as f64 / f64::from(self.rate)
+    }
+
     /// Channel 0's frames, as a wavetable reads them (a table is one channel).
     pub(super) fn first_channel(&self) -> &[f32] {
         &self.data[..self.frames]

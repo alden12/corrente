@@ -1,0 +1,138 @@
+//! A track's notes by key and params by value (ARCH-10.1): the per-event work every host needs, here
+//! once rather than in each host's own language. Before, the bank's TypeScript did this and told the
+//! engine which voice slot played what; now a host says "key 60 down" and "this param is 0.4", and the
+//! track picks the slot (voices.rs), the sample zone and the shaped value (binding.rs).
+//!
+//! - **`bind`**, straight after a load (and a carry), takes the plan's binding and the values, sets
+//!   every param source from them, and starts the held notes again in the new plan, unless its voices
+//!   carried on, in which case they play on.
+//! - **Notes** land `offset` samples into the coming block, as the slot calls do.
+//! - **Values** set every source that reads them: ramped (`set_value`), or at once (`init_value`, for
+//!   a sample param's slot).
+//!
+//! Nothing here allocates once bound: notes and values only index arrays bind made.
+
+use super::binding::Binding;
+use super::sampler::Sample;
+use super::track::Track;
+use super::voices::VoiceAllocator;
+use crate::plan::{SIGNAL_END, SIGNAL_ROOT, SIGNAL_SAMPLE, SIGNAL_START};
+
+impl Track {
+    /// Bind the plan just loaded: its sources' shaping and zones, and the values they read, `from`
+    /// giving any that start elsewhere and ramp to their value over the first block (NaN for none:
+    /// how an effect added to a chain fades in from bypassed). False, changing nothing, if there is no
+    /// plan or the binding has a different number of sources from it.
+    // TS: the second half of bank.ts's load, from `state.plan = plan` on.
+    pub(super) fn bind(&mut self, binding: Binding, from: &[f64], sample_rate: i32, samples: &[Option<Sample>]) -> bool {
+        let Some(graph) = &self.graph else { return false };
+        if binding.sources.len() != graph.plan.param_count {
+            return false;
+        }
+        // Voices that carried on keep their slots, so the allocator that placed them stays.
+        let held = if self.voices_carried { Vec::new() } else { self.voices.held_notes() };
+        if !self.voices_carried {
+            self.voices = VoiceAllocator::new(self.voice_slots(), graph.plan.voice_count);
+        }
+        self.binding = binding;
+        for index in 0..self.binding.sources.len() {
+            // Everything is read from `source` first: it borrows the binding, and the setters below need
+            // the whole track.
+            let source = &self.binding.sources[index];
+            let raw = self.binding.values[source.value];
+            let (sample, smooth_ms, value, start) = (source.sample, source.smooth_ms, source.shaping.resolve(raw), from[source.value]);
+            let start = if start.is_nan() { None } else { Some(source.shaping.resolve(start)) };
+            // TS: if (source.smoothMs) eng_param_ramp(track, index, Math.round((source.smoothMs * sampleRate) / 1000))
+            if smooth_ms > 0.0 {
+                self.set_ramp(index, (smooth_ms * f64::from(sample_rate) / 1000.0 + 0.5).floor() as usize);
+            }
+            match (sample, start) {
+                (true, _) => self.init_param(index, raw as f32),
+                (false, None) => self.init_param(index, value as f32),
+                (false, Some(start)) => {
+                    self.init_param(index, start as f32);
+                    self.set_param(index, value as f32);
+                }
+            }
+        }
+        held.into_iter().for_each(|(note, velocity)| self.key_on(0, note, f64::from(velocity), samples));
+        true
+    }
+
+    /// Start `note` (a MIDI note number) at `velocity` (0 to 1), `offset` samples into the coming
+    /// block: in the slot the allocator picks, cutting the voice it steals, with the zone it fits. A
+    /// note no zone fits doesn't sound, or take a voice.
+    // TS: bank.ts's startNote.
+    pub fn key_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &[Option<Sample>]) {
+        if self.voices.slots() == 0 {
+            return;
+        }
+        let Some(start) = self.binding.start(note, velocity, samples) else { return };
+        let time = self.clock + u64::try_from(offset).unwrap_or(0);
+        // `graph` borrows one field while `voices`, another, is changed: Rust allows that.
+        let graph = &self.graph;
+        let slot = self.voices.note_on(note, velocity as f32, time, |slot| {
+            graph.as_ref().and_then(|graph| graph.voices.get(slot)).is_some_and(|voice| voice.active)
+        });
+        if let Some(cut) = self.voices.cut {
+            self.cut(cut, offset);
+        }
+        self.note_on(slot, offset, start.frequency, start.velocity, note as f32);
+        if let Some([sample, root, start, end]) = start.zone {
+            self.set_voice_signal(slot, SIGNAL_SAMPLE, sample);
+            self.set_voice_signal(slot, SIGNAL_ROOT, root);
+            self.set_voice_signal(slot, SIGNAL_START, start);
+            self.set_voice_signal(slot, SIGNAL_END, end);
+        }
+    }
+
+    /// Release `note`, `offset` samples into the coming block, if it's held.
+    // TS: const slot = voices.noteOff(note, time); if (slot >= 0) eng_note_off(track, slot, offset);
+    pub fn key_off(&mut self, offset: i32, note: i32) {
+        let time = self.clock + u64::try_from(offset).unwrap_or(0);
+        if let Some(slot) = self.voices.note_off(note, time) {
+            self.note_off(slot, offset);
+        }
+    }
+
+    /// Release every held note, `offset` samples into the coming block.
+    // TS: for (let slot = 0; slot < voices.slots; slot++) if (voices.isHeld(slot)) { voices.releaseSlot(slot, time); eng_note_off(track, slot, offset) }
+    pub fn keys_off(&mut self, offset: i32) {
+        let time = self.clock + u64::try_from(offset).unwrap_or(0);
+        for slot in 0..self.voices.slots() {
+            if self.voices.is_held(slot) {
+                self.voices.release_slot(slot, time);
+                self.note_off(slot, offset);
+            }
+        }
+    }
+
+    /// Move a value (a param's raw value) to `raw`: every source reading it ramps to its shaped value.
+    /// Sample sources are left alone (`init_value` sets those). A value the plan doesn't have is ignored.
+    // TS: plan.params.forEach((source, index) => { if (source.param === param && !source.sample) eng_set_param(track, index, resolveNumber(value, source)) })
+    pub fn set_value(&mut self, value: usize, raw: f64) {
+        let Some(slot) = self.binding.values.get_mut(value) else { return };
+        *slot = raw;
+        for index in 0..self.binding.sources.len() {
+            let source = &self.binding.sources[index];
+            if source.value == value && !source.sample {
+                let shaped = source.shaping.resolve(raw) as f32;
+                self.set_param(index, shaped);
+            }
+        }
+    }
+
+    /// Set a value at once, with no ramp: a sample param pointed at a new slot.
+    // TS: plan.params.forEach((source, index) => { if (source.param === param) eng_init_param(track, index, source.sample ? raw : resolveNumber(raw, source)) })
+    pub fn init_value(&mut self, value: usize, raw: f64) {
+        let Some(slot) = self.binding.values.get_mut(value) else { return };
+        *slot = raw;
+        for index in 0..self.binding.sources.len() {
+            let source = &self.binding.sources[index];
+            if source.value == value {
+                let shaped = if source.sample { raw } else { source.shaping.resolve(raw) };
+                self.init_param(index, shaped as f32);
+            }
+        }
+    }
+}

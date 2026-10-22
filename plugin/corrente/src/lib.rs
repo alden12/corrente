@@ -10,7 +10,8 @@
 //!   plugin runs a block behind. Each host sample plays a sample of the block rendered last, while
 //!   its notes are gathered for the next one at the same place in it. That is 128 samples of latency,
 //!   reported to the host, which makes up for it, and every note still lands on its own sample.
-//! - **Voices** are picked as the app picks them (voices.rs).
+//! - **Voices, sample zones and param shaping** are the engine's (ARCH-10.1): the plugin hands it
+//!   notes by key and params by their raw value, as the app's bank does.
 //!
 //! Rust notes, for reading this file:
 //! - `impl Plugin for Corrente` implements nice-plug's interface (a TS `implements`); the `const`s
@@ -22,23 +23,15 @@ mod device;
 mod params;
 #[cfg(test)]
 mod tests;
-mod voices;
 
 use corrente_engine::{BLOCK, Engine};
 use device::Device;
 use nice_plug::prelude::*;
 use params::DeviceParams;
 use std::sync::Arc;
-use voices::VoiceAllocator;
 
 /// The most note events gathered for one engine block; more are dropped.
 const MAX_EVENTS: usize = 512;
-
-/// A key's frequency as the app works it out (bank.ts's `frequencyOf`): in doubles, then narrowed.
-/// nice-plug's own does it in single precision, which is a hair off and drifts the oscillators' phase.
-fn frequency_of(note: u8) -> f32 {
-    (440.0 * 2f64.powf((f64::from(note) - 69.0) / 12.0)) as f32
-}
 
 #[derive(Clone, Copy)]
 enum Event {
@@ -49,10 +42,9 @@ enum Event {
 pub struct Corrente {
     device: Device,
     params: Arc<DeviceParams>,
-    /// For each engine param source, where its param is in `params` (None for one nothing sets).
-    source_params: Vec<Option<usize>>,
+    /// For each of the binding's values, where its param is in `params` (None for one nothing sets).
+    value_params: Vec<Option<usize>>,
     engine: Engine,
-    voices: VoiceAllocator,
     /// The block rendered last, left and right, played out sample by sample.
     output: [[f32; BLOCK]; 2],
     /// How far into the block the host has reached: where the next sample plays from `output`, and
@@ -60,28 +52,24 @@ pub struct Corrente {
     position: usize,
     /// Notes for the next block, at their place in it.
     events: Vec<(usize, Event)>,
-    /// What each source was last set to, so only changes are sent.
-    sent: Vec<f32>,
-    /// Samples since the start, to tell the voice allocator which note came first.
-    clock: u64,
+    /// What each value was last set to, so only changes are sent.
+    sent: Vec<f64>,
 }
 
 impl Default for Corrente {
     fn default() -> Self {
         let device = device::built_in();
         let params = Arc::new(DeviceParams::new(&device.params));
-        let source_params = device.sources.iter().map(|source| source.param.as_deref().and_then(|id| params.index_of(id))).collect();
+        let value_params = device.values.iter().map(|id| id.as_deref().and_then(|id| params.index_of(id))).collect();
         Self {
             device,
             params,
-            source_params,
+            value_params,
             engine: Engine::new(),
-            voices: VoiceAllocator::new(0, 0),
             output: [[0.0; BLOCK]; 2],
             position: 0,
             events: Vec::with_capacity(MAX_EVENTS),
             sent: Vec::new(),
-            clock: 0,
         }
     }
 }
@@ -97,50 +85,37 @@ impl Corrente {
         if !self.engine.load(0, plan) {
             return false;
         }
-        self.sent = (0..self.device.sources.len()).map(|source| self.source_value(source)).collect();
-        let Some(track) = self.engine.track_mut(0) else { return false };
-        for (index, source) in self.device.sources.iter().enumerate() {
-            if let Some(smooth_ms) = source.smooth_ms {
-                track.set_ramp(index, (smooth_ms * rate / 1000.0).round() as usize);
-            }
-            track.init_param(index, self.sent[index]);
-        }
-        self.voices = VoiceAllocator::new(track.voice_slots(), self.device.voices);
-        true
+        // The binding, then each value now, then where each starts: NaN, at its value.
+        self.sent = (0..self.device.values.len()).map(|value| self.value_now(value)).collect();
+        let starts = vec![f64::NAN; self.sent.len()];
+        let words: Vec<f64> = [&self.device.binding[..], &self.sent, &starts].concat();
+        self.engine.bind(0, &words)
     }
 
-    /// Each source's engine value now, read from its param.
-    fn source_value(&self, source: usize) -> f32 {
-        let raw = self.source_params[source].map_or(0.0, |index| self.params.params[index].1.engine_value());
-        self.device.sources[source].resolve(raw)
+    /// A value's raw value now, read from its param.
+    fn value_now(&self, value: usize) -> f64 {
+        self.value_params[value].map_or(0.0, |index| f64::from(self.params.params[index].1.engine_value()))
     }
 
     /// Render the next block: send changed params, start and stop the notes gathered for it, tell
     /// the engine where the transport is, then keep its output to play out.
     fn render(&mut self, beat: f64, tempo: f32, playing: bool) {
-        for source in 0..self.sent.len() {
-            let value = self.source_value(source);
-            if value != self.sent[source] {
-                self.sent[source] = value;
+        for value in 0..self.sent.len() {
+            let now = self.value_now(value);
+            if now != self.sent[value] {
+                self.sent[value] = now;
                 if let Some(track) = self.engine.track_mut(0) {
-                    track.set_param(source, value);
+                    track.set_value(value, now);
                 }
             }
         }
         for index in 0..self.events.len() {
             let (offset, event) = self.events[index];
-            let Some(track) = self.engine.track_mut(0) else { break };
             match event {
-                Event::On { note, velocity } => {
-                    let slot = self.voices.note_on(note, self.clock + offset as u64, |slot| track.voice_active(slot));
-                    if let Some(cut) = self.voices.cut {
-                        track.cut(cut, offset as i32);
-                    }
-                    track.note_on(slot, offset as i32, frequency_of(note), velocity, f32::from(note));
-                }
+                Event::On { note, velocity } => self.engine.key_on(0, offset as i32, i32::from(note), f64::from(velocity)),
                 Event::Off { note } => {
-                    if let Some(slot) = self.voices.note_off(note, self.clock + offset as u64) {
-                        track.note_off(slot, offset as i32);
+                    if let Some(track) = self.engine.track_mut(0) {
+                        track.key_off(offset as i32, i32::from(note));
                     }
                 }
             }
@@ -155,7 +130,6 @@ impl Corrente {
                 }
             }
         }
-        self.clock += BLOCK as u64;
     }
 }
 
@@ -189,9 +163,11 @@ impl Plugin for Corrente {
     }
 
 
-    // May be called on the audio thread: cuts every voice and starts the block over, allocating nothing.
+    // May be called on the audio thread: lets go of every key, cuts every voice and starts the block
+    // over, allocating nothing.
     fn reset(&mut self) {
         if let Some(track) = self.engine.track_mut(0) {
+            track.keys_off(0);
             (0..track.voice_slots()).for_each(|slot| track.cut(slot, 0));
         }
         self.events.clear();

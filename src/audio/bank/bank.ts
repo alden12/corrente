@@ -1,14 +1,14 @@
 /**
  * A bank of tracks in one engine (INST-36.5): the JavaScript that sits next to engine.wasm on the
- * audio thread. It loads each track's compiled plan, keeps the timed events, picks voice slots, and
- * plays each event at its sample in the block that contains it. The worklet wraps it, and offline
+ * audio thread. It loads each track's compiled plan, keeps the timed events, and plays each event at
+ * its sample in the block that contains it. Which voice slot a note takes, its sample zone and each
+ * param's shaping are the engine's (ARCH-10.1), so a native host plays the same without this file. The worklet wraps it, and offline
  * renders and the tests run it as is, so all of them play the same way. No DOM, no Web Audio.
  *
  * - **Times are AudioContext seconds.** A note lands on its exact sample; a param move lands at the
  *   start of its block and the engine ramps it across that block (about 3 ms).
- * - **Params are set by name**, with the raw value the param store holds: each binding's table,
- *   scale and offset turn it into what its engine source gets, here as the event is added rather
- *   than while rendering.
+ * - **Params are set by name**, with the raw value the param store holds; the engine shapes it for
+ *   each source that reads it (binding.ts numbers the names).
  * - **Edits don't click.** A new plan crossfades in over a block in the engine, and the notes held
  *   start again in it; a voice stolen for a new note fades out while the note starts in a spare slot.
  *   Or, told which of the old plan carries on (INST-36.7, carry.ts), the new plan takes over those
@@ -20,23 +20,19 @@
  *   ahead (decision 4 of INST-36). The memory only grows on init, load and loading a sample, so
  *   views are re-made then (the addresses the engine gave stay put).
  */
-import type { CompiledPlan, PlanZone, ZoneValue } from "../definitions/compile";
-import { resolveNumber } from "../params/table";
+import type { CompiledPlan } from "../definitions/compile";
+import { bindingOf, bindWords } from "./binding";
 import {
   BLOCK,
   EMPTY_SAMPLE,
   INPUT_CHANNELS,
   OUTPUT_CHANNELS,
-  SAMPLE_SLOTS,
   startEngine,
   withWords,
-  ZONE_SIGNAL,
   type EngineExports,
 } from "./exports";
-import { carriesVoices } from "./carry";
 import { EVENT, EventQueue, type TimedEvent } from "./events";
 import type { Transport } from "./messages";
-import { VoiceAllocator } from "./voices";
 
 /** A plan the engine refused: the code from eng_load (-1 a bad plan, -2 the wrong length). */
 export class PlanRejected extends Error {
@@ -47,41 +43,13 @@ export class PlanRejected extends Error {
   }
 }
 
-const frequencyOf = (note: number) => 440 * 2 ** ((note - 69) / 12);
-
-/** A zone setting now: a number as it is, or its param's value through the binding. */
-const zoneValue = (setting: ZoneValue, values: Record<string, number>): number =>
-  typeof setting === "number" ? setting : resolveNumber(values[setting.param] ?? 0, setting);
-
-/**
- * The first of a plan's zones a note fits, by key and velocity, its keys read from their params if
- * they have them. A plain indexed loop: it runs while rendering, where a closure or an iterator would
- * be garbage.
- */
-const zoneFor = (
-  zones: PlanZone[],
-  note: number,
-  velocity: number,
-  values: Record<string, number>,
-): PlanZone | undefined => {
-  for (let index = 0; index < zones.length; index++) {
-    const zone = zones[index];
-    const lowKey = Math.round(zoneValue(zone.keys[0], values));
-    const highKey = Math.round(zoneValue(zone.keys[1], values));
-    const [lowVelocity, highVelocity] = zone.velocities;
-    if (note >= lowKey && note <= highKey && velocity >= lowVelocity && velocity <= highVelocity) return zone;
-  }
-  return undefined;
-};
-
 /** A plan with nothing in it: no nodes, no steps, no outputs. What a free track plays. */
 const EMPTY_PLAN = Int32Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+/** Its binding: no values, no sources, no zones (binding.ts's words, as doubles). */
+const EMPTY_BINDING = new Int32Array(new Float64Array([0, 0, 0, 0]).buffer);
 
 interface Track {
   plan: CompiledPlan | null;
-  voices: VoiceAllocator;
-  /** Whether the engine has a slot busy, made once so note ons create no closure. */
-  sounding: (slot: number) => boolean;
   /** The raw value of each param, kept so a new plan starts where the knobs are. */
   values: Record<string, number>;
   /** The sample each sample param names, by param. */
@@ -110,8 +78,6 @@ export class EngineBank {
   private readonly tracks: Track[];
   /** Each sample loaded, by ref: its slot, and how many sample params name it. */
   private readonly sampleSlots = new Map<string, { slot: number; users: number }>();
-  /** Each slot's sample's length in seconds (0 when empty), for a zone's trims in milliseconds. */
-  private readonly sampleSeconds = new Float64Array(SAMPLE_SLOTS);
   private outputs: Float32Array[][] = [];
   private inputs: Float32Array[][] = [];
   /**
@@ -128,13 +94,7 @@ export class EngineBank {
     this.trackCount = trackCount;
     this.engine = startEngine(bytes);
     this.engine.eng_init(sampleRate, trackCount);
-    this.tracks = Array.from({ length: trackCount }, (_, index) => ({
-      plan: null,
-      voices: new VoiceAllocator(0, 0),
-      sounding: (slot: number) => this.engine.eng_voice_active(index, slot) === 1,
-      values: {},
-      samples: {},
-    }));
+    this.tracks = Array.from({ length: trackCount }, () => ({ plan: null, values: {}, samples: {} }));
     this.play = [];
     this.play[EVENT.noteOn] = (event, offset) => this.playNoteOn(event, offset);
     this.play[EVENT.noteOff] = (event, offset) => this.playNoteOff(event, offset);
@@ -158,28 +118,13 @@ export class EngineBank {
     const state = this.trackAt(track);
     const code = this.withWords(plan.words, (pointer) => this.engine.eng_load(track, pointer, plan.words.length));
     if (code !== 0) throw new PlanRejected(track, code);
-    const carried =
-      carry !== undefined &&
-      this.withWords(carry, (pointer) => this.engine.eng_carry(track, pointer, carry.length)) >= 0;
-    const voicesCarried = carried && carriesVoices(carry);
-    const held = voicesCarried ? [] : state.voices.heldNotes();
+    if (carry !== undefined) this.withWords(carry, (pointer) => this.engine.eng_carry(track, pointer, carry.length));
     state.plan = plan;
-    // Voices that carry on keep their slots, so the allocator that placed them stays.
-    if (!voicesCarried) state.voices = new VoiceAllocator(this.engine.eng_voice_slots(track), plan.voices);
     state.values = { ...state.values, ...values };
-    plan.params.forEach((source, index) => {
-      if (source.smoothMs)
-        this.engine.eng_param_ramp(track, index, Math.round((source.smoothMs * this.sampleRate) / 1000));
-      if (source.sample) {
-        this.engine.eng_init_param(track, index, state.values[source.param] ?? EMPTY_SAMPLE);
-        return;
-      }
-      const value = resolveNumber(state.values[source.param] ?? 0, source);
-      const start = from[source.param];
-      this.engine.eng_init_param(track, index, start === undefined ? value : resolveNumber(start, source));
-      if (start !== undefined) this.engine.eng_set_param(track, index, value);
-    });
-    held.forEach(({ note, velocity }) => this.startNote(track, note, velocity, 0, 0));
+    // The engine sets every param from the values and starts the held notes again (unless they carried on).
+    const bound = bindWords(plan, state.values, from);
+    const bindCode = this.withWords(bound, (pointer) => this.engine.eng_bind(track, pointer, bound.length));
+    if (bindCode !== 0) throw new PlanRejected(track, bindCode);
   }
 
   /** Copy `words` into the engine's memory for `call`, then free them. Loading can grow the memory. */
@@ -193,8 +138,8 @@ export class EngineBank {
   unload(track: number): void {
     const state = this.trackAt(track);
     this.withWords(EMPTY_PLAN, (pointer) => this.engine.eng_load(track, pointer, EMPTY_PLAN.length));
+    this.withWords(EMPTY_BINDING, (pointer) => this.engine.eng_bind(track, pointer, EMPTY_BINDING.length));
     state.plan = null;
-    state.voices = new VoiceAllocator(0, 0);
     state.values = {};
     Object.values(state.samples).forEach((ref) => this.releaseSample(ref));
     state.samples = {};
@@ -214,9 +159,8 @@ export class EngineBank {
     if (slot === EMPTY_SAMPLE) delete state.samples[param];
     else state.samples[param] = ref;
     state.values[param] = slot;
-    state.plan?.params.forEach((source, index) => {
-      if (source.param === param) this.engine.eng_init_param(track, index, slot);
-    });
+    const value = state.plan && bindingOf(state.plan).numbers.get(param);
+    if (value !== undefined && value !== null) this.engine.eng_init_value(track, value, slot);
   }
 
   /**
@@ -269,14 +213,12 @@ export class EngineBank {
     }
     const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);
     channels.forEach((channel, index) => data.set(channel, index * frames));
-    this.sampleSeconds[slot] = frames / rate;
     this.view();
   }
 
   /** Empty a sample slot. A sampler still naming it plays silence. */
   freeSample(slot: number): void {
     this.engine.eng_sample_free(slot);
-    this.sampleSeconds[slot] = 0;
   }
 
   noteOn(track: number, note: number, velocity: number, time: number): void {
@@ -309,13 +251,11 @@ export class EngineBank {
     return this.paramNames.push(param) - 1;
   }
 
-  /** A queued param move: every source of the plan loaded now that reads it. */
+  /** A queued param move, to the plan loaded now if it reads the param. */
   private playParam(event: TimedEvent): void {
-    const param = this.paramNames[event.target];
-    this.trackAt(event.track).plan?.params.forEach((source, index) => {
-      if (source.param === param && !source.sample)
-        this.engine.eng_set_param(event.track, index, resolveNumber(event.value, source));
-    });
+    const { plan } = this.trackAt(event.track);
+    const value = plan && bindingOf(plan).numbers.get(this.paramNames[event.target]);
+    if (value !== undefined && value !== null) this.engine.eng_set_value(event.track, value, event.value);
   }
 
   /**
@@ -355,67 +295,23 @@ export class EngineBank {
 
   /** Voices sounding on a track, releases included. */
   activeVoices(track: number): number {
-    const state = this.trackAt(track);
+    this.trackAt(track);
     let active = 0;
-    for (let slot = 0; slot < state.voices.slots; slot++) if (state.sounding(slot)) active++;
+    for (let slot = 0; slot < this.engine.eng_voice_slots(track); slot++)
+      active += this.engine.eng_voice_active(track, slot);
     return active;
   }
 
   private playNoteOn(event: TimedEvent, offset: number): void {
-    this.startNote(event.track, event.target, event.value, event.time, offset);
-  }
-
-  /**
-   * Start a note in a voice slot, cutting the voice it steals, `offset` samples into the coming
-   * block. With zones, the note takes the first that fits and its voice is told which, and a note no
-   * zone fits doesn't sound (or take a voice). A zone's settings are read now: its tune and key
-   * tracking set the note's frequency, its level scales the velocity, and its trims, in milliseconds,
-   * move the start and end by the sample's length.
-   */
-  private startNote(track: number, note: number, velocity: number, time: number, offset: number): void {
-    const state = this.tracks[track];
-    if (!state || state.voices.slots === 0) return;
-    const zones = state.plan?.zones;
-    const zone = zones && zoneFor(zones, note, velocity, state.values);
-    if (zones && !zone) return;
-    const slot = state.voices.noteOn(note, velocity, time, state.sounding);
-    if (state.voices.cut >= 0) this.engine.eng_note_cut(track, state.voices.cut, offset);
-    if (!zone) {
-      this.engine.eng_note_on(track, slot, offset, frequencyOf(note), velocity, note);
-      return;
-    }
-    const { values } = state;
-    const root = zoneValue(zone.root, values);
-    const played = zoneValue(zone.keytrack, values) >= 0.5 ? note : root;
-    const frequency = frequencyOf(played) * 2 ** (zoneValue(zone.tune, values) / 12);
-    this.engine.eng_note_on(track, slot, offset, frequency, velocity * zoneValue(zone.level, values), note);
-    const sample = values[zone.param] ?? EMPTY_SAMPLE;
-    // Milliseconds as a share of the sample, inline: this runs while rendering, so no closures.
-    const perMs = this.sampleSeconds[sample] > 0 ? 1 / (1000 * this.sampleSeconds[sample]) : 0;
-    const start = Math.min(1, Math.max(0, zoneValue(zone.start, values) + zoneValue(zone.trimStart, values) * perMs));
-    const end = Math.min(1, Math.max(start, zoneValue(zone.end, values) - zoneValue(zone.trimEnd, values) * perMs));
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.sample, sample);
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.root, root);
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.start, start);
-    this.engine.eng_voice_signal(track, slot, ZONE_SIGNAL.end, end);
+    this.engine.eng_key_on(event.track, offset, event.target, event.value);
   }
 
   private playNoteOff(event: TimedEvent, offset: number): void {
-    const state = this.tracks[event.track];
-    if (!state) return;
-    const slot = state.voices.noteOff(event.target, event.time);
-    if (slot >= 0) this.engine.eng_note_off(event.track, slot, offset);
+    this.engine.eng_key_off(event.track, offset, event.target);
   }
 
   private playAllOff(event: TimedEvent, offset: number): void {
-    const { track } = event;
-    const state = this.tracks[track];
-    if (!state) return;
-    for (let slot = 0; slot < state.voices.slots; slot++) {
-      if (!state.voices.isHeld(slot)) continue;
-      state.voices.releaseSlot(slot, event.time);
-      this.engine.eng_note_off(track, slot, offset);
-    }
+    this.engine.eng_keys_off(event.track, offset);
   }
 
   private trackAt(track: number): Track {

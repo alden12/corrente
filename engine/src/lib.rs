@@ -167,6 +167,73 @@ pub extern "C" fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32
     carried.map_or(plan::REJECTED, |count| count as i32)
 }
 
+/// Straight after eng_load (and eng_carry), bind the plan: its param sources' shaping, its sample
+/// zones and the values they read (router/binding.rs), from memory eng_malloc handed out, f64s as
+/// pairs of words. Sets every param from the values and starts the held notes again. 0, or -1 if the
+/// words don't make a binding for the track's plan (nothing changes).
+// TS:
+//   const words = wordsAt(pointer, length);  // as eng_load reads them
+//   const doubles = words && new Float64Array(words.buffer, words.byteOffset, words.length / 2);
+//   return doubles && withEngine((engine) => engine.bind(track, doubles)) ? 0 : REJECTED;
+// `chunks_exact(2)` walks the words two at a time. `f64::from_bits` makes a float from its 64 bits:
+// the high word shifted up 32 bits, or'd with the low one (`as u32` keeps a negative word's bits).
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_bind(track: i32, pointer: *const i32, length: i32) -> i32 {
+    let doubles = ALLOCATIONS.with_borrow(|allocations| {
+        let allocation = allocations.iter().find(|allocation| allocation.as_ptr() == pointer)?;
+        let words = allocation.get(..index(length)?)?;
+        let pairs = words.chunks_exact(2);
+        pairs.remainder().is_empty().then(|| pairs.map(|pair| f64::from_bits(u64::from(pair[1] as u32) << 32 | u64::from(pair[0] as u32))).collect::<Vec<_>>())
+    });
+    match (doubles, index(track)) {
+        (Some(doubles), Some(track)) if with_engine(|engine| engine.bind(track, &doubles)) => 0,
+        _ => plan::REJECTED,
+    }
+}
+
+/// Start a note by key on a track, `offset` samples into the coming block: the track picks the voice
+/// slot and the sample zone (router/keys.rs). `note` is its MIDI note number, `velocity` 0 to 1.
+// TS: if (track >= 0) withEngine((engine) => engine.keyOn(track, offset, note, velocity))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_key_on(track: i32, offset: i32, note: i32, velocity: f64) {
+    if let Some(track) = index(track) {
+        with_engine(|engine| engine.key_on(track, offset, note, velocity));
+    }
+}
+
+/// Release a note by key on a track, `offset` samples into the coming block.
+// TS: withTrack(track, (track) => track.keyOff(offset, note))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_key_off(track: i32, offset: i32, note: i32) {
+    with_track(track, |track| track.key_off(offset, note));
+}
+
+/// Release every held note on a track, `offset` samples into the coming block.
+// TS: withTrack(track, (track) => track.keysOff(offset))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_keys_off(track: i32, offset: i32) {
+    with_track(track, |track| track.keys_off(offset));
+}
+
+/// Move one of a track's values (a param's raw value, numbered as eng_bind's words number them): each
+/// param source reading it ramps to its shaped value.
+// TS: if (value >= 0) withTrack(track, (track) => track.setValue(value, raw));
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_set_value(track: i32, value: i32, raw: f64) {
+    if let Some(value) = index(value) {
+        with_track(track, |track| track.set_value(value, raw));
+    }
+}
+
+/// Set one of a track's values at once, with no ramp: a sample param pointed at another slot.
+// TS: if (value >= 0) withTrack(track, (track) => track.initValue(value, raw));
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_init_value(track: i32, value: i32, raw: f64) {
+    if let Some(value) = index(value) {
+        with_track(track, |track| track.init_value(value, raw));
+    }
+}
+
 /// Set a track param's value; it ramps there over its ramp (a block unless eng_param_ramp says).
 // TS: if (source >= 0) withTrack(track, (track) => track.setParam(source, value));
 // `if let Some(source) = index(source)` runs the block only if it's there, naming it: a one-case
@@ -207,7 +274,7 @@ pub extern "C" fn eng_note_on(track: i32, slot: i32, offset: i32, frequency: f32
 }
 
 /// Set one of the zone signals (5 sample slot, 6 root note, 7 start, 8 end) of the note just started
-/// in a track's voice slot, for the coming block: the sample zone JS picked for it. Other signals,
+/// in a track's voice slot, for the coming block: the sample zone picked for it. Other signals,
 /// and slots not sounding, are ignored.
 // TS: if (slot >= 0 && signal >= 0) withTrack(track, (track) => track.setVoiceSignal(slot, signal, value));
 #[unsafe(no_mangle)]
@@ -226,8 +293,8 @@ pub extern "C" fn eng_note_off(track: i32, slot: i32, offset: i32) {
     }
 }
 
-/// Fade the voice in a track's slot out over a block from `offset`, then free the slot: how JS steals
-/// a voice without a click.
+/// Fade the voice in a track's slot out over a block from `offset`, then free the slot: how a voice
+/// is stolen without a click.
 // TS: if (slot >= 0) withTrack(track, (track) => track.cut(slot, offset));
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_note_cut(track: i32, slot: i32, offset: i32) {
@@ -236,7 +303,7 @@ pub extern "C" fn eng_note_cut(track: i32, slot: i32, offset: i32) {
     }
 }
 
-/// How many voice slots a track has: its plan's voices and a few spares, which JS allocates from.
+/// How many voice slots a track has: its plan's voices and a few spares, which the allocator picks from.
 /// -1 if there is no such track.
 // TS: return withTrack(track, (track) => track.voiceSlots()) ?? -1
 // `.map_or(-1, f)` gives -1 for None (no such track).

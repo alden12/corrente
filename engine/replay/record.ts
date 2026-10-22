@@ -60,6 +60,10 @@ const recording = (engine: EngineExports): EngineExports => {
       lines.push(`eng_carry ${track} ${length} ${words(pointer, length)}`);
       return engine.eng_carry(track, pointer, length);
     },
+    eng_bind: (track, pointer, length) => {
+      lines.push(`eng_bind ${track} ${length} ${words(pointer, length)}`);
+      return engine.eng_bind(track, pointer, length);
+    },
     eng_sample_reserve: (slot, frames, channels, rate) => {
       lines.push(`eng_sample_reserve ${slot} ${frames} ${channels} ${rate}`);
       const pointer = engine.eng_sample_reserve(slot, frames, channels, rate);

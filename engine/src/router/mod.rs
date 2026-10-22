@@ -17,8 +17,8 @@
 //! 1..=128 the current one, so a feedback edge reads "the sample before" by offset, even at sample 0.
 //! A node with several outputs writes several buffers, one after another.
 //!
-//! Voices are slots, each with its own copy of every voice-section block and its own buffers.
-//! Allocation and stealing are decided in JS: the engine is told which slot plays what.
+//! Voices are slots, each with its own copy of every voice-section block and its own buffers. Which
+//! slot plays each note is the track's voice allocator's (voices.rs), told notes by key (keys.rs).
 //!
 //! The files, from the outside in:
 //! - engine.rs: the bank, and everything lib.rs calls.
@@ -26,6 +26,9 @@
 //! - graph.rs: a plan and what it runs on, rendering the pre section, the voices, the post section.
 //! - params.rs: a param's buffer, ramping to each new value.
 //! - carry.rs: what a reloaded plan takes over from the one it replaced.
+//! - keys.rs: notes by key and params by value (ARCH-10.1): the voice slot, the zone, the shaping.
+//! - binding.rs: what keys.rs reads: the plan's param shaping and sample zones, and the values.
+//! - voices.rs: which voice slot plays each note.
 //! - render.rs: running one section's steps over its nodes.
 //! - sources.rs: what a node reads while it runs.
 //! - delay.rs: the native delay line, and its steps.
@@ -42,15 +45,18 @@
 //! - One type's methods can be spread over several `impl` blocks in different files: `Render` has
 //!   most of its methods in render.rs and the delay's in delay.rs.
 
+mod binding;
 mod carry;
 mod delay;
 mod engine;
 mod graph;
+mod keys;
 mod params;
 mod render;
 mod sampler;
 mod sources;
 mod track;
+mod voices;
 mod wavetable;
 
 // TS: export { Engine } from "./engine". `pub use` re-exports, so lib.rs writes `router::Engine`.
@@ -59,6 +65,8 @@ pub use track::Track;
 // The tests write wavetables at these sizes. `#[cfg(test)]` builds the line into the tests only.
 #[cfg(test)]
 pub use wavetable::{CYCLE, LEVELS};
+#[cfg(test)]
+pub use voices::VoiceAllocator;
 
 use crate::plan::{CHANNELS, VOICE_SIGNALS};
 
