@@ -427,14 +427,16 @@ export class Recorder {
     const beatsPerBar = this.project.beatsPerBar;
     const clipStart = Math.max(0, Math.floor(this.startBeat / beatsPerBar) * beatsPerBar);
     // A note can start a hair before the clip (the take wakes a moment ahead of its downbeat), so
-    // each is measured from where it lands, or its end would poke past the loop and add a bar.
+    // each is measured from where it lands. And none runs past the end, not even a note given the
+    // shortest length because it was pressed just before the end, or it would add a bar.
+    const room = this.project.length - clipStart;
     const captured0: NoteEvent[] = captured.map((note) => {
       const start = Math.max(0, note.startBeat - clipStart);
       return {
         id: newNoteId(),
         pitch: note.pitch,
         start,
-        length: Math.max(GRID, note.endBeat - clipStart - start),
+        length: Math.min(Math.max(GRID, note.endBeat - clipStart - start), room - start),
         velocity: note.velocity,
       };
     });

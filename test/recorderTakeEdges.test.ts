@@ -105,6 +105,18 @@ describe("a MIDI take's edges", () => {
     expect(take()?.lengthBeats).toBe(project.length);
   });
 
+  it("keeps a key pressed just before the end inside the loop, though it's shorter than a 16th", async () => {
+    const { recorder, project, wait, take } = setUp();
+    recorder.setCountInBars(0);
+    await recorder.start();
+    wait((project.length - 0.06) / 2); // 0.06 of a beat before the end
+    recorder.noteOn(71);
+    await recorder.stop();
+    const [note] = take()?.notes ?? [];
+    expect(note.start + note.length).toBeCloseTo(project.length, 5);
+    expect(take()?.lengthBeats).toBe(project.length);
+  });
+
   it("ends a key let go after the loop came round at the end, too", async () => {
     const { recorder, project, wait, takeNotes } = setUp();
     recorder.setCountInBars(0);
