@@ -6,7 +6,7 @@ import { setCountIn } from "./support/app";
  * microphone and is verified manually), capturing live MIDI touches no media
  * devices, so the whole take can run in CI: arm the selected instrument track,
  * record with no count-in, play notes on the computer keyboard, stop, and confirm a
- * recorded clip lands on the track. The default seed track is a subtractive synth.
+ * recorded clip lands on the track. The default seed track is a Micro VA.
  */
 
 test.use({ viewport: { width: 1320, height: 900 } });

@@ -72,7 +72,7 @@ import { MOBILE_TABS, type BrowseTab, type MobileTab } from "./mobileTabViews";
 import type { Track } from "../../audio/project/projectStore";
 import type { ShellProps } from "./types";
 import type { DeviceShape } from "./useDeviceShape";
-import { UndoIcon } from "../shellIcons";
+import { AgentIcon, UndoIcon } from "../shellIcons";
 import { ProjectOverview } from "../projects/ProjectOverview";
 import { ActivityView } from "../ActivityView";
 
@@ -382,9 +382,7 @@ export function MobileShell({
             />
           )}
           <BarButton label="Agent" tint="agent" onClick={() => setAgentOpen(!agentOpen)} active={agentOpen}>
-            <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" className="w-5 h-5">
-              <path d="M8 1.75l1.6 4.15 4.15 1.6-4.15 1.6L8 13.25l-1.6-4.15L2.25 7.5l4.15-1.6z" />
-            </svg>
+            <AgentIcon />
           </BarButton>
           {/* You, as your initials: the way into account and settings. */}
           <button

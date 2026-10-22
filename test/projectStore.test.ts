@@ -3,12 +3,15 @@ import { ProjectStore } from "../src/audio/project/projectStore";
 import { instrumentInfos, pickableInstrumentInfos } from "../src/audio/instruments/catalog";
 
 describe("ProjectStore", () => {
-  it("seeds one subtractive track by default and selects it", () => {
+  it("seeds the starter track, the Micro VA on Classic Lead, and selects it (DAW-76)", () => {
     const p = new ProjectStore();
     const s = p.getStructure();
     expect(s.tracks).toHaveLength(1);
-    expect(s.tracks[0].instrumentType).toBe("subtractive");
+    expect(s.tracks[0].instrumentType).toBe("micro-va");
     expect(s.selectedTrackId).toBe(s.tracks[0].id);
+    const track = p.getTrack(s.tracks[0].id);
+    expect(track?.kind === "instrument" && track.params.get("f.cutoff")).toBe(3000);
+    expect(p.getClipStore(s.tracks[0].id)?.getClip().notes).toHaveLength(0);
   });
 
   it("can start empty (server mirror) with seedDefault=false", () => {

@@ -38,10 +38,10 @@ agents, in the same live project.
 - **Nothing to install.** It runs in the browser, works offline once loaded, and installs as an app
   on a phone.
 
-**Try it online at [web-daw.fly.dev](https://web-daw.fly.dev).** The online version adds accounts,
-sync between devices, live collaboration, sharing and a hosted MCP server. Sign-in is invite-only
-while it is in preview; everything in this repo also runs on its own, with projects kept in your
-browser.
+**Try it at [corrente.cloud](https://corrente.cloud):** continue signed out to use it straight away,
+with your projects kept in your browser. The online version adds accounts, sync between devices,
+live collaboration, sharing and a hosted MCP server; sign-in is invite-only while it is in preview.
+Everything in this repo also runs on its own.
 
 ## What it does
 

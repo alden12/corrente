@@ -26,16 +26,17 @@ test("a device and its sections fold, and stay folded after a reload", async ({ 
   await expect(reverb.getByText("Decay", { exact: true })).toHaveCount(0);
   await expect(reverb.getByText("2 params")).toBeVisible(); // folded, it says what it holds
 
-  const instrument = block(page, "Subtractive");
-  await instrument.getByRole("button", { name: "Filter Env" }).click();
-  await expect(instrument.getByRole("group", { name: "Filter Env" }).getByText("Attack")).toHaveCount(0);
-  await expect(instrument.getByRole("group", { name: "Envelope" }).getByText("Attack")).toBeVisible();
+  // The Micro VA's filter envelope (eg1) folds on its own, leaving its amp envelope (eg2) open.
+  const instrument = block(page, "Micro VA");
+  await instrument.getByRole("button", { name: "Filter Env", exact: true }).click();
+  await expect(instrument.getByRole("group", { name: "Filter Env" }).getByText("Filter Attack")).toHaveCount(0);
+  await expect(instrument.getByRole("group", { name: "Amp Env" }).getByText("Amp Attack")).toBeVisible();
 
   await page.waitForTimeout(600); // past the project's 300ms save tick, so the reverb is saved
   await page.reload();
   await dismissStart(page);
   await expect(block(page, "Reverb")).toHaveAttribute("data-open", "false");
-  await expect(block(page, "Subtractive").getByRole("button", { name: "Filter Env" })).toHaveAttribute(
+  await expect(block(page, "Micro VA").getByRole("button", { name: "Filter Env", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",
   );

@@ -580,7 +580,7 @@ test.describe("phone", () => {
     await expect(page.getByRole("menu")).toHaveCount(0);
 
     await kebab.tap();
-    const fader = page.getByRole("slider", { name: "Velocity" });
+    const fader = page.getByRole("slider", { name: "Velocity", exact: true });
     const track = (await fader.boundingBox())!;
     await fader.tap({ position: { x: track.width * 0.3, y: track.height / 2 } });
     await expect.poll(velocity, { message: "the note took the velocity the track was tapped at" }).toBeCloseTo(0.3, 1);
@@ -695,7 +695,7 @@ test.describe("phone", () => {
     // while they are showing, so it sits on them.
     const box = (await sheet(page).boundingBox())!;
     expect(box.height, "minimised is just the header").toBeLessThan(80);
-    await expect(sheet(page).getByText(/^Subtractive · \d+ devices?$/)).toBeVisible();
+    await expect(sheet(page).getByText(/^Micro VA · \d+ devices?$/)).toBeVisible();
     expect(Math.abs(box.y + box.height - (await keysTop(page))), "and it sits on the keys").toBeLessThan(2);
 
     // Hidden, the keys give up their header row too, and the bar's keyboard button stands in for it.
@@ -1268,20 +1268,20 @@ test.describe("phone", () => {
     await openGroupCard(page, "main");
     const tracks = page.getByRole("region", { name: "main" });
     await expect(tracks.getByTestId("tree-track")).toHaveCount(1);
-    await expect(tracks.getByText("Subtractive", { exact: true })).toBeVisible();
+    await expect(tracks.getByText("Micro VA", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: /Add a track to main/i }).tap();
     await page.getByRole("menuitem", { name: "New MIDI track" }).tap();
     await expect(tracks.getByTestId("tree-track")).toHaveCount(2);
     await tracks.getByTestId("tree-track").first().tap();
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
-    await expect(sheet(page).getByText(/^Subtractive · /)).toBeVisible();
+    await expect(sheet(page).getByText(/^Micro VA · /)).toBeVisible();
   });
 
   test("swapping a sound from Explore goes back to the Studio, so you can see what it just did", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    await expect(sheet(page).getByText(/^Subtractive · /)).toBeVisible();
+    await expect(sheet(page).getByText(/^Micro VA · /)).toBeVisible();
 
     await tab(page, "Explore").tap();
     await openExploreCategory(page, "Instruments");

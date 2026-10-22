@@ -19,12 +19,9 @@ test("a track's row shows its chain and mutes it", async ({ page }) => {
   await openGroupCard(page, "main");
 
   await expect(tracks(page).getByTestId("tree-track")).toHaveCount(1);
-  await expect(tracks(page).getByText("Subtractive", { exact: true })).toBeVisible();
-  await tracks(page).getByRole("button", { name: "Mute Subtractive 1" }).click();
-  await expect(tracks(page).getByRole("button", { name: "Unmute Subtractive 1" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(tracks(page).getByText("Micro VA", { exact: true })).toBeVisible();
+  await tracks(page).getByRole("button", { name: "Mute Micro VA 1" }).click();
+  await expect(tracks(page).getByRole("button", { name: "Unmute Micro VA 1" })).toHaveAttribute("aria-pressed", "true");
   // The group mutes as a whole from its card.
   await tracks(page).getByRole("button", { name: "Mute main" }).click();
   await expect(tracks(page).getByRole("button", { name: "Unmute main" })).toBeVisible();
@@ -41,11 +38,11 @@ test("selecting a track in the list selects it in the workbench", async ({ page 
   await page.getByRole("button", { name: 'Add "Sampler" as a new track', exact: true }).click();
   await expect(page.getByRole("tablist").getByText("sampler", { exact: true })).toBeVisible();
 
-  // In the Tracks list, select the seed (subtractive) track -> the workbench follows.
+  // In the Tracks list, select the seed (Micro VA) track -> the workbench follows.
   await openProjectTracks(page);
   await openGroupCard(page, "main");
-  await tracks(page).getByTestId("tree-track").filter({ hasText: "Subtractive" }).click();
-  await expect(page.getByRole("tablist").getByText("subtractive", { exact: true })).toBeVisible();
+  await tracks(page).getByTestId("tree-track").filter({ hasText: "Micro VA" }).click();
+  await expect(page.getByRole("tablist").getByText("micro-va", { exact: true })).toBeVisible();
 
   // The filter narrows the list by name.
   await page.getByRole("searchbox", { name: "Filter tracks" }).fill("zzz");

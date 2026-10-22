@@ -9,6 +9,7 @@
  * `projectStore.load` emit, and the AudioContext is preserved.
  */
 import { ProjectStore } from "../project/projectStore";
+import { addStarterMelody } from "../project/starter";
 import type { EditLog } from "../commands/editLog";
 import type { VersionStore } from "../commands/history";
 import type { ProjectData } from "../project/types";
@@ -81,6 +82,11 @@ type InitProjectsOptions = {
    * project under someone else's id.
    */
   preferId?: string | null;
+  /**
+   * Whether a first project gets the example melody (DAW-76). Off by default, so tests start empty;
+   * the app turns it on.
+   */
+  exampleMelody?: boolean;
 };
 
 /**
@@ -90,7 +96,7 @@ type InitProjectsOptions = {
  */
 export async function initProjects(
   deps: ProjectDeps,
-  { storage = getProjectStorage(), preferId }: InitProjectsOptions = {},
+  { storage = getProjectStorage(), preferId, exampleMelody = false }: InitProjectsOptions = {},
 ): Promise<void> {
   const ids = (await storage.listProjects()).map((project) => project.id);
   if (ids.length === 0) {
@@ -100,6 +106,8 @@ export async function initProjects(
     // makes the second pass a harmless re-flush of the same bundle.
     setCurrentProject(currentProjectId());
     await getRepository().setName("Untitled");
+    // The first project anyone sees plays something on the first Play.
+    if (exampleMelody) addStarterMelody(deps.projectStore);
     await flush(deps); // persist the live (seeded) project as project one
     // This branch never loads: the live store was already seeded, so it *is* this project.
     // Marking it anyway is what lets the URL sync at all on a fresh install.

@@ -22,24 +22,24 @@ async function addEffect(page: Page, name: string) {
 test("the devices' bar jumps to a device, and back to the roll once it has scrolled away", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
-  for (const name of ["Reverb", "Tape Echo", "Chorus"]) await addEffect(page, name);
+  for (const name of ["Reverb", "Tape Echo", "Tremolo"]) await addEffect(page, name);
 
   const returnToRoll = page.getByRole("button", { name: /^Roll/ });
   await expect(returnToRoll).toHaveCount(0); // the roll is on screen
 
   // The devices' bar jumps to a device from the top, roll and all.
-  await devicesBar(page).getByRole("button", { name: "Chorus", exact: true }).click();
-  await expect(page.locator('[data-device][aria-label="Chorus"]')).toBeInViewport();
+  await devicesBar(page).getByRole("button", { name: "Tremolo", exact: true }).click();
+  await expect(page.locator('[data-device][aria-label="Tremolo"]')).toBeInViewport();
   await page.getByTestId("roll-scroll").evaluate((element) => element.closest(".overflow-y-auto")?.scrollTo(0, 0));
 
   // Jumping to the last device scrolls the roll off the top, and the bar takes its place.
-  await page.locator('[data-device][aria-label="Chorus"]').scrollIntoViewIfNeeded();
+  await page.locator('[data-device][aria-label="Tremolo"]').scrollIntoViewIfNeeded();
   await expect(returnToRoll).toBeVisible();
   await expect(returnToRoll).toContainText("Clip 1"); // it names the clip open in the roll
 
   // A device's chip scrolls to it.
-  await devicesBar(page).getByRole("button", { name: "Subtractive", exact: true }).click();
-  await expect(page.locator('[data-device][aria-label="Subtractive"]')).toBeInViewport();
+  await devicesBar(page).getByRole("button", { name: "Micro VA", exact: true }).click();
+  await expect(page.locator('[data-device][aria-label="Micro VA"]')).toBeInViewport();
 
   await returnToRoll.click();
   await expect(page.getByTestId("roll-scroll")).toBeInViewport();
@@ -50,9 +50,9 @@ test("the devices fold away under their bar, and a jump opens them again", async
   await page.goto("/");
   await dismissStart(page);
   await page.getByRole("button", { name: "Fold the devices" }).click();
-  await expect(page.locator('[data-device][aria-label="Subtractive"]')).toHaveCount(0);
-  await devicesBar(page).getByRole("button", { name: "Subtractive", exact: true }).click();
-  await expect(page.locator('[data-device][aria-label="Subtractive"]')).toBeInViewport();
+  await expect(page.locator('[data-device][aria-label="Micro VA"]')).toHaveCount(0);
+  await devicesBar(page).getByRole("button", { name: "Micro VA", exact: true }).click();
+  await expect(page.locator('[data-device][aria-label="Micro VA"]')).toBeInViewport();
 });
 
 test("the devices' menu folds every device, and opens them all again", async ({ page }) => {

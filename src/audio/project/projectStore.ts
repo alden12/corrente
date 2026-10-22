@@ -25,6 +25,7 @@ import {
 } from "./projectSerialization";
 import { buildStructure } from "./projectStructure";
 import { FIRST_CLIP_NAME, nextClipName, seedClipId } from "./seedClip";
+import { addStarterTrack } from "./starter";
 import {
   hasInstrument,
   catalogEntry,
@@ -216,8 +217,9 @@ export class ProjectStore {
   private readonly listeners = createListeners();
   private cached: ProjectStructure | null = null;
 
+  /** `seedDefault`: start as a new project does, with the starter track (DAW-76). */
   constructor(seedDefault = true) {
-    if (seedDefault) this.addTrack(DEFAULT_INSTRUMENT);
+    if (seedDefault) addStarterTrack(this);
   }
 
   /** Short but globally unique, so server- and browser-created ids never collide. */

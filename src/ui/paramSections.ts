@@ -10,17 +10,27 @@ import type { ParamSpec } from "../audio/params/types";
 /** Friendly titles + display order for known id namespaces (the part before the dot). */
 export const SECTION_LABELS: Record<string, string> = {
   lfo: "LFO",
+  lfo1: "LFO 1",
+  lfo2: "LFO 2",
   osc: "Oscillator",
+  o1: "Oscillator 1",
+  o2: "Oscillator 2",
+  noise: "Noise",
   fm: "FM",
   super: "Unison",
   organ: "Tone",
   wt: "Wavetable",
   sampler: "Sampler",
   filter: "Filter",
+  f: "Filter",
   fenv: "Filter Env",
+  eg1: "Filter Env",
   env: "Envelope",
+  eg2: "Amp Env",
   amp: "Amp",
   dist: "Drive",
+  mod: "Chorus",
+  dly: "Delay",
 };
 const SECTION_ORDER = Object.keys(SECTION_LABELS);
 

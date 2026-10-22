@@ -104,7 +104,7 @@ test("a track can be renamed inline", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
 
-  const name = page.getByTestId("arr-scroll").getByText("Subtractive 1", { exact: true });
+  const name = page.getByTestId("arr-scroll").getByText("Micro VA 1", { exact: true });
   await name.dblclick();
   const input = page.getByTestId("arr-scroll").getByRole("textbox");
   await input.fill("My Bass");

@@ -171,3 +171,12 @@ export function CloudIcon({ className = "w-4 h-4" }: { className?: string }) {
     </svg>
   );
 }
+
+/** The agent: a four-point sparkle, on the phone's bar and the desktop's agent-panel toggle. */
+export function AgentIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" className={className}>
+      <path d="M8 1.75l1.6 4.15 4.15 1.6-4.15 1.6L8 13.25l-1.6-4.15L2.25 7.5l4.15-1.6z" />
+    </svg>
+  );
+}

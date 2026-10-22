@@ -259,7 +259,11 @@ export function AppShell() {
     // likelier to grant it (Chrome goes by engagement); the "On this device" panel shows what it
     // said (HOST-23.2.1.1).
     void requestPersistentStorage().then(refreshStorageRisk);
-    void initProjects({ projectStore, editLog, versionStore }, { preferId: linkedProjectId.current })
+    void initProjects(
+      { projectStore, editLog, versionStore },
+      // The example melody is for people; e2e starts every test on an empty first project.
+      { preferId: linkedProjectId.current, exampleMelody: import.meta.env?.MODE !== "test" },
+    )
       .then(() => {
         if (!active) return;
         // With a remote backend, edits ride the live WS channel and the authority persists them (the

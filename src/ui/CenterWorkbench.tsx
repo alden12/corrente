@@ -11,6 +11,8 @@ import type { Dispatch } from "../audio/commands/types";
 import type { McpStatus } from "../audio/mcp/bridge";
 import type { WsStatus } from "../contract/client";
 import { SyncChip } from "./ConnectionStatus";
+import { AgentIcon } from "./shellIcons";
+import { IconButton } from "./controls/IconButton";
 import { EMPTY_INSTRUMENT } from "../audio/instruments/catalog";
 import { InlineRename } from "./InlineRename";
 import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
@@ -92,15 +94,9 @@ export function CenterWorkbench({
         </span>
       )}
       {agentCollapsed && (
-        <button
-          type="button"
-          onClick={onExpandAgent}
-          aria-label="Expand agent panel"
-          title="Open the agent panel"
-          className="flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-strong hover:bg-panel cursor-pointer"
-        >
-          <span className="text-lg leading-none">«</span>
-        </button>
+        <IconButton label="Expand agent panel" tone="agent" onClick={onExpandAgent}>
+          <AgentIcon className="w-4 h-4" />
+        </IconButton>
       )}
     </div>
   );
