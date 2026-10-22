@@ -33,6 +33,15 @@ export async function dismissStart(page: Page): Promise<void> {
 }
 
 /**
+ * Go to the Studio on the touch shell, which opens on Explore (2026-10-22). A no-op on the desktop
+ * shell, which has no tabs.
+ */
+export async function openStudio(page: Page): Promise<void> {
+  const studio = page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Studio", exact: true });
+  if (await studio.isVisible()) await studio.click();
+}
+
+/**
  * Open the settings panel on its Timing page (tempo, meter, metronome, count-in, groove - MOBILE-19),
  * from the account button on either shell. The panel reopens on the page it was closed on, so on a
  * phone the category list is only there to tap on the first opening.

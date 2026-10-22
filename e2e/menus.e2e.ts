@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { dismissStart } from "./support/app";
+import { dismissStart, openStudio } from "./support/app";
 
 /**
  * Kebab (⋮) context menus: the arrangement toolbar's add menu creates a group or a
@@ -121,6 +121,7 @@ test.describe("placement", () => {
   test("a flyout opened by a tap stays open, on screen, and its choice lands", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
+    await openStudio(page);
 
     // The top bar's "+" (MOBILE-19.4), near the left edge: where a flyout most wants to run off
     // the screen.
@@ -148,6 +149,7 @@ test.describe("placement", () => {
   test("a resize re-places the menu rather than closing it", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
+    await openStudio(page);
 
     await page.getByRole("button", { name: "Add to the arrangement" }).tap();
     await settledPopoverBoxes(page, 1);
@@ -163,6 +165,7 @@ test.describe("placement", () => {
     await page.setViewportSize({ width: 844, height: 390 });
     await page.goto("/");
     await dismissStart(page);
+    await openStudio(page);
     // Then short enough that the top bar's "+" menu cannot fit below its button. After the start
     // dialog, which needs the room to be dismissed.
     await page.setViewportSize({ width: 844, height: 130 });

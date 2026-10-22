@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart, openSettingsPage } from "./support/app";
+import { dismissStart, openStudio, openSettingsPage } from "./support/app";
 
 /** `<name>-<date>-<version>.daw.zip` (HOST-23.2.1.2). */
 const EXPORT_NAME = /^untitled-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
@@ -99,6 +99,7 @@ test.describe("on a phone", () => {
     await page.clock.install();
     await page.goto("/");
     await dismissStart(page);
+    await openStudio(page);
     await page.getByRole("button", { name: "Group actions" }).first().tap();
     await page.getByRole("menuitem", { name: "Add MIDI track" }).tap();
     await page.clock.fastForward(8 * 24 * 60 * 60 * 1000);

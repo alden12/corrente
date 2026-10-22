@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart, openExploreCategory, swapFromExplore } from "./support/app";
+import { dismissStart, openStudio, openExploreCategory, swapFromExplore } from "./support/app";
 
 /**
  * The drum machine: a Drum Kit track can be edited either as a pad x step grid ("Pads")
@@ -80,6 +80,7 @@ test("on a phone the drum roll gets the touch treatment, like any other roll (MO
   // not to, because DrumRoll took no `compact` prop at all and the editor only handed one to the
   // pitched roll - a drum track kept the desktop layout on a 390px screen.
   await page.setViewportSize({ width: 390, height: 844 });
+  await openStudio(page); // the touch shell starts on Explore
   await expect(page.getByTestId("piano-grid")).toBeVisible();
   await expect(velocityLane).toBeHidden();
 });

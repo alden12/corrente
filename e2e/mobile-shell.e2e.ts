@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   dismissStart,
+  openStudio,
   openExploreCategory,
   swapFromExplore,
   openGroupCard,
@@ -50,6 +51,13 @@ const detentOf = (page: Page) => sheet(page).getAttribute("data-detent");
 const tabBar = (page: Page) => page.getByRole("navigation", { name: "Places" });
 const tab = (page: Page, name: string) => tabBar(page).getByRole("button", { name, exact: true });
 /** The keys, docked above the tabs (MOBILE-24). */
+/** Load the app and go to the Studio, which most of these tests are about. */
+async function startInStudio(page: Page) {
+  await page.goto("/");
+  await dismissStart(page);
+  await openStudio(page);
+}
+
 const pads = (page: Page) => page.getByTestId("keys-dock");
 const pad = (page: Page, name: string) => pads(page).getByRole("button", { name, exact: true });
 
@@ -112,8 +120,7 @@ async function openAdd(page: Page) {
 
 /** The roll, at the detent that gives it room, ready to be tapped at. */
 async function openRoll(page: Page) {
-  await page.goto("/");
-  await dismissStart(page);
+  await startInStudio(page);
   await setDetent(page, "full");
   await expect(page.getByTestId("roll-scroll")).toBeVisible();
   await settleRollScroll(page);
@@ -190,8 +197,7 @@ test.describe("phone", () => {
    * reproduces neither of them: a cursor hits 8px fine and never competes with a scroller.
    */
   test("the loop markers can be dragged with a finger, not just a cursor", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     const end = page.getByTestId("arr-scroll").getByRole("slider", { name: "Loop length" });
@@ -264,8 +270,7 @@ test.describe("phone", () => {
     // write at all - the assertion would have passed on a pinch that set the wrong value.
     const BASELINE = 24;
     await page.addInitScript((zoom) => localStorage.setItem("corrente:arr-zoom", String(zoom)), BASELINE);
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     const scroller = page.getByTestId("arr-scroll");
@@ -325,8 +330,7 @@ test.describe("phone", () => {
       },
       [ROWS, BEATS],
     );
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const box = (await page.getByTestId("roll-scroll").boundingBox())!;
@@ -356,8 +360,7 @@ test.describe("phone", () => {
    * MOBILE-7 has the touch editing model that replaces it (select, then handles).
    */
   test("dragging on empty roll grid does not rubber-band on touch", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const box = (await page.getByTestId("roll-scroll").boundingBox())!;
@@ -388,8 +391,7 @@ test.describe("phone", () => {
    * release unless something recorded that it moved.
    */
   test("two fingers pan the roll as well as zoom it, and leave no notes behind", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const scroller = page.getByTestId("roll-scroll");
@@ -614,8 +616,7 @@ test.describe("phone", () => {
    * settles is whether the app does anything with them.
    */
   test("every edge of the shell is padded back from the display's insets", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     const INSETS = { top: 59, bottom: 34, left: 12, right: 21 };
     await page.evaluate((insets) => {
       (window as unknown as { simulateInsets: (i: typeof insets) => void }).simulateInsets(insets);
@@ -650,8 +651,7 @@ test.describe("phone", () => {
   });
 
   test("swaps in the touch shell: the arrangement, with an editor sheet over it", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     await expect(shell(page)).toHaveAttribute("data-device-tier", "phone");
     // The desktop spine is gone entirely - this is a swap, not a reflow.
@@ -669,8 +669,7 @@ test.describe("phone", () => {
   });
 
   test("opens at Half, showing the track that is already selected", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // There is always a track and a clip selected, so there is always something to edit and
     // showing it presumes nothing. Opening parked read as the editor having failed to open.
@@ -687,8 +686,7 @@ test.describe("phone", () => {
   test("minimised is the bar, with the keyboard button while the keys are hidden, and a tap on it opens the sheet (MOBILE-24)", async ({
     page,
   }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     // The header and nothing else: the track, what it runs, and the way back up. The keys stay
@@ -721,8 +719,7 @@ test.describe("phone", () => {
   });
 
   test("opens on the lane headers, not on beat 0", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // Phone portrait scrolls its header column rather than sticking it, so beat 0 is the
     // *right* edge of the track names. Opening there hides them before you have touched
@@ -732,8 +729,7 @@ test.describe("phone", () => {
   });
 
   test("choosing a track leaves a parked sheet where it is", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     // Tapping lanes is looking around, not a request to edit: the editor stays parked.
@@ -750,8 +746,7 @@ test.describe("phone", () => {
   });
 
   test("scrolling the arrangement while parked is not a request to edit", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     await page.getByTestId("arr-scroll").evaluate((el) => (el.scrollLeft = 400));
@@ -761,8 +756,7 @@ test.describe("phone", () => {
   });
 
   test("the roll centres on the notes at whatever height the sheet settles at", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // Centred means the same content row sits at the middle of the viewport whatever the
     // viewport's height is - so this sum is the invariant, not the scroll offset.
@@ -770,7 +764,20 @@ test.describe("phone", () => {
       page.getByTestId("roll-scroll").evaluate((el) => Math.round(el.scrollTop + el.clientHeight / 2));
 
     await setDetent(page, "half");
-    const atHalf = await centredOn();
+    // Read once it holds still: the Studio has only just come into view, so the roll may still be
+    // fitting itself to it.
+    let atHalf = NaN;
+    await expect
+      .poll(
+        async () => {
+          const now = await centredOn();
+          const settled = now === atHalf;
+          atHalf = now;
+          return settled;
+        },
+        { intervals: [250] },
+      )
+      .toBe(true);
     await setDetent(page, "full");
 
     // Polled, not read once: the re-fit waits for the run of resizes to stop, so it lands a
@@ -785,8 +792,7 @@ test.describe("phone", () => {
   });
 
   test("the roll stops re-centring once you have scrolled it yourself", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const roll = page.getByTestId("roll-scroll");
@@ -800,8 +806,7 @@ test.describe("phone", () => {
   });
 
   test("the drag is not the only way: tap the preview to open, the keyboard steps every detent", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     await grabber(page).tap();
@@ -816,8 +821,7 @@ test.describe("phone", () => {
   });
 
   test("the sheet is the desktop's column: clips, roll and devices in one scroll (MOBILE-24)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const column = sheet(page).getByTestId("workbench-column");
@@ -835,8 +839,7 @@ test.describe("phone", () => {
     expect(header).toBe(44);
   });
   test("every detent leaves the editor a box that fits on screen and scrolls", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     for (const detent of ["half", "full"] as const) {
       await setDetent(page, detent);
@@ -856,8 +859,7 @@ test.describe("phone", () => {
   });
 
   test("the arrangement stays behind the sheet, and gets the band above it", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     const timeline = page.locator('[class*="grid-area:timeline"]');
 
     await setDetent(page, "peek");
@@ -879,8 +881,7 @@ test.describe("phone", () => {
    * and the marker's kebab offers the active clip, Paste and Create clip.
    */
   test("a tap on empty lane offers to place the active clip there", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
     const lane = page.getByTestId("lane").first();
     const placements = lane.getByTestId("placement");
@@ -896,8 +897,7 @@ test.describe("phone", () => {
   });
 
   test("the marker's kebab creates a clip, and pastes one copied from a clip's kebab", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
     const lane = page.getByTestId("lane").first();
     const placements = lane.getByTestId("placement");
@@ -922,8 +922,7 @@ test.describe("phone", () => {
   });
 
   test("the marker's kebab waits for its own tap, even where the finger just was", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
     const lane = page.getByTestId("lane").nth(0);
     const box = (await lane.boundingBox())!;
@@ -935,8 +934,7 @@ test.describe("phone", () => {
   });
 
   test("a clip copied on one track pastes onto another", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
     await page.getByRole("button", { name: "Group actions" }).first().tap();
     await page.getByRole("menuitem", { name: "Add MIDI track" }).tap();
@@ -957,8 +955,7 @@ test.describe("phone", () => {
   });
 
   test("tapping a track selects it without moving the sheet - it is not modal", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "half");
 
     await trackHeader(page).tap();
@@ -970,8 +967,7 @@ test.describe("phone", () => {
   });
 
   test("the arrangement keeps its scroll position when the sheet moves", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     const scroller = () => page.getByTestId("arr-scroll");
 
     await scroller().evaluate((el) => (el.scrollLeft = 500));
@@ -985,8 +981,7 @@ test.describe("phone", () => {
   });
 
   test("scrolling the arrangement back to the start does not snap forward again", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     const scroller = page.getByTestId("arr-scroll");
 
     // The shared view offset used to floor at beat 0 and get pushed back into the DOM, so
@@ -1000,8 +995,7 @@ test.describe("phone", () => {
   });
 
   test("dragging the header moves the sheet and it settles on a detent", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek");
 
     // The whole header is the drag surface, not just the grabber pill - caught here by the
@@ -1022,8 +1016,7 @@ test.describe("phone", () => {
   });
 
   test("full covers the whole workspace (MOBILE-19.1)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     // No sliver of arrangement any more: the sheet's top meets the workspace's.
@@ -1033,8 +1026,7 @@ test.describe("phone", () => {
   });
 
   test("undo and redo are in the top bar, and tempo is on the Timing settings page", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     const undo = page.getByRole("button", { name: "Undo" });
     const redo = page.getByRole("button", { name: "Redo" });
@@ -1065,8 +1057,7 @@ test.describe("phone", () => {
    * (MOBILE-11).
    */
   test("adding is the top bar's +, and the project's settings are in settings", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "half");
 
     const tracks = page.locator("[data-track-id]");
@@ -1086,8 +1077,7 @@ test.describe("phone", () => {
   });
 
   test("beats per bar is a field too, so the whole 1-32 range is reachable", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     await openTimingSettings(page);
     const beats = page.getByRole("spinbutton", { name: "Beats per bar" });
@@ -1102,8 +1092,7 @@ test.describe("phone", () => {
   });
 
   test("the roll has no toolbar or menu of its own on touch", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(page.getByTestId("roll-scroll")).toBeVisible();
 
     // The header stays, for its fold (MOBILE-24), but without the desktop's zoom buttons...
@@ -1119,8 +1108,7 @@ test.describe("phone", () => {
 
   /** The "+" adds to the arrangement, so it is there with the Studio and not over Explore. */
   test("the top bar's + belongs to the Studio", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     const add = page.getByRole("button", { name: "Add to the arrangement" });
     await expect(add).toBeVisible();
     await tab(page, "Explore").tap();
@@ -1130,8 +1118,7 @@ test.describe("phone", () => {
   });
 
   test("the editors' settings are settings pages on touch, and what they set reaches the surface", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     await openSettingsPage(page, "Arrangement");
     await page.getByRole("radiogroup", { name: "Arrangement snap" }).getByRole("radio", { name: "Bar" }).click();
@@ -1151,8 +1138,7 @@ test.describe("phone", () => {
   });
 
   test("three tabs switch places, and the Studio keeps its editor behind them (MOBILE-19)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
     await expect(sheet(page)).toBeVisible();
 
@@ -1175,8 +1161,7 @@ test.describe("phone", () => {
   test("Projects lists every project, names a new one first, and switches between them (MOBILE-19.3)", async ({
     page,
   }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await tab(page, "Projects").tap();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     const open = page.getByRole("region", { name: "Open project" });
@@ -1218,8 +1203,7 @@ test.describe("phone", () => {
   });
 
   test("tapping the tab you are on takes it back to its start (DAW-58)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // Explore: from a category page back to Explore home.
     await tab(page, "Explore").tap();
@@ -1238,8 +1222,7 @@ test.describe("phone", () => {
   });
 
   test("opening another project from the list goes into its page (DAW-58)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await tab(page, "Projects").tap();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     const open = page.getByRole("region", { name: "Open project" });
@@ -1259,8 +1242,7 @@ test.describe("phone", () => {
   });
 
   test("inside a project, choosing a track takes you to it in the Studio (MOBILE-19.3)", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await tab(page, "Projects").tap();
 
     // The project's chips, and its tracks with their chains.
@@ -1279,8 +1261,7 @@ test.describe("phone", () => {
   });
 
   test("swapping a sound from Explore goes back to the Studio, so you can see what it just did", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(sheet(page).getByText(/^Micro VA · /)).toBeVisible();
 
     await tab(page, "Explore").tap();
@@ -1294,8 +1275,7 @@ test.describe("phone", () => {
   });
 
   test("the pads sit under the roll, in the key they say they are in", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // In C major the in-scale pads are the white keys, closing on the octave above - the
     // closing tonic is what gives the leading tone a gap to sit in.
@@ -1309,8 +1289,7 @@ test.describe("phone", () => {
   });
 
   test("playing the pads records a take - the phone can capture, not just arrange", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // Count-in is a timing setting, on the Timing page with the others (MOBILE-11, MOBILE-19).
     await setCountIn(page, "None");
@@ -1331,8 +1310,7 @@ test.describe("phone", () => {
   });
 
   test("chords mode turns each pad into its chord, with the variations stacked above", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     await page.getByRole("button", { name: "Key and scale" }).tap();
     await page.getByRole("menuitemradio", { name: "Chords" }).click();
@@ -1362,8 +1340,7 @@ test.describe("phone", () => {
   });
 
   test("arranging the chords: move one in its column, star it, hide it, and scroll to the rest", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await page.getByRole("button", { name: "Key and scale" }).tap();
     await page.getByRole("menuitemradio", { name: "Chords" }).click();
     await setDetent(page, "full");
@@ -1410,14 +1387,14 @@ test.describe("phone", () => {
     // Editing switched it to Custom, and the arrangement is kept across a reload.
     await page.reload();
     await dismissStart(page);
+    await openStudio(page);
     await setDetent(page, "full");
     await expect(pad(page, "Dsus4")).toHaveCount(0);
     await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Em7" })).toBeVisible();
   });
 
   test("the roll folds away under its header, and the keys stay where they are", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
     const keysAt = await keysTop(page);
 
@@ -1429,8 +1406,7 @@ test.describe("phone", () => {
     expect(await keysTop(page)).toBe(keysAt);
   });
   test("a long chord name shrinks to fit its pad rather than overflowing it", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await page.getByRole("button", { name: "Key and scale" }).tap();
     await page.getByRole("menuitemradio", { name: "Chords" }).click();
     // F# minor: sharp roots, and a half-diminished seventh on the second degree (G#m7♭5).
@@ -1456,8 +1432,7 @@ test.describe("phone", () => {
   });
 
   test("sliding sideways runs the notes under your finger, without latching them", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     const from = (await pad(page, "C3").boundingBox())!;
     const to = (await pad(page, "E3").boundingBox())!;
@@ -1480,8 +1455,7 @@ test.describe("phone", () => {
   test("the keys stay docked while the sheet scrolls to the devices, so you can play while you tweak", async ({
     page,
   }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const column = sheet(page).getByTestId("workbench-column");
@@ -1500,8 +1474,7 @@ test.describe("phone", () => {
     await expect(pad(page, "C3")).toHaveAttribute("aria-pressed", "false");
   });
   test("dragging down off a pad latches it, and the next note lets it go", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     const box = (await pad(page, "C3").boundingBox())!;
     // From the pad's top edge, so a 50px drag is still on screen at the bottom of the sheet.
@@ -1518,8 +1491,7 @@ test.describe("phone", () => {
   });
 
   test("the octave range grows in whole rows, up to a share of the screen", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     const grow = page.getByRole("button", { name: /More octaves/ });
@@ -1534,8 +1506,7 @@ test.describe("phone", () => {
     await expect(page.getByTestId("roll-scroll")).toBeVisible();
   });
   test("a long submenu stays on screen instead of running off the bottom", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // The pads' key menu sits at the bottom of the sheet and its Key list is twelve rows,
     // which opened level with its own row would put most of them under the fold.
@@ -1548,8 +1519,7 @@ test.describe("phone", () => {
   });
 
   test("the agent is a top-bar button, opening a sheet over the app", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     const composer = page.getByRole("textbox", { name: /message the agent/i });
     await page.getByRole("button", { name: "Agent" }).tap();
@@ -1568,8 +1538,7 @@ test.describe("phone, landscape", () => {
   test.use({ viewport: LANDSCAPE, hasTouch: true, isMobile: true });
 
   test("gets its own detents, because it is wide but very short", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     await setDetent(page, "full");
     // Of the *workspace*, which is what a detent is a fraction of - the viewport also
@@ -1581,8 +1550,7 @@ test.describe("phone, landscape", () => {
   });
 
   test("folding the keys hands their height to the sheet", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
     const before = (await sheet(page).boundingBox())!.height;
 
@@ -1595,8 +1563,7 @@ test.describe("phone, landscape", () => {
     expect(roll.width, "the roll has the full width").toBeGreaterThan(700);
   });
   test("the velocity lane starts folded away on touch, and its setting brings it back", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "full");
 
     // 56px of lane is a whole row of pads, and velocity still reads as note fill strength -
@@ -1610,8 +1577,7 @@ test.describe("phone, landscape", () => {
   });
 
   test("still gets a row of pads, the controls folded into the header", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     // Short but wide: a row of pads is worth more than the controls' own row, and the header
     // has the width to take them.
@@ -1625,16 +1591,14 @@ test.describe("tablet", () => {
   test.use({ viewport: TABLET, hasTouch: true, isMobile: true });
 
   test("gets the touch shell too, tiered as tablet", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(shell(page)).toHaveAttribute("data-device-tier", "tablet");
     await expect(sheet(page)).toBeVisible();
     await expect(desktopRail(page)).toHaveCount(0);
   });
 
   test("has the same tabs, and docks the agent beside the workspace", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(tabBar(page)).toBeVisible();
 
     // Docked, not a sheet: no scrim, and it sits beside the workspace rather than over it.
@@ -1661,20 +1625,19 @@ test.describe("desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test("keeps the four-region grid, its own toolbars and no editor sheet", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(shell(page)).toHaveCount(0);
     await expect(desktopRail(page)).toBeVisible();
     await expect(sheet(page)).toHaveCount(0);
   });
 
   test("a window too narrow for the grid falls back to the touch shell", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await expect(desktopRail(page)).toBeVisible();
 
     await page.setViewportSize({ width: 700, height: 900 });
     await expect(shell(page)).toBeVisible();
+    await openStudio(page); // the touch shell starts on Explore
     await expect(sheet(page)).toBeVisible();
     await expect(desktopRail(page)).toHaveCount(0);
   });
@@ -1685,8 +1648,7 @@ test.describe("phone (arrangement clips)", () => {
 
   /** The timeline, with the seed track's block on screen. */
   async function openTimeline(page: Page) {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     await setDetent(page, "peek"); // get the editor sheet out of the arrangement's way
     await expect(page.getByTestId("placement").first()).toBeVisible();
   }
@@ -1732,8 +1694,7 @@ test.describe("phone (backgrounding)", () => {
    * worth preserving in that, so hiding the app stops the transport.
    */
   test("minimising the app stops the transport", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
 
     await page.keyboard.press("Space");
     await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
@@ -1781,8 +1742,7 @@ test.describe("phone, the narrowest", () => {
   test.use({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
 
   test("the top bar wraps rather than running its last buttons off the edge", async ({ page }) => {
-    await page.goto("/");
-    await dismissStart(page);
+    await startInStudio(page);
     const settings = (await page.getByRole("button", { name: "Account and settings" }).boundingBox())!;
     expect(settings.x + settings.width).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);

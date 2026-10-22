@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { dismissStart } from "./support/app";
+import { dismissStart, openStudio } from "./support/app";
 
 /**
  * Whether the arrangement's header column is pinned or scrolls away with the lanes, which is
@@ -23,6 +23,7 @@ test.describe("tablet", () => {
   test("the headers scroll away while a panel is docked beside the arrangement", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
+    await openStudio(page);
     await expect.poll(() => headerPosition(page)).toBe("sticky");
 
     // Docking the agent leaves the timeline ~690px - a 220px pinned column there is a header
