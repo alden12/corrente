@@ -1137,6 +1137,16 @@ test.describe("phone", () => {
     ).toHaveAttribute("aria-checked", "true");
   });
 
+  test("a first visit opens on Explore, and a reload comes back to the tab you left", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(tab(page, "Explore")).toHaveAttribute("aria-current", "page");
+    await tab(page, "Studio").click();
+    await page.reload();
+    await dismissStart(page);
+    await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
+  });
+
   test("three tabs switch places, and the Studio keeps its editor behind them (MOBILE-19)", async ({ page }) => {
     await startInStudio(page);
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");
@@ -1387,7 +1397,6 @@ test.describe("phone", () => {
     // Editing switched it to Custom, and the arrangement is kept across a reload.
     await page.reload();
     await dismissStart(page);
-    await openStudio(page);
     await setDetent(page, "full");
     await expect(pad(page, "Dsus4")).toHaveCount(0);
     await expect(pads(page).locator('[data-chord-row="1"]').getByRole("button", { name: "Em7" })).toBeVisible();

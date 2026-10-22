@@ -68,7 +68,7 @@ import { ProjectsHome } from "../projects/ProjectsHome";
 import { BackToProjects } from "../projects/ProjectsPlace";
 import { PROJECTS_PAGE_DEFAULT, PROJECTS_PAGE_KEY, PROJECTS_PAGES, type ProjectsPage } from "../projects/projectsPage";
 import { openExplorePage } from "../explore/explorePage";
-import type { BrowseTab, MobileTab } from "./mobileTabViews";
+import { MOBILE_TABS, type BrowseTab, type MobileTab } from "./mobileTabViews";
 import type { Track } from "../../audio/project/projectStore";
 import type { ShellProps } from "./types";
 import type { DeviceShape } from "./useDeviceShape";
@@ -189,8 +189,9 @@ export function MobileShell({
   // A callback ref, since Explore mounts only while its tab shows and the hook measures on mount.
   const [browseElement, setBrowseElement] = useState<HTMLDivElement | null>(null);
   const browseHeight = useElementHeight(useMemo(() => ({ current: browseElement }), [browseElement]));
-  // Which place is in front. Every start opens on Explore, the sounds to try (2026-10-22, Alden).
-  const [tab, setTab] = useState<MobileTab>("explore");
+  // Which place is in front. Kept across reloads: you come back to where you were. A first visit
+  // starts on Explore, the sounds to try (2026-10-22, Alden).
+  const [tab, setTab] = usePersistentString<MobileTab>("corrente:mobile-tab", "explore", MOBILE_TABS);
   // "home" is the list of projects (MOBILE-19.3); "inside" is the open project's own views.
   const [projectsPage, setProjectsPage] = usePersistentString<ProjectsPage>(
     PROJECTS_PAGE_KEY,

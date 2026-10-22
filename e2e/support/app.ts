@@ -33,8 +33,8 @@ export async function dismissStart(page: Page): Promise<void> {
 }
 
 /**
- * Go to the Studio on the touch shell, which opens on Explore (2026-10-22). A no-op on the desktop
- * shell, which has no tabs.
+ * Go to the Studio on the touch shell, which opens on Explore on a first visit (2026-10-22). A
+ * no-op on the desktop shell, which has no tabs.
  */
 export async function openStudio(page: Page): Promise<void> {
   const studio = page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Studio", exact: true });
