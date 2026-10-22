@@ -5,6 +5,8 @@
  *   node engine/compile.ts           rebuild all three (commit them with the change that caused it)
  *   node engine/compile.ts --check   rebuild and fail if any differs from the committed one
  *   node engine/compile.ts --test    run the Rust unit tests
+ *   node engine/compile.ts --gen     write the blocks' generated Rust to gen/, so cargo can build the
+ *                                    engine natively outside the toolchain (PLUGIN-2.1)
  *
  * Needs Docker. The toolchain always runs as x86 Linux, emulated on an ARM Mac, because the
  * compilers' output can differ by the processor they run on and CI's is x86: the same platform is
@@ -105,12 +107,13 @@ const registry = (kinds: string[]) => {
 };
 
 /**
- * In a fresh container: copy the sources and the registry in, run Faust over the blocks, then cargo,
- * then copy each of `collect` out before the container goes.
+ * In a fresh container: copy the sources and the registry in, run Faust over the blocks, then cargo
+ * (unless there are no `cargoArgs`), then copy each of `collect` out before the container goes.
  */
 const cargoInToolchain = (image: string, cargoArgs: string[], collect: { from: string; to: string }[] = []) => {
   const kinds = blockKinds();
-  const command = [...kinds.map(faustCommand), ["cargo", ...cargoArgs].join(" ")].join(" && ");
+  const cargo = cargoArgs.length > 0 ? [["cargo", ...cargoArgs].join(" ")] : [];
+  const command = [...kinds.map(faustCommand), ...cargo].join(" && ");
   const genDir = mkdtempSync(join(tmpdir(), "corrente-engine-gen-"));
   const container = docker(["create", "--platform", PLATFORM, image, "sh", "-c", command], { quiet: true }).trim();
   try {
@@ -219,11 +222,18 @@ const modes: Record<string, (image: string) => void> = {
   // On the toolchain's own processor rather than as WebAssembly: the router's logic is the same, and
   // the test runner needs a program it can start.
   "--test": (image) => cargoInToolchain(image, ["test", ...CARGO_FLAGS]),
+  // Faust's Rust is the same whatever it's compiled for, so it's made here and compiled elsewhere.
+  "--gen": (image) => {
+    const genDir = join(engineDir, "gen");
+    rmSync(genDir, { recursive: true, force: true });
+    cargoInToolchain(image, [], [{ from: "/src/gen", to: genDir }]);
+    console.log("gen/ written: build natively with cargo in engine/.");
+  },
 };
 
 const mode = modes[process.argv[2] ?? "build"];
 if (!mode) {
-  console.error(`Unknown option ${process.argv[2]}: use --check, --test or nothing.`);
+  console.error(`Unknown option ${process.argv[2]}: use --check, --test, --gen or nothing.`);
   process.exitCode = 1;
 } else {
   try {

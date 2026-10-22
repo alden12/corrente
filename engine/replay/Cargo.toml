@@ -1,0 +1,10 @@
+[package]
+name = "corrente-engine-replay"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+publish = false
+
+# PLUGIN-2.1's check that the engine built natively plays as engine.wasm does: see src/main.rs.
+# Links the engine as the dynamic library `cargo build --release` in engine/ makes (build.rs).
+[dependencies]
