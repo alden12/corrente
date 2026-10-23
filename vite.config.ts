@@ -109,6 +109,10 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
+  build: {
+    // Two pages: the app, and the plugin's window (PLUGIN-3.2), which the plugin loads from `dist/`.
+    rollupOptions: { input: { main: "index.html", plugin: "plugin.html" } },
+  },
   server: {
     port: 5155,
     // See the note on `e2e` above: a test run must not be live-reloaded out from under itself.

@@ -1,6 +1,3 @@
 # Names nih-plug's bundler gives each package's plugin bundles.
-[webview-spike]
-name = "Corrente Webview Spike"
-
 [corrente]
 name = "Corrente"

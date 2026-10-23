@@ -1,7 +1,7 @@
 //! Corrente as a plugin (PLUGIN-2, PLUGIN-3): a device package played by the engine the app uses,
-//! from the host's MIDI, with 16 macros as the host's params. No editor yet, so the host shows its own
-//! controls for them, and the device is the one built in (device.json) or the one the host's project
-//! saved.
+//! from the host's MIDI, with 16 macros as the host's params. The device is the one built in
+//! (device.json), the one the host's project saved, or the one built in the plugin's window: the
+//! app's device rack in a webview (editor.rs), which sends a package for each change.
 //!
 //! - **The engine** is the app's (`corrente_engine`, built natively by engine/native), owned by the
 //!   plugin, one per instance. A package carries a plan already compiled by the app's compiler, so no
@@ -24,6 +24,7 @@
 //! - `std::mem::replace(&mut a, b)` puts b in a and gives back what a held, in one step.
 
 mod device;
+mod editor;
 mod package;
 mod params;
 #[cfg(test)]
@@ -32,7 +33,6 @@ mod tests;
 use corrente_engine::BLOCK;
 use device::Prepared;
 use nice_plug::prelude::*;
-use package::Package;
 use params::Macros;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -75,11 +75,11 @@ impl Default for Corrente {
 
 impl Corrente {
     /// A plugin playing `json`'s package from when it's activated; None for one it can't read.
-    // TS: const package = Package.parse(json); if (!package) return undefined; return { params: new Macros(json, package), ... }
+    // TS: const package = Package.parse(json); if (!package) return undefined; return { params: new Macros(package), ... }
     fn with_package(json: &str) -> Option<Self> {
-        let package = Package::parse(json)?;
+        let package = package::Package::parse(json)?;
         Some(Self {
-            params: Arc::new(Macros::new(json.to_owned(), &package)),
+            params: Arc::new(Macros::new(package)),
             device: None,
             retiring: None,
             output: [[0.0; BLOCK]; 2],
@@ -90,17 +90,19 @@ impl Corrente {
 
     /// Build the saved package's device at `rate`, here and now (off the audio thread).
     fn load(&mut self, rate: f32) -> bool {
-        // TS: this.params.rate = rate; const json = this.params.package;
+        // TS: this.params.rate = rate; const prepared = prepare(this.params.package, rate, this.params.knobs);
         // An atomic holds a number, so the rate is stored as its bits. `.lock()` waits for the
-        // mutex and lends what it guards; `.map(...)` copies the JSON out before the lock is let go.
+        // mutex and lends what it guards; `.ok()` turns a failed lock into None.
         self.params.rate.store(rate.to_bits(), Ordering::Release);
-        let json = self.params.package.lock().map(|json| json.clone()).unwrap_or_default();
-        // TS: const prepared = Package.parse(json) && prepare(package, rate, this.params.knobs);
-        let prepared = Package::parse(&json).and_then(|package| device::prepare(&package, rate, &self.params.knobs));
-        // One built before this, at an older rate, is stale.
-        // TS: this.params.incoming = undefined;  (`.take()` empties an Option, handing back what it held)
+        let prepared = self.params.package.lock().ok().and_then(|package| device::prepare(&package, rate, &self.params.knobs));
+        // One built before this, at an older rate, is stale, and so are changes waiting for it: the
+        // package already has them.
+        // TS: this.params.incoming = undefined; this.params.changes = [];  (`.take()` empties an Option)
         if let Ok(mut incoming) = self.params.incoming.lock() {
             incoming.take();
+        }
+        if let Ok(mut changes) = self.params.changes.lock() {
+            changes.clear();
         }
         // TS: this.device = prepared; return prepared !== undefined;  (`Box::new` puts it on the heap)
         self.device = prepared.map(Box::new);
@@ -136,8 +138,8 @@ impl Corrente {
         }
     }
 
-    /// Render the next block: send changed values, start and stop the notes gathered for it, tell
-    /// the engine where the transport is, then keep its output to play out.
+    /// Render the next block: take the window's changes, send changed values, start and stop the
+    /// notes gathered for it, tell the engine where the transport is, then keep its output to play out.
     fn render(&mut self, beat: f64, tempo: f32, playing: bool) {
         // TS: this.takeIncoming(); const device = this.device; if (!device) { this.events.length = 0; return; }
         // `.as_deref_mut()` lends what's inside the Option<Box<..>> writably, without taking it out.
@@ -146,6 +148,20 @@ impl Corrente {
             self.events.clear();
             return;
         };
+        // TS:
+        //   if (!this.params.incoming.busyOrFull()) {
+        //     const changes = this.params.changes.tryTake();
+        //     changes?.forEach(([index, raw]) => device.set(index, raw, this.params.knobs));
+        //   }
+        // Changes made after a new device was built are that device's, so they wait while one is
+        // waiting to swap in. Neither lock is waited for; `.clear()` keeps the list's room.
+        let waiting = self.params.incoming.try_lock().map(|incoming| incoming.is_some()).unwrap_or(true);
+        if !waiting {
+            if let Ok(mut changes) = self.params.changes.try_lock() {
+                changes.iter().for_each(|&(index, raw)| device.set(index, raw, &self.params.knobs));
+                changes.clear();
+            }
+        }
         // TS:
         //   device.sources.forEach((source, value) => {
         //     const now = source.now(this.params.knobs);
@@ -202,8 +218,7 @@ impl Plugin for Corrente {
     }];
     const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
 
-    // None yet, so the host shows its own controls for the params.
-    type Editor = ();
+    type Editor = editor::RackEditor;
     type SysExMessage = ();
     type BackgroundTask = ();
 
@@ -211,6 +226,11 @@ impl Plugin for Corrente {
     // owner rather than copying the macros.
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    // TS: return new RackEditor(this.params)
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        Some(editor::RackEditor::new(self.params.clone()))
     }
 
     // Off the audio thread: building the device allocates.

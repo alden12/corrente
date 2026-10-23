@@ -104,7 +104,7 @@ fn a_saved_device_plays_again_in_a_fresh_plugin() {
     // A host restores the macros first, then the package: so the fresh plugin's knobs are where the
     // drum kit left them (made from it), while it plays the built-in device until the package arrives.
     let mut fresh = Corrente::with_package(&json).expect("a package");
-    *fresh.params.package.lock().expect("the package") = BUILT_IN.to_owned();
+    *fresh.params.package.lock().expect("the package") = package::Package::parse(BUILT_IN).expect("the built-in");
     assert!(fresh.load(RATE));
     // TS: fresh.params.deserializeFields(saved); expect(play(fresh, recordNotes(), 200)).toEqual(expected);
     fresh.params.deserialize_fields(&saved);
@@ -134,4 +134,57 @@ fn sounds_as_the_app_does() {
         println!("{device}: {} samples, {differing} not bit-identical, largest difference {largest:e}, peak {}", output.len(), peak(&expected));
         assert!(largest < 1e-6, "{device} differs from the app");
     }
+}
+
+/// `json` with value `index`'s engine value (or title) changed, as the window would send it.
+// TS: const package = JSON.parse(json); package.values[index][field] = to; return JSON.stringify(package);
+fn changed(json: &str, index: usize, field: &str, to: serde_json::Value) -> String {
+    let mut package: serde_json::Value = serde_json::from_str(json).expect("a package");
+    package["values"][index][field] = to;
+    package.to_string()
+}
+
+/// The window sends the whole package on every change: one with only values moved sets those between
+/// blocks, with no rebuild, and the moved values are saved. The built-in's first param is macro 1's,
+/// so this is the macro path; the drum kit (with `CORRENTE_PACKAGES`) has values past the macros, so
+/// it checks a fixed one too.
+#[test]
+fn a_moved_value_sets_without_a_rebuild_and_is_saved() {
+    // TS: const packages = [BUILT_IN, ...(process.env.CORRENTE_PACKAGES ? [read("drumkit.json")] : [])];
+    let drums = std::env::var_os("CORRENTE_PACKAGES").map(|packages| std::fs::read_to_string(PathBuf::from(packages).join("drumkit.json")).expect("export.ts's drumkit"));
+    for json in std::iter::once(BUILT_IN.to_owned()).chain(drums) {
+        // TS: the first param, and the last if it's past the macros.
+        let mut plugin = active(&json);
+        let package = package::Package::parse(&json).expect("a package");
+        let params: Vec<usize> = package.values.iter().enumerate().filter(|(_, value)| matches!(value, package::Value::Param { .. })).map(|(index, _)| index).collect();
+        let moving: Vec<(usize, f64)> = std::iter::once((params[0], 0.25)).chain((params.len() > params::MACROS).then(|| (params[params.len() - 1], 0.75))).collect();
+        // TS: send the package changed, value by value: each load reports just its moved value, and builds nothing.
+        for &(index, raw) in &moving {
+            let saved = plugin.params.package.lock().ok().and_then(|package| serde_json::to_string(&*package).ok()).expect("saved");
+            assert_eq!(plugin.params.load(&changed(&saved, index, "raw", raw.into())), Some(vec![(index, raw)]), "just the value that moved");
+            assert!(plugin.params.incoming.lock().expect("incoming").is_none(), "no device rebuilt");
+        }
+        // TS: one block later the engine has them; and saving keeps them, as the same device.
+        play(&mut plugin, &[], 1);
+        let saved = package::Package::parse(&plugin.params.serialize_fields()["package"]).expect("the saved package reads");
+        let device = plugin.device.as_deref().expect("playing");
+        for &(index, raw) in &moving {
+            assert_eq!(device.sent[index], raw, "{} plays it", package.label);
+            assert_eq!(saved.values[index].raw(), Some(raw), "{} saves it", package.label);
+        }
+        assert!(saved.same_device(&package));
+    }
+}
+
+/// Anything more than values (here a param's title) is another device: built off the audio thread, and
+/// swapped in at the next block.
+#[test]
+fn another_device_from_the_window_swaps_in() {
+    let mut plugin = active(BUILT_IN);
+    let index = package::Package::parse(BUILT_IN).expect("the built-in").values.iter().position(|value| matches!(value, package::Value::Param { .. })).expect("a param");
+    assert_eq!(plugin.params.load(&changed(BUILT_IN, index, "title", "Renamed".into())), Some(vec![]));
+    assert!(plugin.params.incoming.lock().expect("incoming").is_some(), "a device waits to swap in");
+    play(&mut plugin, &[], 1);
+    assert!(plugin.params.incoming.lock().expect("incoming").is_none(), "and has");
+    assert_eq!(plugin.params.targets.read().expect("targets")[0].title, "Renamed");
 }

@@ -20,3 +20,11 @@ serde_json = "1"
 # A package's samples are base64 in its JSON, and its sample files are decoded here.
 base64 = "0.22"
 symphonia = { version = "0.5", features = ["mp3"] }
+# The window (editor.rs): the app's device rack in a webview, attached to the host's view.
+wry = "0.57"
+
+# The same macOS bindings wry uses: to ask whether the host's view is in a window yet, and to try again
+# on the main thread's next turn when it isn't.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow"] }
+dispatch2 = "0.3"

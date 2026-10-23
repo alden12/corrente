@@ -3,13 +3,13 @@
 //! again with its window closed.
 //!
 //! Rust notes, for reading this file:
-//! - `#[derive(Deserialize)]` has serde write the JSON reading for a struct; `#[serde(tag = "kind")]`
-//!   reads a TS-style discriminated union by its `kind` field.
+//! - `#[derive(Deserialize, Serialize)]` has serde write the JSON reading and writing for a struct;
+//!   `#[serde(tag = "kind")]` reads a TS-style discriminated union by its `kind` field.
 //! - `Option<T>` is a value that may be missing, like `T | undefined`.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::FormatOptions;
@@ -20,7 +20,8 @@ use symphonia::core::probe::Hint;
 /// The package format this plugin reads (devicePackage.ts's PACKAGE_FORMAT).
 pub const FORMAT: u32 = 1;
 
-#[derive(Deserialize)]
+// Saved as the plugin plays it (params.rs): a value the window changes is changed here too.
+#[derive(Deserialize, Serialize)]
 pub struct Package {
     pub format: u32,
     pub label: String,
@@ -33,19 +34,55 @@ pub struct Package {
 }
 
 // TS: type PackageValue = { kind: "param", ... } | { kind: "sample", ... } | { kind: "fixed", ... }
-#[derive(Deserialize)]
+// `skip_serializing_if` leaves a missing file or table out of the JSON, as the app does.
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Value {
     Param { title: String, spec: ParamSpec, raw: f64 },
-    Sample { file: Option<String>, table: Option<String> },
+    Sample {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        file: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        table: Option<String>,
+    },
     Fixed { raw: f64 },
 }
 
+impl Value {
+    /// The engine value a param or fixed value starts at; None for a sample, whose value is its slot.
+    // TS: return value.kind === "sample" ? undefined : value.raw;
+    pub fn raw(&self) -> Option<f64> {
+        match self {
+            Value::Param { raw, .. } | Value::Fixed { raw } => Some(*raw),
+            Value::Sample { .. } => None,
+        }
+    }
+
+    /// Change the engine value a param or fixed value starts at; a sample stays as it is.
+    // TS: if (value.kind !== "sample") value.raw = raw;
+    // `Value::Param { raw: now, .. }` names the field `now` here, so it doesn't hide the argument.
+    pub fn set_raw(&mut self, raw: f64) {
+        if let Value::Param { raw: now, .. } | Value::Fixed { raw: now } = self {
+            *now = raw;
+        }
+    }
+}
+
 // TS: type ParamSpec = NumberSpec | EnumSpec | BooleanSpec  (src/audio/params/types.ts)
-#[derive(Deserialize, Clone)]
+// `PartialEq` lets two specs be compared with `==`, field by field.
+#[derive(Deserialize, Serialize, Clone, PartialEq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ParamSpec {
-    Number { min: f64, max: f64, unit: Option<String>, taper: Option<String>, step: Option<f64> },
+    Number {
+        min: f64,
+        max: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        unit: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        taper: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        step: Option<f64>,
+    },
     Enum { options: Vec<String> },
     Boolean {},
 }
@@ -125,6 +162,31 @@ impl Package {
     // `::<Package>` names the type serde should read; `.ok()` turns its error into None.
     pub fn parse(json: &str) -> Option<Package> {
         serde_json::from_str::<Package>(json).ok().filter(|package| package.format == FORMAT)
+    }
+
+    /// Whether `other` is this device with only its values moved: the same plan, binding, params and
+    /// samples. The window sends the whole package again on any change, so the plugin tells a knob
+    /// from a new device here, and only rebuilds for the second.
+    // TS:
+    //   return sameNumbers(this.words, other.words) && sameNumbers(this.binding, other.binding) &&
+    //     this.values.length === other.values.length && this.values.every((value, index) => sameShape(value, other.values[index]));
+    // `to_bits` compares the doubles' bits, so a NaN in the binding equals itself.
+    pub fn same_device(&self, other: &Package) -> bool {
+        let same_value = |(mine, theirs): (&Value, &Value)| match (mine, theirs) {
+            (Value::Param { spec, title, .. }, Value::Param { spec: other_spec, title: other_title, .. }) => {
+                spec == other_spec && title == other_title
+            }
+            (Value::Sample { file, table }, Value::Sample { file: other_file, table: other_table }) => {
+                file == other_file && table == other_table
+            }
+            (Value::Fixed { .. }, Value::Fixed { .. }) => true,
+            _ => false,
+        };
+        self.words == other.words
+            && self.binding.len() == other.binding.len()
+            && self.binding.iter().zip(&other.binding).all(|(mine, theirs)| mine.to_bits() == theirs.to_bits())
+            && self.values.len() == other.values.len()
+            && self.values.iter().zip(&other.values).all(same_value)
     }
 }
 

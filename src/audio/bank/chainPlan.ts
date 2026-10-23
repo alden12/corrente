@@ -121,7 +121,7 @@ export const applyBypass = (
   });
 
 /** An engine instrument's plan with the effects it takes in, and which those are. */
-interface InstrumentChain {
+export interface InstrumentChain {
   plan: ChainPlan;
   absorbed: EffectInstance[];
 }

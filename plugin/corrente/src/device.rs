@@ -48,6 +48,26 @@ pub struct Prepared {
     pub sent: Vec<f64>,
 }
 
+impl Prepared {
+    /// The window moved value `index` to `raw`: a fixed value takes it; a macro's plays it from now,
+    /// until its knob moves again. Allocates nothing: the audio thread calls it between blocks.
+    // TS:
+    //   const source = this.sources[index];
+    //   if (source?.kind === "fixed") source.raw = raw;
+    //   else if (source?.kind === "macro") { source.raw = raw; source.still = knobs[source.knob].value; }
+    // `get_mut(i)` lends the item at i writably, if there is one; `raw: value` names that field `value`.
+    pub fn set(&mut self, index: usize, raw: f64, knobs: &[FloatParam]) {
+        match self.sources.get_mut(index) {
+            Some(Source::Fixed(value)) => *value = raw,
+            Some(Source::Macro { knob, raw: value, still, .. }) => {
+                *value = raw;
+                *still = knobs[*knob].value();
+            }
+            None => {}
+        }
+    }
+}
+
 /// An engine at `rate` playing `package`, its values read from `knobs` now. None for a plan or binding
 /// the engine refuses.
 pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Prepared> {

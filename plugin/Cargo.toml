@@ -1,7 +1,6 @@
-# The plugin (PLUGIN-1): Corrente's devices as a CLAP and VST3, built with nih-plug.
-# `corrente` is the plugin (PLUGIN-2's proof of concept so far); `webview-spike` is PLUGIN-2.2's
-# spike, a webview editor in a plugin window. Bundle with
+# The plugin (PLUGIN-1): Corrente's devices as a CLAP and VST3, built with nice-plug.
+# `corrente` is the plugin; its window is the app's device rack in a webview (PLUGIN-3.2). Bundle with
 # `cargo xtask bundle <package> --release`, which writes target/bundled/.
 [workspace]
 resolver = "3"
-members = ["corrente", "webview-spike", "xtask"]
+members = ["corrente", "xtask"]

@@ -20,7 +20,7 @@ import { ParamStore } from "../../src/audio/params/store";
 import { sampleAudioFor } from "../../src/audio/render/sampleAudio";
 import { parseRef } from "../../src/audio/samples/catalog";
 import { builtinSampleUrl, loadNodeSample } from "../../server/render/nodeRender";
-import { namespaceOf, sectionTitle } from "../../src/ui/paramSections";
+import { paramTitle } from "../../src/plugin/paramTitle";
 
 const args = process.argv.slice(2);
 const outAt = args.indexOf("--out");
@@ -37,17 +37,11 @@ const file = async (ref: string) => {
 /** A wavetable's table as the app builds it. Its rate doesn't matter: a table is read by the cycle. */
 const table = async (ref: string) => (await sampleAudioFor(ref, true, loadNodeSample, 48000))?.channels[0] ?? null;
 
-/** Named as the app shows them, section first ("Filter Env Attack"), since the host lists them flat. */
-const titleOf = (id: string, spec: { label: string }) => {
-  const namespace = namespaceOf(id);
-  return namespace ? `${sectionTitle(namespace)} ${spec.label}` : spec.label;
-};
-
 const packageOf = async (type: string) => {
   const chain = chainPlan([{ key: "instrument", type, store: new ParamStore(instrumentSchema(type)) }], true);
   if (!chain) throw new Error(`${type} isn't an engine instrument`);
   const label = ENGINE_INSTRUMENTS.find((instrument) => instrument.type === type)?.label ?? type;
-  return devicePackage(chain, label, { file, table }, titleOf);
+  return devicePackage(chain, label, { file, table }, paramTitle);
 };
 
 if (outDir) mkdirSync(outDir, { recursive: true });
