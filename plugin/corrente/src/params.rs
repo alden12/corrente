@@ -36,6 +36,9 @@ pub struct Target {
 }
 
 /// The first MACROS of a package's params, in order, as the macros' targets.
+// TS:
+//   return package.values.flatMap((kind, value) => kind.kind === "param" ? [{ value, title, spec, raw }] : []).slice(0, MACROS);
+// `filter_map` keeps each Some its closure returns; `.take(MACROS)` stops after the first 16.
 pub fn targets_of(package: &Package) -> Vec<Target> {
     let params = package.values.iter().enumerate().filter_map(|(value, kind)| match kind {
         Value::Param { title, spec, raw } => Some(Target { value, title: title.clone(), spec: spec.clone(), raw: *raw }),
@@ -61,6 +64,13 @@ pub struct Macros {
 impl Macros {
     /// Macros for `json`'s package, each knob starting at its target's value.
     pub fn new(json: String, package: &Package) -> Self {
+        // TS:
+        //   const targets = targetsOf(package);
+        //   const knobs = Array.from({ length: MACROS }, (_, index) => new FloatParam(`Macro ${index + 1}`,
+        //     targets[index] ? targets[index].spec.position(targets[index].raw) : 0.5, { min: 0, max: 1 })
+        //     .withValueToString((position) => targets[index] ? `${title}: ${display(engineValue(position))}` : ""));
+        // `RwLock` lets many threads read at once, or one write. Each knob's text closure keeps its own
+        // `Arc` of the targets (`shown`), so it sees them change; `move` hands the closure what it uses.
         let targets = Arc::new(RwLock::new(targets_of(package)));
         let knobs = (0..MACROS)
             .map(|index| {
@@ -74,6 +84,7 @@ impl Macros {
                     }))
             })
             .collect();
+        // TS: return { knobs, targets, package: json, incoming: undefined, retired: undefined, rate: 0 }
         Macros {
             knobs,
             targets,
@@ -85,6 +96,7 @@ impl Macros {
     }
 
     /// The sample rate the plugin is active at, if it has been.
+    // TS: return this.rate > 0 ? this.rate : undefined
     pub fn active_rate(&self) -> Option<f32> {
         Some(f32::from_bits(self.rate.load(Ordering::Acquire))).filter(|&rate| rate > 0.0)
     }
@@ -92,17 +104,21 @@ impl Macros {
     /// Play `json`'s package from the next block: build its engine now, here (off the audio thread),
     /// for the plugin to swap in. False, changing nothing, for one that won't load.
     pub fn load(&self, json: String) -> bool {
+        // TS: const package = Package.parse(json); if (!package) return false;
         let Some(package) = Package::parse(&json) else { return false };
         // A device the audio thread let go of is freed here, where freeing is allowed.
         if let Ok(mut retired) = self.retired.lock() {
             retired.take();
         }
+        // TS: const rate = this.activeRate(); if (rate) { const prepared = prepare(package, rate, this.knobs); if (!prepared) return false; this.incoming = prepared; }
         if let Some(rate) = self.active_rate() {
             let Some(prepared) = device::prepare(&package, rate, &self.knobs) else { return false };
             if let Ok(mut incoming) = self.incoming.lock() {
                 *incoming = Some(Box::new(prepared));
             }
         }
+        // TS: this.targets = targetsOf(package); this.package = json; return true;
+        // `.write()` takes the RwLock for writing; `*targets = ...` replaces what it guards.
         if let Ok(mut targets) = self.targets.write() {
             *targets = targets_of(&package);
         }
@@ -114,16 +130,19 @@ impl Macros {
 }
 
 unsafe impl Params for Macros {
+    // TS: return this.knobs.map((knob, index) => [`macro${index + 1}`, knob, ""])  (id, param, group)
     fn param_map(&self) -> Vec<(String, ParamPtr, String)> {
         self.knobs.iter().enumerate().map(|(index, knob)| (format!("macro{}", index + 1), knob.as_ptr(), String::new())).collect()
     }
 
+    // TS: return new Map([["package", this.package]])
     fn serialize_fields(&self) -> BTreeMap<String, String> {
         let package = self.package.lock().map(|package| package.clone()).unwrap_or_default();
         BTreeMap::from([(PACKAGE_FIELD.to_owned(), package)])
     }
 
     // The host's project is opening, or a preset loading: the macros' values are already restored.
+    // TS: const json = serialized.get("package"); if (json !== undefined && !this.load(json)) log the failure;
     fn deserialize_fields(&self, serialized: &BTreeMap<String, String>) {
         if let Some(json) = serialized.get(PACKAGE_FIELD) {
             if !self.load(json.clone()) {

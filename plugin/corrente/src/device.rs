@@ -25,6 +25,11 @@ pub enum Source {
 
 impl Source {
     /// The value's raw engine value now.
+    // TS:
+    //   if (this.kind === "fixed") return this.raw;
+    //   const position = knobs[this.knob].value;
+    //   return position === this.still ? this.raw : this.spec.engineValue(position);
+    // `*raw` reads the number out of the loan the pattern gives.
     pub fn now(&self, knobs: &[FloatParam]) -> f64 {
         match self {
             Source::Fixed(raw) => *raw,
@@ -46,8 +51,14 @@ pub struct Prepared {
 /// An engine at `rate` playing `package`, its values read from `knobs` now. None for a plan or binding
 /// the engine refuses.
 pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Prepared> {
+    // TS: const engine = new Engine(); engine.init(rate, 1);
     let mut engine = Engine::new();
     engine.init(rate as i32, 1);
+    // TS:
+    //   let nextSlot = 0;
+    //   const sources = package.values.map((value) => value.kind === "sample" ? fixed(slot it loads into, or EMPTY_SAMPLE) : fixed(value.raw));
+    // The closure changes `engine` and `next_slot` as `map` calls it: fine in Rust because nothing
+    // else uses them meanwhile. `Value::Fixed { raw } | Value::Param { raw, .. }` matches either case.
     // Each sample takes the next slot; one that won't load plays silence, as in the app.
     let mut next_slot = 0;
     let mut sources: Vec<Source> = package
@@ -57,6 +68,8 @@ pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Pre
             Value::Fixed { raw } | Value::Param { raw, .. } => Source::Fixed(*raw),
             Value::Sample { file, table } => {
                 let audio = audio_of(file.as_deref(), table.as_deref());
+                // TS: reserve the slot, copy each channel in after the one before, then count it taken.
+                // `data[a..b]` is a slice (subarray) of the engine's memory; `copy_from_slice` is `set`.
                 let slot = audio.filter(|_| next_slot < EMPTY_SAMPLE).and_then(|audio| {
                     let frames = audio.channels[0].len();
                     let data = engine.reserve_sample(next_slot, frames, audio.channels.len(), audio.rate)?;
@@ -68,16 +81,22 @@ pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Pre
             }
         })
         .collect();
+    // TS: targetsOf(package).forEach((target, knob) => sources[target.value] = macro(knob, target, still: position(target.raw)));
     for (knob, target) in targets_of(package).into_iter().enumerate() {
         let still = target.spec.position(target.raw) as f32;
         sources[target.value] = Source::Macro { knob, spec: target.spec, raw: target.raw, still };
     }
+    // TS: const plan = parsePlan(package.words); if (!plan) return undefined; if (!engine.load(0, plan)) { log; return undefined }
     let plan = corrente_engine::parse_plan(&package.words).ok()?;
     if !engine.load(0, plan) {
         nice_error!("the engine refused {}'s plan", package.label);
         return None;
     }
     // The binding, then each value now, then where each starts: NaN, at its value.
+    // TS:
+    //   const sent = sources.map((source) => source.now(knobs));
+    //   return engine.bind(0, [...package.binding, ...sent, ...sent.map(() => NaN)]) ? { engine, sources, sent } : undefined;
+    // `[a, b, c].concat()` joins three slices into one new list.
     let sent: Vec<f64> = sources.iter().map(|source| source.now(knobs)).collect();
     let starts = vec![f64::NAN; sent.len()];
     engine.bind(0, &[&package.binding[..], &sent, &starts].concat()).then_some(Prepared { engine, sources, sent })

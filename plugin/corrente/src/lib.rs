@@ -42,6 +42,8 @@ const MAX_EVENTS: usize = 512;
 /// The device a new instance plays: export.ts's output.
 const BUILT_IN: &str = include_str!("../device.json");
 
+// TS: type Event = { kind: "on"; note: number; velocity: number } | { kind: "off"; note: number }
+// `#[derive(Clone, Copy)]` lets an Event be copied like a number, rather than moved.
 #[derive(Clone, Copy)]
 enum Event {
     On { note: u8, velocity: f32 },
@@ -64,6 +66,8 @@ pub struct Corrente {
 }
 
 impl Default for Corrente {
+    // TS: return Corrente.withPackage(BUILT_IN) ?? throw new Error(...). `.expect` stops with that
+    // message on None: the built-in package is ours, so it always reads.
     fn default() -> Self {
         Corrente::with_package(BUILT_IN).expect("device.json is export.ts's output")
     }
@@ -71,6 +75,7 @@ impl Default for Corrente {
 
 impl Corrente {
     /// A plugin playing `json`'s package from when it's activated; None for one it can't read.
+    // TS: const package = Package.parse(json); if (!package) return undefined; return { params: new Macros(json, package), ... }
     fn with_package(json: &str) -> Option<Self> {
         let package = Package::parse(json)?;
         Some(Self {
@@ -85,13 +90,19 @@ impl Corrente {
 
     /// Build the saved package's device at `rate`, here and now (off the audio thread).
     fn load(&mut self, rate: f32) -> bool {
+        // TS: this.params.rate = rate; const json = this.params.package;
+        // An atomic holds a number, so the rate is stored as its bits. `.lock()` waits for the
+        // mutex and lends what it guards; `.map(...)` copies the JSON out before the lock is let go.
         self.params.rate.store(rate.to_bits(), Ordering::Release);
         let json = self.params.package.lock().map(|json| json.clone()).unwrap_or_default();
+        // TS: const prepared = Package.parse(json) && prepare(package, rate, this.params.knobs);
         let prepared = Package::parse(&json).and_then(|package| device::prepare(&package, rate, &self.params.knobs));
         // One built before this, at an older rate, is stale.
+        // TS: this.params.incoming = undefined;  (`.take()` empties an Option, handing back what it held)
         if let Ok(mut incoming) = self.params.incoming.lock() {
             incoming.take();
         }
+        // TS: this.device = prepared; return prepared !== undefined;  (`Box::new` puts it on the heap)
         self.device = prepared.map(Box::new);
         self.device.is_some()
     }
@@ -99,19 +110,25 @@ impl Corrente {
     /// Swap in a device built off the audio thread, if one is waiting, handing the old one back to be
     /// freed there. Never waits for a lock, and frees nothing.
     fn take_incoming(&mut self) {
+        // TS: const old = this.retiring; this.retiring = undefined; if (old) this.retire(old); if (this.retiring) return;
         if let Some(old) = self.retiring.take() {
             self.retire(old);
         }
         if self.retiring.is_some() {
             return;
         }
+        // TS: const fresh = this.params.incoming.tryTake(); if (!fresh) return;
+        // `try_lock` gives the lock only if it's free right now, never waiting: the audio thread can't.
         let Some(new) = self.params.incoming.try_lock().ok().and_then(|mut incoming| incoming.take()) else { return };
+        // TS: const old = this.device; this.device = fresh; if (old) this.retire(old);
         if let Some(old) = std::mem::replace(&mut self.device, Some(new)) {
             self.retire(old);
         }
     }
 
     /// Hand a device back to be freed off the audio thread, or keep it to try next block.
+    // TS: if (this.params.retired.tryLock() && !this.params.retired.value) this.params.retired.value = old; else this.retiring = old;
+    // A `match` arm can carry a condition (`if retired.is_none()`); the `_` arm takes everything else.
     fn retire(&mut self, old: Box<Prepared>) {
         match self.params.retired.try_lock() {
             Ok(mut retired) if retired.is_none() => *retired = Some(old),
@@ -122,11 +139,18 @@ impl Corrente {
     /// Render the next block: send changed values, start and stop the notes gathered for it, tell
     /// the engine where the transport is, then keep its output to play out.
     fn render(&mut self, beat: f64, tempo: f32, playing: bool) {
+        // TS: this.takeIncoming(); const device = this.device; if (!device) { this.events.length = 0; return; }
+        // `.as_deref_mut()` lends what's inside the Option<Box<..>> writably, without taking it out.
         self.take_incoming();
         let Some(device) = self.device.as_deref_mut() else {
             self.events.clear();
             return;
         };
+        // TS:
+        //   device.sources.forEach((source, value) => {
+        //     const now = source.now(this.params.knobs);
+        //     if (now !== device.sent[value]) { device.sent[value] = now; device.engine.track(0)?.setValue(value, now); }
+        //   });
         for value in 0..device.sources.len() {
             let now = device.sources[value].now(&self.params.knobs);
             if now != device.sent[value] {
@@ -136,6 +160,8 @@ impl Corrente {
                 }
             }
         }
+        // TS: for (const [offset, event] of this.events) event.kind === "on" ? engine.keyOn(...) : track.keyOff(...)
+        // `&(offset, event)` unpacks each pair as it's lent out; `i32::from(note)` widens the u8 key.
         for &(offset, event) in &self.events {
             match event {
                 Event::On { note, velocity } => device.engine.key_on(0, offset as i32, i32::from(note), f64::from(velocity)),
@@ -146,9 +172,12 @@ impl Corrente {
                 }
             }
         }
+        // TS: this.events.length = 0; engine.setTransport(beat, tempo, playing); engine.process();
+        // `clear()` empties the list but keeps its room, so the next block's pushes don't allocate.
         self.events.clear();
         device.engine.set_transport(beat, tempo, playing);
         device.engine.process();
+        // TS: this.output.forEach((output, channel) => output.set(track.output(channel)))
         if let Some(track) = device.engine.track_mut(0) {
             for (channel, output) in self.output.iter_mut().enumerate() {
                 if let Some(rendered) = track.output(channel) {
@@ -178,18 +207,25 @@ impl Plugin for Corrente {
     type SysExMessage = ();
     type BackgroundTask = ();
 
+    // TS: return this.params. `Arc` is a shared pointer counted across threads; `.clone()` adds an
+    // owner rather than copying the macros.
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
     }
 
     // Off the audio thread: building the device allocates.
     fn activate(&mut self, _layout: &AudioIOLayout, buffer: &BufferConfig, context: &mut impl ActivateContext<Self>) -> bool {
+        // TS: context.setLatencySamples(BLOCK); return this.load(buffer.sampleRate);
         context.set_latency_samples(BLOCK as u32);
         self.load(buffer.sample_rate)
     }
 
     // May be called on the audio thread: lets go of every key, cuts every voice and starts the block
     // over, allocating nothing.
+    // TS:
+    //   const track = this.device?.engine.track(0);
+    //   if (track) { track.keysOff(0); for (let slot = 0; slot < track.voiceSlots(); slot++) track.cut(slot, 0); }
+    //   this.events.length = 0; this.position = 0; this.output = [new Float32Array(BLOCK), new Float32Array(BLOCK)];
     fn reset(&mut self) {
         if let Some(track) = self.device.as_deref_mut().and_then(|device| device.engine.track_mut(0)) {
             track.keys_off(0);
@@ -201,6 +237,8 @@ impl Plugin for Corrente {
     }
 
     fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, context: &mut impl ProcessContext<Self>) -> ProcessStatus {
+        // TS: for each sample index: take every MIDI event timed at or before it, then play out one sample.
+        // `while let Some(x) = ...` loops for as long as the expression gives a value.
         let mut next_event = context.next_event();
         for (index, mut samples) in buffer.iter_samples().enumerate() {
             while let Some(event) = next_event.filter(|event| event.timing() <= index as u32) {
@@ -210,14 +248,18 @@ impl Plugin for Corrente {
                     NoteEvent::NoteOff { key, .. } => key.number().map(|note| Event::Off { note }),
                     _ => None,
                 };
+                // TS: if (gathered && this.events.length < MAX_EVENTS) this.events.push([this.position, gathered]);
                 if let Some(gathered) = gathered.filter(|_| self.events.len() < MAX_EVENTS) {
                     self.events.push((self.position, gathered));
                 }
                 next_event = context.next_event();
             }
+            // TS: samples.forEach((_, channel) => samples[channel] = this.output[Math.min(channel, 1)][this.position]);
+            // `*sample = ...` writes through the loan `iter_mut` gives.
             for (channel, sample) in samples.iter_mut().enumerate() {
                 *sample = self.output[channel.min(1)][self.position];
             }
+            // TS: if (++this.position === BLOCK) { this.position = 0; this.render(transport's beat, tempo, playing) }
             self.position += 1;
             if self.position == BLOCK {
                 self.position = 0;
