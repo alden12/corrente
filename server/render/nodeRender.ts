@@ -15,7 +15,7 @@ import type { SampleAudio } from "../../src/audio/bank/bank";
 
 const ENGINE_URL = new URL("../../engine/engine.wasm", import.meta.url);
 /** The built-in kit's files: `<id>.wav`, as builtinUrls.ts bundles them for the browser. */
-const assetUrl = (id: string) => new URL(`../../src/audio/samples/assets/${id}.wav`, import.meta.url);
+export const builtinSampleUrl = (id: string) => new URL(`../../src/audio/samples/assets/${id}.wav`, import.meta.url);
 
 /** One decode per built-in, shared by every render. */
 const builtins = new Map<string, Promise<SampleAudio | null>>();
@@ -26,7 +26,7 @@ export const loadNodeSample: LoadSample = (ref) => {
     return Promise.resolve(null);
   const pending =
     builtins.get(parsed.id) ??
-    readFile(fileURLToPath(assetUrl(parsed.id))).then(
+    readFile(fileURLToPath(builtinSampleUrl(parsed.id))).then(
       (bytes) => decodeWav(bytes),
       () => null,
     );

@@ -19,7 +19,7 @@ import { ENGINE_INSTRUMENTS } from "../../src/audio/instruments/engine";
 import { ParamStore } from "../../src/audio/params/store";
 import { sampleAudioFor } from "../../src/audio/render/sampleAudio";
 import { parseRef } from "../../src/audio/samples/catalog";
-import { loadNodeSample } from "../../server/render/nodeRender";
+import { builtinSampleUrl, loadNodeSample } from "../../server/render/nodeRender";
 import { namespaceOf, sectionTitle } from "../../src/ui/paramSections";
 
 const args = process.argv.slice(2);
@@ -31,8 +31,7 @@ const types = args.filter((arg, index) => !arg.startsWith("--") && (outAt < 0 ||
 const file = async (ref: string) => {
   const parsed = parseRef(ref);
   if (parsed.kind !== "builtin") return null;
-  const url = new URL(`../../src/audio/samples/assets/${parsed.id}.wav`, import.meta.url);
-  return new Uint8Array(readFileSync(fileURLToPath(url)));
+  return new Uint8Array(readFileSync(fileURLToPath(builtinSampleUrl(parsed.id))));
 };
 
 /** A wavetable's table as the app builds it. Its rate doesn't matter: a table is read by the cycle. */
