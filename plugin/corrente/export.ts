@@ -1,47 +1,63 @@
 /**
- * PLUGIN-2: write one built-in instrument as the plugin plays it, so the plugin needs no TypeScript
- * at run time. The plan is compiled here by the app's own compiler (`chainPlan`, as a track plays
- * it), with its binding (bank/binding.ts: the param shaping the engine does) and the device's param
- * specs beside it.
+ * PLUGIN-3: built-in instruments as device packages (src/audio/bank/devicePackage.ts), made in Node by
+ * the app's own compiler (`chainPlan`, as a track plays them), samples embedded. The plugin has no
+ * window yet to be handed one, so the first is built in as its default device (device.json), and the
+ * plugin's tests play the rest.
  *
- *   npx tsx plugin/corrente/export.ts [type]      (default subtractive) -> plugin/corrente/device.json
+ *   npx tsx plugin/corrente/export.ts [type...] [--out dir]
  *
- * A device with a sample or wavetable param isn't supported yet: the plugin has no way to fill the
- * engine's sample slots.
+ * With no types, subtractive. With `--out`, every package is written there as `<type>.json`, and
+ * device.json is left alone.
  */
-import { writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bindingOf } from "../../src/audio/bank/binding";
 import { chainPlan } from "../../src/audio/bank/chainPlan";
+import { devicePackage } from "../../src/audio/bank/devicePackage";
 import { instrumentSchema } from "../../src/audio/instruments/catalog";
 import { ENGINE_INSTRUMENTS } from "../../src/audio/instruments/engine";
 import { ParamStore } from "../../src/audio/params/store";
+import { sampleAudioFor } from "../../src/audio/render/sampleAudio";
+import { parseRef } from "../../src/audio/samples/catalog";
+import { loadNodeSample } from "../../server/render/nodeRender";
 import { namespaceOf, sectionTitle } from "../../src/ui/paramSections";
 
-const type = process.argv[2] ?? "subtractive";
-const schema = instrumentSchema(type);
-if (schema.some((spec) => spec.kind === "sample"))
-  throw new Error(`${type} plays samples, which the plugin can't load yet`);
-const chain = chainPlan([{ key: "instrument", type, store: new ParamStore(schema) }], true);
-if (!chain) throw new Error(`${type} isn't an engine instrument`);
+const args = process.argv.slice(2);
+const outAt = args.indexOf("--out");
+const outDir = outAt >= 0 ? args[outAt + 1] : undefined;
+const types = args.filter((arg, index) => !arg.startsWith("--") && (outAt < 0 || index !== outAt + 1));
 
-const binding = bindingOf(chain.plan);
-const device = {
-  type,
-  label: ENGINE_INSTRUMENTS.find((instrument) => instrument.type === type)?.label ?? type,
-  words: Array.from(chain.plan.words),
-  // eng_bind's words up to the values, which the plugin adds from its params.
-  binding: binding.words,
-  // Named as the app shows them, section first ("Filter Env Attack"), since the host lists them flat.
-  params: schema.map((spec) => {
-    const namespace = namespaceOf(spec.id);
-    return { ...spec, name: namespace ? `${sectionTitle(namespace)} ${spec.label}` : spec.label };
-  }),
-  // The binding's value i is the param with this id in `params` (null for one nothing sets).
-  values: binding.names.map((name) => chain.sources[name]?.id ?? null),
+/** A built-in sample's file, as the app bundles it; null for any other (there are none in Node). */
+const file = async (ref: string) => {
+  const parsed = parseRef(ref);
+  if (parsed.kind !== "builtin") return null;
+  const url = new URL(`../../src/audio/samples/assets/${parsed.id}.wav`, import.meta.url);
+  return new Uint8Array(readFileSync(fileURLToPath(url)));
 };
-const out = fileURLToPath(new URL("device.json", import.meta.url));
-writeFileSync(out, `${JSON.stringify(device)}\n`);
-console.log(
-  `${device.label}: ${device.words.length} plan words, ${device.values.length} values, ${schema.length} params -> ${out}`,
-);
+
+/** A wavetable's table as the app builds it. Its rate doesn't matter: a table is read by the cycle. */
+const table = async (ref: string) => (await sampleAudioFor(ref, true, loadNodeSample, 48000))?.channels[0] ?? null;
+
+/** Named as the app shows them, section first ("Filter Env Attack"), since the host lists them flat. */
+const titleOf = (id: string, spec: { label: string }) => {
+  const namespace = namespaceOf(id);
+  return namespace ? `${sectionTitle(namespace)} ${spec.label}` : spec.label;
+};
+
+const packageOf = async (type: string) => {
+  const chain = chainPlan([{ key: "instrument", type, store: new ParamStore(instrumentSchema(type)) }], true);
+  if (!chain) throw new Error(`${type} isn't an engine instrument`);
+  const label = ENGINE_INSTRUMENTS.find((instrument) => instrument.type === type)?.label ?? type;
+  return devicePackage(chain, label, { file, table }, titleOf);
+};
+
+if (outDir) mkdirSync(outDir, { recursive: true });
+for (const type of types.length > 0 ? types : ["subtractive"]) {
+  const made = await packageOf(type);
+  const out = outDir ? join(outDir, `${type}.json`) : fileURLToPath(new URL("device.json", import.meta.url));
+  const json = JSON.stringify(made);
+  writeFileSync(out, `${json}\n`);
+  const samples = made.values.filter((value) => value.kind === "sample").length;
+  console.log(`${made.label}: ${made.values.length} values (${samples} samples), ${json.length} bytes -> ${out}`);
+  if (!outDir) break;
+}

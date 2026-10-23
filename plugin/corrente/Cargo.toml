@@ -5,7 +5,7 @@ edition = "2024"
 license = "AGPL-3.0-or-later"
 publish = false
 
-# PLUGIN-2's proof of concept: one built-in instrument on the app's engine. See src/lib.rs.
+# Corrente's devices as a plugin (PLUGIN-2, PLUGIN-3), on the app's engine. See src/lib.rs.
 [lib]
 crate-type = ["cdylib"]
 
@@ -17,3 +17,6 @@ nice-plug = { version = "0.4.2", features = ["assert_process_allocs"] }
 corrente-engine-native = { path = "../../engine/native" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# A package's samples are base64 in its JSON, and its sample files are decoded here.
+base64 = "0.22"
+symphonia = { version = "0.5", features = ["mp3"] }

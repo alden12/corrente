@@ -1,11 +1,14 @@
-//! Corrente as a plugin (PLUGIN-2's proof of concept): one built-in instrument, played by the
-//! engine the app uses, from the host's MIDI, with its params as the host's. No editor yet, so the
-//! host shows its own controls for them.
+//! Corrente as a plugin (PLUGIN-2, PLUGIN-3): a device package played by the engine the app uses,
+//! from the host's MIDI, with 16 macros as the host's params. No editor yet, so the host shows its own
+//! controls for them, and the device is the one built in (device.json) or the one the host's project
+//! saved.
 //!
 //! - **The engine** is the app's (`corrente_engine`, built natively by engine/native), owned by the
-//!   plugin, one per instance. The device's plan was compiled ahead of time by the app's compiler
-//!   (export.ts -> device.json), so no TypeScript runs here.
-//! - **The plan loads in `activate`**, which hosts call off the audio thread: loading allocates.
+//!   plugin, one per instance. A package carries a plan already compiled by the app's compiler, so no
+//!   TypeScript runs here.
+//! - **A device is built off the audio thread** (device.rs: loading allocates), in `activate`, or when
+//!   the host restores a saved package (params.rs), and handed over whole: the audio thread swaps it
+//!   in between blocks, and hands the old one back to be freed elsewhere.
 //! - **Blocks:** the engine renders 128 samples at a time and hosts hand over any number, so the
 //!   plugin runs a block behind. Each host sample plays a sample of the block rendered last, while
 //!   its notes are gathered for the next one at the same place in it. That is 128 samples of latency,
@@ -18,20 +21,26 @@
 //!   are values it asks for, fixed at compile time.
 //! - `Vec::with_capacity(n)` reserves room for n items up front: pushing up to n then never
 //!   allocates, which is how the event queue stays off the allocator on the audio thread.
+//! - `std::mem::replace(&mut a, b)` puts b in a and gives back what a held, in one step.
 
 mod device;
+mod package;
 mod params;
 #[cfg(test)]
 mod tests;
 
-use corrente_engine::{BLOCK, Engine};
-use device::Device;
+use corrente_engine::BLOCK;
+use device::Prepared;
 use nice_plug::prelude::*;
-use params::DeviceParams;
+use package::Package;
+use params::Macros;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 /// The most note events gathered for one engine block; more are dropped.
 const MAX_EVENTS: usize = 512;
+/// The device a new instance plays: export.ts's output.
+const BUILT_IN: &str = include_str!("../device.json");
 
 #[derive(Clone, Copy)]
 enum Event {
@@ -40,11 +49,11 @@ enum Event {
 }
 
 pub struct Corrente {
-    device: Device,
-    params: Arc<DeviceParams>,
-    /// For each of the binding's values, where its param is in `params` (None for one nothing sets).
-    value_params: Vec<Option<usize>>,
-    engine: Engine,
+    params: Arc<Macros>,
+    /// The device playing, once the plugin is active.
+    device: Option<Box<Prepared>>,
+    /// A device swapped out that couldn't be handed back yet (the slot was busy): tried again next block.
+    retiring: Option<Box<Prepared>>,
     /// The block rendered last, left and right, played out sample by sample.
     output: [[f32; BLOCK]; 2],
     /// How far into the block the host has reached: where the next sample plays from `output`, and
@@ -52,78 +61,95 @@ pub struct Corrente {
     position: usize,
     /// Notes for the next block, at their place in it.
     events: Vec<(usize, Event)>,
-    /// What each value was last set to, so only changes are sent.
-    sent: Vec<f64>,
 }
 
 impl Default for Corrente {
     fn default() -> Self {
-        let device = device::built_in();
-        let params = Arc::new(DeviceParams::new(&device.params));
-        let value_params = device.values.iter().map(|id| id.as_deref().and_then(|id| params.index_of(id))).collect();
-        Self {
-            device,
-            params,
-            value_params,
-            engine: Engine::new(),
-            output: [[0.0; BLOCK]; 2],
-            position: 0,
-            events: Vec::with_capacity(MAX_EVENTS),
-            sent: Vec::new(),
-        }
+        Corrente::with_package(BUILT_IN).expect("device.json is export.ts's output")
     }
 }
 
 impl Corrente {
-    /// Make the engine at `rate` and load the device's plan into it, its params at their values now.
+    /// A plugin playing `json`'s package from when it's activated; None for one it can't read.
+    fn with_package(json: &str) -> Option<Self> {
+        let package = Package::parse(json)?;
+        Some(Self {
+            params: Arc::new(Macros::new(json.to_owned(), &package)),
+            device: None,
+            retiring: None,
+            output: [[0.0; BLOCK]; 2],
+            position: 0,
+            events: Vec::with_capacity(MAX_EVENTS),
+        })
+    }
+
+    /// Build the saved package's device at `rate`, here and now (off the audio thread).
     fn load(&mut self, rate: f32) -> bool {
-        self.engine.init(rate as i32, 1);
-        let Ok(plan) = corrente_engine::parse_plan(&self.device.words) else {
-            nice_error!("{}'s plan didn't parse", self.device.label);
-            return false;
-        };
-        if !self.engine.load(0, plan) {
-            return false;
+        self.params.rate.store(rate.to_bits(), Ordering::Release);
+        let json = self.params.package.lock().map(|json| json.clone()).unwrap_or_default();
+        let prepared = Package::parse(&json).and_then(|package| device::prepare(&package, rate, &self.params.knobs));
+        // One built before this, at an older rate, is stale.
+        if let Ok(mut incoming) = self.params.incoming.lock() {
+            incoming.take();
         }
-        // The binding, then each value now, then where each starts: NaN, at its value.
-        self.sent = (0..self.device.values.len()).map(|value| self.value_now(value)).collect();
-        let starts = vec![f64::NAN; self.sent.len()];
-        let words: Vec<f64> = [&self.device.binding[..], &self.sent, &starts].concat();
-        self.engine.bind(0, &words)
+        self.device = prepared.map(Box::new);
+        self.device.is_some()
     }
 
-    /// A value's raw value now, read from its param.
-    fn value_now(&self, value: usize) -> f64 {
-        self.value_params[value].map_or(0.0, |index| f64::from(self.params.params[index].1.engine_value()))
+    /// Swap in a device built off the audio thread, if one is waiting, handing the old one back to be
+    /// freed there. Never waits for a lock, and frees nothing.
+    fn take_incoming(&mut self) {
+        if let Some(old) = self.retiring.take() {
+            self.retire(old);
+        }
+        if self.retiring.is_some() {
+            return;
+        }
+        let Some(new) = self.params.incoming.try_lock().ok().and_then(|mut incoming| incoming.take()) else { return };
+        if let Some(old) = std::mem::replace(&mut self.device, Some(new)) {
+            self.retire(old);
+        }
     }
 
-    /// Render the next block: send changed params, start and stop the notes gathered for it, tell
+    /// Hand a device back to be freed off the audio thread, or keep it to try next block.
+    fn retire(&mut self, old: Box<Prepared>) {
+        match self.params.retired.try_lock() {
+            Ok(mut retired) if retired.is_none() => *retired = Some(old),
+            _ => self.retiring = Some(old),
+        }
+    }
+
+    /// Render the next block: send changed values, start and stop the notes gathered for it, tell
     /// the engine where the transport is, then keep its output to play out.
     fn render(&mut self, beat: f64, tempo: f32, playing: bool) {
-        for value in 0..self.sent.len() {
-            let now = self.value_now(value);
-            if now != self.sent[value] {
-                self.sent[value] = now;
-                if let Some(track) = self.engine.track_mut(0) {
+        self.take_incoming();
+        let Some(device) = self.device.as_deref_mut() else {
+            self.events.clear();
+            return;
+        };
+        for value in 0..device.sources.len() {
+            let now = device.sources[value].now(&self.params.knobs);
+            if now != device.sent[value] {
+                device.sent[value] = now;
+                if let Some(track) = device.engine.track_mut(0) {
                     track.set_value(value, now);
                 }
             }
         }
-        for index in 0..self.events.len() {
-            let (offset, event) = self.events[index];
+        for &(offset, event) in &self.events {
             match event {
-                Event::On { note, velocity } => self.engine.key_on(0, offset as i32, i32::from(note), f64::from(velocity)),
+                Event::On { note, velocity } => device.engine.key_on(0, offset as i32, i32::from(note), f64::from(velocity)),
                 Event::Off { note } => {
-                    if let Some(track) = self.engine.track_mut(0) {
+                    if let Some(track) = device.engine.track_mut(0) {
                         track.key_off(offset as i32, i32::from(note));
                     }
                 }
             }
         }
         self.events.clear();
-        self.engine.set_transport(beat, tempo, playing);
-        self.engine.process();
-        if let Some(track) = self.engine.track_mut(0) {
+        device.engine.set_transport(beat, tempo, playing);
+        device.engine.process();
+        if let Some(track) = device.engine.track_mut(0) {
             for (channel, output) in self.output.iter_mut().enumerate() {
                 if let Some(rendered) = track.output(channel) {
                     output.copy_from_slice(rendered);
@@ -156,17 +182,16 @@ impl Plugin for Corrente {
         self.params.clone()
     }
 
-    // Off the audio thread: making the engine and loading the plan allocate.
+    // Off the audio thread: building the device allocates.
     fn activate(&mut self, _layout: &AudioIOLayout, buffer: &BufferConfig, context: &mut impl ActivateContext<Self>) -> bool {
         context.set_latency_samples(BLOCK as u32);
         self.load(buffer.sample_rate)
     }
 
-
     // May be called on the audio thread: lets go of every key, cuts every voice and starts the block
     // over, allocating nothing.
     fn reset(&mut self) {
-        if let Some(track) = self.engine.track_mut(0) {
+        if let Some(track) = self.device.as_deref_mut().and_then(|device| device.engine.track_mut(0)) {
             track.keys_off(0);
             (0..track.voice_slots()).for_each(|slot| track.cut(slot, 0));
         }

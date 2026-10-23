@@ -1,95 +1,134 @@
-//! The device's params as the host's: a number as a float, a switch as a bool, a choice as an int
-//! that shows its option's name. nice-plug's `#[derive(Params)]` needs them known when the plugin is
-//! compiled; these come from the device, so `Params` is implemented by hand.
+//! The plugin's host params and saved state: 16 macros and the device package.
+//!
+//! - **Macros, not the device's own params:** a host takes a plugin's params once, when it makes the
+//!   plugin, and nice-plug can't tell it they changed, so the list can't follow the device loaded. Each
+//!   macro is a knob from 0 to 1, mapped for now to one of the device's params in order (the first 16
+//!   that aren't samples); the window will let you choose. The host shows the mapped param's name and
+//!   value in the macro's text.
+//! - **The package is saved with the host's project** (`serialize_fields`), as the JSON it came as,
+//!   and loading it again (`deserialize_fields`) builds its engine off the audio thread
+//!   (device.rs), for the plugin to swap in between blocks.
 //!
 //! Rust notes, for reading this file:
 //! - `unsafe impl Params` is implementing a trait whose contract Rust can't check: here, that the
 //!   pointers `param_map` hands out stay valid as long as the params do (they live in `self`).
+//! - `Mutex` and `RwLock` guard what more than one thread reads: the host's threads and the audio
+//!   thread. The audio thread only ever `try_lock`s, so it never waits.
 
-use crate::device::ParamSpec;
+use crate::device::{self, Prepared};
+use crate::package::{Package, ParamSpec, Value};
 use nice_plug::prelude::*;
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
-pub enum HostParam {
-    Number(FloatParam),
-    Switch(BoolParam),
-    Choice(IntParam),
+pub const MACROS: usize = 16;
+/// The key the package is saved under in the plugin's state.
+const PACKAGE_FIELD: &str = "package";
+
+/// A device param a macro is mapped to: which of the binding's values it sets, and how.
+pub struct Target {
+    pub value: usize,
+    pub title: String,
+    pub spec: ParamSpec,
+    /// The engine value the package had, which plays until the macro moves off its position.
+    pub raw: f64,
 }
 
-impl HostParam {
-    fn from_spec(spec: &ParamSpec) -> Self {
-        match spec {
-            ParamSpec::Number { name, min, max, default, unit, taper, step, .. } => {
-                let range = if taper.as_deref() == Some("exponential") && *min > 0.0 {
-                    // The app's exponential taper puts the geometric mean at the middle; a skew that
-                    // puts it there too follows it closely (nice-plug has no exponential range).
-                    let middle = ((min * max).sqrt() - min) / (max - min);
-                    FloatRange::Skewed { min: *min, max: *max, factor: 0.5f32.ln() / middle.ln() }
-                } else {
-                    FloatRange::Linear { min: *min, max: *max }
-                };
-                let unit = unit.clone().map(|unit| format!(" {unit}")).unwrap_or_default();
-                let decimals = if max - min > 100.0 { 0 } else { 2 };
-                let param = FloatParam::new(name, *default, range)
-                    .with_value_to_string(Arc::new(move |value| format!("{value:.decimals$}{unit}")))
-                    // Typed in, the number before any unit: "200 ms" or "200" both read as 200.
-                    .with_string_to_value(Arc::new(|text| text.split_whitespace().next()?.parse().ok()));
-                HostParam::Number(match step {
-                    Some(step) => param.with_step_size(*step),
-                    None => param,
-                })
+/// The first MACROS of a package's params, in order, as the macros' targets.
+pub fn targets_of(package: &Package) -> Vec<Target> {
+    let params = package.values.iter().enumerate().filter_map(|(value, kind)| match kind {
+        Value::Param { title, spec, raw } => Some(Target { value, title: title.clone(), spec: spec.clone(), raw: *raw }),
+        _ => None,
+    });
+    params.take(MACROS).collect()
+}
+
+pub struct Macros {
+    pub knobs: Vec<FloatParam>,
+    /// What each macro is mapped to now, for the host's text. Changed only off the audio thread.
+    pub targets: Arc<RwLock<Vec<Target>>>,
+    /// The package playing, as JSON: what is saved.
+    pub package: Mutex<String>,
+    /// A device built off the audio thread, waiting to be swapped in.
+    pub incoming: Mutex<Option<Box<Prepared>>>,
+    /// The device it replaced, handed back to be freed off the audio thread.
+    pub retired: Mutex<Option<Box<Prepared>>>,
+    /// The sample rate the plugin is active at (f32 bits), 0 before it first is.
+    pub rate: AtomicU32,
+}
+
+impl Macros {
+    /// Macros for `json`'s package, each knob starting at its target's value.
+    pub fn new(json: String, package: &Package) -> Self {
+        let targets = Arc::new(RwLock::new(targets_of(package)));
+        let knobs = (0..MACROS)
+            .map(|index| {
+                let start = targets.read().ok().and_then(|targets| targets.get(index).map(|target| target.spec.position(target.raw)));
+                let shown = targets.clone();
+                FloatParam::new(format!("Macro {}", index + 1), start.unwrap_or(0.5) as f32, FloatRange::Linear { min: 0.0, max: 1.0 })
+                    .with_value_to_string(Arc::new(move |position| {
+                        let targets = shown.read();
+                        let target = targets.as_ref().ok().and_then(|targets| targets.get(index));
+                        target.map_or_else(String::new, |target| format!("{}: {}", target.title, target.spec.display(target.spec.engine_value(f64::from(position)))))
+                    }))
+            })
+            .collect();
+        Macros {
+            knobs,
+            targets,
+            package: Mutex::new(json),
+            incoming: Mutex::new(None),
+            retired: Mutex::new(None),
+            rate: AtomicU32::new(0),
+        }
+    }
+
+    /// The sample rate the plugin is active at, if it has been.
+    pub fn active_rate(&self) -> Option<f32> {
+        Some(f32::from_bits(self.rate.load(Ordering::Acquire))).filter(|&rate| rate > 0.0)
+    }
+
+    /// Play `json`'s package from the next block: build its engine now, here (off the audio thread),
+    /// for the plugin to swap in. False, changing nothing, for one that won't load.
+    pub fn load(&self, json: String) -> bool {
+        let Some(package) = Package::parse(&json) else { return false };
+        // A device the audio thread let go of is freed here, where freeing is allowed.
+        if let Ok(mut retired) = self.retired.lock() {
+            retired.take();
+        }
+        if let Some(rate) = self.active_rate() {
+            let Some(prepared) = device::prepare(&package, rate, &self.knobs) else { return false };
+            if let Ok(mut incoming) = self.incoming.lock() {
+                *incoming = Some(Box::new(prepared));
             }
-            ParamSpec::Boolean { name, default, .. } => HostParam::Switch(BoolParam::new(name, *default)),
-            ParamSpec::Enum { name, options, default, .. } => {
-                let index = options.iter().position(|option| option == default).unwrap_or(0);
-                let (names, names_back) = (options.clone(), options.clone());
-                HostParam::Choice(
-                    IntParam::new(name, index as i32, IntRange::Linear { min: 0, max: options.len() as i32 - 1 })
-                        .with_value_to_string(Arc::new(move |index| names.get(index as usize).cloned().unwrap_or_default()))
-                        .with_string_to_value(Arc::new(move |text| names_back.iter().position(|name| name == text).map(|index| index as i32))),
-                )
-            }
         }
-    }
-
-    /// The param's value as the engine reads it: a number as it is, a switch as 0 or 1, a choice as
-    /// its option's index.
-    // TS: engineValueOf(spec, value)  (src/audio/definitions/values.ts)
-    pub fn engine_value(&self) -> f32 {
-        match self {
-            HostParam::Number(param) => param.value(),
-            HostParam::Switch(param) => f32::from(u8::from(param.value())),
-            HostParam::Choice(param) => param.value() as f32,
+        if let Ok(mut targets) = self.targets.write() {
+            *targets = targets_of(&package);
         }
-    }
-
-    fn pointer(&self) -> ParamPtr {
-        match self {
-            HostParam::Number(param) => param.as_ptr(),
-            HostParam::Switch(param) => param.as_ptr(),
-            HostParam::Choice(param) => param.as_ptr(),
+        if let Ok(mut saved) = self.package.lock() {
+            *saved = json;
         }
+        true
     }
 }
 
-pub struct DeviceParams {
-    /// The device's params, in its order, with their ids (what the host saves them under).
-    pub params: Vec<(String, HostParam)>,
-}
-
-impl DeviceParams {
-    pub fn new(specs: &[ParamSpec]) -> Self {
-        Self { params: specs.iter().map(|spec| (spec.id().to_owned(), HostParam::from_spec(spec))).collect() }
-    }
-
-    /// Where a param is in `params`, by id.
-    pub fn index_of(&self, id: &str) -> Option<usize> {
-        self.params.iter().position(|(param_id, _)| param_id == id)
-    }
-}
-
-unsafe impl Params for DeviceParams {
+unsafe impl Params for Macros {
     fn param_map(&self) -> Vec<(String, ParamPtr, String)> {
-        self.params.iter().map(|(id, param)| (id.clone(), param.pointer(), String::new())).collect()
+        self.knobs.iter().enumerate().map(|(index, knob)| (format!("macro{}", index + 1), knob.as_ptr(), String::new())).collect()
+    }
+
+    fn serialize_fields(&self) -> BTreeMap<String, String> {
+        let package = self.package.lock().map(|package| package.clone()).unwrap_or_default();
+        BTreeMap::from([(PACKAGE_FIELD.to_owned(), package)])
+    }
+
+    // The host's project is opening, or a preset loading: the macros' values are already restored.
+    fn deserialize_fields(&self, serialized: &BTreeMap<String, String>) {
+        if let Some(json) = serialized.get(PACKAGE_FIELD) {
+            if !self.load(json.clone()) {
+                nice_error!("the saved device didn't load");
+            }
+        }
     }
 }
