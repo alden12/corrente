@@ -19,6 +19,7 @@ import { PluginApp } from "./PluginApp";
 import { pageSamples } from "./pageSamples";
 import { PluginDevice, projectOfRack, type ToPlugin } from "./pluginDevice";
 import { PluginPreview } from "./pluginPreview";
+import { keysToHost } from "./keysToHost";
 
 declare global {
   interface Window {
@@ -66,5 +67,7 @@ window.corrente = {
     restore(rack);
   },
 };
-if (window.ipc) send({ type: "ready" });
-else window.corrente.restore(null);
+if (window.ipc) {
+  send({ type: "ready" });
+  keysToHost(send);
+} else window.corrente.restore(null);

@@ -30,6 +30,8 @@ export type ToPlugin =
   | { type: "preview"; package: string | null }
   | { type: "value"; value: number; raw: number }
   | { type: "rack"; rack: string }
+  /** Hand the keyboard back to the host, which plays notes from it (`keysToHost.ts`). */
+  | { type: "keys" }
   | { type: "log"; text: string };
 
 /** The project as the plugin saves it: with its schema version, so a later page can upcast it. */

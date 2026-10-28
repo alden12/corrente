@@ -13,6 +13,7 @@
 //!   - `preview`: a sound Explore tries, played in place of the package and not saved; null ends it.
 //!   - `value`: one of the binding's values moved (a knob), set between blocks without a rebuild.
 //!   - `rack`: the page's project snapshot, saved with the host's project.
+//!   - `keys`: hand the keyboard back to the host (after a click that wasn't into a text field).
 //!   - `log`: a line for the plugin's log.
 //! - **A value a macro is mapped to moves the macro too**, as a drag the host hears (begin, set, end),
 //!   so the host's control and the page's knob agree, and the host can record it.
@@ -70,6 +71,7 @@ enum Message {
     Preview { package: Option<String> },
     Value { value: usize, raw: f64 },
     Rack { rack: String },
+    Keys,
     Log { text: String },
 }
 
@@ -177,6 +179,31 @@ fn build_in_window(parent: ParentWindowHandle, slot: Weak<RefCell<Option<WebView
     }
 }
 
+/**
+ * Give the keyboard back to the host. A host plays notes from the computer's keyboard (Ableton's
+ * computer MIDI keyboard), and while the webview has it, a key goes to the page first and only then,
+ * late or not at all, to the host: notes held too long, quick presses lost. So after a click the page
+ * asks for this, and the host's own view, the one the webview sits in, takes the keyboard again.
+ */
+#[cfg(target_os = "macos")]
+fn keys_to_host(webview: &WebView) {
+    use wry::WebViewExtMacOS;
+    // TS: const host = webview.view.superview; host?.window?.makeFirstResponder(host) || host?.window?.makeFirstResponder(null);
+    // A view that won't take it leaves the window itself to (`None`), which passes keys on to the host.
+    // `superview` is `unsafe` in the bindings, which can't know the parent outlives the call; the host
+    // keeps it while the window is open, and this runs only then.
+    let view = webview.webview();
+    let Some(host) = (unsafe { view.superview() }) else { return };
+    let Some(window) = host.window() else { return };
+    if !window.makeFirstResponder(Some(&host)) {
+        window.makeFirstResponder(None);
+    }
+}
+
+/// Elsewhere, the keyboard isn't the webview's to hand back yet.
+#[cfg(not(target_os = "macos"))]
+fn keys_to_host(_webview: &WebView) {}
+
 /// A file the scheme serves, with its type.
 fn respond(body: Cow<'static, [u8]>, path: &str) -> Response<Cow<'static, [u8]>> {
     // TS: const TYPES = { html: "text/html", ... }; TYPES[extension] ?? "application/octet-stream"
@@ -237,7 +264,7 @@ impl Editor for RackEditor {
         _host: Option<HostMethods>,
     ) -> Result<SpawnedEditor<RackWindow>, Box<dyn Error>> {
         let webview: Rc<RefCell<Option<WebView>>> = Rc::new(RefCell::new(None));
-        let (params, reply_to) = (self.params.clone(), Rc::downgrade(&webview));
+        let (params, reply_to, keys_to) = (self.params.clone(), Rc::downgrade(&webview), Rc::downgrade(&webview));
         // TS: const reply = (script: string) => webview.deref()?.value?.evaluateScript(script);
         let reply = move |script: String| {
             if let Some(view) = reply_to.upgrade().as_ref().and_then(|view| view.borrow().as_ref().map(|view| view.evaluate_script(&script))) {
@@ -280,6 +307,14 @@ impl Editor for RackEditor {
                 Message::Rack { rack } => {
                     if let Ok(mut saved) = params.rack.lock() {
                         *saved = rack;
+                    }
+                }
+                // TS: if (webview.deref()?.value) keysToHost(webview.deref().value);
+                Message::Keys => {
+                    if let Some(view) = keys_to.upgrade() {
+                        if let Some(view) = view.borrow().as_ref() {
+                            keys_to_host(view);
+                        }
                     }
                 }
                 Message::Log { text } => nice_log!("window: {text}"),
