@@ -217,13 +217,17 @@ pub fn audio_of(file: Option<&str>, table: Option<&str>) -> Option<Audio> {
     decode(BASE64.decode(file?).ok()?)
 }
 
-/// A sound file's audio (WAV, FLAC, MP3, Ogg), its first two channels at its own rate.
+/// A sound file's audio (WAV, AIFF, FLAC, MP3, Ogg), its first two channels at its own rate. The window
+/// sends anything else as a WAV (pageSamples.ts).
 fn decode(bytes: Vec<u8>) -> Option<Audio> {
     // TS: const format = probe(bytes) (which container: WAV, FLAC, ...); const track = format.defaultTrack;
     //     const decoder = codecs.make(track.codecParams);
     // `Box::new(Cursor::new(bytes))` wraps the bytes as a readable stream symphonia can seek in.
     let stream = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes)), Default::default());
-    let probed = symphonia::default::get_probe().format(&Hint::new(), stream, &FormatOptions::default(), &MetadataOptions::default()).ok()?;
+    // Gapless: an MP3 starts with the encoder's few silent frames, which the browser trims; asking for
+    // gapless has the reader say how many each packet holds (from the file's header), skipped below.
+    let options = FormatOptions { enable_gapless: true, ..Default::default() };
+    let probed = symphonia::default::get_probe().format(&Hint::new(), stream, &options, &MetadataOptions::default()).ok()?;
     let mut format = probed.format;
     let track = format.default_track()?;
     let (id, rate) = (track.id, track.codec_params.sample_rate? as f32);
@@ -233,7 +237,7 @@ fn decode(bytes: Vec<u8>) -> Option<Audio> {
     //   for (let packet = format.nextPacket(); packet; packet = format.nextPacket()) {
     //     if (packet.trackId !== id) continue;
     //     const decoded = decoder.decode(packet); if (!decoded) continue;
-    //     each of its first two channels' samples appended to that channel;
+    //     each of its first two channels' samples, less the packet's gapless trim, appended to that channel;
     //   }
     // `SampleBuffer` converts whatever the file stores (16-bit, 24-bit, ...) to f32s, planar: one
     // channel's samples, then the next's.
@@ -248,9 +252,12 @@ fn decode(bytes: Vec<u8>) -> Option<Audio> {
         buffer.copy_planar_ref(decoded);
         let count = spec.channels.count().min(2);
         let frames = buffer.samples().len() / spec.channels.count();
+        // TS: const from = Math.min(packet.trimStart, frames); const to = Math.max(from, frames - packet.trimEnd);
+        let from = (packet.trim_start() as usize).min(frames);
+        let to = frames.saturating_sub(packet.trim_end() as usize).max(from);
         channels.resize_with(count, Vec::new);
         for (channel, samples) in channels.iter_mut().enumerate() {
-            samples.extend_from_slice(&buffer.samples()[channel * frames..(channel + 1) * frames]);
+            samples.extend_from_slice(&buffer.samples()[channel * frames + from..channel * frames + to]);
         }
     }
     // TS: return channels[0]?.length ? { channels, rate } : undefined;

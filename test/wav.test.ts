@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { encodeWav, encodeWavBuffer } from "../src/audio/recording/wav";
+import { encodeWav, encodeWavBuffer, encodeWavChannels } from "../src/audio/recording/wav";
+import { decodeWav } from "../src/audio/render/wav";
 
 const ascii = (view: DataView, offset: number, length: number) =>
   Array.from({ length }, (_, i) => String.fromCharCode(view.getUint8(offset + i))).join("");
@@ -44,5 +45,18 @@ describe("encodeWav", () => {
     const blob = encodeWav(new Float32Array([0.1, -0.1]), 48000);
     expect(blob.type).toBe("audio/wav");
     expect(blob.size).toBe(44 + 2 * 2);
+  });
+});
+
+describe("encodeWavChannels", () => {
+  it("interleaves two channels, which read back as they went in", () => {
+    const left = Float32Array.from([0, 0.5, -0.5]);
+    const right = Float32Array.from([0.25, -0.25, 1]);
+    const audio = decodeWav(new Uint8Array(encodeWavChannels([left, right], 44100)));
+    expect(audio.rate).toBe(44100);
+    expect(audio.channels).toHaveLength(2);
+    audio.channels.forEach((channel, index) =>
+      [left, right][index].forEach((sample, at) => expect(channel[at]).toBeCloseTo(sample, 3)),
+    );
   });
 });

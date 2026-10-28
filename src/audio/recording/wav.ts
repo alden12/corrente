@@ -10,11 +10,20 @@ const WAV_HEADER_BYTES = 44;
 
 /** Encode mono float32 samples as a 16-bit PCM WAV, returning the raw bytes. */
 export function encodeWavBuffer(samples: Float32Array, sampleRate: number): ArrayBuffer {
-  const numChannels = 1;
+  return encodeWavChannels([samples], sampleRate);
+}
+
+/**
+ * Encode float32 channels (of equal length) as a 16-bit PCM WAV, interleaved, returning the raw bytes.
+ * The plugin's window turns a file the plugin can't decode faithfully into one (PLUGIN-3.6).
+ */
+export function encodeWavChannels(channels: Float32Array[], sampleRate: number): ArrayBuffer {
+  const numChannels = channels.length;
+  const frames = channels[0]?.length ?? 0;
   const bytesPerSample = 2;
   const blockAlign = numChannels * bytesPerSample;
   const byteRate = sampleRate * blockAlign;
-  const dataSize = samples.length * bytesPerSample;
+  const dataSize = frames * blockAlign;
   const buffer = new ArrayBuffer(WAV_HEADER_BYTES + dataSize);
   const view = new DataView(buffer);
 
@@ -37,11 +46,13 @@ export function encodeWavBuffer(samples: Float32Array, sampleRate: number): Arra
   view.setUint32(40, dataSize, true);
 
   let offset = WAV_HEADER_BYTES;
-  for (let i = 0; i < samples.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
-    // Asymmetric full-scale: negative reaches -32768, positive +32767.
-    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
-    offset += 2;
+  for (let i = 0; i < frames; i++) {
+    for (const samples of channels) {
+      const clamped = Math.max(-1, Math.min(1, samples[i]));
+      // Asymmetric full-scale: negative reaches -32768, positive +32767.
+      view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+      offset += 2;
+    }
   }
   return buffer;
 }

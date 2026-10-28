@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { toBase64 } from "../src/audio/bank/devicePackage";
 import { ProjectStore } from "../src/audio/project/projectStore";
-import { NO_SAMPLES, pageSamples } from "../src/plugin/pageSamples";
+import { encodeWavChannels } from "../src/audio/recording/wav";
+import { NO_SAMPLES, pageSamples, playable } from "../src/plugin/pageSamples";
 
 /**
  * A sample of your own in the plugin's window (PLUGIN-3.6): read from the window's storage where it
@@ -21,6 +22,21 @@ describe("pageSamples", () => {
     const samples = pageSamples(project(), { files: { "asset:mine": toBase64(bytes) }, tables: {} });
     expect(await samples.file("asset:mine")).toEqual(bytes);
     expect(await samples.file("asset:other")).toBeNull();
+  });
+
+  it("hands the plugin a file it decodes as the browser does untouched, by what its first bytes say", async () => {
+    const wav = new Uint8Array(encodeWavChannels([Float32Array.from([0, 0.5])], 48000));
+    const starting = (tag: string) =>
+      Uint8Array.from([...tag].map((character) => character.charCodeAt(0)).concat([0, 0, 0, 0]));
+    for (const bytes of [
+      wav,
+      starting("fLaC"),
+      starting("OggS"),
+      starting("ID3\u0004"),
+      Uint8Array.from([0xff, 0xfb, 0x90, 0]),
+    ]) {
+      expect(await playable(bytes)).toBe(bytes);
+    }
   });
 
   it("plays a wavetable's saved table when its sample can't be read", async () => {
