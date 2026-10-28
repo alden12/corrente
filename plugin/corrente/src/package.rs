@@ -48,6 +48,10 @@ pub enum Value {
         raw: f64,
     },
     Sample {
+        /// The sample's ref in the window ("builtin:kick", "asset:<id>"), so the window can be handed
+        /// back what it saved. Empty in a package saved before refs were kept.
+        #[serde(rename = "ref", default)]
+        reference: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         file: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -184,7 +188,7 @@ impl Package {
             (Value::Param { name, spec, title, .. }, Value::Param { name: other_name, spec: other_spec, title: other_title, .. }) => {
                 name == other_name && spec == other_spec && title == other_title
             }
-            (Value::Sample { file, table }, Value::Sample { file: other_file, table: other_table }) => {
+            (Value::Sample { file, table, .. }, Value::Sample { file: other_file, table: other_table, .. }) => {
                 file == other_file && table == other_table
             }
             (Value::Fixed { .. }, Value::Fixed { .. }) => true,

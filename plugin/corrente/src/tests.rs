@@ -217,6 +217,23 @@ fn macros_map_by_name_and_are_saved() {
     assert!(targets[1..].iter().all(Option::is_none));
 }
 
+/// The samples a package holds go back to the window by its ref when it opens (PLUGIN-3.6), so a
+/// sample of your own plays wherever the host's project does: the ref is saved with the package.
+#[test]
+fn saved_samples_go_back_to_the_window_by_ref() {
+    // TS: a package with a sample of the window's own (its file) and a wavetable's table, saved and read back.
+    let mut package: serde_json::Value = serde_json::from_str(BUILT_IN).expect("a package");
+    let values = package["values"].as_array_mut().expect("values");
+    values.push(serde_json::json!({ "kind": "sample", "name": "zz.sample", "ref": "asset:mine", "file": "AAEC" }));
+    values.push(serde_json::json!({ "kind": "sample", "name": "zz.table", "ref": "asset:wave", "table": "AACAPw==" }));
+    values.push(serde_json::json!({ "kind": "sample", "name": "zz.none", "ref": "" }));
+    let params = params::Macros::new(package::Package::parse(&package.to_string()).expect("it reads"));
+    let saved = package::Package::parse(&params.serialize_fields()["package"]).expect("the saved package reads");
+    let restored = params::Macros::new(saved);
+    let samples: serde_json::Value = serde_json::from_str(&restored.samples_json()).expect("JSON");
+    assert_eq!(samples, serde_json::json!({ "files": { "asset:mine": "AAEC" }, "tables": { "asset:wave": "AACAPw==" } }));
+}
+
 /// A sound Explore tries plays in place of the package, with its own values (no macros), and isn't
 /// saved; a value moved meanwhile is saved but waits, and the package plays again when the trying
 /// ends. Here the sound tried is the built-in turned all the way down, so silence says which plays.

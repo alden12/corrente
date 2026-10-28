@@ -19,7 +19,7 @@
 //! - **A value a macro is mapped to moves the macro too**, as a drag the host hears (begin, set, end),
 //!   so the host's control and the page's knob agree, and the host can record it. The other way, a
 //!   macro the host moves (a knob, automation) moves the page's knob: `window.corrente.macro`.
-//! - **The plugin calls the page** with `window.corrente.restore(rack, macros)` when it's ready, and
+//! - **The plugin calls the page** with `window.corrente.restore(rack, macros, samples)` when it's ready, and
 //!   `window.corrente.macro(name, position)` when the host moves a mapped macro.
 //!
 //! Rust notes, for reading this file:
@@ -287,12 +287,12 @@ impl Editor for RackEditor {
                 Err(error) => return nice_error!("the window sent a message the plugin can't read: {error}"),
             };
             match message {
-                // TS: reply(`window.corrente?.restore(${JSON.stringify(params.rack || null)}, ${JSON.stringify(params.slots)})`)
+                // TS: reply(`window.corrente?.restore(${JSON.stringify(params.rack || null)}, ${JSON.stringify(params.slots)}, ${params.samplesJson()})`)
                 // The rack is JSON already, so it goes to the page as a string for it to parse.
                 Message::Ready => {
                     let rack = params.rack.lock().map(|rack| rack.clone()).unwrap_or_default();
                     let argument = if rack.is_empty() { "null".to_owned() } else { serde_json::to_string(&rack).unwrap_or_default() };
-                    reply(format!("window.corrente?.restore({argument}, {})", params.slots_json()));
+                    reply(format!("window.corrente?.restore({argument}, {}, {})", params.slots_json(), params.samples_json()));
                 }
                 // TS: const moved = params.load(package); if (!moved) log; else moved.forEach(([index, raw]) => moveMacro(index, raw));
                 Message::Load { package } => match params.load(&package) {

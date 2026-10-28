@@ -232,6 +232,30 @@ impl Macros {
         mapped
     }
 
+    /// The samples the package holds, by the window's ref, as JSON for its restore: `{ files, tables }`,
+    /// each a ref's base64 bytes. The window reads a sample from here when its own storage hasn't it
+    /// (another machine, or storage cleared): the project carries its samples (PLUGIN-3.6).
+    pub fn samples_json(&self) -> String {
+        // TS:
+        //   const pick = (field) => Object.fromEntries(package.values.flatMap((value) => value.kind === "sample" && value.ref && value[field] ? [[value.ref, value[field]]] : []));
+        //   return JSON.stringify({ files: pick("file"), tables: pick("table") });
+        // `BTreeMap` is a Map kept in key order; serde writes it as a JSON object.
+        let Ok(package) = self.package.lock() else { return "null".to_owned() };
+        let pick = |field: fn(&Value) -> Option<&String>| -> BTreeMap<&str, &str> {
+            package
+                .values
+                .iter()
+                .filter_map(|value| match value {
+                    Value::Sample { reference, .. } if !reference.is_empty() => field(value).map(|bytes| (reference.as_str(), bytes.as_str())),
+                    _ => None,
+                })
+                .collect()
+        };
+        let files = pick(|value| if let Value::Sample { file, .. } = value { file.as_ref() } else { None });
+        let tables = pick(|value| if let Value::Sample { table, .. } = value { table.as_ref() } else { None });
+        serde_json::to_string(&serde_json::json!({ "files": files, "tables": tables })).unwrap_or_else(|_| "null".to_owned())
+    }
+
     /// The window's mapping, as JSON, or "null" before it has mapped any (for its restore).
     pub fn slots_json(&self) -> String {
         self.slots.lock().ok().and_then(|slots| serde_json::to_string(&*slots).ok()).unwrap_or_else(|| "null".to_owned())

@@ -16,7 +16,7 @@ import { ProjectStore } from "../audio/project/projectStore";
 import { noteUsed } from "../ui/explore/recent/store";
 import { applyStoredTheme } from "../ui/theme";
 import { PluginApp } from "./PluginApp";
-import { pageSamples } from "./pageSamples";
+import { NO_SAMPLES, pageSamples, type SavedSamples } from "./pageSamples";
 import { PluginDevice, projectOfRack, type ToPlugin } from "./pluginDevice";
 import { PluginPreview } from "./pluginPreview";
 import { PluginMacros, type Slots } from "./pluginMacros";
@@ -28,7 +28,7 @@ declare global {
     ipc?: { postMessage(message: string): void };
     /** What the plugin calls back: the saved rack and macro mapping, and a macro the host moved. */
     corrente?: {
-      restore(rack: string | null, macros?: Slots | null): void;
+      restore(rack: string | null, macros?: Slots | null, samples?: SavedSamples | null): void;
       macro(name: string, position: number): void;
     };
   }
@@ -44,20 +44,26 @@ applyStoredTheme();
 startLibrary();
 
 const project = new ProjectStore(false);
-const device = new PluginDevice(project, pageSamples, send);
 const macros = new PluginMacros(send);
+/** Made on restore, with the samples the plugin saved. */
+let device: PluginDevice | undefined;
 
-/** Show the rack the plugin saved, or a fresh one playing what a new plugin plays, then start sending. */
-const restore = (rack: string | null, slots: Slots | null) => {
+/**
+ * Show the rack the plugin saved, or a fresh one playing what a new plugin plays, then start sending.
+ * Samples are read from the window's storage, else from those the plugin saved (PLUGIN-3.6).
+ */
+const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSamples) => {
   macros.restore(slots);
+  const samples = pageSamples(project, savedSamples);
   const saved = rack ? projectOfRack(rack) : undefined;
   if (saved) project.load(saved);
   else {
     if (rack) send({ type: "log", text: "the saved rack didn't read; starting afresh" });
     project.addTrack(DEFAULT_INSTRUMENT);
   }
+  device = new PluginDevice(project, samples, send);
   device.start();
-  const preview = new SoundPreview(new PluginPreview(pageSamples, send), noteUsed, project);
+  const preview = new SoundPreview(new PluginPreview(samples, send), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <PluginApp project={project} preview={preview} device={device} macros={macros} />
@@ -68,12 +74,12 @@ const restore = (rack: string | null, slots: Slots | null) => {
 // Once only: the plugin answers each `ready`, and a page reloaded in devtools asks again.
 let restored = false;
 window.corrente = {
-  restore: (rack, slots) => {
+  restore: (rack, slots, samples) => {
     if (restored) return;
     restored = true;
-    restore(rack, slots ?? null);
+    restore(rack, slots ?? null, samples ?? NO_SAMPLES);
   },
-  macro: (name, position) => device.fromHost(name, position),
+  macro: (name, position) => device?.fromHost(name, position),
 };
 if (window.ipc) {
   send({ type: "ready" });

@@ -88,7 +88,7 @@ pub fn prepare(package: &Package, rate: f32, macros: Option<(&[FloatParam], &[Op
         .iter()
         .map(|value| match value {
             Value::Fixed { raw } | Value::Param { raw, .. } => Source::Fixed(*raw),
-            Value::Sample { file, table } => {
+            Value::Sample { file, table, .. } => {
                 let audio = audio_of(file.as_deref(), table.as_deref());
                 // TS: reserve the slot, copy each channel in after the one before, then count it taken.
                 // `data[a..b]` is a slice (subarray) of the engine's memory; `copy_from_slice` is `set`.
