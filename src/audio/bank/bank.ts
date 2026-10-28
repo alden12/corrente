@@ -21,6 +21,7 @@
  *   views are re-made then (the addresses the engine gave stay put).
  */
 import type { CompiledPlan } from "../definitions/compile";
+import type { CompiledChain } from "../midi/compile";
 import { bindingOf, bindWords } from "./binding";
 import {
   BLOCK,
@@ -100,6 +101,7 @@ export class EngineBank {
     this.play[EVENT.noteOff] = (event, offset) => this.playNoteOff(event, offset);
     this.play[EVENT.param] = (event) => this.playParam(event);
     this.play[EVENT.allOff] = (event, offset) => this.playAllOff(event, offset);
+    this.play[EVENT.midiValue] = (event) => this.engine.eng_midi_value(event.track, event.target, event.value);
     this.view();
   }
 
@@ -125,6 +127,24 @@ export class EngineBank {
     const bound = bindWords(plan, state.values, from);
     const bindCode = this.withWords(bound, (pointer) => this.engine.eng_bind(track, pointer, bound.length));
     if (bindCode !== 0) throw new PlanRejected(track, bindCode);
+  }
+
+  /**
+   * Play a track's notes through MIDI devices (INST-11.1): `chain` is chainWords' output, the devices
+   * in order (none takes them away). Takes effect at once; the keys down start again in it. Throws
+   * PlanRejected if the engine won't read it.
+   */
+  loadMidi(track: number, chain: CompiledChain): void {
+    this.trackAt(track);
+    const code = this.withWords(chain.words, (pointer) =>
+      this.engine.eng_midi_load(track, pointer, chain.words.length),
+    );
+    if (code !== 0) throw new PlanRejected(track, code);
+  }
+
+  /** Move a MIDI device value (numbered as chainWords' `values`) at `time`. */
+  setMidiValue(track: number, value: number, raw: number, time: number): void {
+    this.queue.add(EVENT.midiValue, track, value, raw, time);
   }
 
   /** Copy `words` into the engine's memory for `call`, then free them. Loading can grow the memory. */

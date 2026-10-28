@@ -28,6 +28,13 @@ export interface EngineExports {
   eng_key_off(track: number, offset: number, note: number): void;
   /** Releases every held note. */
   eng_keys_off(track: number, offset: number): void;
+  /**
+   * A track's MIDI devices (INST-11.1, midi/compile.ts's chainWords): the keys down start again in
+   * them. A chain of none takes them away. 0, or -1 if the words don't make a chain (nothing changes).
+   */
+  eng_midi_load(track: number, words: number, length: number): number;
+  /** Moves a MIDI device value (a param or a bypass, numbered by chainWords). */
+  eng_midi_value(track: number, value: number, raw: number): void;
   /** Moves a param's raw value (numbered by binding.ts): each source reading it ramps to its shaped value. */
   eng_set_value(track: number, value: number, raw: number): void;
   /** Sets a param's raw value at once: a sample param's slot. */

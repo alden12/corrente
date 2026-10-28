@@ -2,6 +2,7 @@
 //! What concerns one track is the track's: lib.rs looks it up with `track` and calls it.
 
 use super::binding::Binding;
+use crate::midi::{self, BlockTransport};
 use super::sampler::{MAX_SAMPLES, Sample};
 use super::track::Track;
 use super::{BLOCK, SILENT_SLOT, Slot};
@@ -71,6 +72,16 @@ impl Engine {
         }
     }
 
+    /// Load a track's MIDI devices from `eng_midi_load`'s words (an empty chain, with no devices, takes
+    /// them away). False, changing nothing, if there's no such track or the words don't make a chain.
+    // TS: const chain = midi.parse(words); if (!chain || !this.tracks[track]) return false; this.tracks[track].loadMidi(chain.devices.length ? chain : undefined, this.samples); return true;
+    pub fn load_midi(&mut self, track: usize, words: &[f64]) -> bool {
+        let (Some(track), Some(chain)) = (self.tracks.get_mut(track), midi::parse(words)) else { return false };
+        let chain = (!chain.devices.is_empty()).then_some(chain);
+        track.load_midi(chain, &self.samples);
+        true
+    }
+
     /// A track, to read: None if there is no such track. Only the tests read one without changing it.
     // TS: return this.tracks[track]
     // `#[cfg(test)]` builds it into the tests only.
@@ -116,8 +127,9 @@ impl Engine {
     pub fn process(&mut self) {
         self.fill_host();
         let (host, samples) = (&self.host, &self.samples);
-        self.tracks.iter_mut().for_each(|track| track.process(host, samples));
         let (beat, tempo, playing) = self.transport;
+        let block = BlockTransport { beat, per_sample: tempo as f64 / 60.0 / self.sample_rate as f64, playing };
+        self.tracks.iter_mut().for_each(|track| track.process(host, samples, block));
         self.transport = (beat + BLOCK as f64 * tempo as f64 / 60.0 / self.sample_rate as f64, tempo, playing);
     }
 

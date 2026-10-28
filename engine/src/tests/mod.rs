@@ -15,6 +15,7 @@
 
 mod edits;
 mod loops;
+mod midi;
 mod playing;
 mod refusals;
 mod reports;

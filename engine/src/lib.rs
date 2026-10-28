@@ -27,6 +27,7 @@
 //!   one-writer rule checked when it runs rather than when it compiles.
 
 mod faust;
+mod midi;
 mod plan;
 mod router;
 
@@ -171,24 +172,50 @@ pub extern "C" fn eng_carry(track: i32, pointer: *const i32, length: i32) -> i32
 /// zones and the values they read (router/binding.rs), from memory eng_malloc handed out, f64s as
 /// pairs of words. Sets every param from the values and starts the held notes again. 0, or -1 if the
 /// words don't make a binding for the track's plan (nothing changes).
-// TS:
-//   const words = wordsAt(pointer, length);  // as eng_load reads them
-//   const doubles = words && new Float64Array(words.buffer, words.byteOffset, words.length / 2);
-//   return doubles && withEngine((engine) => engine.bind(track, doubles)) ? 0 : REJECTED;
-// `chunks_exact(2)` walks the words two at a time. `f64::from_bits` makes a float from its 64 bits:
-// the high word shifted up 32 bits, or'd with the low one (`as u32` keeps a negative word's bits).
+// TS: const doubles = doublesAt(pointer, length); return doubles && withEngine((engine) => engine.bind(track, doubles)) ? 0 : REJECTED;
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_bind(track: i32, pointer: *const i32, length: i32) -> i32 {
-    let doubles = ALLOCATIONS.with_borrow(|allocations| {
+    match (doubles_at(pointer, length), index(track)) {
+        (Some(doubles), Some(track)) if with_engine(|engine| engine.bind(track, &doubles)) => 0,
+        _ => plan::REJECTED,
+    }
+}
+
+/// Load a track's MIDI devices (INST-11.1, midi/words.rs), from memory eng_malloc handed out, f64s as
+/// pairs of words; a chain of no devices takes them away. The keys down start again in the new chain.
+/// 0, or -1 if the words don't make a chain (the track keeps the one it had).
+// TS: const doubles = doublesAt(pointer, length); return doubles && withEngine((engine) => engine.loadMidi(track, doubles)) ? 0 : REJECTED;
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_midi_load(track: i32, pointer: *const i32, length: i32) -> i32 {
+    match (doubles_at(pointer, length), index(track)) {
+        (Some(doubles), Some(track)) if with_engine(|engine| engine.load_midi(track, &doubles)) => 0,
+        _ => plan::REJECTED,
+    }
+}
+
+/// Move one of a track's MIDI device values (a param, or a device's bypass) to `raw`.
+// TS: if (value >= 0) withTrack(track, (track) => track.setMidiValue(value, raw))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_midi_value(track: i32, value: i32, raw: f64) {
+    if let Some(value) = index(value) {
+        with_track(track, |track| track.set_midi_value(value, raw));
+    }
+}
+
+/// The f64s in memory eng_malloc handed out, `length` int32 words of it, two words to each (low half
+/// first): None for memory the engine didn't hand out, or an odd number of words.
+// TS:
+//   const words = wordsAt(pointer, length);  // as eng_load reads them
+//   return words && new Float64Array(words.buffer, words.byteOffset, words.length / 2);
+// `chunks_exact(2)` walks the words two at a time. `f64::from_bits` makes a float from its 64 bits:
+// the high word shifted up 32 bits, or'd with the low one (`as u32` keeps a negative word's bits).
+fn doubles_at(pointer: *const i32, length: i32) -> Option<Vec<f64>> {
+    ALLOCATIONS.with_borrow(|allocations| {
         let allocation = allocations.iter().find(|allocation| allocation.as_ptr() == pointer)?;
         let words = allocation.get(..index(length)?)?;
         let pairs = words.chunks_exact(2);
         pairs.remainder().is_empty().then(|| pairs.map(|pair| f64::from_bits(u64::from(pair[1] as u32) << 32 | u64::from(pair[0] as u32))).collect::<Vec<_>>())
-    });
-    match (doubles, index(track)) {
-        (Some(doubles), Some(track)) if with_engine(|engine| engine.bind(track, &doubles)) => 0,
-        _ => plan::REJECTED,
-    }
+    })
 }
 
 /// Start a note by key on a track, `offset` samples into the coming block: the track picks the voice

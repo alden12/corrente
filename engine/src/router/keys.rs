@@ -13,6 +13,7 @@
 //! Nothing here allocates once bound: notes and values only index arrays bind made.
 
 use super::binding::Binding;
+use crate::midi::{Chain, Event};
 use super::sampler::Sample;
 use super::track::Track;
 use super::voices::VoiceAllocator;
@@ -73,15 +74,24 @@ impl Track {
         }
         // TS: held.forEach(([note, velocity]) => this.keyOn(0, note, velocity, samples)); return true;
         // `into_iter` hands each item over (the list is used up), rather than lending it.
-        held.into_iter().for_each(|(note, velocity)| self.key_on(0, note, f64::from(velocity), samples));
+        held.into_iter().for_each(|(note, velocity)| self.play_on(0, note, f64::from(velocity), samples));
         true
     }
 
     /// Start `note` (a MIDI note number) at `velocity` (0 to 1), `offset` samples into the coming
     /// block: in the slot the allocator picks, cutting the voice it steals, with the zone it fits. A
     /// note no zone fits doesn't sound, or take a voice.
-    // TS: bank.ts's startNote.
+    // TS: this.midi ? this.midi.key(offset, on(note, velocity)) : this.playOn(offset, note, velocity, samples)
     pub fn key_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &[Option<Sample>]) {
+        match &mut self.midi {
+            Some(chain) => chain.key(offset, Event::On { note, velocity: velocity as f32, length: None }),
+            None => self.play_on(offset, note, velocity, samples),
+        }
+    }
+
+    /// Start a note in a voice: what `key_on` does with no MIDI devices, and what they play.
+    // TS: bank.ts's startNote.
+    pub(super) fn play_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &[Option<Sample>]) {
         // TS:
         //   if (this.voices.slots === 0) return;
         //   const start = this.binding.start(note, velocity, samples); if (!start) return;
@@ -116,8 +126,17 @@ impl Track {
     }
 
     /// Release `note`, `offset` samples into the coming block, if it's held.
-    // TS: const slot = voices.noteOff(note, time); if (slot >= 0) eng_note_off(track, slot, offset);
+    // TS: this.midi ? this.midi.key(offset, off(note)) : this.playOff(offset, note)
     pub fn key_off(&mut self, offset: i32, note: i32) {
+        match &mut self.midi {
+            Some(chain) => chain.key(offset, Event::Off { note }),
+            None => self.play_off(offset, note),
+        }
+    }
+
+    /// Release a note's voice: what `key_off` does with no MIDI devices, and what they let go of.
+    // TS: const slot = voices.noteOff(note, time); if (slot >= 0) eng_note_off(track, slot, offset);
+    pub(super) fn play_off(&mut self, offset: i32, note: i32) {
         // `if let Some(slot) = ...` runs the block only when note_off found a slot.
         let time = self.clock + u64::try_from(offset).unwrap_or(0);
         if let Some(slot) = self.voices.note_off(note, time) {
@@ -126,8 +145,40 @@ impl Track {
     }
 
     /// Release every held note, `offset` samples into the coming block.
-    // TS: for (let slot = 0; slot < voices.slots; slot++) if (voices.isHeld(slot)) { voices.releaseSlot(slot, time); eng_note_off(track, slot, offset) }
+    // TS: this.midi?.clear(); this.releaseVoices(offset)
     pub fn keys_off(&mut self, offset: i32) {
+        if let Some(chain) = &mut self.midi {
+            chain.clear();
+        }
+        self.release_voices(offset);
+    }
+
+    /// Replace the track's MIDI devices (None for none). The keys down carry over: what the old chain
+    /// (or the voices, with none) was playing lets go, and the keys start again in the new one.
+    // TS:
+    //   const down = this.midi ? [...this.midi.down()] : this.voices.heldNotes();
+    //   this.releaseVoices(0); this.midi = chain; down.forEach(([note, velocity]) => this.keyOn(0, note, velocity, samples));
+    pub fn load_midi(&mut self, chain: Option<Chain>, samples: &[Option<Sample>]) {
+        let down = match &self.midi {
+            Some(old) => old.down().to_vec(),
+            None => self.voices.held_notes(),
+        };
+        self.release_voices(0);
+        self.midi = chain;
+        down.into_iter().for_each(|(note, velocity)| self.key_on(0, note, f64::from(velocity), samples));
+    }
+
+    /// Move a MIDI device value to `raw` (a value the chain doesn't have, or no chain, is ignored).
+    // TS: this.midi?.setValue(value, raw)
+    pub fn set_midi_value(&mut self, value: usize, raw: f64) {
+        if let Some(chain) = &mut self.midi {
+            chain.set_value(value, raw);
+        }
+    }
+
+    /// Release every voice that's held, `offset` samples into the coming block.
+    // TS: for (let slot = 0; slot < voices.slots; slot++) if (voices.isHeld(slot)) { voices.releaseSlot(slot, time); eng_note_off(track, slot, offset) }
+    fn release_voices(&mut self, offset: i32) {
         let time = self.clock + u64::try_from(offset).unwrap_or(0);
         for slot in 0..self.voices.slots() {
             if self.voices.is_held(slot) {

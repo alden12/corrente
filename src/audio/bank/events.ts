@@ -7,7 +7,7 @@
  * happens as a message arrives (between blocks), which is where the queue may grow.
  */
 
-export const EVENT = { noteOn: 0, noteOff: 1, param: 2, allOff: 3 } as const;
+export const EVENT = { noteOn: 0, noteOff: 1, param: 2, allOff: 3, midiValue: 4 } as const;
 export type EventKind = (typeof EVENT)[keyof typeof EVENT];
 
 /** One event, as `next` hands it out: a reused object, valid until the next call. */

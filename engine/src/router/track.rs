@@ -14,6 +14,7 @@
 //!   around the load).
 
 use super::binding::Binding;
+use crate::midi::{BlockTransport, Chain, Event};
 use super::carry::{map_fits, section_map, same_node, take_over};
 use super::graph::{Graph, Output, SectionState, Voice};
 use super::params::ParamSource;
@@ -51,6 +52,8 @@ pub struct Track {
     pub(super) clock: u64,
     /// Whether the last load's voices carried on (`carry`), keeping their notes and allocator.
     pub(super) voices_carried: bool,
+    /// The track's MIDI devices (INST-11.1), between the keys it's told and its voices, if it has any.
+    pub(super) midi: Option<Chain>,
 }
 
 impl Track {
@@ -71,6 +74,7 @@ impl Track {
             voices: VoiceAllocator::new(0, 0),
             clock: 0,
             voices_carried: false,
+            midi: None,
         }
     }
 
@@ -140,7 +144,20 @@ impl Track {
     }
 
     /// Render one block into `output`, crossfading from the outgoing graph in the block after a load.
-    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>]) {
+    /// The MIDI devices' notes for the block go to the voices first.
+    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>], transport: BlockTransport) {
+        // TS: this.midi?.block(this.clock, transport).forEach(([offset, event]) => event.kind === "on" ? this.playOn(...) : this.playOff(...))
+        // `.take()` lends the chain out of the track while the track plays its notes, then puts it back.
+        if let Some(mut chain) = self.midi.take() {
+            for &(offset, event) in chain.block(self.clock, transport) {
+                match event {
+                    Event::On { note, velocity, .. } => self.play_on(offset as i32, note, f64::from(velocity), samples),
+                    Event::Off { note } => self.play_off(offset as i32, note),
+                    Event::Tick { .. } => {}
+                }
+            }
+            self.midi = Some(chain);
+        }
         // TS: if (this.graph) this.graph.render(this.inputs, host, samples, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
         match &mut self.graph {
             Some(graph) => graph.render(&self.inputs, host, samples, &mut self.voice_sum, &mut self.output),

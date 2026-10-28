@@ -42,6 +42,11 @@ pub struct Shaping {
 }
 
 impl Shaping {
+    // TS: ({ scale, offset, table })
+    pub(crate) fn new(scale: f64, offset: f64, table: Vec<(f64, f64)>) -> Self {
+        Shaping { scale, offset, table }
+    }
+
     // TS: resolveNumber(raw, { scale, offset, table })
     pub fn resolve(&self, raw: f64) -> f64 {
         // TS: const looked = this.table.length === 0 ? raw : lookupTable(this.table, raw); return looked * this.scale + this.offset;
