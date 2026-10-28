@@ -188,3 +188,27 @@ fn another_device_from_the_window_swaps_in() {
     assert!(plugin.params.incoming.lock().expect("incoming").is_none(), "and has");
     assert_eq!(plugin.params.targets.read().expect("targets")[0].title, "Renamed");
 }
+
+/// What the scheme serves at `path`: its status and body.
+// TS: const response = serve(new Request(`corrente://localhost${path}`)); return [response.status, response.body];
+fn fetch(path: &str) -> (u16, Vec<u8>) {
+    let request = wry::http::Request::builder().uri(format!("corrente://localhost{path}")).body(Vec::new()).unwrap();
+    let response = editor::serve(request);
+    (response.status().as_u16(), response.body().to_vec())
+}
+
+#[test]
+fn the_page_and_what_it_links_are_built_in() {
+    // TS: if (app.FILES.length === 0) return; // built without the app
+    if editor::app::FILES.is_empty() {
+        return eprintln!("skipped: the plugin was built without the app (run `yarn build` first)");
+    }
+    let (status, page) = fetch("/plugin.html");
+    assert_eq!(status, 200, "the page is built in");
+    // TS: const links = page.split('"/').slice(1).map((part) => "/" + part.split('"')[0]);
+    let page = String::from_utf8(page).unwrap();
+    let links: Vec<String> = page.split("=\"/").skip(1).map(|part| format!("/{}", part.split('"').next().unwrap())).collect();
+    assert!(links.iter().any(|link| link.ends_with(".js")), "the page links its script: {links:?}");
+    links.iter().for_each(|link| assert_eq!(fetch(link).0, 200, "{link} is built in"));
+    assert_eq!(fetch("/nothing-here.js").0, 404);
+}

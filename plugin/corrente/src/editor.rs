@@ -2,9 +2,10 @@
 //! wry's, attached straight to the view the host gives the plugin (PLUGIN-2.2's spike, on nice-plug's
 //! editor API).
 //!
-//! - **The page** comes from the Vite dev server when the plugin is built with `CORRENTE_DEV_URL`
-//!   (`http://localhost:5180/plugin.html`), for fast iteration, or else from the app's built `dist/`
-//!   (`CORRENTE_APP_DIR`) over a `corrente://` scheme. Bundling the app into the binary is HOST-23.2.3's.
+//! - **The page** is the app's built `dist/`, built into the binary (build.rs, PLUGIN-3.3) and served
+//!   over a `corrente://` scheme, or the Vite dev server's when the plugin is built with
+//!   `CORRENTE_DEV_URL` (`http://localhost:5180/plugin.html`), for fast iteration. Updating it like
+//!   the site is HOST-23.2.3's.
 //! - **Page to plugin**, as JSON through wry's IPC handler, on the main thread:
 //!   - `ready`: the page asks for its saved state, and gets it back through `window.corrente.restore`.
 //!   - `load`: a device package (src/audio/bank/devicePackage.ts) on every change. The same device
@@ -192,18 +193,23 @@ fn respond(body: Cow<'static, [u8]>, path: &str) -> Response<Cow<'static, [u8]>>
     Response::builder().header("Content-Type", content_type).body(body).unwrap()
 }
 
+/// The app's built files (build.rs).
+pub(crate) mod app {
+    include!(concat!(env!("OUT_DIR"), "/app.rs"));
+}
+
 /// The `corrente://` scheme: a file of the app's `dist/`, or a page saying the app wasn't built in.
-fn serve(request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
-    // TS: const app = process.env.CORRENTE_APP_DIR; if (!app) return page("Built without the app ...");
-    let Some(app) = option_env!("CORRENTE_APP_DIR") else {
-        let page = "<p style=\"font-family: sans-serif\">Built without the app: set CORRENTE_APP_DIR (the app's dist/) or CORRENTE_DEV_URL.</p>";
+pub(crate) fn serve(request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+    // TS: if (app.FILES.length === 0) return page("Built without the app ...");
+    if app::FILES.is_empty() {
+        let page = "<p style=\"font-family: sans-serif\">Built without the app: run `yarn build` in packages/app before building the plugin, or use `yarn plugin:bundle`.</p>";
         return respond(Cow::Borrowed(page.as_bytes()), "missing.html");
-    };
-    // TS: return readFile(join(app, path)) ?? notFound;
-    let path = request.uri().path().to_owned();
-    match std::fs::read(std::path::Path::new(app).join(path.trim_start_matches('/'))) {
-        Ok(bytes) => respond(Cow::Owned(bytes), &path),
-        Err(_) => Response::builder().status(404).body(Cow::Borrowed(&b"Not found"[..])).unwrap(),
+    }
+    // TS: const file = app.FILES.find(([path]) => path === request.path.replace(/^\//, "")); return file ? respond(file[1]) : notFound;
+    let path = request.uri().path().trim_start_matches('/');
+    match app::FILES.iter().find(|(name, _)| *name == path) {
+        Some((_, bytes)) => respond(Cow::Borrowed(bytes), path),
+        None => Response::builder().status(404).body(Cow::Borrowed(&b"Not found"[..])).unwrap(),
     }
 }
 

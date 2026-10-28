@@ -28,6 +28,7 @@
     "engine:test": "node engine/compile.ts --test",
     "engine:costs": "MEASURE_COSTS=1 vitest run test/engineCosts.test.ts",
     "portraits": "tsx scripts/generatePortraits.ts",
+    "plugin:bundle": "yarn build && cd plugin && cargo xtask bundle corrente --release",
     "preview": "vite preview"
   },
   "dependencies": {
