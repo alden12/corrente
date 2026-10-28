@@ -1,5 +1,5 @@
 /**
- * The MIDI device format (INST-11.1, docs/app/MIDI-DEVICES.md): a MIDI device as data, a small graph
+ * The MIDI device format (INST-11.1): a MIDI device as data, a small graph
  * of event nodes the engine plays (engine/src/midi), compiled by compile.ts. DOM-free, so the app and
  * both MCP servers share it.
  *

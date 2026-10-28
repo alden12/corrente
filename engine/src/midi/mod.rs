@@ -1,4 +1,4 @@
-//! MIDI devices in the engine (INST-11.1, docs/app/MIDI-DEVICES.md): a track's chain of MIDI devices,
+//! MIDI devices in the engine (INST-11.1): a track's chain of MIDI devices,
 //! each a small graph of event nodes, between the keys it's told and its voices. The same Rust in the
 //! app's worklet, the plugin and an export, so a device plays the same notes in all three.
 //!
