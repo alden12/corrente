@@ -26,6 +26,7 @@ import { TagChips } from "./TagChips";
 import {
   byName,
   CATEGORIES,
+  CATEGORY_KIND,
   CATEGORY_ORDER,
   type ExploreCategory,
   type ExploreItem,
@@ -38,6 +39,7 @@ import {
   tagsIn,
 } from "./exploreItems";
 import { useLibraryActions } from "./useLibraryActions";
+import { useExploreScope } from "./exploreScope";
 import { useSavedPatches } from "./useSavedPatches";
 import { useFavourites } from "./favourites/useFavourites";
 import {
@@ -125,7 +127,12 @@ export function ExploreView({
     <TagChips tags={rankTags(shown, picked)} all={tagsIn(pool)} picked={picked} onToggle={toggleTag} />
   );
 
-  const items = exploreItems({ savedPatches, samples: project.samples, project: projectStore });
+  // What this window takes (`ExploreScope`): the plugin's lists only what it plays.
+  const { kinds } = useExploreScope();
+  const items = exploreItems({ savedPatches, samples: project.samples, project: projectStore }).filter((item) =>
+    kinds.has(item.source.kind),
+  );
+  const categories = CATEGORY_ORDER.filter((key) => key === "favourites" || kinds.has(CATEGORY_KIND[key]));
 
   // Favourites keep the order you hearted them in, newest first; every other category reads A to Z.
   const inCategory = (key: ExploreCategory) =>
@@ -242,7 +249,7 @@ export function ExploreView({
         {chips(searched, results)}
         {!filtering && (
           <div className="grid grid-cols-1 @[17rem]:grid-cols-2 gap-1.5 mt-0.5">
-            {CATEGORY_ORDER.map((key) => (
+            {categories.map((key) => (
               <button
                 key={key}
                 type="button"

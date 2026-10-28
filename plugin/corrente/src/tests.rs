@@ -189,6 +189,34 @@ fn another_device_from_the_window_swaps_in() {
     assert_eq!(plugin.params.targets.read().expect("targets")[0].title, "Renamed");
 }
 
+/// A sound Explore tries plays in place of the package, with its own values (no macros), and isn't
+/// saved; a value moved meanwhile is saved but waits, and the package plays again when the trying
+/// ends. Here the sound tried is the built-in turned all the way down, so silence says which plays.
+#[test]
+fn a_sound_tried_plays_instead_and_is_not_saved() {
+    // TS: const level = the index of the built-in's "Amp Level"; const silent = changed(BUILT_IN, level, "raw", 0);
+    let package = package::Package::parse(BUILT_IN).expect("the built-in");
+    let level = package.values.iter().position(|value| matches!(value, package::Value::Param { title, .. } if title == "Amp Level")).expect("a level");
+    let silent = changed(BUILT_IN, level, "raw", 0.0.into());
+    let note = [(0, BLOCK * 40, 60, 0.8)];
+    let mut plugin = active(BUILT_IN);
+    // TS: plugin.params.preview(silent); the next blocks are silent, and no source is a macro.
+    assert!(plugin.params.preview(Some(&silent)));
+    assert!(peak(&play(&mut plugin, &note, 30)) < 1e-6, "the sound tried plays");
+    assert!(plugin.device.as_deref().expect("playing").sources.iter().all(|source| matches!(source, device::Source::Fixed(_))), "with no macros");
+    // TS: a value moved meanwhile waits, and is saved; the package saved is still the built-in's device.
+    plugin.params.set_value(level, 0.5);
+    play(&mut plugin, &[], 1);
+    assert_eq!(plugin.device.as_deref().expect("playing").sent[level], 0.0, "the moved value waits");
+    let saved = package::Package::parse(&plugin.params.serialize_fields()["package"]).expect("saved");
+    assert!(saved.same_device(&package), "nothing tried is saved");
+    assert_eq!(saved.values[level].raw(), Some(0.5), "the moved value is");
+    // TS: plugin.params.preview(null); the package plays again.
+    assert!(plugin.params.preview(None));
+    assert!(peak(&play(&mut plugin, &note, 30)) > 0.05, "the package plays again");
+    assert!(plugin.params.preview(None), "ending twice is fine");
+}
+
 /// What the scheme serves at `path`: its status and body.
 // TS: const response = serve(new Request(`corrente://localhost${path}`)); return [response.status, response.body];
 fn fetch(path: &str) -> (u16, Vec<u8>) {

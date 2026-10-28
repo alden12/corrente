@@ -68,9 +68,10 @@ impl Prepared {
     }
 }
 
-/// An engine at `rate` playing `package`, its values read from `knobs` now. None for a plan or binding
-/// the engine refuses.
-pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Prepared> {
+/// An engine at `rate` playing `package`, its values read from `knobs` now. With no knobs (a sound
+/// Explore is trying), no macros: the package's own values play. None for a plan or binding the
+/// engine refuses.
+pub fn prepare(package: &Package, rate: f32, knobs: Option<&[FloatParam]>) -> Option<Prepared> {
     // TS: const engine = new Engine(); engine.init(rate, 1);
     let mut engine = Engine::new();
     engine.init(rate as i32, 1);
@@ -101,8 +102,9 @@ pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Pre
             }
         })
         .collect();
-    // TS: targetsOf(package).forEach((target, knob) => sources[target.value] = macro(knob, target, still: position(target.raw)));
-    for (knob, target) in targets_of(package).into_iter().enumerate() {
+    // TS: if (knobs) targetsOf(package).forEach((target, knob) => sources[target.value] = macro(knob, target, still: position(target.raw)));
+    // `knobs.map_or(0, ...)` is how many there are, or 0 with none: `take(0)` maps nothing.
+    for (knob, target) in targets_of(package).into_iter().enumerate().take(knobs.map_or(0, |knobs| knobs.len())) {
         let still = target.spec.position(target.raw) as f32;
         sources[target.value] = Source::Macro { knob, spec: target.spec, raw: target.raw, still };
     }
@@ -114,10 +116,10 @@ pub fn prepare(package: &Package, rate: f32, knobs: &[FloatParam]) -> Option<Pre
     }
     // The binding, then each value now, then where each starts: NaN, at its value.
     // TS:
-    //   const sent = sources.map((source) => source.now(knobs));
+    //   const sent = sources.map((source) => source.now(knobs ?? []));
     //   return engine.bind(0, [...package.binding, ...sent, ...sent.map(() => NaN)]) ? { engine, sources, sent } : undefined;
     // `[a, b, c].concat()` joins three slices into one new list.
-    let sent: Vec<f64> = sources.iter().map(|source| source.now(knobs)).collect();
+    let sent: Vec<f64> = sources.iter().map(|source| source.now(knobs.unwrap_or_default())).collect();
     let starts = vec![f64::NAN; sent.len()];
     engine.bind(0, &[&package.binding[..], &sent, &starts].concat()).then_some(Prepared { engine, sources, sent })
 }

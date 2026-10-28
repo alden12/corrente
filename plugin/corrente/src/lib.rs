@@ -90,11 +90,12 @@ impl Corrente {
 
     /// Build the saved package's device at `rate`, here and now (off the audio thread).
     fn load(&mut self, rate: f32) -> bool {
-        // TS: this.params.rate = rate; const prepared = prepare(this.params.package, rate, this.params.knobs);
+        // TS: this.params.rate = rate; this.params.previewing = false; const prepared = prepare(this.params.package, rate, this.params.knobs);
         // An atomic holds a number, so the rate is stored as its bits. `.lock()` waits for the
         // mutex and lends what it guards; `.ok()` turns a failed lock into None.
         self.params.rate.store(rate.to_bits(), Ordering::Release);
-        let prepared = self.params.package.lock().ok().and_then(|package| device::prepare(&package, rate, &self.params.knobs));
+        self.params.previewing.store(false, Ordering::Release);
+        let prepared = self.params.package.lock().ok().and_then(|package| device::prepare(&package, rate, Some(&self.params.knobs)));
         // One built before this, at an older rate, is stale, and so are changes waiting for it: the
         // package already has them.
         // TS: this.params.incoming = undefined; this.params.changes = [];  (`.take()` empties an Option)
@@ -149,14 +150,15 @@ impl Corrente {
             return;
         };
         // TS:
-        //   if (!this.params.incoming.busyOrFull()) {
+        //   if (!this.params.incoming.busyOrFull() && !this.params.previewing) {
         //     const changes = this.params.changes.tryTake();
         //     changes?.forEach(([index, raw]) => device.set(index, raw, this.params.knobs));
         //   }
         // Changes made after a new device was built are that device's, so they wait while one is
-        // waiting to swap in. Neither lock is waited for; `.clear()` keeps the list's room.
+        // waiting to swap in, and while a sound Explore tries plays (the saved package has them, and
+        // plays again with them after). Neither lock is waited for; `.clear()` keeps the list's room.
         let waiting = self.params.incoming.try_lock().map(|incoming| incoming.is_some()).unwrap_or(true);
-        if !waiting {
+        if !waiting && !self.params.previewing.load(Ordering::Acquire) {
             if let Ok(mut changes) = self.params.changes.try_lock() {
                 changes.iter().for_each(|&(index, raw)| device.set(index, raw, &self.params.knobs));
                 changes.clear();

@@ -10,6 +10,7 @@
 //!   - `ready`: the page asks for its saved state, and gets it back through `window.corrente.restore`.
 //!   - `load`: a device package (src/audio/bank/devicePackage.ts) on every change. The same device
 //!     with values moved sets just those; another is built and swapped in (params.rs).
+//!   - `preview`: a sound Explore tries, played in place of the package and not saved; null ends it.
 //!   - `value`: one of the binding's values moved (a knob), set between blocks without a rebuild.
 //!   - `rack`: the page's project snapshot, saved with the host's project.
 //!   - `log`: a line for the plugin's log.
@@ -66,6 +67,7 @@ const HEIGHT: u32 = 560;
 enum Message {
     Ready,
     Load { package: String },
+    Preview { package: Option<String> },
     Value { value: usize, raw: f64 },
     Rack { rack: String },
     Log { text: String },
@@ -263,6 +265,12 @@ impl Editor for RackEditor {
                     Some(moved) => moved.into_iter().for_each(|(index, raw)| move_macro(&params, &context, index, raw)),
                     None => nice_error!("the window's device didn't load"),
                 },
+                // TS: if (!params.preview(package)) log;
+                Message::Preview { package } => {
+                    if !params.preview(package.as_deref()) {
+                        nice_error!("the sound the window tried didn't load");
+                    }
+                }
                 // TS: params.setValue(value, raw); moveMacro(value, raw);
                 Message::Value { value, raw } => {
                     params.set_value(value, raw);

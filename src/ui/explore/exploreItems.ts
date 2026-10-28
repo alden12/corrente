@@ -47,6 +47,15 @@ export type ItemSource =
   | { kind: "midi"; type: string }
   | { kind: "sample"; id: string };
 
+/** The kind of item each category holds (favourites holds any). */
+export const CATEGORY_KIND: Record<ItemCategory, ItemSource["kind"]> = {
+  instruments: "instrument",
+  patches: "patch",
+  effects: "effect",
+  midi: "midi",
+  samples: "sample",
+};
+
 export interface ExploreItem {
   key: string;
   category: ItemCategory;

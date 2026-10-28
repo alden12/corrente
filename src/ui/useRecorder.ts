@@ -6,9 +6,12 @@
 import { useSyncExternalStore } from "react";
 import type { Recorder, RecorderState } from "../audio/recording/recorder";
 
-export function useRecorder(recorder: Recorder): RecorderState {
+export function useRecorder(recorder: Recorder): RecorderState;
+/** No recorder (the plugin's window), no state. */
+export function useRecorder(recorder: Recorder | undefined): RecorderState | undefined;
+export function useRecorder(recorder: Recorder | undefined): RecorderState | undefined {
   return useSyncExternalStore(
-    (onChange) => recorder.subscribe(onChange),
-    () => recorder.getState(),
+    (onChange) => recorder?.subscribe(onChange) ?? (() => undefined),
+    () => recorder?.getState(),
   );
 }

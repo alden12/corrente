@@ -26,6 +26,8 @@ import { paramTitle } from "./paramTitle";
 export type ToPlugin =
   | { type: "ready" }
   | { type: "load"; package: string }
+  /** A sound being tried in Explore, played instead of the track's until null ends it; never saved. */
+  | { type: "preview"; package: string | null }
   | { type: "value"; value: number; raw: number }
   | { type: "rack"; rack: string }
   | { type: "log"; text: string };
@@ -64,6 +66,25 @@ export const projectOfRack = (rack: string): ProjectData | undefined => {
 /** The project as `rack` sends it. */
 export const rackOf = (project: ProjectStore): string =>
   JSON.stringify({ version: PROJECT_SCHEMA, project: project.snapshot() } satisfies SavedRack);
+
+/** The bypass values the plan's effects are at now, by the plan's param name. */
+const fixedOf = (chain: InstrumentChain): Record<string, number> =>
+  Object.fromEntries(
+    chain.absorbed.flatMap((effect) => {
+      const param = chain.plan.bypass.get(effect.id);
+      return param ? [[param, effect.bypassed ? 1 : 0]] : [];
+    }),
+  );
+
+/** A chain's package, its samples read in, labelled as its instrument. */
+const packageOf = (chain: InstrumentChain, instrumentType: string, samples: PackageSamples): Promise<DevicePackage> =>
+  devicePackage(chain.plan, catalogEntry(instrumentType).label, samples, paramTitle, fixedOf(chain));
+
+/** What a track plays, as a package; undefined for a track with no instrument to play. */
+export const trackPackage = (track: InstrumentTrack, samples: PackageSamples): Promise<DevicePackage> | undefined => {
+  const chain = instrumentChain(track.instrumentType, track.params, track.effects);
+  return chain && packageOf(chain, track.instrumentType, samples);
+};
 
 export class PluginDevice {
   private readonly project: ProjectStore;
@@ -138,21 +159,11 @@ export class PluginDevice {
     );
   }
 
-  /** The bypass values the plan's effects are at now, by the plan's param name. */
-  private fixed(chain: InstrumentChain): Record<string, number> {
-    return Object.fromEntries(
-      chain.absorbed.flatMap((effect) => {
-        const param = chain.plan.bypass.get(effect.id);
-        return param ? [[param, effect.bypassed ? 1 : 0]] : [];
-      }),
-    );
-  }
-
   /** Each binding value's engine value now, undefined for a sample. */
   private values(chain: InstrumentChain): (number | undefined)[] {
     const { plan, sources } = chain.plan;
     const binding = bindingOf(plan);
-    const fixed = this.fixed(chain);
+    const fixed = fixedOf(chain);
     return binding.names.map((name, index) => {
       if (binding.samples[index]) return undefined;
       const source = sources[name];
@@ -176,8 +187,7 @@ export class PluginDevice {
     const chain = this.chain;
     if (!chain) return;
     const build = ++this.building;
-    const label = catalogEntry(trackOf(this.project)?.instrumentType ?? "").label;
-    this.pending = devicePackage(chain.plan, label, this.samples, paramTitle, this.fixed(chain))
+    this.pending = packageOf(chain, trackOf(this.project)?.instrumentType ?? "", this.samples)
       .then((made: DevicePackage) => {
         if (build !== this.building) return;
         this.sent = made.values.map((value) => (value.kind === "sample" ? undefined : value.raw));

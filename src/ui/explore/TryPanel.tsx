@@ -8,7 +8,8 @@
  *
  * Playing it needs nothing here: while it is open, live notes go to it (`LiveNotes`), so the
  * computer keyboard on desktop and the pads the shell passes in on a phone both play it. The
- * toolbar's record button records it onto a new track (`Recorder`), and the panel says so.
+ * toolbar's record button records it onto a new track (`Recorder`), and the panel says so. In the
+ * plugin's one-track window (`ExploreScope`) there is no recorder or second track: Replace only.
  */
 import { useSyncExternalStore } from "react";
 import type { Dispatch } from "../../audio/commands/types";
@@ -20,6 +21,7 @@ import { soundChains } from "../../audio/patches/sound";
 import { useProject } from "../../audio/project/useProject";
 import { Button } from "../controls/Button";
 import { useRecorder } from "../useRecorder";
+import { useExploreScope } from "./exploreScope";
 import { PanelHeader, PlusIcon, SwapIcon } from "./PanelParts";
 import { ACTION, ACTION_LAYOUT } from "./panelStyles";
 import { exploreItems } from "./exploreItems";
@@ -79,7 +81,8 @@ export function TryPanel({
   pads,
 }: {
   preview: SoundPreview;
-  recorder: Recorder;
+  /** What records it onto a new track; the plugin has none. */
+  recorder?: Recorder;
   projectStore: ProjectStore;
   dispatch: Dispatch;
   /** Wraps Swap and Add, so the host can get out of the way after them (see `LibraryPanel`). */
@@ -90,7 +93,8 @@ export function TryPanel({
 }) {
   const trying = useSyncExternalStore(preview.subscribe, preview.getState);
   const project = useProject(projectStore);
-  const recording = useRecorder(recorder).status !== "idle";
+  const { oneTrack } = useExploreScope();
+  const recording = (useRecorder(recorder)?.status ?? "idle") !== "idle";
   const savedPatches = useSavedPatches();
   if (!trying) return null;
   // The phone is the shell that passes pads; it gets the roomier buttons with fuller labels.
@@ -125,7 +129,7 @@ export function TryPanel({
 
       {/* Side by side. Desktop's labels are short to fit the library column; which track "current" is,
           and the full action, are in the title and the accessible name. */}
-      <div className="grid grid-cols-[3fr_2fr] gap-2">
+      <div className={`grid gap-2 ${oneTrack ? "grid-cols-1" : "grid-cols-[3fr_2fr]"}`}>
         <Button
           variant="quiet"
           onClick={swap}
@@ -145,15 +149,17 @@ export function TryPanel({
             {layout === "desktop" ? "Replace current" : selected ? `Swap onto ${selected.name}` : "Swap onto a track"}
           </span>
         </Button>
-        <Button
-          variant="solid"
-          onClick={add}
-          aria-label="Add as a new track"
-          className={`${ACTION} ${ACTION_LAYOUT[layout]}`}
-        >
-          <PlusIcon />
-          <span className="min-w-0 leading-tight @[16rem]:whitespace-nowrap">Add new</span>
-        </Button>
+        {!oneTrack && (
+          <Button
+            variant="solid"
+            onClick={add}
+            aria-label="Add as a new track"
+            className={`${ACTION} ${ACTION_LAYOUT[layout]}`}
+          >
+            <PlusIcon />
+            <span className="min-w-0 leading-tight @[16rem]:whitespace-nowrap">Add new</span>
+          </Button>
+        )}
       </div>
 
       {/* Edge to edge, out of the panel's padding, as the Studio's keys dock is. */}

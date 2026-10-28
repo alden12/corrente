@@ -59,12 +59,21 @@ const ADD: Partial<Handlers<void>> = {
   midi: (source, actions) => actions.addMidiDevice(source.type),
 };
 
+type Hints = Partial<Record<ItemSource["kind"], (name: string) => string>>;
+
 /** What the "+" says it will do, for its tooltip and accessible name. */
-export const ADD_HINT: Partial<Record<ItemSource["kind"], (name: string) => string>> = {
+export const ADD_HINT: Hints = {
   instrument: (name) => `Add "${name}" as a new track`,
   patch: (name) => `Add "${name}" as a new track`,
   effect: (name) => `Add "${name}" to the selected track`,
   midi: (name) => `Add "${name}" to the selected track`,
+};
+
+/** The same, in the plugin's one-track window, where a sound replaces the track's (`ExploreScope`). */
+export const ONE_TRACK_ADD_HINT: Hints = {
+  ...ADD_HINT,
+  instrument: (name) => `Play "${name}" instead`,
+  patch: (name) => `Play "${name}" instead`,
 };
 
 /** `undefined` when the item has no "+". */

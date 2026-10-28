@@ -12,6 +12,8 @@
 //!   values moved isn't rebuilt: each moved value goes through `changes`, a queue the audio thread
 //!   empties between blocks. The window's own state, its `rack`, is saved beside the package, so it
 //!   opens again as it was.
+//! - **A sound Explore tries** (`preview`) plays in place of the package, with no macros, and isn't
+//!   saved; the package plays again when it ends.
 //!
 //! Rust notes, for reading this file:
 //! - `unsafe impl Params` is implementing a trait whose contract Rust can't check: here, that the
@@ -23,7 +25,7 @@ use crate::device::{self, Prepared};
 use crate::package::{Package, ParamSpec, Value};
 use nice_plug::prelude::*;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 pub const MACROS: usize = 16;
@@ -71,6 +73,8 @@ pub struct Macros {
     pub retired: Mutex<Option<Box<Prepared>>>,
     /// The sample rate the plugin is active at (f32 bits), 0 before it first is.
     pub rate: AtomicU32,
+    /// A sound Explore is trying plays instead of the package (`preview`).
+    pub previewing: AtomicBool,
 }
 
 impl Macros {
@@ -96,7 +100,7 @@ impl Macros {
                     }))
             })
             .collect();
-        // TS: return { knobs, targets, package, rack: "", changes: [], incoming: undefined, retired: undefined, rate: 0 }
+        // TS: return { knobs, targets, package, rack: "", changes: [], incoming: undefined, retired: undefined, rate: 0, previewing: false }
         Macros {
             knobs,
             targets,
@@ -106,6 +110,7 @@ impl Macros {
             incoming: Mutex::new(None),
             retired: Mutex::new(None),
             rate: AtomicU32::new(0),
+            previewing: AtomicBool::new(false),
         }
     }
 
@@ -145,16 +150,11 @@ impl Macros {
         if let Ok(mut retired) = self.retired.lock() {
             retired.take();
         }
-        // TS: const rate = this.activeRate(); if (rate) { const prepared = prepare(package, rate, this.knobs); if (!prepared) return undefined; this.changes = []; this.incoming = prepared; }
-        // Changes waiting were the old device's, so they go before the new one can be taken.
+        // TS: const rate = this.activeRate(); if (rate) { const prepared = prepare(package, rate, this.knobs); if (!prepared) return undefined; this.swapIn(prepared, false); }
+        // A new device ends any sound being tried: it's what the window chose.
         if let Some(rate) = self.active_rate() {
-            let prepared = device::prepare(&package, rate, &self.knobs)?;
-            if let Ok(mut changes) = self.changes.lock() {
-                changes.clear();
-            }
-            if let Ok(mut incoming) = self.incoming.lock() {
-                *incoming = Some(Box::new(prepared));
-            }
+            let prepared = device::prepare(&package, rate, Some(&self.knobs))?;
+            self.swap_in(prepared, false);
         }
         // TS: this.targets = targetsOf(package); this.package = package; return [];
         // `.write()` takes the RwLock for writing; `*targets = ...` replaces what it guards.
@@ -165,6 +165,44 @@ impl Macros {
             *saved = package;
         }
         Some(Vec::new())
+    }
+
+    /// Play `json`'s package in place of the saved one while Explore tries it, or the saved one again
+    /// (None). Neither is saved: the package stays as it was. False for one that won't load.
+    pub fn preview(&self, json: Option<&str>) -> bool {
+        // TS: if (!json && !this.previewing) return true; (nothing to end)
+        if json.is_none() && !self.previewing.load(Ordering::Acquire) {
+            return true;
+        }
+        if let Ok(mut retired) = self.retired.lock() {
+            retired.take();
+        }
+        // TS:
+        //   const rate = this.activeRate(); if (!rate) return true;
+        //   const prepared = json ? prepare(Package.parse(json), rate) : prepare(this.package, rate, this.knobs);
+        // Not active yet, there's nothing to build: activating plays the package (lib.rs's `load`).
+        let Some(rate) = self.active_rate() else { return true };
+        let prepared = match json {
+            Some(json) => Package::parse(json).and_then(|package| device::prepare(&package, rate, None)),
+            None => self.package.lock().ok().and_then(|package| device::prepare(&package, rate, Some(&self.knobs))),
+        };
+        // TS: if (!prepared) return false; this.swapIn(prepared, !!json); return true;
+        let Some(prepared) = prepared else { return false };
+        self.swap_in(prepared, json.is_some());
+        true
+    }
+
+    /// Hand `prepared` to the audio thread to swap in. Changes waiting were the old device's (and the
+    /// package has them), so they go before the new one can be taken.
+    // TS: this.changes = []; this.previewing = previewing; this.incoming = prepared;
+    fn swap_in(&self, prepared: Prepared, previewing: bool) {
+        if let Ok(mut changes) = self.changes.lock() {
+            changes.clear();
+        }
+        self.previewing.store(previewing, Ordering::Release);
+        if let Ok(mut incoming) = self.incoming.lock() {
+            *incoming = Some(Box::new(prepared));
+        }
     }
 
     /// Value `index` moved to `raw` in the window: saved with the package, and queued for the audio

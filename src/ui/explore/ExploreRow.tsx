@@ -1,13 +1,14 @@
 /**
  * One Explore item as a playlist row (COMM-1.9.1): number, artwork, name and tags, then its
  * actions. The whole left side is the primary tap (audition it on the selected track); the heart
- * favourites it (COMM-1.9.3), the "+" adds a new track, and the menu removes what is yours to
- * remove.
+ * favourites it (COMM-1.9.3), the "+" adds a new track (in the plugin, replaces the track's sound),
+ * and the menu removes what is yours to remove.
  */
 import { Menu } from "../Menu";
 import { ExploreThumb } from "./ExploreThumb";
 import { CATEGORIES, type ExploreItem } from "./exploreItems";
-import { ADD_HINT, PICK_HINT } from "./exploreActions";
+import { ADD_HINT, ONE_TRACK_ADD_HINT, PICK_HINT } from "./exploreActions";
+import { useExploreScope } from "./exploreScope";
 import { FavouriteButton } from "./favourites/FavouriteButton";
 
 export function ExploreRow({
@@ -30,6 +31,7 @@ export function ExploreRow({
   /** It is the sound in the try panel. */
   trying?: boolean;
 }) {
+  const addHint = (useExploreScope().oneTrack ? ONE_TRACK_ADD_HINT : ADD_HINT)[item.source.kind]?.(item.name);
   return (
     <div
       className={`group flex items-center gap-1 pr-2 hover:bg-you/10 ${trying ? "bg-you/15" : ""}`}
@@ -85,8 +87,8 @@ export function ExploreRow({
       {onAdd && (
         <button
           type="button"
-          title={ADD_HINT[item.source.kind]?.(item.name)}
-          aria-label={ADD_HINT[item.source.kind]?.(item.name)}
+          title={addHint}
+          aria-label={addHint}
           onClick={onAdd}
           className="shrink-0 w-7 h-7 rounded-md text-[18px] leading-none text-faint hover:text-strong hover:bg-you/10 cursor-pointer"
         >
