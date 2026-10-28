@@ -20,6 +20,8 @@ import { authorFillStyle, authorHex } from "./authorStyle";
 import { useAuthorPresence, type AuthorPresence } from "./authorColorsContext";
 import { DeviceHue } from "./devices/deviceHue";
 import { hueAccent } from "./deviceColor";
+import { useKnobExtras } from "./knobExtras";
+import { useContextMenu } from "./useContextMenu";
 
 /** Extra context the `sample` control needs (the project library + import action);
  *  optional, since only instrument panels with a sample param supply it. */
@@ -281,6 +283,9 @@ export function Knob({
   author?: string;
 }) {
   const [value] = useParam(store, spec.id);
+  // A page's additions (`KnobExtras`): the plugin's macro menu and badge. None in the app.
+  const extras = useKnobExtras();
+  const { openAt, menu } = useContextMenu();
 
   // One renderer per kind (map dispatch). useParam runs above unconditionally, so
   // hook order is stable regardless of which renderer is picked.
@@ -337,5 +342,19 @@ export function Knob({
     ),
   };
 
-  return renderers[spec.kind]();
+  const control = renderers[spec.kind]();
+  const items = extras?.menu(store, spec.id);
+  const badge = extras?.badge(store, spec.id);
+  if (!items && !badge) return control;
+  return (
+    <div className="relative" onContextMenu={items ? (event) => openAt(event, items) : undefined}>
+      {control}
+      {badge && (
+        <span className="absolute -top-1 right-0 px-1 rounded-sm bg-you/15 font-mono text-[9px] leading-normal text-you pointer-events-none">
+          {badge}
+        </span>
+      )}
+      {menu}
+    </div>
+  );
 }

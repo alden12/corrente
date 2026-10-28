@@ -38,7 +38,15 @@ pub struct Package {
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Value {
-    Param { title: String, spec: ParamSpec, raw: f64 },
+    Param {
+        /// The binding's name for it, which stays put as the device changes around it: what a macro
+        /// is mapped to. Empty in a package saved before names were kept.
+        #[serde(default)]
+        name: String,
+        title: String,
+        spec: ParamSpec,
+        raw: f64,
+    },
     Sample {
         #[serde(skip_serializing_if = "Option::is_none")]
         file: Option<String>,
@@ -173,8 +181,8 @@ impl Package {
     // `to_bits` compares the doubles' bits, so a NaN in the binding equals itself.
     pub fn same_device(&self, other: &Package) -> bool {
         let same_value = |(mine, theirs): (&Value, &Value)| match (mine, theirs) {
-            (Value::Param { spec, title, .. }, Value::Param { spec: other_spec, title: other_title, .. }) => {
-                spec == other_spec && title == other_title
+            (Value::Param { name, spec, title, .. }, Value::Param { name: other_name, spec: other_spec, title: other_title, .. }) => {
+                name == other_name && spec == other_spec && title == other_title
             }
             (Value::Sample { file, table }, Value::Sample { file: other_file, table: other_table }) => {
                 file == other_file && table == other_table

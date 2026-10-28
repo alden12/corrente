@@ -19,14 +19,18 @@ import { PluginApp } from "./PluginApp";
 import { pageSamples } from "./pageSamples";
 import { PluginDevice, projectOfRack, type ToPlugin } from "./pluginDevice";
 import { PluginPreview } from "./pluginPreview";
+import { PluginMacros, type Slots } from "./pluginMacros";
 import { keysToHost } from "./keysToHost";
 
 declare global {
   interface Window {
     /** wry's channel to the plugin (editor.rs), absent in a plain browser. */
     ipc?: { postMessage(message: string): void };
-    /** What the plugin calls back. */
-    corrente?: { restore(rack: string | null): void };
+    /** What the plugin calls back: the saved rack and macro mapping, and a macro the host moved. */
+    corrente?: {
+      restore(rack: string | null, macros?: Slots | null): void;
+      macro(name: string, position: number): void;
+    };
   }
 }
 
@@ -40,20 +44,23 @@ applyStoredTheme();
 startLibrary();
 
 const project = new ProjectStore(false);
+const device = new PluginDevice(project, pageSamples, send);
+const macros = new PluginMacros(send);
 
 /** Show the rack the plugin saved, or a fresh one playing what a new plugin plays, then start sending. */
-const restore = (rack: string | null) => {
+const restore = (rack: string | null, slots: Slots | null) => {
+  macros.restore(slots);
   const saved = rack ? projectOfRack(rack) : undefined;
   if (saved) project.load(saved);
   else {
     if (rack) send({ type: "log", text: "the saved rack didn't read; starting afresh" });
     project.addTrack(DEFAULT_INSTRUMENT);
   }
-  new PluginDevice(project, pageSamples, send).start();
+  device.start();
   const preview = new SoundPreview(new PluginPreview(pageSamples, send), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <PluginApp project={project} preview={preview} />
+      <PluginApp project={project} preview={preview} device={device} macros={macros} />
     </StrictMode>,
   );
 };
@@ -61,11 +68,12 @@ const restore = (rack: string | null) => {
 // Once only: the plugin answers each `ready`, and a page reloaded in devtools asks again.
 let restored = false;
 window.corrente = {
-  restore: (rack) => {
+  restore: (rack, slots) => {
     if (restored) return;
     restored = true;
-    restore(rack);
+    restore(rack, slots ?? null);
   },
+  macro: (name, position) => device.fromHost(name, position),
 };
 if (window.ipc) {
   send({ type: "ready" });

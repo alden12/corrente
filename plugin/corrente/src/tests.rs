@@ -190,7 +190,31 @@ fn another_device_from_the_window_swaps_in() {
     assert!(plugin.params.incoming.lock().expect("incoming").is_some(), "a device waits to swap in");
     play(&mut plugin, &[], 1);
     assert!(plugin.params.incoming.lock().expect("incoming").is_none(), "and has");
-    assert_eq!(plugin.params.targets.read().expect("targets")[0].title, "Renamed");
+    assert_eq!(plugin.params.targets.read().expect("targets")[0].as_ref().expect("a target").title, "Renamed");
+}
+
+/// The window maps the macros by the params' binding names (PLUGIN-3.4): the device is built again to
+/// play the mapped param through its macro, and the mapping is saved and restored with the package.
+#[test]
+fn macros_map_by_name_and_are_saved() {
+    // TS: const level = the built-in's "Amp Level"; plugin.params.setMacros(["instrument.amp.level", null, ...]);
+    let package = package::Package::parse(BUILT_IN).expect("the built-in");
+    let level = package.values.iter().position(|value| matches!(value, package::Value::Param { title, .. } if title == "Amp Level")).expect("a level");
+    let mut slots: params::Slots = vec![None; params::MACROS];
+    slots[0] = Some("instrument.amp.level".to_owned());
+    let mut plugin = active(BUILT_IN);
+    assert_eq!(plugin.params.set_macros(slots.clone()), vec![(level, 0.8)], "the mapped value, for the window to move its macro to");
+    play(&mut plugin, &[], 1);
+    let device = plugin.device.as_deref().expect("playing");
+    assert!(matches!(device.sources[level], device::Source::Macro { knob: 0, .. }), "the level plays through macro 1");
+    assert_eq!(device.sources.iter().filter(|source| matches!(source, device::Source::Macro { .. })).count(), 1, "and nothing else does");
+    // TS: a fresh plugin given the saved fields maps the same.
+    let saved = plugin.params.serialize_fields();
+    let fresh = Corrente::default();
+    fresh.params.deserialize_fields(&saved);
+    let targets = fresh.params.targets.read().expect("targets");
+    assert_eq!(targets[0].as_ref().map(|target| target.value), Some(level));
+    assert!(targets[1..].iter().all(Option::is_none));
 }
 
 /// A sound Explore tries plays in place of the package, with its own values (no macros), and isn't

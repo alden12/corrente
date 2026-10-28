@@ -13,10 +13,14 @@
 //!   - `preview`: a sound Explore tries, played in place of the package and not saved; null ends it.
 //!   - `value`: one of the binding's values moved (a knob), set between blocks without a rebuild.
 //!   - `rack`: the page's project snapshot, saved with the host's project.
+//!   - `macros`: what each macro is mapped to, by the param's binding name (PLUGIN-3.4).
 //!   - `keys`: hand the keyboard back to the host (after a click that wasn't into a text field).
 //!   - `log`: a line for the plugin's log.
 //! - **A value a macro is mapped to moves the macro too**, as a drag the host hears (begin, set, end),
-//!   so the host's control and the page's knob agree, and the host can record it.
+//!   so the host's control and the page's knob agree, and the host can record it. The other way, a
+//!   macro the host moves (a knob, automation) moves the page's knob: `window.corrente.macro`.
+//! - **The plugin calls the page** with `window.corrente.restore(rack, macros)` when it's ready, and
+//!   `window.corrente.macro(name, position)` when the host moves a mapped macro.
 //!
 //! Rust notes, for reading this file:
 //! - `Rc<RefCell<T>>` is shared ownership on one thread (`Rc`) of something borrowed writable on
@@ -25,7 +29,7 @@
 //!   because nice-plug keeps the editor's handle on the main thread, where it was made.
 //! - `#[cfg(target_os = "macos")]` compiles what follows on macOS only.
 
-use crate::params::Macros;
+use crate::params::{Macros, Slots};
 use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::dpi::NativeSize;
 use nice_plug::editor::{EditorHandle, HostMethods, SpawnedEditor};
@@ -71,6 +75,7 @@ enum Message {
     Preview { package: Option<String> },
     Value { value: usize, raw: f64 },
     Rack { rack: String },
+    Macros { slots: Slots },
     Keys,
     Log { text: String },
 }
@@ -99,6 +104,8 @@ pub struct RackWindow {
     build: RefCell<Option<Build>>,
     width: Arc<AtomicU32>,
     height: Arc<AtomicU32>,
+    /// What the macros are mapped to, to tell the page which knob a host's macro moves.
+    params: Arc<Macros>,
 }
 unsafe impl Send for RackWindow {}
 
@@ -280,12 +287,12 @@ impl Editor for RackEditor {
                 Err(error) => return nice_error!("the window sent a message the plugin can't read: {error}"),
             };
             match message {
-                // TS: reply(`window.corrente?.restore(${JSON.stringify(params.rack || null)})`)
+                // TS: reply(`window.corrente?.restore(${JSON.stringify(params.rack || null)}, ${JSON.stringify(params.slots)})`)
                 // The rack is JSON already, so it goes to the page as a string for it to parse.
                 Message::Ready => {
                     let rack = params.rack.lock().map(|rack| rack.clone()).unwrap_or_default();
                     let argument = if rack.is_empty() { "null".to_owned() } else { serde_json::to_string(&rack).unwrap_or_default() };
-                    reply(format!("window.corrente?.restore({argument})"));
+                    reply(format!("window.corrente?.restore({argument}, {})", params.slots_json()));
                 }
                 // TS: const moved = params.load(package); if (!moved) log; else moved.forEach(([index, raw]) => moveMacro(index, raw));
                 Message::Load { package } => match params.load(&package) {
@@ -309,6 +316,8 @@ impl Editor for RackEditor {
                         *saved = rack;
                     }
                 }
+                // TS: params.setMacros(slots).forEach(([index, raw]) => moveMacro(index, raw));
+                Message::Macros { slots } => params.set_macros(slots).into_iter().for_each(|(index, raw)| move_macro(&params, &context, index, raw)),
                 // TS: if (webview.deref()?.value) keysToHost(webview.deref().value);
                 Message::Keys => {
                     if let Some(view) = keys_to.upgrade() {
@@ -334,7 +343,7 @@ impl Editor for RackEditor {
                 .with_devtools(true)
                 .build_as_child(parent)
         });
-        let window = RackWindow { webview, build: RefCell::new(Some(build)), width: self.width.clone(), height: self.height.clone() };
+        let window = RackWindow { webview, build: RefCell::new(Some(build)), width: self.width.clone(), height: self.height.clone(), params: self.params.clone() };
         // VST3 hands the parent over now; CLAP does it after, through `set_parent`.
         if let Some(parent) = parent {
             window.attach(parent);
@@ -407,7 +416,18 @@ impl EditorHandle for RackWindow {
     // Only X11 needs a call back on the main thread.
     fn host_main_thread_callback(&self, _window: &()) {}
 
-    // The page shows the device's own values, not the macros, so a host's change has nothing to redraw yet.
-    fn param_value_changed(&self, _id: &str, _normalized_value: f32) {}
+    /// The host moved a macro (its knob, or automation): the page's knob it's mapped to follows. Runs on
+    /// the main thread. The page leaves alone a knob already there, as one it moved itself is.
+    // TS:
+    //   const knob = Number(id.replace("macro", "")) - 1; const target = this.params.targets[knob];
+    //   if (target) this.webview?.evaluateScript(`window.corrente?.macro(${JSON.stringify(target.name)}, ${position})`);
+    fn param_value_changed(&self, id: &str, normalized_value: f32) {
+        let Some(knob) = id.strip_prefix("macro").and_then(|number| number.parse::<usize>().ok()).and_then(|number| number.checked_sub(1)) else { return };
+        let Some(name) = self.params.targets.read().ok().and_then(|targets| targets.get(knob).and_then(Option::as_ref).map(|target| target.name.clone())) else { return };
+        let script = format!("window.corrente?.macro({}, {normalized_value})", serde_json::to_string(&name).unwrap_or_default());
+        if let Err(error) = on_webview(self, |webview| webview.evaluate_script(&script)) {
+            nice_error!("the window didn't take a macro's move: {error}");
+        }
+    }
     fn param_modulation_changed(&self, _id: &str, _modulation_offset: f32) {}
 }

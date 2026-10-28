@@ -90,12 +90,12 @@ impl Corrente {
 
     /// Build the saved package's device at `rate`, here and now (off the audio thread).
     fn load(&mut self, rate: f32) -> bool {
-        // TS: this.params.rate = rate; this.params.previewing = false; const prepared = prepare(this.params.package, rate, this.params.knobs);
+        // TS: this.params.rate = rate; this.params.previewing = false; const prepared = prepare(this.params.package, rate, [this.params.knobs, this.params.targets]);
         // An atomic holds a number, so the rate is stored as its bits. `.lock()` waits for the
         // mutex and lends what it guards; `.ok()` turns a failed lock into None.
         self.params.rate.store(rate.to_bits(), Ordering::Release);
         self.params.previewing.store(false, Ordering::Release);
-        let prepared = self.params.package.lock().ok().and_then(|package| device::prepare(&package, rate, Some(&self.params.knobs)));
+        let prepared = self.params.package.lock().ok().zip(self.params.targets.read().ok()).and_then(|(package, targets)| device::prepare(&package, rate, Some((&self.params.knobs, &targets))));
         // One built before this, at an older rate, is stale, and so are changes waiting for it: the
         // package already has them.
         // TS: this.params.incoming = undefined; this.params.changes = [];  (`.take()` empties an Option)

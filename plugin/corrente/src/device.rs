@@ -7,7 +7,7 @@
 //!   moves a pointer, not the engine.
 
 use crate::package::{Package, ParamSpec, Value, audio_of};
-use crate::params::targets_of;
+use crate::params::Target;
 use corrente_engine::Engine;
 use nice_plug::prelude::*;
 
@@ -68,10 +68,11 @@ impl Prepared {
     }
 }
 
-/// An engine at `rate` playing `package`, its values read from `knobs` now. With no knobs (a sound
-/// Explore is trying), no macros: the package's own values play. None for a plan or binding the
-/// engine refuses.
-pub fn prepare(package: &Package, rate: f32, knobs: Option<&[FloatParam]>) -> Option<Prepared> {
+/// An engine at `rate` playing `package`, the values `targets` names read from their `knobs` now.
+/// With no macros (a sound Explore is trying), the package's own values play. None for a plan or
+/// binding the engine refuses.
+pub fn prepare(package: &Package, rate: f32, macros: Option<(&[FloatParam], &[Option<Target>])>) -> Option<Prepared> {
+    let (knobs, targets) = macros.unwrap_or_default();
     // TS: const engine = new Engine(); engine.init(rate, 1);
     let mut engine = Engine::new();
     engine.init(rate as i32, 1);
@@ -102,11 +103,11 @@ pub fn prepare(package: &Package, rate: f32, knobs: Option<&[FloatParam]>) -> Op
             }
         })
         .collect();
-    // TS: if (knobs) targetsOf(package).forEach((target, knob) => sources[target.value] = macro(knob, target, still: position(target.raw)));
-    // `knobs.map_or(0, ...)` is how many there are, or 0 with none: `take(0)` maps nothing.
-    for (knob, target) in targets_of(package).into_iter().enumerate().take(knobs.map_or(0, |knobs| knobs.len())) {
+    // TS: targets.forEach((target, knob) => { if (target) sources[target.value] = macro(knob, target, still: position(target.raw)) });
+    // `.filter_map` over the pairs skips the knobs with no target.
+    for (knob, target) in targets.iter().enumerate().filter_map(|(knob, target)| target.as_ref().map(|target| (knob, target))) {
         let still = target.spec.position(target.raw) as f32;
-        sources[target.value] = Source::Macro { knob, spec: target.spec, raw: target.raw, still };
+        sources[target.value] = Source::Macro { knob, spec: target.spec.clone(), raw: target.raw, still };
     }
     // TS: const plan = parsePlan(package.words); if (!plan) return undefined; if (!engine.load(0, plan)) { log; return undefined }
     let plan = corrente_engine::parse_plan(&package.words).ok()?;
@@ -116,10 +117,10 @@ pub fn prepare(package: &Package, rate: f32, knobs: Option<&[FloatParam]>) -> Op
     }
     // The binding, then each value now, then where each starts: NaN, at its value.
     // TS:
-    //   const sent = sources.map((source) => source.now(knobs ?? []));
+    //   const sent = sources.map((source) => source.now(knobs));
     //   return engine.bind(0, [...package.binding, ...sent, ...sent.map(() => NaN)]) ? { engine, sources, sent } : undefined;
     // `[a, b, c].concat()` joins three slices into one new list.
-    let sent: Vec<f64> = sources.iter().map(|source| source.now(knobs.unwrap_or_default())).collect();
+    let sent: Vec<f64> = sources.iter().map(|source| source.now(knobs)).collect();
     let starts = vec![f64::NAN; sent.len()];
     engine.bind(0, &[&package.binding[..], &sent, &starts].concat()).then_some(Prepared { engine, sources, sent })
 }

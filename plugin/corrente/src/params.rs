@@ -2,9 +2,10 @@
 //!
 //! - **Macros, not the device's own params:** a host takes a plugin's params once, when it makes the
 //!   plugin, and nice-plug can't tell it they changed, so the list can't follow the device loaded. Each
-//!   macro is a knob from 0 to 1, mapped for now to one of the device's params in order (the first 16
-//!   that aren't samples); the window will let you choose. The host shows the mapped param's name and
-//!   value in the macro's text.
+//!   macro is a knob from 0 to 1, mapped to one of the device's params: the first 16 that aren't
+//!   samples, until the window maps them (PLUGIN-3.4), by the param's binding name (`slots`), which
+//!   holds as the device changes around it. The host shows the mapped param's name and value in the
+//!   macro's text.
 //! - **The package is saved with the host's project** (`serialize_fields`), with any value the window
 //!   has moved since, and loading it again (`deserialize_fields`) builds its engine off the audio
 //!   thread (device.rs), for the plugin to swap in between blocks.
@@ -32,26 +33,49 @@ pub const MACROS: usize = 16;
 /// The keys the package and the window's state are saved under in the plugin's state.
 const PACKAGE_FIELD: &str = "package";
 const RACK_FIELD: &str = "rack";
+const MACROS_FIELD: &str = "macros";
 
 /// A device param a macro is mapped to: which of the binding's values it sets, and how.
 pub struct Target {
     pub value: usize,
+    /// The param's binding name, which the window knows it by.
+    pub name: String,
     pub title: String,
     pub spec: ParamSpec,
     /// The engine value the package had, which plays until the macro moves off its position.
     pub raw: f64,
 }
 
-/// The first MACROS of a package's params, in order, as the macros' targets.
+/// What each macro is mapped to, by the param's binding name; None for a macro mapped to nothing.
+pub type Slots = Vec<Option<String>>;
+
+/// The macros' targets in `package`, one per macro: what `slots` maps each to, or with no slots (the
+/// window hasn't mapped any), the first MACROS params in order. None where a macro has no target.
 // TS:
-//   return package.values.flatMap((kind, value) => kind.kind === "param" ? [{ value, title, spec, raw }] : []).slice(0, MACROS);
-// `filter_map` keeps each Some its closure returns; `.take(MACROS)` stops after the first 16.
-pub fn targets_of(package: &Package) -> Vec<Target> {
-    let params = package.values.iter().enumerate().filter_map(|(value, kind)| match kind {
-        Value::Param { title, spec, raw } => Some(Target { value, title: title.clone(), spec: spec.clone(), raw: *raw }),
-        _ => None,
-    });
-    params.take(MACROS).collect()
+//   const params = package.values.flatMap((kind, value) => kind.kind === "param" ? [{ value, name, title, spec, raw }] : []);
+//   return Array.from({ length: MACROS }, (_, knob) => slots ? params.find((param) => param.name === slots[knob]) : params[knob]);
+// `filter_map` keeps each Some its closure returns; `.nth(knob)` is the knob-th item, if there is one.
+pub fn targets_of(package: &Package, slots: Option<&Slots>) -> Vec<Option<Target>> {
+    let params = || {
+        package.values.iter().enumerate().filter_map(|(value, kind)| match kind {
+            Value::Param { name, title, spec, raw } => Some((name, Target { value, name: name.clone(), title: title.clone(), spec: spec.clone(), raw: *raw })),
+            _ => None,
+        })
+    };
+    (0..MACROS)
+        .map(|knob| match slots {
+            Some(slots) => slots.get(knob).cloned().flatten().and_then(|mapped| params().find(|(name, _)| **name == mapped)),
+            None => params().nth(knob),
+        })
+        .map(|found| found.map(|(_, target)| target))
+        .collect()
+}
+
+/// Each value a macro is mapped to, and the engine value it's at.
+// TS: return targets.flatMap((target) => target ? [[target.value, target.raw]] : []);
+// `.flatten()` skips the Nones, as `flatMap` skipping empties.
+fn mapped_values(targets: &[Option<Target>]) -> Vec<(usize, f64)> {
+    targets.iter().flatten().map(|target| (target.value, target.raw)).collect()
 }
 
 /// Room for the value changes waiting for the audio thread: one per value, so more than any device has.
@@ -60,7 +84,9 @@ const MAX_CHANGES: usize = 256;
 pub struct Macros {
     pub knobs: Vec<FloatParam>,
     /// What each macro is mapped to now, for the host's text. Changed only off the audio thread.
-    pub targets: Arc<RwLock<Vec<Target>>>,
+    pub targets: Arc<RwLock<Vec<Option<Target>>>>,
+    /// The window's mapping, by binding name; None until it maps one (the first 16 params, then).
+    pub slots: Mutex<Option<Slots>>,
     /// The package playing, with the window's changes: what is saved.
     pub package: Mutex<Package>,
     /// The window's project snapshot (JSON), empty before it has opened.
@@ -87,23 +113,24 @@ impl Macros {
         //     .withValueToString((position) => targets[index] ? `${title}: ${display(engineValue(position))}` : ""));
         // `RwLock` lets many threads read at once, or one write. Each knob's text closure keeps its own
         // `Arc` of the targets (`shown`), so it sees them change; `move` hands the closure what it uses.
-        let targets = Arc::new(RwLock::new(targets_of(&package)));
+        let targets = Arc::new(RwLock::new(targets_of(&package, None)));
         let knobs = (0..MACROS)
             .map(|index| {
-                let start = targets.read().ok().and_then(|targets| targets.get(index).map(|target| target.spec.position(target.raw)));
+                let start = targets.read().ok().and_then(|targets| targets.get(index).and_then(Option::as_ref).map(|target| target.spec.position(target.raw)));
                 let shown = targets.clone();
                 FloatParam::new(format!("Macro {}", index + 1), start.unwrap_or(0.5) as f32, FloatRange::Linear { min: 0.0, max: 1.0 })
                     .with_value_to_string(Arc::new(move |position| {
                         let targets = shown.read();
-                        let target = targets.as_ref().ok().and_then(|targets| targets.get(index));
+                        let target = targets.as_ref().ok().and_then(|targets| targets.get(index).and_then(Option::as_ref));
                         target.map_or_else(String::new, |target| format!("{}: {}", target.title, target.spec.display(target.spec.engine_value(f64::from(position)))))
                     }))
             })
             .collect();
-        // TS: return { knobs, targets, package, rack: "", changes: [], incoming: undefined, retired: undefined, rate: 0, previewing: false }
+        // TS: return { knobs, targets, slots: undefined, package, rack: "", changes: [], incoming: undefined, retired: undefined, rate: 0, previewing: false }
         Macros {
             knobs,
             targets,
+            slots: Mutex::new(None),
             package: Mutex::new(package),
             rack: Mutex::new(String::new()),
             changes: Mutex::new(Vec::with_capacity(MAX_CHANGES)),
@@ -123,8 +150,8 @@ impl Macros {
     /// Play `json`'s package from the next block. The same device with values moved sets just those
     /// (`set_value`), and they're returned; another device's engine is built now, here (off the audio
     /// thread), for the plugin to swap in, and each value a macro is mapped to is returned, for the
-    /// window to move the macro to: the host's knobs still sit where the old device's values were, and
-    /// the new device would otherwise play those. None, changing nothing, for one that won't load.
+    /// window to move the macro to (the host's knobs still sit where the old device's values were).
+    /// None, changing nothing, for one that won't load.
     pub fn load(&self, json: &str) -> Option<Vec<(usize, f64)>> {
         // TS: const package = Package.parse(json); if (!package) return undefined;
         let package = Package::parse(json)?;
@@ -152,17 +179,18 @@ impl Macros {
         if let Ok(mut retired) = self.retired.lock() {
             retired.take();
         }
-        // TS: const rate = this.activeRate(); if (rate) { const prepared = prepare(package, rate, this.knobs); if (!prepared) return undefined; this.swapIn(prepared, false); }
+        // TS:
+        //   const targets = targetsOf(package, this.slots);
+        //   const rate = this.activeRate(); if (rate) { const prepared = prepare(package, rate, [this.knobs, targets]); if (!prepared) return undefined; this.swapIn(prepared, false); }
         // A new device ends any sound being tried: it's what the window chose.
+        let targets = targets_of(&package, self.slots.lock().ok().as_deref().and_then(Option::as_ref));
         if let Some(rate) = self.active_rate() {
-            let prepared = device::prepare(&package, rate, Some(&self.knobs))?;
+            let prepared = device::prepare(&package, rate, Some((&self.knobs, &targets)))?;
             self.swap_in(prepared, false);
         }
-        // TS: const targets = targetsOf(package); const mapped = targets.map((target) => [target.value, target.raw]);
-        //     this.targets = targets; this.package = package; return mapped;
+        // TS: const mapped = mappedValues(targets); this.targets = targets; this.package = package; return mapped;
         // `.write()` takes the RwLock for writing; `*held = ...` replaces what it guards.
-        let targets = targets_of(&package);
-        let mapped = targets.iter().map(|target| (target.value, target.raw)).collect();
+        let mapped = mapped_values(&targets);
         if let Ok(mut held) = self.targets.write() {
             *held = targets;
         }
@@ -170,6 +198,43 @@ impl Macros {
             *saved = package;
         }
         Some(mapped)
+    }
+
+    /// The window mapped the macros (`slots`): the targets follow, and the device is built again to
+    /// play its macros through them (after the sound being tried, if one is). Each mapped value is
+    /// returned, for the window to move its macro to where the value is now.
+    pub fn set_macros(&self, slots: Slots) -> Vec<(usize, f64)> {
+        self.remap(Some(slots))
+    }
+
+    /// Map the macros by `slots`, or to the first 16 params with none (`set_macros`).
+    fn remap(&self, slots: Option<Slots>) -> Vec<(usize, f64)> {
+        // TS:
+        //   const targets = targetsOf(this.package, slots);
+        //   const rate = this.activeRate();
+        //   if (rate && !this.previewing) { const prepared = prepare(this.package, rate, [this.knobs, targets]); if (prepared) this.swapIn(prepared, false); }
+        //   this.targets = targets; this.slots = slots; return mappedValues(targets);
+        let Ok(package) = self.package.lock() else { return Vec::new() };
+        let targets = targets_of(&package, slots.as_ref());
+        if let Some(rate) = self.active_rate().filter(|_| !self.previewing.load(Ordering::Acquire)) {
+            if let Some(prepared) = device::prepare(&package, rate, Some((&self.knobs, &targets))) {
+                self.swap_in(prepared, false);
+            }
+        }
+        drop(package);
+        let mapped = mapped_values(&targets);
+        if let Ok(mut held) = self.targets.write() {
+            *held = targets;
+        }
+        if let Ok(mut held) = self.slots.lock() {
+            *held = slots;
+        }
+        mapped
+    }
+
+    /// The window's mapping, as JSON, or "null" before it has mapped any (for its restore).
+    pub fn slots_json(&self) -> String {
+        self.slots.lock().ok().and_then(|slots| serde_json::to_string(&*slots).ok()).unwrap_or_else(|| "null".to_owned())
     }
 
     /// Play `json`'s package in place of the saved one while Explore tries it, or the saved one again
@@ -189,7 +254,7 @@ impl Macros {
         let Some(rate) = self.active_rate() else { return true };
         let prepared = match json {
             Some(json) => Package::parse(json).and_then(|package| device::prepare(&package, rate, None)),
-            None => self.package.lock().ok().and_then(|package| device::prepare(&package, rate, Some(&self.knobs))),
+            None => self.package.lock().ok().zip(self.targets.read().ok()).and_then(|(package, targets)| device::prepare(&package, rate, Some((&self.knobs, &targets)))),
         };
         // TS: if (!prepared) return false; this.swapIn(prepared, !!json); return true;
         let Some(prepared) = prepared else { return false };
@@ -228,12 +293,12 @@ impl Macros {
     }
 
     /// The macro mapped to value `index`, if one is, and where its knob sits for `raw`.
-    // TS: const knob = this.targets.findIndex((target) => target.value === index); return knob < 0 ? undefined : [knob, this.targets[knob].spec.position(raw)];
+    // TS: const knob = this.targets.findIndex((target) => target?.value === index); return knob < 0 ? undefined : [knob, this.targets[knob].spec.position(raw)];
     // `.position(...)` here is the list's: the index of the first match, as findIndex.
     pub fn macro_for(&self, index: usize, raw: f64) -> Option<(usize, f64)> {
         let targets = self.targets.read().ok()?;
-        let knob = targets.iter().position(|target| target.value == index)?;
-        Some((knob, targets[knob].spec.position(raw)))
+        let knob = targets.iter().position(|target| target.as_ref().is_some_and(|target| target.value == index))?;
+        Some((knob, targets[knob].as_ref()?.spec.position(raw)))
     }
 }
 
@@ -243,24 +308,34 @@ unsafe impl Params for Macros {
         self.knobs.iter().enumerate().map(|(index, knob)| (format!("macro{}", index + 1), knob.as_ptr(), String::new())).collect()
     }
 
-    // TS: return new Map([["package", JSON.stringify(this.package)], ["rack", this.rack]])
+    // TS: return new Map([["package", JSON.stringify(this.package)], ["rack", this.rack], ...(this.slots ? [["macros", JSON.stringify(this.slots)]] : [])])
     // `.ok().and_then(...)` gives None if the lock or the writing fails, and `.unwrap_or_default()` "".
     fn serialize_fields(&self) -> BTreeMap<String, String> {
         let package = self.package.lock().ok().and_then(|package| serde_json::to_string(&*package).ok()).unwrap_or_default();
         let rack = self.rack.lock().map(|rack| rack.clone()).unwrap_or_default();
-        BTreeMap::from([(PACKAGE_FIELD.to_owned(), package), (RACK_FIELD.to_owned(), rack)])
+        let slots = self.slots.lock().ok().and_then(|slots| slots.as_ref().and_then(|slots| serde_json::to_string(slots).ok()));
+        let mut fields = BTreeMap::from([(PACKAGE_FIELD.to_owned(), package), (RACK_FIELD.to_owned(), rack)]);
+        // The mapping only once the window has made one: before, the first 16 params, as ever.
+        if let Some(slots) = slots {
+            fields.insert(MACROS_FIELD.to_owned(), slots);
+        }
+        fields
     }
 
     // The host's project is opening, or a preset loading: the macros' values are already restored.
     // TS:
     //   const json = serialized.get("package"); if (json !== undefined && !this.load(json)) log the failure;
+    //   this.remap(JSON.parse(serialized.get("macros") ?? "null"));
     //   this.rack = serialized.get("rack") ?? "";
     fn deserialize_fields(&self, serialized: &BTreeMap<String, String>) {
+        // The device, then its mapping: `remap` builds it again with the mapping, even where `load`
+        // found the same device already playing.
         if let Some(json) = serialized.get(PACKAGE_FIELD) {
             if self.load(json).is_none() {
                 nice_error!("the saved device didn't load");
             }
         }
+        self.remap(serialized.get(MACROS_FIELD).and_then(|json| serde_json::from_str(json).ok()));
         if let Ok(mut rack) = self.rack.lock() {
             *rack = serialized.get(RACK_FIELD).cloned().unwrap_or_default();
         }
