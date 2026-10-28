@@ -122,7 +122,9 @@ impl Macros {
 
     /// Play `json`'s package from the next block. The same device with values moved sets just those
     /// (`set_value`), and they're returned; another device's engine is built now, here (off the audio
-    /// thread), for the plugin to swap in. None, changing nothing, for one that won't load.
+    /// thread), for the plugin to swap in, and each value a macro is mapped to is returned, for the
+    /// window to move the macro to: the host's knobs still sit where the old device's values were, and
+    /// the new device would otherwise play those. None, changing nothing, for one that won't load.
     pub fn load(&self, json: &str) -> Option<Vec<(usize, f64)>> {
         // TS: const package = Package.parse(json); if (!package) return undefined;
         let package = Package::parse(json)?;
@@ -156,15 +158,18 @@ impl Macros {
             let prepared = device::prepare(&package, rate, Some(&self.knobs))?;
             self.swap_in(prepared, false);
         }
-        // TS: this.targets = targetsOf(package); this.package = package; return [];
-        // `.write()` takes the RwLock for writing; `*targets = ...` replaces what it guards.
-        if let Ok(mut targets) = self.targets.write() {
-            *targets = targets_of(&package);
+        // TS: const targets = targetsOf(package); const mapped = targets.map((target) => [target.value, target.raw]);
+        //     this.targets = targets; this.package = package; return mapped;
+        // `.write()` takes the RwLock for writing; `*held = ...` replaces what it guards.
+        let targets = targets_of(&package);
+        let mapped = targets.iter().map(|target| (target.value, target.raw)).collect();
+        if let Ok(mut held) = self.targets.write() {
+            *held = targets;
         }
         if let Ok(mut saved) = self.package.lock() {
             *saved = package;
         }
-        Some(Vec::new())
+        Some(mapped)
     }
 
     /// Play `json`'s package in place of the saved one while Explore tries it, or the saved one again

@@ -177,12 +177,16 @@ fn a_moved_value_sets_without_a_rebuild_and_is_saved() {
 }
 
 /// Anything more than values (here a param's title) is another device: built off the audio thread, and
-/// swapped in at the next block.
+/// swapped in at the next block. Each value a macro is mapped to comes back, for the window to move
+/// the host's knob to (they sit where the old device's values were).
 #[test]
 fn another_device_from_the_window_swaps_in() {
     let mut plugin = active(BUILT_IN);
-    let index = package::Package::parse(BUILT_IN).expect("the built-in").values.iter().position(|value| matches!(value, package::Value::Param { .. })).expect("a param");
-    assert_eq!(plugin.params.load(&changed(BUILT_IN, index, "title", "Renamed".into())), Some(vec![]));
+    let package = package::Package::parse(BUILT_IN).expect("the built-in");
+    let index = package.values.iter().position(|value| matches!(value, package::Value::Param { .. })).expect("a param");
+    // TS: expect(load(renamed)).toEqual(the first MACROS params' [value, raw]);
+    let mapped: Vec<(usize, f64)> = package.values.iter().enumerate().filter(|(_, value)| matches!(value, package::Value::Param { .. })).map(|(at, value)| (at, value.raw().expect("a param's"))).take(params::MACROS).collect();
+    assert_eq!(plugin.params.load(&changed(BUILT_IN, index, "title", "Renamed".into())), Some(mapped));
     assert!(plugin.params.incoming.lock().expect("incoming").is_some(), "a device waits to swap in");
     play(&mut plugin, &[], 1);
     assert!(plugin.params.incoming.lock().expect("incoming").is_none(), "and has");
