@@ -285,3 +285,18 @@ fn the_page_and_what_it_links_are_built_in() {
     links.iter().for_each(|link| assert_eq!(fetch(link).0, 200, "{link} is built in"));
     assert_eq!(fetch("/nothing-here.js").0, 404);
 }
+
+#[test]
+fn each_engine_block_gets_the_beat_at_its_own_start_wrapped_by_the_host_loop() {
+    // 120 beats a minute at 48 kHz. A 512-sample buffer at beat 10 renders four blocks, at indices
+    // 127, 255, 383 and 511: each starts where its first event was gathered, not at the buffer.
+    let per_sample = 2.0 / 48000.0;
+    let starts: Vec<f64> = [127, 255, 383, 511].iter().map(|&index| block_beat(10.0, index, per_sample, None)).collect();
+    let expected: Vec<f64> = [0.0, 128.0, 256.0, 384.0].iter().map(|samples| 10.0 + samples * per_sample).collect();
+    assert_eq!(starts, expected);
+    // A block that began in the buffer before, ending a loop from beat 8 to 12 as this buffer starts it again.
+    let wrapped = block_beat(8.0, 63, per_sample, Some((8.0, 12.0)));
+    assert!((wrapped - (12.0 - 64.0 * per_sample)).abs() < 1e-12, "{wrapped}");
+    // Outside the loop, nothing wraps.
+    assert_eq!(block_beat(20.0, 127, per_sample, Some((8.0, 12.0))), 20.0);
+}

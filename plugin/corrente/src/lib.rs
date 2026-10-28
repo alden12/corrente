@@ -42,6 +42,22 @@ const MAX_EVENTS: usize = 512;
 /// The device a new instance plays: export.ts's output.
 const BUILT_IN: &str = include_str!("../device.json");
 
+/// The beat at the start of the engine block about to render, `index` samples into the host's buffer
+/// (whose start is at `at_buffer`): the block holds the events gathered over the BLOCK samples up to
+/// and including `index`, so it starts BLOCK - 1 samples back, perhaps in the buffer before. Inside
+/// the host's loop it wraps, as the host's own beat would have.
+// TS:
+//   const beat = atBuffer + (index + 1 - BLOCK) * perSample;
+//   if (!loop || atBuffer < loop[0] || atBuffer >= loop[1] || loop[1] <= loop[0]) return beat;
+//   return loop[0] + mod(beat - loop[0], loop[1] - loop[0]);
+pub(crate) fn block_beat(at_buffer: f64, index: usize, per_sample: f64, looping: Option<(f64, f64)>) -> f64 {
+    let beat = at_buffer + (index as f64 + 1.0 - BLOCK as f64) * per_sample;
+    match looping {
+        Some((start, end)) if end > start && (start..end).contains(&at_buffer) => start + (beat - start).rem_euclid(end - start),
+        _ => beat,
+    }
+}
+
 // TS: type Event = { kind: "on"; note: number; velocity: number } | { kind: "off"; note: number }
 // `#[derive(Clone, Copy)]` lets an Event be copied like a number, rather than moved.
 #[derive(Clone, Copy)]
@@ -286,9 +302,10 @@ impl Plugin for Corrente {
             if self.position == BLOCK {
                 self.position = 0;
                 let transport = context.transport();
-                let (beat, tempo) = (transport.pos_beats().unwrap_or(0.0), transport.tempo.unwrap_or(120.0) as f32);
-                let playing = transport.playing;
-                self.render(beat, tempo, playing);
+                let tempo = transport.tempo.unwrap_or(120.0);
+                let at_buffer = transport.pos_beats().unwrap_or(0.0);
+                let beat = block_beat(at_buffer, index, tempo / 60.0 / f64::from(transport.sample_rate), transport.loop_range_beats());
+                self.render(beat, tempo as f32, transport.playing);
             }
         }
         ProcessStatus::KeepAlive
