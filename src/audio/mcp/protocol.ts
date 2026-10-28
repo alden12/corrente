@@ -31,6 +31,9 @@ export type HistoryMethod = "commit" | "revert" | "history" | "diff" | "state";
 export type PatchMethod = "list" | "save" | "apply" | "get";
 
 /** Sent by the browser tab to the server (state sync + RPC replies). */
+/** What kind of page drives the server: the app, or a plugin's window. */
+export type ClientKind = "app" | "plugin";
+
 export type BrowserToServer =
   | { type: "projectSnapshot"; project: ProjectData }
   | { type: "projectStructure"; project: ProjectData }
@@ -46,7 +49,10 @@ export type BrowserToServer =
   // tab with the latest, so the agent edits the project in front of the user (AGENT-32).
   | { type: "attention"; at: number }
   // Not from a tab: a newer server, started by another Claude Code session, asking for the port.
-  | { type: "takeover" };
+  | { type: "takeover" }
+  // What the page is, said once connected: the app, or a plugin's window (PLUGIN-4), whose one-track
+  // rack only some tools suit. A server from before this ignores it.
+  | { type: "hello"; kind: ClientKind };
 
 /** Sent by the server to the browser tab (commands). */
 export type ServerToBrowser =

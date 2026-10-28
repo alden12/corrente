@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { WebSocket } from "ws";
 import { createDawMcp, type DawMcp } from "../server/mcpServer";
 import { ProjectStore } from "../src/audio/project/projectStore";
+import { PLUGIN_TOOLS } from "../server/mcp/pluginTools";
 
 // Which tab the local MCP drives, and which session has it (AGENT-32).
 
@@ -157,6 +158,21 @@ describe("MCP server with several tabs", () => {
     expect(code).toBe(1008);
     const tab = await openTab("Local page", { origin: "http://localhost:5155" });
     await waitFor(() => tab.driven() === true);
+  });
+
+  it("shows a plugin's window only the tools it takes, and the app all of them (PLUGIN-4)", async () => {
+    const tools = async () => (await session.client.listTools()).tools.map((tool) => tool.name);
+    const plugin = await openTab("Plugin", { origin: "corrente://localhost" });
+    plugin.socket.send(JSON.stringify({ type: "hello", kind: "plugin" }));
+    plugin.sendAttention(1000);
+    await eventually(async () => !(await tools()).includes("create_track"));
+    expect(new Set(await tools())).toEqual(PLUGIN_TOOLS);
+
+    // The app in front again: every tool is back.
+    const app = await openTab("App", { origin: "http://localhost:5155" });
+    app.socket.send(JSON.stringify({ type: "hello", kind: "app" }));
+    app.sendAttention(2000);
+    await eventually(async () => (await tools()).includes("create_track"));
   });
 
   it("doesn't hand over to a page asking for it", async () => {

@@ -1,8 +1,9 @@
 /**
  * The plugin window's page (PLUGIN-3.2), `plugin.html`: it asks the plugin for the rack it saved,
- * then shows it and sends the plugin what to play, and what Explore tries (PLUGIN-3.5). The plugin answers through `window.corrente`, and
- * hears the page through wry's `window.ipc`. Opened in a plain browser, where there is no plugin, it
- * starts afresh and logs what it would have sent, for working on the page.
+ * then shows it and sends the plugin what to play, and what Explore tries (PLUGIN-3.5), and lets
+ * Claude drive it through the local MCP server while it's open (PLUGIN-4). The plugin answers through
+ * `window.corrente`, and hears the page through wry's `window.ipc`. Opened in a plain browser, where
+ * there is no plugin, it starts afresh and logs what it would have sent, for working on the page.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -11,6 +12,9 @@ import "@fontsource-variable/google-sans-code/wght.css";
 import "../index.css";
 import { DEFAULT_INSTRUMENT } from "../audio/instruments/catalog";
 import { startLibrary } from "../audio/library/account";
+import { applyEdit } from "../audio/commands/applyEdit";
+import { agentAuthor } from "../audio/commands/authors";
+import { connectMcpBridge } from "../audio/mcp/bridge";
 import { SoundPreview } from "../audio/live/preview";
 import { ProjectStore } from "../audio/project/projectStore";
 import { noteUsed } from "../ui/explore/recent/store";
@@ -63,6 +67,16 @@ const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSa
   }
   device = new PluginDevice(project, samples, send);
   device.start();
+  // Claude through the local MCP server, as a browser tab of the app reaches it (PLUGIN-4): while this
+  // window is open, and the one used last if there are several. Its edits apply as the agent's.
+  const agent = agentAuthor("you");
+  connectMcpBridge(
+    {
+      projectStore: project,
+      editLog: { dispatchAsAgent: (command) => applyEdit(project, command, agent), agentAuthor: agent, note: () => {} },
+    },
+    { kind: "plugin" },
+  );
   const preview = new SoundPreview(new PluginPreview(samples, send), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

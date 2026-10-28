@@ -9,14 +9,21 @@
  * driven by a stdio transport in production and an in-memory transport in tests.
  */
 import type { IncomingMessage } from "node:http";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
 import { ProjectStore } from "../src/audio/project/projectStore";
 import { DEFAULT_WS_PORT, LOCAL_HOSTNAMES } from "../src/audio/mcp/protocol";
-import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "../src/audio/mcp/protocol";
+import type {
+  BrowserToServer,
+  ClientKind,
+  HistoryMethod,
+  PatchMethod,
+  ServerToBrowser,
+} from "../src/audio/mcp/protocol";
 import type { DawTarget, Reply } from "./mcp/target";
-import { makeToolContext } from "./mcp/context";
+import { makeToolContext, type ToolHost } from "./mcp/context";
+import { PLUGIN_TOOLS } from "./mcp/pluginTools";
 import { registerDawTools } from "./mcp/tools";
 
 /** How long a device edit may take to land in the tab, before the tool says it didn't answer. */
@@ -58,6 +65,18 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
    */
   let tab: WebSocket | null = null;
   const attention = new Map<WebSocket, number>();
+  /** What each page said it is (`hello`): one that hasn't said is the app. */
+  const kinds = new Map<WebSocket, ClientKind>();
+  /** Every tool, by name, to hide those a plugin's window can't take while one is driven (PLUGIN-4). */
+  const registered = new Map<string, RegisteredTool>();
+  /** Show the tools the driven page takes, and hide the rest; MCP clients hear the list change. */
+  const scopeTools = () => {
+    const plugin = tab !== null && kinds.get(tab) === "plugin";
+    registered.forEach((tool, name) => {
+      const shown = !plugin || PLUGIN_TOOLS.has(name);
+      if (tool.enabled !== shown) tool[shown ? "enable" : "disable"]();
+    });
+  };
   /** Sockets from something other than a browser (no Origin header): the only ones allowed a takeover. */
   const local = new WeakSet<WebSocket>();
   /** Set once another session's server took the port: this one stays up but drives nothing. */
@@ -74,6 +93,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     tab = next;
     if (tab) sendTo(tab, { type: "resync" });
     announce();
+    scopeTools();
   };
   const mostAttended = () =>
     [...attention].reduce<[WebSocket, number] | null>(
@@ -117,6 +137,10 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     takeover: (_msg, socket) => {
       if (local.has(socket)) handOver();
     },
+    hello: (msg, socket) => {
+      kinds.set(socket, msg.kind);
+      if (socket === tab) scopeTools();
+    },
   };
 
   // Both RPC paths (history, patches) correlate by a shared id and resolve here.
@@ -149,6 +173,7 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
     });
     socket.on("close", () => {
       attention.delete(socket);
+      kinds.delete(socket);
       if (tab === socket) retarget(mostAttended());
     });
   };
@@ -244,8 +269,17 @@ export function createDawMcp(options: { port?: number; onError?: (err: NodeJS.Er
       awaitReply((id) => sendToTab({ type: "analysisRequest", id, device }), ANALYSIS_TIMEOUT_MS),
   };
   const server = new McpServer({ name: "corrente", version: "0.1.0" });
-  const context = makeToolContext(server, target);
+  // Each tool kept by name as it's registered, for `scopeTools`.
+  const host: ToolHost = {
+    registerTool: ((name: string, ...rest: unknown[]) => {
+      const tool = (server.registerTool as (name: string, ...rest: unknown[]) => RegisteredTool)(name, ...rest);
+      registered.set(name, tool);
+      return tool;
+    }) as ToolHost["registerTool"],
+  };
+  const context = makeToolContext(host, target);
   registerDawTools(context);
+  scopeTools();
 
   const close = async () => {
     context.clearSequence();

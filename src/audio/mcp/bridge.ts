@@ -16,7 +16,7 @@ import type { SaveOptions } from "../patches/toolSpec";
 import { listPatches, savePatchFromTrack } from "../patches/library";
 import { DEFAULT_WS_PORT, LOCAL_HOSTNAMES } from "./protocol";
 import { analyzeProjectMix, analyzeTrackDevice } from "../engine/renderInWorker";
-import type { BrowserToServer, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
+import type { BrowserToServer, ClientKind, HistoryMethod, PatchMethod, ServerToBrowser } from "./protocol";
 
 /** `standby`: connected, but another tab was in front more recently, so the agent drives that one. */
 export type McpStatus = "connecting" | "connected" | "standby" | "disconnected";
@@ -31,17 +31,24 @@ const lastAttention = (): number => {
   }
 };
 
+/**
+ * What the bridge drives. A plugin's window (PLUGIN-4) has a project and its own way to apply edits,
+ * but no engine, transport or version history: those tools are hidden while it's driven, and the
+ * requests that reach it anyway say so.
+ */
 export interface McpBridgeDeps {
   projectStore: ProjectStore;
-  engine: AudioEngine;
-  scheduler: Scheduler;
-  editLog: EditLog;
-  versionStore: VersionStore;
+  editLog: Pick<EditLog, "dispatchAsAgent" | "agentAuthor" | "note">;
+  engine?: Pick<AudioEngine, "getNoteTarget">;
+  scheduler?: Pick<Scheduler, "play" | "stop">;
+  versionStore?: VersionStore;
 }
 
 export interface McpBridgeOptions {
   url?: string;
   onStatus?: (status: McpStatus) => void;
+  /** What this page is, for the server: the app (the default) or a plugin's window. */
+  kind?: ClientKind;
 }
 
 export interface McpBridgeHandle {
@@ -83,10 +90,10 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
   const live: LiveHandlers = {
     selectTrack: (msg) => projectStore.selectTrack(msg.trackId),
     selectClip: (msg) => projectStore.selectClip(msg.trackId, msg.clipId),
-    noteOn: (msg) => engine.getNoteTarget(msg.trackId)?.noteOn(msg.midi, msg.velocity ?? 1),
-    noteOff: (msg) => engine.getNoteTarget(msg.trackId)?.noteOff(msg.midi),
-    allNotesOff: () => projectStore.getTracks().forEach((track) => engine.getNoteTarget(track.id)?.allNotesOff()),
-    transport: (msg) => (msg.action === "play" ? scheduler.play() : scheduler.stop()),
+    noteOn: (msg) => engine?.getNoteTarget(msg.trackId)?.noteOn(msg.midi, msg.velocity ?? 1),
+    noteOff: (msg) => engine?.getNoteTarget(msg.trackId)?.noteOff(msg.midi),
+    allNotesOff: () => projectStore.getTracks().forEach((track) => engine?.getNoteTarget(track.id)?.allNotesOff()),
+    transport: (msg) => (msg.action === "play" ? scheduler?.play() : scheduler?.stop()),
     // Feed annotation from the agent: a line of intent narration in the activity feed.
     note: (msg) => editLog.note(msg.text, editLog.agentAuthor),
   };
@@ -104,16 +111,21 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
   // are authored as the agent, for the user driving it. `diff` defaults `fromId` to the commit's
   // parent ("what changed in this version"). Results are sent back as historyReply.
   const p = (params: Record<string, unknown> | undefined) => params ?? {};
+  /** The version store, or an error to send back where there's none (a plugin's window). */
+  const versions = (): VersionStore => {
+    if (!versionStore) throw new Error("There's no version history here: the host's project is the record.");
+    return versionStore;
+  };
   const historyMethods: { [K in HistoryMethod]: (params: Record<string, unknown>) => Promise<unknown> } = {
-    commit: (params) => versionStore.commit(params.message as string | undefined, editLog.agentAuthor),
-    revert: (params) => versionStore.revertTo(params.commitId as string, editLog.agentAuthor),
-    history: (params) => versionStore.history(params.limit as number | undefined),
-    state: async () => versionStore.getState(),
+    commit: (params) => versions().commit(params.message as string | undefined, editLog.agentAuthor),
+    revert: (params) => versions().revertTo(params.commitId as string, editLog.agentAuthor),
+    history: (params) => versions().history(params.limit as number | undefined),
+    state: async () => versions().getState(),
     diff: async (params) => {
       const toId = params.toId as string;
       let fromId = params.fromId as string | undefined;
-      if (!fromId) fromId = (await versionStore.getCommit(toId))?.parent ?? toId;
-      return versionStore.diff(fromId, toId);
+      if (!fromId) fromId = (await versions().getCommit(toId))?.parent ?? toId;
+      return versions().diff(fromId, toId);
     },
   };
 
@@ -265,6 +277,7 @@ export function connectMcpBridge(deps: McpBridgeDeps, options: McpBridgeOptions 
   document.addEventListener("visibilitychange", onVisibility);
 
   const wireOutbound = () => {
+    send({ type: "hello", kind: options.kind ?? "app" });
     if (document.hasFocus()) noteAttention();
     else send({ type: "attention", at: lastAttention() });
     send({ type: "projectSnapshot", project: projectStore.snapshot() });
