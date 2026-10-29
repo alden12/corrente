@@ -35,9 +35,10 @@ const arpeggiator = compileMidiDevice({
   nodes: {
     keys: { node: "input" },
     clock: { node: "clock", inputs: { sync: "keys", beats: "1/8" } },
-    arp: { node: "pick", inputs: { notes: "keys", ticks: "clock", gate: 0.5 } },
+    arp: { node: "pick", inputs: { notes: "keys", ticks: "clock" } },
+    gate: { node: "length", inputs: { notes: "arp", scale: 0.5 } },
   },
-  output: "arp",
+  output: "gate",
 });
 
 const bankOf = () => {
