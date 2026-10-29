@@ -64,7 +64,7 @@ test("an audio clip becomes a sample: a library entry for the same audio, and a 
   await page.getByRole("button", { name: "Use as sample" }).click();
 
   // A Sampler track, set to the new library entry.
-  await expect(page.getByText("sampler", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Sampler", { exact: true })).toBeVisible();
   await expect(page.getByTitle('Show "take", to hear it or put it on an audio track')).toBeVisible();
 
   // The same audio again is the same library entry, not a second copy.

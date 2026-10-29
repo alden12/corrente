@@ -9,8 +9,10 @@ import { dismissStart } from "./support/app";
 
 test.use({ viewport: { width: 1320, height: 900 } });
 
+/** Rename the selected track, from its editor tab's right-click menu (DAW-89). */
 async function renameTrack(page: Page, to: string) {
-  await page.getByTitle("Double-click to rename").first().dblclick();
+  await page.getByRole("tablist", { name: "Open editors" }).getByRole("tab").first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename track" }).click();
   const input = page.locator("input:focus"); // the autofocused inline-rename field
   await input.fill(to);
   await input.press("Enter");
