@@ -103,14 +103,19 @@ function deviceDrawing(kind: "instrument" | "effect", type: string, project: Dev
  * portrait, or for a custom one what draws it, its colour and its name.
  */
 export function deviceArt(
-  kind: "instrument" | "effect",
+  kind: "instrument" | "effect" | "midi",
   type: string,
-  project: DeviceSource,
+  project: ExploreProject,
 ): { portrait?: Portrait; drawing?: PortraitJob; hue?: number; label: string } {
-  const info = (kind === "instrument" ? pickableInstrumentInfos() : effectInfos()).find((each) => each.type === type);
+  const infos = { instrument: pickableInstrumentInfos, effect: effectInfos, midi: midiDeviceInfos }[kind]();
+  const info = infos.find((each) => each.type === type);
   return {
     portrait: (PORTRAITS as Record<string, Portrait>)[PORTRAIT_KEYS[kind](type)],
-    drawing: info?.custom ? deviceDrawing(kind, type, project) : undefined,
+    drawing: info?.custom
+      ? kind === "midi"
+        ? midiDrawing(type, project)
+        : deviceDrawing(kind, type, project)
+      : undefined,
     hue: info && deviceHue(info),
     label: info?.label ?? type,
   };

@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
-import { engineDevice } from "../../audio/definitions/engineDevices";
+import { hasGraph } from "../../audio/definitions/chainGraph";
 import { readPersistent, writePersistent } from "../persistentStore";
 import { subscribeGraphRequests } from "./openGraph";
 import {
@@ -27,9 +27,18 @@ import {
 
 const keyFor = (projectId: string) => `corrente:editor-tabs:${projectId}`;
 
-/** Whether a tab's target is still there: its track in the project, its device registered. */
+/** Whether a tab's target is still there: its track in the project, its device registered. A patch's chain is in its tab. */
+const EXISTS: {
+  [Kind in TabTarget["kind"]]: (store: ProjectStore, target: Extract<TabTarget, { kind: Kind }>) => boolean;
+} = {
+  track: (store, target) => !!store.getTrack(target.trackId),
+  graph: (_store, target) => hasGraph(target.device, target.type),
+  chain: (store, target) => store.getTrack(target.trackId)?.kind === "instrument",
+  patch: () => true,
+};
+
 const exists = (store: ProjectStore, target: TabTarget): boolean =>
-  target.kind === "track" ? !!store.getTrack(target.trackId) : !!engineDevice(target.type);
+  (EXISTS[target.kind] as (store: ProjectStore, target: TabTarget) => boolean)(store, target);
 
 export interface EditorTabsView {
   state: EditorTabs;

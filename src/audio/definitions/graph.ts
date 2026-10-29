@@ -61,21 +61,25 @@ const signalOf = (reference: string): { family: string; port: string } | undefin
   return head in SIGNALS ? { family: head, port: rest.join(".") || "stereo" } : undefined;
 };
 
-const round = (value: number) => String(Number(value.toPrecision(4)));
+export const round = (value: number) => String(Number(value.toPrecision(4)));
 
-/** Everything a definition draws, by id: built up as inputs are read. */
-interface Builder {
+/** What a graph is built up in as inputs are read, and the params it names: shared with the MIDI devices' (midi/graph.ts). */
+export interface GraphBuilder {
   nodes: Map<string, GraphNode>;
   edges: GraphEdge[];
-  definition: AuthoredDefinition;
   params: ParamSchema;
+}
+
+/** Everything a definition draws, by id: built up as inputs are read. */
+interface Builder extends GraphBuilder {
+  definition: AuthoredDefinition;
 }
 
 const paramId = (param: string) => `param:${param}`;
 const signalId = (family: string) => `signal:${family}`;
 
 /** The param's node, made the first time something reads it. */
-const paramNode = (builder: Builder, param: string): string => {
+const paramNode = (builder: GraphBuilder, param: string): string => {
   const id = paramId(param);
   if (!builder.nodes.has(id)) {
     const spec = builder.params.find((each) => each.id === param);
@@ -118,7 +122,7 @@ const fromReference = (builder: Builder, reference: string): { from: string; fro
 };
 
 /** What's done to a param's value on the way in: its scale, its offset, a table it's mapped through. */
-const bindingText = (binding: ParamBinding): string =>
+export const bindingText = (binding: ParamBinding): string =>
   [
     binding.scale !== undefined && `× ${round(binding.scale)}`,
     binding.offset !== undefined && `+ ${round(binding.offset)}`,
@@ -128,7 +132,7 @@ const bindingText = (binding: ParamBinding): string =>
     .join(" ");
 
 /** A param in words: its label, then anything done to it. */
-const paramText = (builder: Builder, binding: ParamBinding): string =>
+export const paramText = (builder: GraphBuilder, binding: ParamBinding): string =>
   [builder.params.find((spec) => spec.id === binding.param)?.label ?? binding.param, bindingText(binding)]
     .filter(Boolean)
     .join(" ");
@@ -138,7 +142,13 @@ const amountText = (builder: Builder, amount: number | ParamBinding | undefined)
   amount === undefined ? undefined : typeof amount === "number" ? round(amount) : paramText(builder, amount);
 
 /** A wire from a param's node into `to`'s `toPort`, labelled with what's done to it on the way. */
-const wireParam = (builder: Builder, param: string, to: string, toPort: string, label: string | undefined) => {
+export const wireParam = (
+  builder: GraphBuilder,
+  param: string,
+  to: string,
+  toPort: string,
+  label: string | undefined,
+) => {
   builder.edges.push({ from: paramNode(builder, param), fromPort: "value", to, toPort, ...(label ? { label } : {}) });
 };
 

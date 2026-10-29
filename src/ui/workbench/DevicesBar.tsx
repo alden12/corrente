@@ -12,6 +12,7 @@ import { midiDeviceCatalogEntry } from "../../audio/midi/device/catalog";
 import { deviceAccent } from "../deviceColor";
 import { instrumentFold, useDeviceFolds } from "../devices/deviceFolds";
 import { Menu, type MenuItem } from "../Menu";
+import { openChainGraph, useCanOpenGraphs } from "../tabs/openGraph";
 import { PagedStrip } from "../controls/PagedStrip";
 import { SectionHeader } from "../controls/SectionHeader";
 
@@ -67,7 +68,10 @@ export function DevicesBar({
   const jumps = jumpsFor(track);
   const [, , putFolds] = useDeviceFolds();
   const keys = jumps.map((jump) => jump.key);
+  // The whole chain's graph (INST-44.2), where there are editor tabs to show it in.
+  const chainGraph = useCanOpenGraphs() && track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT;
   const foldItems: MenuItem[] = [
+    ...(chainGraph ? [{ label: "View chain graph", onClick: () => openChainGraph(track.id) }] : []),
     { label: "Fold all devices", onClick: () => putFolds(keys, true) },
     { label: "Open all devices", onClick: () => putFolds(keys, false) },
   ];

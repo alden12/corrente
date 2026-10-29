@@ -41,6 +41,7 @@ export function MidiDeviceChain({
             device={info}
             label={info.label}
             kind="midi"
+            graph="midi"
             foldKey={device.id}
             bypass={{
               bypassed: device.bypassed,

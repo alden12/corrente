@@ -10,9 +10,9 @@ import { EMPTY_INSTRUMENT, instrumentInfos } from "../../audio/instruments/catal
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import { ExploreThumb } from "../explore/ExploreThumb";
 import { deviceArt } from "../explore/exploreItems";
-import { engineDevice } from "../../audio/definitions/engineDevices";
+import { hasGraph } from "../../audio/definitions/chainGraph";
 import type { MenuItem } from "../Menu";
-import { openDeviceGraph } from "./openGraph";
+import { openChainGraph, openDeviceGraph } from "./openGraph";
 import { InlineRename } from "../InlineRename";
 import { useContextMenu } from "../useContextMenu";
 import { tabKey, type Tab } from "./editorTabs";
@@ -53,22 +53,51 @@ interface Face {
   menu: MenuItem[];
 }
 
-/** A track's tab, or a device graph's; none if its track is gone. */
+/** Explore's category for each kind of device, which picks its thumb's glyph. */
+const CATEGORIES = { instrument: "instruments", effect: "effects", midi: "midi" } as const;
+
+/** A track's tab, a device graph's or a chain's; none if its track is gone. */
 const faceOf = (tab: Tab, projectStore: ProjectStore, rename: () => void): Face | undefined => {
   const target = tab.target;
   if (target.kind === "graph") {
     const art = deviceArt(target.device, target.type, projectStore);
     return {
-      thumb: <ExploreThumb category={`${target.device}s`} size={THUMB} badge={false} {...art} />,
+      thumb: <ExploreThumb category={CATEGORIES[target.device]} size={THUMB} badge={false} {...art} />,
       thumbTitle: `${art.label}'s graph`,
       name: art.label,
       suffix: "graph",
       menu: [],
     };
   }
+  if (target.kind === "patch") {
+    const instrument = target.chain.find((device) => device.kind === "instrument");
+    return {
+      thumb: (
+        <ExploreThumb
+          category="patches"
+          size={THUMB}
+          badge={false}
+          {...(instrument ? deviceArt("instrument", instrument.type, projectStore) : {})}
+        />
+      ),
+      thumbTitle: `${target.name}'s chain`,
+      name: target.name,
+      suffix: "chain",
+      menu: [],
+    };
+  }
   const track = projectStore.getTrack(target.trackId);
   if (!track) return undefined;
-  const graphable = track.kind === "instrument" && !!engineDevice(track.instrumentType);
+  if (target.kind === "chain") {
+    return {
+      thumb: <TrackThumb track={track} projectStore={projectStore} />,
+      thumbTitle: `${track.name}'s chain`,
+      name: track.name,
+      suffix: "chain",
+      menu: [],
+    };
+  }
+  const graphable = track.kind === "instrument" && hasGraph("instrument", track.instrumentType);
   return {
     thumb: <TrackThumb track={track} projectStore={projectStore} />,
     thumbTitle: kindOf(track),
@@ -76,7 +105,10 @@ const faceOf = (tab: Tab, projectStore: ProjectStore, rename: () => void): Face 
     menu: [
       { label: "Rename track", onClick: rename },
       ...(graphable
-        ? [{ label: "View instrument graph", onClick: () => openDeviceGraph("instrument", track.instrumentType) }]
+        ? [
+            { label: "View instrument graph", onClick: () => openDeviceGraph("instrument", track.instrumentType) },
+            { label: "View chain graph", onClick: () => openChainGraph(track.id) },
+          ]
         : []),
     ],
   };

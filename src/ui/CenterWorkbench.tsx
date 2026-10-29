@@ -13,9 +13,11 @@ import { EditorTabBar } from "./tabs/EditorTabBar";
 import { tabKey } from "./tabs/editorTabs";
 import { useEditorTabs } from "./tabs/useEditorTabs";
 
+import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
+import { graphDevices } from "./graph/graphDevices";
+
 /** A device's graph (INST-44), fetched with React Flow the first time one is opened. */
 const DeviceGraphView = lazy(() => import("./graph/DeviceGraphView"));
-import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
 
 export function CenterWorkbench({
   projectId,
@@ -51,9 +53,9 @@ export function CenterWorkbench({
     );
   }
 
-  // The tab shown, if it's a device's graph rather than the selected track.
+  // The tab shown, if it's a graph rather than the selected track: its devices, in chain order.
   const shown = tabs.state.tabs.find((tab) => tabKey(tab.target) === tabs.state.active)?.target;
-  const graph = shown?.kind === "graph" ? shown : undefined;
+  const graph = shown && shown.kind !== "track" ? graphDevices(shown, projectStore) : undefined;
 
   // An edit made in a tab keeps it, as VS Code keeps a preview you type into.
   const editing: Dispatch = (command, author) => {
@@ -69,7 +71,7 @@ export function CenterWorkbench({
         <Suspense
           fallback={<p className="flex-1 flex items-center justify-center text-sm text-muted">Drawing the graph…</p>}
         >
-          <DeviceGraphView key={graph.type} type={graph.type} />
+          <DeviceGraphView key={tabKey(shown!)} devices={graph} />
         </Suspense>
       ) : (
         <WorkbenchColumn

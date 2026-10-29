@@ -47,6 +47,9 @@ export const unregisterEngineMidiDevice = (type: string): void => {
   plans.delete(type);
 };
 
+/** A device type's definition as written, for drawing it (INST-44.2); undefined if the engine doesn't play it. */
+export const engineMidiDefinition = (type: string): MidiDefinition | undefined => DEFINITIONS.get(type);
+
 /**
  * A device type's plan, compiled once against its schema; undefined if the engine doesn't play it.
  * A device edited gets a new plan, so whoever holds the old one can tell.

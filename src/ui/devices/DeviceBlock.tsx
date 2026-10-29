@@ -13,6 +13,7 @@ import { useDeviceFolds } from "./deviceFolds";
 import { paramCount } from "./paramCount";
 import { foldOnHeaderClick } from "../controls/foldOnHeaderClick";
 import { openDeviceGraph, useCanViewGraph } from "../tabs/openGraph";
+import type { DeviceKind } from "../../audio/definitions/chainGraph";
 
 export interface Bypass {
   bypassed: boolean;
@@ -43,12 +44,12 @@ export function DeviceBlock({
   actions?: ReactNode;
   /** How many params it has, which it says folded. */
   params: number;
-  /** What its graph is drawn as, for an instrument or an effect. */
-  graph?: "instrument" | "effect";
+  /** What its graph is drawn as: an instrument, an effect or a MIDI device. */
+  graph?: DeviceKind;
   children: ReactNode;
 }) {
   const [folded, toggleFold] = useDeviceFolds();
-  const graphable = useCanViewGraph(graph && device.type);
+  const graphable = useCanViewGraph(graph && { kind: graph, type: device.type });
   const open = !folded.has(foldKey);
   return (
     // A group, not a section: a section with a name is a landmark, and a rack of them would crowd

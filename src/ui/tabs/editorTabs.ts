@@ -9,14 +9,33 @@
  *
  * **A limit:** past `TAB_LIMIT`, the tab used longest ago closes, never the one you're on.
  *
- * A tab is a track's editor or **a device's graph** (INST-44), opened from a menu as a kept tab.
+ * A tab is a track's editor or **a graph** (INST-44), opened from a menu as a kept tab: a device's, a
+ * track's whole chain (INST-44.2), or a saved patch's chain, carried in the tab since a patch can't
+ * change under it.
  */
 import { z } from "zod";
+import type { DeviceKind } from "../../audio/definitions/chainGraph";
 
-/** What a tab shows: a track's editor, or a device's graph by its type. */
+/** A device in a patch's chain, as its tab keeps it. */
+export interface PatchChainDevice {
+  kind: DeviceKind;
+  type: string;
+  bypassed?: boolean;
+}
+
+/** What a tab shows: a track's editor, a device's graph by its type, or a track's or a patch's chain. */
 export type TabTarget =
   | { kind: "track"; trackId: string }
-  | { kind: "graph"; device: "instrument" | "effect"; type: string };
+  | { kind: "graph"; device: DeviceKind; type: string }
+  | { kind: "chain"; trackId: string }
+  | { kind: "patch"; patchId: string; name: string; chain: PatchChainDevice[] };
+
+const KEYS: { [Kind in TabTarget["kind"]]: (target: Extract<TabTarget, { kind: Kind }>) => string } = {
+  track: (target) => `track:${target.trackId}`,
+  graph: (target) => `graph:${target.type}`,
+  chain: (target) => `chain:${target.trackId}`,
+  patch: (target) => `patch:${target.patchId}`,
+};
 
 export interface Tab {
   target: TabTarget;
@@ -38,8 +57,7 @@ export const TAB_LIMIT = 10;
 export const NO_TABS: EditorTabs = { tabs: [], active: null };
 
 /** A tab's identity: two tabs on the same target are the same tab. */
-export const tabKey = (target: TabTarget): string =>
-  target.kind === "track" ? `track:${target.trackId}` : `graph:${target.type}`;
+export const tabKey = (target: TabTarget): string => (KEYS[target.kind] as (target: TabTarget) => string)(target);
 
 const activeTab = (state: EditorTabs): Tab | undefined => state.tabs.find((tab) => tabKey(tab.target) === state.active);
 
@@ -120,13 +138,22 @@ export function retainTabs(state: EditorTabs, exists: (target: TabTarget) => boo
   return { tabs, active };
 }
 
+const deviceKind = z.enum(["midi", "instrument", "effect"]);
+
 /** The saved list, checked as it's read back: anything that doesn't read is no tabs. */
 const savedTabs = z.object({
   tabs: z.array(
     z.object({
       target: z.discriminatedUnion("kind", [
         z.object({ kind: z.literal("track"), trackId: z.string() }),
-        z.object({ kind: z.literal("graph"), device: z.enum(["instrument", "effect"]), type: z.string() }),
+        z.object({ kind: z.literal("graph"), device: deviceKind, type: z.string() }),
+        z.object({ kind: z.literal("chain"), trackId: z.string() }),
+        z.object({
+          kind: z.literal("patch"),
+          patchId: z.string(),
+          name: z.string(),
+          chain: z.array(z.object({ kind: deviceKind, type: z.string(), bypassed: z.boolean().optional() })),
+        }),
       ]),
       preview: z.boolean(),
       usedAt: z.number(),
