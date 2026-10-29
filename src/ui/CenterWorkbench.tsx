@@ -8,31 +8,9 @@ import type { ProjectStore, Track } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { Recorder } from "../audio/recording/recorder";
 import type { Dispatch } from "../audio/commands/types";
-import type { McpStatus } from "../audio/mcp/bridge";
-import type { WsStatus } from "../contract/client";
-import { SyncChip } from "./ConnectionStatus";
-import { AgentIcon } from "./shellIcons";
-import { IconButton } from "./controls/IconButton";
 import { EMPTY_INSTRUMENT } from "../audio/instruments/catalog";
 import { InlineRename } from "./InlineRename";
 import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
-import { OnThisDeviceChip, onThisDevice, type Reminder } from "./hosting/OnThisDevice";
-
-// The built-in agent does not need MCP, so a missing connection is not a warning:
-// only "connected" is called out (green + label); otherwise it is a quiet grey dot
-// you can hover for status.
-const MCP_DOT: Record<McpStatus, string> = {
-  connected: "bg-good",
-  connecting: "bg-faint",
-  standby: "bg-faint",
-  disconnected: "bg-faint",
-};
-const MCP_TITLE: Record<McpStatus, string> = {
-  connected: "MCP connected",
-  connecting: "MCP connecting…",
-  standby: "MCP connected, but driving another tab: the one most recently in front",
-  disconnected: "MCP disconnected",
-};
 
 export function CenterWorkbench({
   projectStore,
@@ -41,13 +19,6 @@ export function CenterWorkbench({
   dispatch,
   selectedTrack,
   onRevealSamples,
-  onRevealProject,
-  backupReminder,
-  mcpStatus,
-  syncStatus,
-  syncShared = false,
-  agentCollapsed,
-  onExpandAgent,
   keys,
 }: {
   projectStore: ProjectStore;
@@ -57,54 +28,13 @@ export function CenterWorkbench({
   selectedTrack: Track | undefined;
   /** Reveal the Samples library view (threaded to an empty Sampler's picker). */
   onRevealSamples?: () => void;
-  /** Open the open project's own page (its Export button), from the "Saved in browser" chip. */
-  onRevealProject?: () => void;
-  /** The open project's log and export, for the chip's backup reminder. */
-  backupReminder?: Reminder;
-  /** MCP connection status - shown as a dot in the tab bar's indicator area. */
-  mcpStatus: McpStatus;
-  /** Sync-server connection status - shown as a chip beside MCP. `null` in local (no-sync) mode. */
-  syncStatus: WsStatus | null;
-  /** The open project has collaborators, which the chip warns of while offline. */
-  syncShared?: boolean;
-  /** The agent pane is collapsed away; the tab bar hosts its expand control. */
-  agentCollapsed: boolean;
-  onExpandAgent: () => void;
   /** The computer-keyboard panel (DAW-12.1), shown in the piano roll under its velocity lane. */
   keys?: { panel: ReactNode; height: number };
 }) {
-  // The tab bar's right-hand indicator area: the MCP status dot, then (when the
-  // agent pane is collapsed away) its expand control - there is no idle rail.
-  const indicators = (
-    <div className="ml-auto self-center flex items-center gap-2 pr-2">
-      {syncStatus && <SyncChip status={syncStatus} shared={syncShared} />}
-      {onThisDevice && onRevealProject && (
-        <OnThisDeviceChip onShowProject={onRevealProject} reminder={backupReminder} />
-      )}
-      {/* MCP is a dev/local bridge; show it only when actually connected, so it doesn't sit as a
-          second bare dot beside the sync chip (confusing) the rest of the time. Grey when the agent
-          drives another tab. */}
-      {(mcpStatus === "connected" || mcpStatus === "standby") && (
-        <span
-          className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted"
-          title={MCP_TITLE[mcpStatus]}
-        >
-          <span className={`w-2 h-2 rounded-full ${MCP_DOT[mcpStatus]}`} />
-          MCP
-        </span>
-      )}
-      {agentCollapsed && (
-        <IconButton label="Expand agent panel" tone="agent" onClick={onExpandAgent}>
-          <AgentIcon className="w-4 h-4" />
-        </IconButton>
-      )}
-    </div>
-  );
-
   if (!selectedTrack) {
     return (
       <div className="[grid-area:center] bg-ground flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-        <div className="flex items-center h-11 border-b border-line bg-frame shrink-0">{indicators}</div>
+        <div className="h-11 border-b border-line bg-frame shrink-0" />
         <div className="flex-1 flex items-center justify-center text-muted text-sm">
           No track selected. Add an instrument or import audio from the library.
         </div>
@@ -122,8 +52,8 @@ export function CenterWorkbench({
   return (
     <div className="[grid-area:center] bg-ground flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
       {/* The selected track is a single editor tab (reserving space for future
-          multi-window tabs); it carries the track name + kind chip. The agent-expand
-          control sits at the far right of the tab bar. */}
+          multi-window tabs); it carries the track name + kind chip. The app's status
+          indicators are at the foot of the activity rail (DAW-87). */}
       <div
         className="flex items-stretch h-11 border-b border-line bg-frame shrink-0"
         role="tablist"
@@ -141,7 +71,6 @@ export function CenterWorkbench({
           />
           <span className="font-mono text-[9px] tracking-wider uppercase text-faint shrink-0">{kindLabel}</span>
         </div>
-        {indicators}
       </div>
 
       <WorkbenchColumn

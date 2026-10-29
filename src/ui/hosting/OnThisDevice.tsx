@@ -21,6 +21,7 @@ import {
   type StorageRisk,
   type StorageRiskSnapshot,
 } from "../../hosting/storageRisk";
+import type { ChipPopover } from "../ConnectionStatus";
 import { Popover } from "../Menu";
 import { useDismiss } from "../useDismiss";
 import { DeviceIcon } from "../shellIcons";
@@ -191,10 +192,13 @@ export function OnThisDeviceChip({
   onShowProject,
   reminder,
   icon = false,
+  popover = { strategy: "below", side: "right" },
 }: {
   onShowProject: () => void;
   reminder?: Reminder;
   icon?: boolean;
+  /** Where the details open: below the phone's top bar, beside the desktop's rail. */
+  popover?: ChipPopover;
 }) {
   const label = usePlaceLabel(reminder);
   const [open, setOpen] = useState(false);
@@ -233,8 +237,8 @@ export function OnThisDeviceChip({
       {open && (
         <Popover
           anchorRef={triggerRef}
-          strategy="below"
-          side="right"
+          strategy={popover.strategy}
+          side={popover.side}
           role="dialog"
           label="Saved in browser"
           onDetached={() => setOpen(false)}

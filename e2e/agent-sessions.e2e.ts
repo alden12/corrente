@@ -36,7 +36,7 @@ async function openAgent(page: Page) {
   await seedKey(page);
   await page.goto("/");
   await dismissStart(page);
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
 }
 
 test("saves a session, starts a new one, switches back, and persists across reload", async ({ page }) => {
@@ -60,11 +60,11 @@ test("saves a session, starts a new one, switches back, and persists across relo
   await page.getByText("write a bassline").click();
   await expect(page.getByText("Sure thing.")).toBeVisible();
 
-  // Persists across a reload. The panel's expanded state persists too, so only click
-  // the expand control if it is present.
+  // Persists across a reload, and so does the rail's view.
   await page.reload();
   await dismissStart(page);
-  const expand = page.getByRole("button", { name: /expand agent panel/i });
-  if (await expand.count()) await expand.click();
+  // The rail remembers the agent was open; its icon would close it again, so open it only if it isn't.
+  if (!(await page.getByRole("button", { name: "New chat" }).count()))
+    await page.getByRole("button", { name: "Agent", exact: true }).click();
   await expect(page.getByText("Sure thing.")).toBeVisible();
 });

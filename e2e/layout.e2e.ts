@@ -2,43 +2,43 @@ import { test, expect, type Page } from "@playwright/test";
 import { dismissStart } from "./support/app";
 
 /**
- * Layout & resizable-panel integration. These guard the four-region spine
- * (library | center | agent, timeline) and the drag-resize/persist behaviour -
+ * Layout & resizable-panel integration. These guard the spine (rail | side panel | center, timeline;
+ * the agent is one of the rail's views, DAW-87) and the drag-resize/persist behaviour -
  * including the regression where the grid had no definite height (the center
  * refused to collapse) and where a stale, oversized persisted timeline height
  * crowded the whole workbench out.
  */
 
-const region = (page: Page, area: "library" | "center" | "agent" | "timeline") =>
-  page.locator(`[class*="grid-area:${area}"]`);
+const region = (page: Page, area: "library" | "center" | "timeline") => page.locator(`[class*="grid-area:${area}"]`);
 
 /** Dismiss the audio-start modal so panels are interactive. */
 
-async function box(page: Page, area: "library" | "center" | "agent" | "timeline") {
+async function box(page: Page, area: "library" | "center" | "timeline") {
   const b = await region(page, area).boundingBox();
   if (!b) throw new Error(`no box for ${area}`);
   return b;
 }
 
-const widthOf = (page: Page, area: "library" | "center" | "agent" | "timeline") =>
+const widthOf = (page: Page, area: "library" | "center" | "timeline") =>
   region(page, area).evaluate((el) => el.getBoundingClientRect().width);
 
 // Each test runs in a fresh, isolated browser context, so localStorage starts
 // empty - no manual clearing needed (and clearing on reload would defeat the
 // persistence tests).
 
-test("the core regions are visible on a clean load; the agent expands on demand", async ({ page }) => {
+test("the core regions are visible on a clean load; the agent opens in the side panel", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
-  // The agent pane is collapsed away by default, so only these three show at first.
   for (const area of ["library", "center", "timeline"] as const) {
     const b = await box(page, area);
     expect(b.width, `${area} width`).toBeGreaterThan(20);
     expect(b.height, `${area} height`).toBeGreaterThan(20);
   }
-  await expect(region(page, "agent")).toHaveCount(0);
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
-  await expect.poll(() => widthOf(page, "agent")).toBeGreaterThan(200);
+  const center = await widthOf(page, "center");
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
+  await expect(region(page, "library").getByRole("button", { name: "New chat" })).toBeVisible();
+  // It takes the library's place, so the center keeps its width.
+  expect(Math.abs((await widthOf(page, "center")) - center)).toBeLessThan(2);
 });
 
 test("the activity rail spans the full height, and the timeline starts after it", async ({ page }) => {
@@ -84,31 +84,23 @@ test("an oversized persisted timeline height cannot crowd out the workbench", as
   expect(center.height).toBeLessThanOrEqual(body.height + 1);
 });
 
-test("the reserved agent panel expands from the tab bar and collapses away", async ({ page }) => {
+test("the agent's collapse closes the side panel to the rail, and its icon opens it again", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
-  // Collapsed by default: the pane is gone entirely (no idle rail).
-  await expect(region(page, "agent")).toHaveCount(0);
-
-  // The column animates (0.42s transition), so poll until it settles.
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
-  await expect.poll(() => widthOf(page, "agent")).toBeGreaterThan(200);
-
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
   await page.getByRole("button", { name: /collapse agent panel/i }).click();
-  await expect(region(page, "agent")).toHaveCount(0);
+  await expect(region(page, "library")).toHaveCount(0);
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
+  await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
 });
 
-test("the center workbench reflows when the agent panel expands and collapses", async ({ page }) => {
+test("the app's status sits at the foot of the rail, above the account button", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
-
-  const collapsed = await widthOf(page, "center");
-  // Expanding the agent panel takes width from the center.
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
-  await expect.poll(() => widthOf(page, "agent")).toBeGreaterThan(200);
-  await expect.poll(() => widthOf(page, "center")).toBeLessThan(collapsed - 100);
-  // Collapsing it again gives the center its width back.
-  await page.getByRole("button", { name: /collapse agent panel/i }).click();
-  await expect(region(page, "agent")).toHaveCount(0);
-  await expect.poll(() => widthOf(page, "center")).toBeGreaterThan(collapsed - 1);
+  const rail = page.locator('[class*="grid-area:rail"]');
+  const status = (await rail.getByRole("button", { name: "Saved in browser" }).boundingBox())!;
+  const account = (await rail.getByRole("button", { name: "Account and settings" }).boundingBox())!;
+  expect(status.y + status.height).toBeLessThanOrEqual(account.y + 1);
+  // Nothing left in the workbench's tab bar but the track.
+  await expect(region(page, "center").getByRole("button", { name: "Saved in browser" })).toHaveCount(0);
 });

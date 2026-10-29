@@ -1,10 +1,10 @@
 /**
- * The agent panel (right): the in-app AI collaborator. It chats with the model (via the
+ * The agent panel: the in-app AI collaborator, a view of the desktop's activity rail (DAW-87) and a
+ * sheet on the phone. It chats with the model (via the
  * user's own key, BYOK) and can inspect and edit the project by calling tools - the reason-act loop
  * runs its tools through the same `dispatch` the UI uses, so its edits show up live in
  * the arrangement and in the activity feed. Conversations are saved as switchable
- * sessions (persisted). See the agent design notes. Collapsed by default, mounts only when
- * expanded; the expand control lives in the workbench tab bar.
+ * sessions (persisted). See the agent design notes. Mounts only while it's open.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAgentChat } from "./useAgentChat";
@@ -191,7 +191,7 @@ export function AgentPanel({
   };
 
   return (
-    <div className="[grid-area:agent] bg-panel border-l border-line flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+    <div className="bg-panel flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
       <div className="relative flex items-center gap-2 h-11 px-3 border-b border-line shrink-0">
         <span className="w-2 h-2 rounded-full bg-agent shrink-0" />
         <button
@@ -224,7 +224,7 @@ export function AgentPanel({
           title="Collapse agent panel"
           className="shrink-0 text-lg leading-none text-muted hover:text-ink cursor-pointer px-1"
         >
-          »
+          «
         </button>
 
         {menuOpen && (

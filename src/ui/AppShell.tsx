@@ -80,7 +80,7 @@ import { isTypingTarget } from "./typingTarget";
 import { hosting } from "../hosting";
 import { refreshStorageRisk } from "../hosting/storageRisk";
 
-const LIBRARY_VIEWS = ["project", "explore", "activity"] as const;
+const LIBRARY_VIEWS = ["project", "explore", "activity", "agent"] as const;
 
 /**
  * Start over on another project, by its address rather than a reload: the address names the project a
@@ -175,7 +175,6 @@ export function AppShell() {
   // (widths, the timeline split) is private to the desktop shell.
   const [libCollapsed, setLibCollapsed] = usePersistentBoolean("corrente:lib-collapsed", false);
   const [libView, setLibView] = usePersistentString<LibraryView>("corrente:lib-view", "explore", LIBRARY_VIEWS);
-  const [agentCollapsed, setAgentCollapsed] = usePersistentBoolean("corrente:agent-collapsed", true);
   const deviceShape = useDeviceShape();
   // Null when the settings panel is closed. Open, it names the tab to show when a caller means one
   // (the agent panel's link asks for Agent); the logo names none, and gets the tab you left it on.
@@ -466,8 +465,6 @@ export function AppShell() {
     onSelectView: selectView,
     libCollapsed,
     onToggleLibCollapsed: () => setLibCollapsed(!libCollapsed),
-    agentCollapsed,
-    onSetAgentCollapsed: setAgentCollapsed,
     onOpenAgentSettings: () => setSettings({ tab: "agent" }),
     onOpenSettings: () => setSettings({}),
     onOpenTiming: () => setSettings({ tab: "timing" }),

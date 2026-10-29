@@ -48,7 +48,7 @@ import { AccountAvatar } from "../AccountAvatar";
 import { Menu } from "../Menu";
 import { IconButton } from "../controls/IconButton";
 import { iconButtonClass } from "../controls/iconButtonStyle";
-import type { LibraryView } from "../libraryViews";
+import type { LibraryView, PanelView } from "../libraryViews";
 import { WorkbenchColumn } from "../workbench/WorkbenchColumn";
 import { NotePads } from "../pads/NotePads";
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
@@ -297,7 +297,7 @@ export function MobileShell({
    * out of it (an instrument, a device, a sample) goes to the Studio, because what it changed is
    * there and a full-screen tab in front of it would show nothing happening (MOBILE-9).
    */
-  const browse = (browseTab: BrowseTab, view: LibraryView, onView: (view: LibraryView) => void) => (
+  const browse = (browseTab: BrowseTab, view: PanelView, onView: (view: LibraryView) => void) => (
     <div ref={setBrowseElement} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
       <ViewRail tab={browseTab} current={view} onSelect={onView} />
       <LibraryPanel

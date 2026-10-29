@@ -2,7 +2,7 @@
  * The touch shell's tabs and the library views each hosts (MOBILE-19), as data. Components are in
  * `MobileTabs.tsx`; this is separate so that file exports components only.
  */
-import type { LibraryView } from "../libraryViews";
+import type { LibraryView, PanelView } from "../libraryViews";
 
 export type MobileTab = "projects" | "explore" | "studio";
 /** In bar order, left to right: the two places you work in, then your projects at the end. */
@@ -15,7 +15,7 @@ export const MOBILE_TABS: readonly MobileTab[] = ["explore", "studio", "projects
 export const TAB_VIEWS = {
   projects: ["project", "activity"],
   explore: ["explore"],
-} as const satisfies Record<Exclude<MobileTab, "studio">, readonly LibraryView[]>;
+} as const satisfies Record<Exclude<MobileTab, "studio">, readonly PanelView[]>;
 
 export type BrowseTab = keyof typeof TAB_VIEWS;
 

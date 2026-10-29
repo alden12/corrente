@@ -1,10 +1,11 @@
 /**
- * The desktop shell: the video-editor spine (activity rail + library | center | agent,
- * with the arrangement timeline as a full-width band along the bottom). Lifted out of
+ * The desktop shell: the video-editor spine (activity rail + library | center, with the
+ * arrangement timeline as a full-width band along the bottom). The agent is one of the rail's views
+ * (DAW-87), opening in the library's place, and the app's status sits at the rail's foot. Lifted out of
  * `AppShell` when the touch shell arrived (MOBILE-1) - `AppShell` owns the stores and
  * the engine, and each shell is a pure layout over `ShellProps`.
  *
- * Everything private to this file is geometry: the three resizable, persisted splits
+ * Everything private to this file is geometry: the two resizable, persisted splits
  * and the measured body height that keeps the timeline from crowding out the workbench.
  */
 import { useSongKey } from "../pads/songKey";
@@ -15,6 +16,7 @@ import { ActivityRail } from "../ActivityRail";
 import { LibraryPanel } from "../LibraryPanel";
 import { CenterWorkbench } from "../CenterWorkbench";
 import { AgentPanel } from "../AgentPanel";
+import { RailIndicators } from "../RailIndicators";
 import { ArrangementTimeline } from "../ArrangementTimeline";
 import { ResizeHandle } from "../ResizeHandle";
 import { usePersistentNumber } from "../usePersistent";
@@ -24,20 +26,19 @@ import { openProjectsPage } from "../projects/projectsPage";
 import { KeysPanel } from "../keys/KeysPanel";
 import { useDesktopKeys } from "../keys/useDesktopKeys";
 
-// Layout bounds. The activity rail is always shown on the left; the library panel
-// beside it collapses to that rail. The agent pane collapses away entirely (its
-// expand control lives in the workbench tab bar). The timeline can grow until only
-// MIN_CENTER of the workbench remains.
+// Layout bounds. The activity rail is always shown on the left; the panel beside it (the library's
+// views, or the agent) collapses to that rail. The timeline can grow until only MIN_CENTER of the
+// workbench remains.
 const RAIL_WIDTH = 48;
 const MIN_CENTER = 96;
 
-/** What the middle column keeps on a first open, before either side panel gets more. */
+/** What the middle column keeps on a first open, before the side panel gets more. */
 const MIDDLE_MIN = 560;
 const PANEL_WIDTH = 350;
 
-/** Each side panel's width on a first open: 350px, shared down on a window too small for both. */
+/** The side panel's width on a first open: 350px, less on a window too small for it. */
 const readOpeningPanelWidth = (): number =>
-  Math.max(150, Math.min(PANEL_WIDTH, Math.floor((window.innerWidth - MIDDLE_MIN) / 2)));
+  Math.max(150, Math.min(PANEL_WIDTH, window.innerWidth - RAIL_WIDTH - MIDDLE_MIN));
 
 function subscribeResize(onChange: () => void): () => void {
   window.addEventListener("resize", onChange);
@@ -64,21 +65,18 @@ export function DesktopShell({
   onSelectView,
   libCollapsed,
   onToggleLibCollapsed,
-  agentCollapsed,
-  onSetAgentCollapsed,
   onOpenAgentSettings,
   onOpenSettings,
   onOpenShare,
   onOpenTiming,
 }: ShellProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  // A first open gives each side panel 350px, or less on a small window so the middle keeps
+  // A first open gives the side panel 350px, or less on a small window so the middle keeps
   // MIDDLE_MIN; a width you've dragged to is kept as it is.
   // Read on every resize, so a panel you haven't sized follows the window rather than catching up
   // on the next redraw.
   const opening = useSyncExternalStore(subscribeResize, readOpeningPanelWidth);
-  const [libWidth, setLibWidth] = usePersistentNumber("corrente:lib-width", opening, 150, 420);
-  const [agentWidth, setAgentWidth] = usePersistentNumber("corrente:agent-width", Math.max(240, opening), 240, 620);
+  const [libWidth, setLibWidth] = usePersistentNumber("corrente:lib-width", opening, 150, 620);
   const [timelineH, setTimelineH] = usePersistentNumber("corrente:timeline-height", 244, 120, 2000);
   const [dragging, setDragging] = useState(false);
   // The computer keyboard, played in key (DAW-12.1). Here rather than in the piano roll that shows
@@ -100,15 +98,17 @@ export function DesktopShell({
   }, []);
 
   const effTimelineH = bodyH ? Math.min(timelineH, bodyH - MIN_CENTER) : timelineH;
-  // The rail is its own full-height column (spans both rows), then the library panel
-  // (collapses to 0), the center, and the agent (collapses to 0). `libColRight` is the
-  // panel's right edge (rail + panel), where its resize handle sits.
+  // The rail is its own full-height column (spans both rows), then the side panel (collapses to 0)
+  // and the center. `libColRight` is the panel's right edge (rail + panel), where its resize handle sits.
   const libColRight = RAIL_WIDTH + (libCollapsed ? 0 : libWidth);
-  const gridCols = `${RAIL_WIDTH}px ${libCollapsed ? 0 : libWidth}px minmax(0, 1fr) ${agentCollapsed ? 0 : agentWidth}px`;
+  const gridCols = `${RAIL_WIDTH}px ${libCollapsed ? 0 : libWidth}px minmax(0, 1fr)`;
   const gridRows = `minmax(0, 1fr) ${effTimelineH}px`;
   const bodyRect = () => bodyRef.current?.getBoundingClientRect();
   const bodyLeft = () => bodyRect()?.left ?? 0;
-  const bodyRight = () => bodyRect()?.right ?? 0;
+  const revealProject = () => {
+    openProjectsPage("inside");
+    onSelectView("project");
+  };
 
   return (
     <div
@@ -130,8 +130,35 @@ export function DesktopShell({
           onSelectView("explore");
           requestExploreSearch();
         }}
+        indicators={
+          <RailIndicators
+            mcpStatus={mcpStatus}
+            syncStatus={syncStatus}
+            syncShared={syncShared}
+            onRevealProject={revealProject}
+            backupReminder={{
+              editLog,
+              onExport: () =>
+                void exportProjectFile(currentProjectId(), projectStore.name, { projectStore, editLog }).catch(
+                  (error: unknown) => console.warn("[corrente] export failed:", error),
+                ),
+            }}
+          />
+        }
       />
-      {!libCollapsed && (
+      {!libCollapsed && libView === "agent" && (
+        <div className="[grid-area:library] min-w-0 min-h-0 flex border-r border-line">
+          <AgentPanel
+            onCollapse={onToggleLibCollapsed}
+            projectStore={projectStore}
+            dispatch={dispatch}
+            scheduler={scheduler}
+            hasApiKey={hasApiKey}
+            onOpenAgentSettings={onOpenAgentSettings}
+          />
+        </div>
+      )}
+      {!libCollapsed && libView !== "agent" && (
         <LibraryPanel
           projectStore={projectStore}
           editLog={editLog}
@@ -154,34 +181,8 @@ export function DesktopShell({
           openExplorePage("samples");
           onSelectView("explore");
         }}
-        onRevealProject={() => {
-          openProjectsPage("inside");
-          onSelectView("project");
-        }}
-        backupReminder={{
-          editLog,
-          onExport: () =>
-            void exportProjectFile(currentProjectId(), projectStore.name, { projectStore, editLog }).catch(
-              (error: unknown) => console.warn("[corrente] export failed:", error),
-            ),
-        }}
-        mcpStatus={mcpStatus}
-        syncStatus={syncStatus}
-        syncShared={syncShared}
-        agentCollapsed={agentCollapsed}
-        onExpandAgent={() => onSetAgentCollapsed(false)}
         keys={{ panel: <KeysPanel {...keys.panel} />, height: keys.height }}
       />
-      {!agentCollapsed && (
-        <AgentPanel
-          onCollapse={() => onSetAgentCollapsed(true)}
-          projectStore={projectStore}
-          dispatch={dispatch}
-          scheduler={scheduler}
-          hasApiKey={hasApiKey}
-          onOpenAgentSettings={onOpenAgentSettings}
-        />
-      )}
       <ArrangementTimeline
         projectStore={projectStore}
         scheduler={scheduler}
@@ -197,14 +198,6 @@ export function DesktopShell({
           onDragChange={setDragging}
           onResize={(x) => setLibWidth(x - bodyLeft() - RAIL_WIDTH)}
           style={{ left: libColRight - 3, top: 0, bottom: effTimelineH }}
-        />
-      )}
-      {!agentCollapsed && (
-        <ResizeHandle
-          ariaLabel="Resize agent panel"
-          onDragChange={setDragging}
-          onResize={(x) => setAgentWidth(bodyRight() - x)}
-          style={{ right: agentWidth - 3, top: 0, bottom: effTimelineH }}
         />
       )}
       <ResizeHandle

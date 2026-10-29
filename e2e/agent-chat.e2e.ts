@@ -29,7 +29,7 @@ async function seedKey(page: Page) {
 async function openAgent(page: Page) {
   await page.goto("/");
   await dismissStart(page);
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
   await expect(page.getByRole("textbox", { name: /message the agent/i })).toBeVisible();
 }
 
@@ -131,7 +131,7 @@ test("selecting a provider in settings routes the request to it", async ({ page 
   await page.getByRole("button", { name: "Save", exact: true }).click();
 
   // The next request must go to OpenAI's endpoint, not the default (Gemini).
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
   await page.getByRole("textbox", { name: /message the agent/i }).fill("hello");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByText("Hi from OpenAI.")).toBeVisible();

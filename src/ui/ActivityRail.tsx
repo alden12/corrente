@@ -1,11 +1,12 @@
 /**
  * The activity rail (far left): a thin icon bar that switches the library panel
- * between one view at a time - Explore / Project / Activity - under a Search icon that opens
- * Explore's search. Clicking the active icon collapses the panel to just this rail
- * (mirroring the agent panel's collapse-to-rail); clicking any other icon selects
+ * between one view at a time - Explore / Project / Activity / Agent - under a Search icon that
+ * opens Explore's search, with the app's status and your account at its foot. Clicking the active
+ * icon collapses the panel to just this rail; clicking any other icon selects
  * that view (expanding first if collapsed). The set of views is data (libraryViews.tsx),
  * shared with the touch shell's strip, so adding one is a single entry there.
  */
+import type { ReactNode } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { RAIL_ITEMS, type LibraryView } from "./libraryViews";
 
@@ -18,6 +19,7 @@ export function ActivityRail({
   onToggleCollapse,
   onOpenSettings,
   onSearch,
+  indicators,
 }: {
   active: LibraryView;
   collapsed: boolean;
@@ -28,6 +30,8 @@ export function ActivityRail({
   onOpenSettings: () => void;
   /** Search: not a view of its own, but a way into Explore's search box (COMM-1.9.3). */
   onSearch: () => void;
+  /** The app's status, above the account button (DAW-87): `RailIndicators`. */
+  indicators?: ReactNode;
 }) {
   return (
     <nav
@@ -84,6 +88,7 @@ export function ActivityRail({
           Account and settings are one panel, so this is the one button onto both. It renders in
           local/dev too, from your handle, so it is there whether or not anyone is signed in. */}
       <div className="mt-auto flex flex-col items-center w-full">
+        {indicators}
         <button
           type="button"
           title="Account and settings"

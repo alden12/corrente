@@ -51,7 +51,7 @@ test("runs a tool call from the model and edits the project", async ({ page }) =
 
   await page.goto("/");
   await dismissStart(page);
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
 
   const input = page.getByRole("textbox", { name: /message the agent/i });
   await input.fill("make me a bass track");

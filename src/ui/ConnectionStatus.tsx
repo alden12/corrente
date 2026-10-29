@@ -42,19 +42,24 @@ const DETAIL: Record<WsStatus, string> = {
 /** Said as well while a shared project is offline. */
 const SHARED_OFFLINE = "This project is shared, so someone else's edits to the same things may conflict with yours.";
 
+/** Where a chip's details open: below it on the phone's top bar, beside it on the desktop's rail. */
+export type ChipPopover = { strategy: "below" | "beside"; side: "left" | "right" };
+
 /**
- * The connection chip: a dot and a word in the desktop status bar, or (`icon`) a cloud on the phone's
- * top bar with a dot while offline. A press shows what the status means.
+ * The connection chip: a cloud with a dot while offline (`icon`), on the phone's top bar and the
+ * foot of the desktop's rail (DAW-87), or a dot and a word. A press shows what the status means.
  */
 export function SyncChip({
   status,
   shared = false,
   icon = false,
+  popover = { strategy: "below", side: icon ? "left" : "right" },
 }: {
   status: WsStatus;
   /** The project has collaborators, so being offline can conflict. */
   shared?: boolean;
   icon?: boolean;
+  popover?: ChipPopover;
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -94,8 +99,8 @@ export function SyncChip({
       {open && (
         <Popover
           anchorRef={triggerRef}
-          strategy="below"
-          side={icon ? "left" : "right"}
+          strategy={popover.strategy}
+          side={popover.side}
           role="dialog"
           label="Sync"
           onDetached={close}

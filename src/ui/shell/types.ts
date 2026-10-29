@@ -59,8 +59,6 @@ export interface ShellProps {
    */
   libCollapsed: boolean;
   onToggleLibCollapsed: () => void;
-  agentCollapsed: boolean;
-  onSetAgentCollapsed: (collapsed: boolean) => void;
 
   onOpenAgentSettings: () => void;
   onOpenSettings: () => void;

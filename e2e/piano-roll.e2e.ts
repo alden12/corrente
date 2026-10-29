@@ -128,7 +128,7 @@ test("the roll toolbar fits when the panel is narrow, keeping zoom reachable", a
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/");
   await dismissStart(page);
-  await page.getByRole("button", { name: /expand agent panel/i }).click();
+  await page.getByRole("button", { name: "Agent", exact: true }).click();
   await expect.poll(() => page.getByTitle("Zoom out (time)").isVisible()).toBe(true);
 
   const toolbar = page.getByText("Piano roll", { exact: true }).locator("..");

@@ -8,9 +8,16 @@
  * exports breaks React Fast Refresh.)
  */
 import type { ReactNode } from "react";
+import { AgentIcon } from "./shellIcons";
 
 /** The one library view on show. Persisted, so it survives a reload. */
-export type LibraryView = "project" | "explore" | "activity";
+export type LibraryView = "project" | "explore" | "activity" | "agent";
+
+/**
+ * The views the library panel draws. The agent (DAW-87) is a rail view too, but the desktop shell
+ * opens its own panel in the library's place, and the phone opens it as a sheet.
+ */
+export type PanelView = Exclude<LibraryView, "agent">;
 
 export interface RailItem {
   view: LibraryView;
@@ -57,4 +64,5 @@ export const RAIL_ITEMS: RailItem[] = [
     ),
   },
   { view: "activity", label: "Activity", icon: svg(<path d="M2 8h3l2-4 2 8 2-6 1.5 2H14" />) },
+  { view: "agent", label: "Agent", icon: <AgentIcon className="w-4.5 h-4.5" /> },
 ];

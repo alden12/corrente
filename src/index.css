@@ -310,11 +310,11 @@
 
 .app-body {
   display: grid;
-  grid-template-columns: 48px 200px minmax(0, 1fr) 320px;
+  grid-template-columns: 48px 200px minmax(0, 1fr);
   grid-template-rows: 1fr 244px;
   grid-template-areas:
-    "rail library center agent"
-    "rail timeline timeline timeline";
+    "rail library center"
+    "rail timeline timeline";
   transition: grid-template-columns 0.42s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

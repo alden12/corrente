@@ -17,7 +17,7 @@ import { DevicePanel } from "./explore/DevicePanel";
 import { SamplePanel } from "./explore/SamplePanel";
 import { panelFor } from "./explore/exploreActions";
 import type { ExploreItem } from "./explore/exploreItems";
-import type { LibraryView } from "./ActivityRail";
+import type { PanelView } from "./libraryViews";
 import { ActivityView } from "./ActivityView";
 import { LibraryHeader } from "./LibraryHeader";
 import { ExploreView } from "./explore/ExploreView";
@@ -42,7 +42,7 @@ export function LibraryPanel({
   editLog: EditLog;
   versionStore: VersionStore;
   dispatch: Dispatch;
-  activeView: LibraryView;
+  activeView: PanelView;
   onOpenShare: (projectId: string, projectName: string) => void;
   /** Something was taken from the library. Set where the panel is covering what it changes. */
   onPick?: () => void;
@@ -86,7 +86,7 @@ export function LibraryPanel({
   };
 
   // One renderer per view (data-driven, so adding a view is a single entry).
-  const views: Record<LibraryView, () => ReactNode> = {
+  const views: Record<PanelView, () => ReactNode> = {
     // The Projects home, and the open project one level in (MOBILE-19.3). The phone shows the same
     // two pages on its Projects tab, outside this panel.
     project: () => (
