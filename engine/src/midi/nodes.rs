@@ -1,18 +1,19 @@
-//! The event nodes a MIDI device is made of (INST-11.1's first palette), and what each does with a
-//! block's events. midi/format.ts's NODE_SPECS lists the same kinds, ports and fields, in this order:
-//! the two change together.
+//! The event nodes a MIDI device is made of (INST-11's palette), and what each does with a block's
+//! events. midi/format.ts's NODE_SPECS lists the same kinds, ports and fields, in this order: the two
+//! change together.
 //!
 //! - **input**: the notes the device is given.
 //! - **clock** (clock.rs): ticks every `beats`, optionally free-running from the first note on `sync`.
-//! - **pick**: holds the notes it's given and, on each tick, plays one of them for `gate` of a step:
-//!   walking up, down, up and down, at random, or in the order played, over `octaves` octaves; or
-//!   all of them at once (chord). At the loudest held velocity, times the tick's level.
+//! - **pick**: holds the notes it's given and, on each tick, plays one of them for the tick's step:
+//!   walking up, down, up and down, at random, or in the order played; or all of them at once
+//!   (chord). At the loudest held velocity, times the tick's level.
 //! - **stack**: plays copies of each note, each moved by its interval, its velocity scaled, and on or
-//!   off: an octaver, a chord, a fixed harmony.
+//!   off, numbered by copy: an octaver, a chord, a fixed harmony, an echo's repeats.
 //! - **transpose**: moves each note by `semitones`.
 //! - **velocity**: scales each note's velocity.
 //! - **euclid** and **ratchet** (rhythm.rs): pass on some of a clock's ticks, or repeat them.
-//! - **strum** (strum.rs): spreads the notes of a chord out in time.
+//! - **order**, **delay**, **length** and **chance** (time.rs): number the notes of a chord, play notes
+//!   later, change how long they last, or let them through by chance.
 //!
 //! A note that's moved keeps track of where it went, so its note off lets go of the same notes even if
 //! a knob moved in between. A note off nobody played passes through as it is: letting go of a note
@@ -20,8 +21,8 @@
 
 use super::clock::Clock;
 use super::rhythm::{self, Ratchet};
-use super::strum::Strum;
-use super::{BlockTransport, Event, Field, MAX_COPIES, MAX_EVENTS, MAX_HELD, Timed, draw};
+use super::time::{Chance, Delay, Order};
+use super::{BlockTransport, Event, Field, MAX_COPIES, MAX_EVENTS, MAX_HELD, NoteContext, Timed, draw};
 
 /// What a port or an output carries.
 // TS: type Wire = "notes" | "ticks"
@@ -48,17 +49,21 @@ pub enum Fields {
 }
 
 // TS: the same list as midi/format.ts's NODE_SPECS, by kind number.
-pub const SPECS: [Spec; 9] = [
+pub const SPECS: [Spec; 12] = [
     Spec { ports: &[], fields: Fields::Exactly(0), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Ticks },
-    Spec { ports: &[Wire::Notes, Wire::Ticks], fields: Fields::Exactly(3), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes, Wire::Ticks], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Copies, output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Ticks], fields: Fields::Exactly(4), output: Wire::Ticks },
     Spec { ports: &[Wire::Ticks], fields: Fields::Exactly(1), output: Wire::Ticks },
-    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(4), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(2), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
 ];
+
 pub const KIND_INPUT: usize = 0;
 pub const KIND_CLOCK: usize = 1;
 pub const KIND_PICK: usize = 2;
@@ -67,7 +72,10 @@ pub const KIND_TRANSPOSE: usize = 4;
 pub const KIND_VELOCITY: usize = 5;
 pub const KIND_EUCLID: usize = 6;
 pub const KIND_RATCHET: usize = 7;
-pub const KIND_STRUM: usize = 8;
+pub const KIND_ORDER: usize = 8;
+pub const KIND_DELAY: usize = 9;
+pub const KIND_LENGTH: usize = 10;
+pub const KIND_CHANCE: usize = 11;
 
 /// A node's state, by kind.
 // TS: a discriminated union of each kind's state.
@@ -81,7 +89,10 @@ pub enum Kind {
     Velocity,
     Euclid,
     Ratchet(Ratchet),
-    Strum(Strum),
+    Order(Order),
+    Delay(Delay),
+    Length,
+    Chance(Chance),
 }
 
 impl Kind {
@@ -96,7 +107,10 @@ impl Kind {
             KIND_VELOCITY => Kind::Velocity,
             KIND_EUCLID => Kind::Euclid,
             KIND_RATCHET => Kind::Ratchet(Ratchet::new()),
-            KIND_STRUM => Kind::Strum(Strum::new()),
+            KIND_ORDER => Kind::Order(Order::new()),
+            KIND_DELAY => Kind::Delay(Delay::new()),
+            KIND_LENGTH => Kind::Length,
+            KIND_CHANCE => Kind::Chance(Chance::new()),
             _ => return None,
         })
     }
@@ -114,10 +128,16 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
-    /// Field `index` of `fields`, drawing a random one for `at` (a step, or a note).
-    // TS: fields[index].read(this.values, () => draw(this.seed, this.node, index, at))
+    /// Field `index` of `fields` for a step, drawing a random one for `at` (the step).
+    // TS: fields[index].read(this.values, () => draw(this.seed, this.node, index, at), noNote)
     pub fn field(&self, fields: &[Field], index: usize, at: i64) -> f64 {
-        fields[index].read(self.values, || draw(self.seed, self.node, index, at))
+        fields[index].read(self.values, || draw(self.seed, self.node, index, at), NoteContext::default())
+    }
+
+    /// Field `index` of `fields` for a note: a per-note field reads it, and a random one draws for its pitch.
+    // TS: fields[index].read(this.values, () => draw(this.seed, this.node, index, note.pitch), note)
+    pub fn note_field(&self, fields: &[Field], index: usize, note: NoteContext) -> f64 {
+        fields[index].read(self.values, || draw(self.seed, self.node, index, i64::from(note.pitch)), note)
     }
 }
 
@@ -139,21 +159,34 @@ impl Node {
             Kind::Input => {}
             Kind::Clock(clock) => clock.process(&inputs[0], context.transport, context.field(fields, 0, 0), out),
             Kind::Pick(pick) => pick.process(&inputs[0], &inputs[1], fields, context, out),
-            Kind::Stack(map) => map.process(&inputs[0], out, |note, velocity, copy| {
-                // TS: [interval, velocity, on] = the copy's three fields
-                let at = i64::from(note);
-                let on = context.field(fields, copy * 3 + 2, at) >= 0.5;
-                let interval = context.field(fields, copy * 3, at).round() as i32;
-                on.then(|| (note + interval, velocity * context.field(fields, copy * 3 + 1, at) as f32))
+            // TS: each copy is [interval, velocity, on], read for the note; a copy is numbered by its place
+            Kind::Stack(map) => map.process(&inputs[0], out, |note, copy| {
+                let on = context.note_field(fields, copy * 3 + 2, note) >= 0.5;
+                let interval = context.note_field(fields, copy * 3, note).round() as i32;
+                let velocity = note.velocity * context.note_field(fields, copy * 3 + 1, note) as f32;
+                on.then_some((note.pitch + interval, velocity, copy as u8))
             }, fields.len() / 3),
-            Kind::Transpose(map) => map.process(&inputs[0], out, |note, velocity, _| {
-                Some((note + context.field(fields, 0, i64::from(note)).round() as i32, velocity))
+            Kind::Transpose(map) => map.process(&inputs[0], out, |note, _| {
+                Some((note.pitch + context.note_field(fields, 0, note).round() as i32, note.velocity, note.index))
             }, 1),
+            // TS: notes.map(([offset, event]) => [offset, event.kind === "on" ? { ...event, velocity: clamp(event.velocity * scale(event)) } : event])
             Kind::Velocity => inputs[0].iter().for_each(|&(offset, event)| {
                 let event = match event {
-                    Event::On { note, velocity, length } => {
-                        let scale = context.field(fields, 0, i64::from(note)) as f32;
-                        Event::On { note, velocity: (velocity * scale).clamp(0.0, 1.0), length }
+                    Event::On { note, velocity, length, index } => {
+                        let scale = context.note_field(fields, 0, NoteContext::of(event)) as f32;
+                        Event::On { note, velocity: (velocity * scale).clamp(0.0, 1.0), length, index }
+                    }
+                    other => other,
+                };
+                push(out, offset, event);
+            }),
+            // TS: notes.map(([offset, event]) => [offset, event.length ? { ...event, length: Math.max(1, Math.round(event.length * scale(event))) } : event])
+            Kind::Length => inputs[0].iter().for_each(|&(offset, event)| {
+                let event = match event {
+                    Event::On { note, velocity, length: Some(length), index } => {
+                        let scale = context.note_field(fields, 0, NoteContext::of(event)).max(0.0);
+                        let length = (f64::from(length) * scale).round().max(1.0) as u32;
+                        Event::On { note, velocity, length: Some(length), index }
                     }
                     other => other,
                 };
@@ -161,7 +194,9 @@ impl Node {
             }),
             Kind::Euclid => rhythm::euclid(&inputs[0], fields, context, out),
             Kind::Ratchet(ratchet) => ratchet.process(&inputs[0], fields, context, out),
-            Kind::Strum(strum) => strum.process(&inputs[0], fields, context, out),
+            Kind::Order(order) => order.process(&inputs[0], fields, context, out),
+            Kind::Delay(delay) => delay.process(&inputs[0], fields, context, out),
+            Kind::Chance(chance) => chance.process(&inputs[0], fields, context, out),
         }
     }
 
@@ -173,9 +208,11 @@ impl Node {
             Kind::Clock(clock) => clock.clear(),
             Kind::Pick(pick) => pick.clear(),
             Kind::Ratchet(ratchet) => ratchet.clear(),
-            Kind::Strum(strum) => strum.clear(offset, out),
             Kind::Stack(map) | Kind::Transpose(map) => map.clear(offset, out),
-            Kind::Input | Kind::Velocity | Kind::Euclid => {}
+            Kind::Order(order) => order.clear(),
+            Kind::Delay(delay) => delay.clear(offset, out),
+            Kind::Chance(chance) => chance.clear(),
+            Kind::Input | Kind::Velocity | Kind::Euclid | Kind::Length => {}
         }
     }
 }
@@ -188,50 +225,56 @@ pub fn push(out: &mut Vec<Timed>, offset: usize, event: Event) {
     }
 }
 
+/// The most notes one key (and index) becomes, across the ones it's moved to: a stack's copies, twice
+/// over for a key that comes in with two indices.
+const MAX_BECAME: usize = MAX_COPIES * 2;
+
 /// Notes moved, and where each went: for every incoming key, the notes it became, so its note off lets
 /// go of those.
-// TS: class NoteMap { became: number[][] = Array.from({ length: 128 }, () => []) }
+// TS: class NoteMap { became: [fromIndex: number, note: number, index: number][][] = Array.from({ length: 128 }, () => []) }
 pub struct NoteMap {
-    /// By incoming key: how many notes it became, and which (each 0 to 127).
-    became: [(u8, [u8; MAX_COPIES]); 128],
+    /// By incoming key: how many notes it became, and each one's incoming index, note and own index.
+    became: [(u8, [(u8, u8, u8); MAX_BECAME]); 128],
 }
 
 impl NoteMap {
     // TS: new NoteMap()  (an empty list for each of the 128 keys)
     pub fn new() -> Self {
-        NoteMap { became: [(0, [0; MAX_COPIES]); 128] }
+        NoteMap { became: [(0, [(0, 0, 0); MAX_BECAME]); 128] }
     }
 
     /// Each note on becomes the notes `copy` makes of it (copies 0 to `copies`; None for one that's
-    /// off), each in 0..=127; its note off, note offs for those. A note with a length becomes copies
-    /// with the same length, and isn't remembered: it lets itself go.
+    /// off): a pitch in 0..=127, a velocity and an index. Its note off, note offs for those. A note
+    /// with a length becomes copies with the same length, and isn't remembered: it lets itself go.
     // TS: for (const [offset, event] of input) { ... }
-    pub fn process(&mut self, input: &[Timed], out: &mut Vec<Timed>, copy: impl Fn(i32, f32, usize) -> Option<(i32, f32)>, copies: usize) {
+    pub fn process(&mut self, input: &[Timed], out: &mut Vec<Timed>, copy: impl Fn(NoteContext, usize) -> Option<(i32, f32, u8)>, copies: usize) {
         for &(offset, event) in input {
             match event {
-                Event::On { note, velocity, length } => {
+                Event::On { note, length, index, .. } => {
                     let key = note.clamp(0, 127) as usize;
                     // A key played again before its note off: let go of what it became first.
                     if length.is_none() {
-                        self.release(key, offset, out);
+                        self.release(key, index, offset, out);
                     }
-                    for index in 0..copies.min(MAX_COPIES) {
-                        let Some((moved, velocity)) = copy(note, velocity, index).filter(|&(moved, _)| (0..=127).contains(&moved)) else { continue };
-                        push(out, offset, Event::On { note: moved, velocity, length });
-                        if length.is_none() {
-                            let (count, notes) = &mut self.became[key];
-                            notes[usize::from(*count)] = moved as u8;
+                    for place in 0..copies.min(MAX_COPIES) {
+                        let made = copy(NoteContext::of(event), place).filter(|&(moved, _, _)| (0..=127).contains(&moved));
+                        let Some((moved, velocity, moved_index)) = made else { continue };
+                        push(out, offset, Event::On { note: moved, velocity, length, index: moved_index });
+                        let (count, notes) = &mut self.became[key];
+                        if length.is_none() && usize::from(*count) < MAX_BECAME {
+                            notes[usize::from(*count)] = (index, moved as u8, moved_index);
                             *count += 1;
                         }
                     }
                 }
-                Event::Off { note } => {
+                Event::Off { note, index } => {
                     let key = note.clamp(0, 127) as usize;
-                    // TS: if (!this.became[key].length) out.push([offset, event]) else this.release(key, offset, out)
-                    if self.became[key].0 == 0 {
-                        push(out, offset, event);
+                    // TS: if (!this.became[key].some(([from]) => from === index)) out.push([offset, event]) else this.release(key, index, offset, out)
+                    let (count, notes) = &self.became[key];
+                    if notes[..usize::from(*count)].iter().any(|&(from, _, _)| from == index) {
+                        self.release(key, index, offset, out);
                     } else {
-                        self.release(key, offset, out);
+                        push(out, offset, event);
                     }
                 }
                 Event::Tick { .. } => {}
@@ -239,17 +282,30 @@ impl NoteMap {
         }
     }
 
-    /// Note offs for what `key` became, and forget it.
-    // TS: this.became[key].forEach((note) => out.push([offset, off(note)])); this.became[key] = []
-    fn release(&mut self, key: usize, offset: usize, out: &mut Vec<Timed>) {
+    /// Note offs for what `key` became when it came in with `index`, and forget those.
+    // TS: const [mine, rest] = partition(this.became[key], ([from]) => from === index); mine.forEach(... out.push(off)); this.became[key] = rest
+    fn release(&mut self, key: usize, index: u8, offset: usize, out: &mut Vec<Timed>) {
         let (count, notes) = &mut self.became[key];
-        notes[..usize::from(*count)].iter().for_each(|&note| push(out, offset, Event::Off { note: i32::from(note) }));
-        *count = 0;
+        let mut kept = 0;
+        (0..usize::from(*count)).for_each(|at| {
+            let (from, note, moved_index) = notes[at];
+            if from == index {
+                push(out, offset, Event::Off { note: i32::from(note), index: moved_index });
+            } else {
+                notes[kept] = notes[at];
+                kept += 1;
+            }
+        });
+        *count = kept as u8;
     }
 
     // TS: every key's notes let go
     fn clear(&mut self, offset: usize, out: &mut Vec<Timed>) {
-        (0..128).for_each(|key| self.release(key, offset, out));
+        (0..128).for_each(|key| {
+            let (count, notes) = &mut self.became[key];
+            notes[..usize::from(*count)].iter().for_each(|&(_, note, index)| push(out, offset, Event::Off { note: i32::from(note), index }));
+            *count = 0;
+        });
     }
 }
 
@@ -277,7 +333,7 @@ impl Pick {
     }
 
     /// Hold the notes as they come and play one on each tick, both in sample order (a note landing
-    /// with a tick goes first, so the tick hears it). Fields: direction, octaves, gate.
+    /// with a tick goes first, so the tick hears it). Field: direction.
     // TS: process(notes, ticks, fields, context, out)
     fn process(&mut self, notes: &[Timed], ticks: &[Timed], fields: &[Field], context: &Context, out: &mut Vec<Timed>) {
         let (mut next_note, mut next_tick) = (0, 0);
@@ -309,7 +365,7 @@ impl Pick {
     // TS: on && !length ? insert by pitch : off ? remove : nothing
     fn hold(&mut self, event: Event) {
         match event {
-            Event::On { note, velocity, length: None } => {
+            Event::On { note, velocity, length: None, .. } => {
                 if self.held.is_empty() {
                     self.first_step = None;
                 }
@@ -319,14 +375,15 @@ impl Pick {
                     self.played += 1;
                 }
             }
-            Event::Off { note } => self.held.retain(|&(held, _, _)| held != note),
+            Event::Off { note, .. } => self.held.retain(|&(held, _, _)| held != note),
             _ => {}
         }
     }
 
-    /// Play a tick's note (`step`, `samples` long, at `level`), if anything's held, for `gate` of the
-    /// step, at the loudest held velocity times the level. A chord plays every held note.
-    // TS: const sequence = held x octaves, in the direction's order; const note = sequence[index of step]; out.push([offset, on(note, loudest * level, length)])
+    /// Play a tick's note (`step`, `samples` long, at `level`), if anything's held, for the step, at
+    /// the loudest held velocity times the level. A chord plays every held note. Each note is numbered
+    /// by its place in what's held, lowest first.
+    // TS: const note = held[index of step, in the direction's order]; out.push([offset, on(note, loudest * level, samples)])
     // `(step, samples, level): (i64, f64, f32)` takes a tuple and names its parts, as TS's `[step, samples, level]: [...]`.
     fn play(&mut self, offset: usize, (step, samples, level): (i64, f64, f32), fields: &[Field], context: &Context, out: &mut Vec<Timed>) {
         if self.held.is_empty() {
@@ -337,24 +394,17 @@ impl Pick {
         let velocity = self.held.iter().map(|&(_, velocity, _)| velocity).fold(0.0, f32::max) * level;
         let first = *self.first_step.get_or_insert(step);
         let direction = context.field(fields, 0, step).round() as usize;
-        let octaves = context.field(fields, 1, step).round().clamp(1.0, 8.0) as usize;
-        let gate = context.field(fields, 2, step).clamp(0.0, 1.0);
-        let length = (gate * samples).round().max(1.0) as u32;
-        let count = self.held.len() * octaves;
-        // TS: const on = (note: number) => ({ kind: "on", note, velocity, length })
-        let on = |note: i32| Event::On { note, velocity, length: Some(length) };
-        // TS: if (direction === CHORD) { every held note in every octave; return }
+        let length = samples.round().max(1.0) as u32;
+        let count = self.held.len();
+        // TS: const on = (note: number, index: number) => ({ kind: "on", note, velocity, length, index })
+        let on = |note: i32, index: usize| Event::On { note, velocity, length: Some(length), index: index.min(255) as u8 };
+        // TS: if (direction === CHORD) { held.forEach(([note], index) => out.push([offset, on(note, index)])); return }
         if direction == CHORD {
-            (0..count).for_each(|index| {
-                let note = self.held[index % self.held.len()].0 + 12 * (index / self.held.len()) as i32;
-                if (0..=127).contains(&note) {
-                    push(out, offset, on(note));
-                }
-            });
+            self.held.iter().enumerate().for_each(|(index, &(note, _, _))| push(out, offset, on(note, index)));
             return;
         }
         let walked = (step - first).max(0) as usize;
-        // Which of the `count` notes (held by pitch, then the next octave up, and so on) this step plays.
+        // Which of the `count` notes (held by pitch) this step plays.
         // TS: { up: walked % count, [DOWN]: count - 1 - walked % count, [UP_DOWN]: bounce, [RANDOM]: draw, [PLAYED]: by when played }
         let index = match direction {
             DOWN => count - 1 - walked % count,
@@ -366,18 +416,14 @@ impl Pick {
             RANDOM => ((draw(context.seed, context.node, 0, step) * count as f64) as usize).min(count - 1),
             _ => walked % count,
         };
-        let (octave, place) = (index / self.held.len(), index % self.held.len());
         let (note, _, _) = if direction == PLAYED {
-            // The `place`th note by when it was played: count those played before each.
+            // The `index`th note by when it was played: count those played before each.
             let rank = |&(_, _, when): &(i32, f32, u64)| self.held.iter().filter(|&&(_, _, other)| other < when).count();
-            *self.held.iter().find(|held| rank(held) == place).unwrap_or(&self.held[place])
+            *self.held.iter().find(|held| rank(held) == index).unwrap_or(&self.held[index])
         } else {
-            self.held[place]
+            self.held[index]
         };
-        let note = note + 12 * octave as i32;
-        if (0..=127).contains(&note) {
-            push(out, offset, on(note));
-        }
+        push(out, offset, on(note, index));
     }
 
     // TS: this.held = []; this.firstStep = undefined

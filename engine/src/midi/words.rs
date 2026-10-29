@@ -15,7 +15,7 @@
 
 use super::chain::{Chain, Device};
 use super::nodes::{Fields, Kind, Node, SPECS, Wire};
-use super::{Field, MAX_COPIES};
+use super::{Field, MAX_COPIES, Per};
 use crate::router::Shaping;
 
 /// The seed a device's random fields start from, by its place in the chain.
@@ -59,7 +59,7 @@ impl Reader<'_> {
         (word.fract() == 0.0 && (0.0..=1e6).contains(&word)).then_some(word as usize)
     }
 
-    // TS: const kind = this.word(); kind === 0 ? fixed : kind === 1 ? bound : kind === 2 ? random : undefined
+    // TS: const kind = this.word(); kind === 0 ? fixed : kind === 1 ? bound : kind === 2 ? random : kind === 3 ? per : undefined
     fn field(&mut self) -> Option<Field> {
         match self.count()? {
             0 => Some(Field::Fixed(self.word()?)),
@@ -71,8 +71,19 @@ impl Reader<'_> {
                 Some(Field::Bound(value, Shaping::new(scale, offset, table)))
             }
             2 => Some(Field::Random(self.word()?, self.word()?)),
+            // TS: { per: PER[this.count()], times: this.plain(), plus: this.plain() }
+            3 => {
+                let per = [Per::Index, Per::Pitch, Per::Velocity].get(self.count()?).copied()?;
+                Some(Field::Per(per, Box::new(self.plain()?), Box::new(self.plain()?)))
+            }
             _ => None,
         }
+    }
+
+    /// A field that's a number or a value: what a per-note field multiplies and adds.
+    // TS: const field = this.field(); return field?.fixed !== undefined || field?.value !== undefined ? field : undefined
+    fn plain(&mut self) -> Option<Field> {
+        self.field().filter(|field| matches!(field, Field::Fixed(_) | Field::Bound(..)))
     }
 
     /// A device: its nodes checked against each other, and its output.

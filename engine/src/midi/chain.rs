@@ -3,7 +3,7 @@
 //! length let go when it runs out.
 
 use super::nodes::{Kind, Node, push};
-use super::{BlockTransport, Event, Field, MAX_EVENTS, MAX_HELD, MAX_RELEASES, Timed};
+use super::{BlockTransport, Event, Field, MAX_EVENTS, MAX_HELD, MAX_RELEASES, NoteContext, Timed};
 use crate::router::BLOCK;
 
 /// One device: its nodes in order (each after what it reads), each node's output this block, and room
@@ -37,7 +37,7 @@ impl Device {
     // TS: process(input, values, transport): Timed[]
     fn process(&mut self, input: &[Timed], values: &[f64], transport: BlockTransport) -> &[Timed] {
         self.result.clear();
-        let bypassed = self.bypass.read(values, || 0.0) >= 0.5;
+        let bypassed = self.bypass.read(values, || 0.0, NoteContext::default()) >= 0.5;
         if bypassed != self.bypassed {
             self.bypassed = bypassed;
             self.nodes.iter_mut().for_each(|node| node.clear(0, &mut self.result));
@@ -132,7 +132,7 @@ impl Chain {
             Event::On { note, velocity, .. } if self.down.len() < MAX_HELD && !self.down.iter().any(|&(down, _)| down == note) => {
                 self.down.push((note, velocity));
             }
-            Event::Off { note } => self.down.retain(|&(down, _)| down != note),
+            Event::Off { note, .. } => self.down.retain(|&(down, _)| down != note),
             _ => {}
         }
         if self.incoming.len() < MAX_EVENTS {
@@ -186,8 +186,8 @@ impl Chain {
         for &(offset, event) in between.iter() {
             release_until(releases, out, clock, clock + offset as u64 + 1);
             match event {
-                Event::On { note, velocity, length } => {
-                    push_out(out, offset, Event::On { note, velocity, length: None });
+                Event::On { note, velocity, length, index } => {
+                    push_out(out, offset, Event::On { note, velocity, length: None, index });
                     if let Some(length) = length.filter(|_| releases.len() < MAX_RELEASES) {
                         releases.push((clock + offset as u64 + u64::from(length), note));
                     }
@@ -207,7 +207,7 @@ fn release_until(releases: &mut Vec<(u64, i32)>, out: &mut Vec<Timed>, clock: u6
     // Each turn removes one release, so it ends.
     while let Some(at) = releases.iter().enumerate().filter(|(_, (time, _))| *time < until).min_by_key(|(_, (time, _))| *time).map(|(at, _)| at) {
         let (time, note) = releases.swap_remove(at);
-        push_out(out, time.saturating_sub(clock) as usize, Event::Off { note });
+        push_out(out, time.saturating_sub(clock) as usize, Event::Off { note, index: 0 });
     }
 }
 

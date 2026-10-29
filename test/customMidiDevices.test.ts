@@ -20,7 +20,8 @@ const strum = (direction = "up"): CustomMidiDevice => ({
     format: 1,
     nodes: {
       keys: { node: "input" },
-      strum: { node: "strum", inputs: { notes: "keys", spread: { param: "spread" }, direction } },
+      chord: { node: "order", inputs: { notes: "keys", direction } },
+      strum: { node: "delay", inputs: { notes: "chord", beats: { per: "index", times: { param: "spread" } } } },
     },
     output: "strum",
   },

@@ -221,10 +221,8 @@ describe("MCP server (tracks)", () => {
       format: 1,
       nodes: {
         keys: { node: "input" },
-        strum: {
-          node: "strum",
-          inputs: { notes: "keys", spread: { param: "spread" }, direction: { param: "direction" } },
-        },
+        chord: { node: "order", inputs: { notes: "keys", direction: { param: "direction" } } },
+        strum: { node: "delay", inputs: { notes: "chord", beats: { per: "index", times: { param: "spread" } } } },
       },
       output: "strum",
     },
@@ -260,7 +258,7 @@ describe("MCP server (tracks)", () => {
         ...strum.definition,
         nodes: {
           ...strum.definition.nodes,
-          strum: { node: "strum", inputs: { notes: "keys", spread: { param: "spread" }, direction: "alternate" } },
+          chord: { node: "order", inputs: { notes: "keys", direction: "alternate" } },
         },
       },
     });
@@ -282,17 +280,19 @@ describe("MCP server (tracks)", () => {
         format: 1,
         nodes: {
           keys: { node: "input" },
-          strum: { node: "strum", inputs: { notes: "nowhere", spread: { param: "missing" } } },
+          strum: { node: "delay", inputs: { notes: "nowhere", beats: { per: "index", times: { param: "missing" } } } },
         },
         output: "strum",
       },
     });
     expect(broken.isError).toBe(true);
     expect(broken.content[0].text).toContain("strum.notes: there's no node nowhere");
-    expect(broken.content[0].text).toContain("strum.spread: there's no param missing");
+    expect(broken.content[0].text).toContain("strum.beats.times: there's no param missing");
     expect(parse(await call("list_custom_devices")).midiDevices).toEqual([]);
     const doc = parse(await call("describe_device_format"));
-    expect(Object.keys(doc.midiNodes)).toEqual(expect.arrayContaining(["input", "clock", "pick", "euclid", "strum"]));
+    expect(Object.keys(doc.midiNodes)).toEqual(
+      expect.arrayContaining(["input", "clock", "pick", "euclid", "order", "delay", "length", "chance"]),
+    );
   });
 
   it("list_tracks reports the instrument palette and starts with no tracks", async () => {

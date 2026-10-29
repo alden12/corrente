@@ -19,7 +19,10 @@ const TRANSPOSE: f64 = 4.0;
 const VELOCITY: f64 = 5.0;
 const EUCLID: f64 = 6.0;
 const RATCHET: f64 = 7.0;
-const STRUM: f64 = 8.0;
+const ORDER: f64 = 8.0;
+const DELAY: f64 = 9.0;
+const LENGTH: f64 = 10.0;
+const CHANCE: f64 = 11.0;
 const CHORD: f64 = 5.0;
 
 // TS: const fixed = (value: number) => [0, value]; const bound = (value: number) => [1, value, 1, 0, 0]; const random = (min, max) => [2, min, max]
@@ -32,6 +35,12 @@ fn bound(value: usize) -> Vec<f64> {
 fn random(min: f64, max: f64) -> Vec<f64> {
     vec![2.0, min, max]
 }
+/// A field reading the note (0 index, 1 pitch, 2 velocity), times one number plus another.
+// TS: const per = (read, times, plus) => [3, read, ...fixed(times), ...fixed(plus)]
+fn per(read: f64, times: f64, plus: f64) -> Vec<f64> {
+    [vec![3.0, read], fixed(times), fixed(plus)].concat()
+}
+const INDEX: f64 = 0.0;
 
 /// A node's words: its kind, each port's sources, its fields.
 // TS: const node = (kind, ports, fields) => [kind, ports.length, ...ports.flatMap((sources) => [sources.length, ...sources]), fields.length, ...fields.flat()]
@@ -74,17 +83,22 @@ fn octavator() -> Vec<f64> {
     device(fixed(0.0), &[node(INPUT, &[], &[]), node(STACK, &[&[0]], &fields)], 1)
 }
 
-/// An arpeggiator: a clock in eighths synced to the keys, picking up the held notes for half a step.
+/// An arpeggiator: the keys stacked over `octaves`, a clock in eighths synced to the keys, picking
+/// through what's held, each note half a step long.
 // TS: device(fixed(0), [input, clock(sync: input, beats 0.5), pick(notes: input, ticks: clock, direction, octaves, gate 0.5)], 2)
+// TS: device(fixed(0), [input, stack(an octave a copy), clock(sync, 1/8), pick(notes: stack, ticks: clock, direction), length(0.5)], 4)
 fn arpeggiator(direction: f64, octaves: f64) -> Vec<f64> {
+    let copies: Vec<Vec<f64>> = (0..octaves as usize).flat_map(|octave| [fixed(12.0 * octave as f64), fixed(1.0), fixed(1.0)]).collect();
     device(
         fixed(0.0),
         &[
             node(INPUT, &[], &[]),
+            node(STACK, &[&[0]], &copies),
             node(CLOCK, &[&[0]], &[fixed(0.5)]),
-            node(PICK, &[&[0], &[1]], &[fixed(direction), fixed(octaves), fixed(0.5)]),
+            node(PICK, &[&[1], &[2]], &[fixed(direction)]),
+            node(LENGTH, &[&[3]], &[fixed(0.5)]),
         ],
-        2,
+        4,
     )
 }
 
@@ -100,24 +114,34 @@ fn steady(block: u64) -> BlockTransport {
 }
 
 /// Play `blocks` blocks, telling the chain `keys` (block, offset, event) as they come: every event it
-/// sends the voices, as (sample time, event).
+/// sends the voices, as (sample time, event), each note's index set to 0 (the voices don't read it,
+/// and these tests compare pitches and times).
 // TS: for (let n = 0; n < blocks; n++) { keys at n -> chain.key; chain.block(n * 128, transport(n)).forEach(...) }
 fn run(chain: &mut Chain, blocks: u64, keys: &[(u64, i32, Event)], transport: impl Fn(u64) -> BlockTransport) -> Vec<(u64, Event)> {
     let mut played = Vec::new();
     for block in 0..blocks {
         keys.iter().filter(|(at, _, _)| *at == block).for_each(|&(_, offset, event)| chain.key(offset, event));
         let clock = block * 128;
-        played.extend(chain.block(clock, transport(block)).iter().map(|&(offset, event)| (clock + offset as u64, event)));
+        played.extend(chain.block(clock, transport(block)).iter().map(|&(offset, event)| (clock + offset as u64, unindexed(event))));
     }
     played
 }
 
+// TS: event.kind === "tick" ? event : { ...event, index: 0 }
+fn unindexed(event: Event) -> Event {
+    match event {
+        Event::On { note, velocity, length, .. } => Event::On { note, velocity, length, index: 0 },
+        Event::Off { note, .. } => Event::Off { note, index: 0 },
+        tick => tick,
+    }
+}
+
 // TS: const on = (note) => ({ kind: "on", note, velocity: 1 }); const off = (note) => ({ kind: "off", note })
 fn on(note: i32) -> Event {
-    Event::On { note, velocity: 1.0, length: None }
+    Event::On { note, velocity: 1.0, length: None, index: 0 }
 }
 fn off(note: i32) -> Event {
-    Event::Off { note }
+    Event::Off { note, index: 0 }
 }
 // TS: played.filter(([, event]) => event.kind === "on").map(([time, event]) => [time, event.note])
 fn ons(played: &[(u64, Event)]) -> Vec<(u64, i32)> {
@@ -157,7 +181,7 @@ fn the_octavator_plays_its_copies_and_lets_go_of_the_same_notes() {
     // `matches!(value, pattern if condition)` is true when the value fits the pattern.
     let velocity = |note| played.iter().find_map(|&(_, event)| matches!(event, Event::On { note: on, .. } if on == note).then_some(event));
     assert_eq!(ons(&played), vec![(5, C), (5, C + 12)]);
-    assert_eq!(velocity(C + 12), Some(Event::On { note: C + 12, velocity: 0.5, length: None }));
+    assert_eq!(velocity(C + 12), Some(Event::On { note: C + 12, velocity: 0.5, length: None, index: 0 }));
     assert!(played.contains(&(90, off(C))) && played.contains(&(90, off(C + 12))));
 }
 
@@ -171,7 +195,7 @@ fn a_note_lets_go_of_what_it_became_even_after_a_knob_moves() {
     chain.set_value(1, 1.0);
     chain.key(10, off(C));
     // TS: const released = chain.block(128, steady(1)).map(([, event]) => event)
-    let released: Vec<Event> = chain.block(128, steady(1)).iter().map(|&(_, event)| event).collect();
+    let released: Vec<Event> = chain.block(128, steady(1)).iter().map(|&(_, event)| unindexed(event)).collect();
     assert_eq!(released, vec![off(C), off(C + 12)]);
 }
 
@@ -180,10 +204,10 @@ fn devices_chain_in_order_and_each_reads_its_own_fields() {
     let transpose = device(fixed(0.0), &[node(INPUT, &[], &[]), node(TRANSPOSE, &[&[0]], &[fixed(2.0)])], 1);
     let velocity = device(fixed(0.0), &[node(INPUT, &[], &[]), node(VELOCITY, &[&[0]], &[fixed(0.5)])], 1);
     let mut chain = parse(&chain_words(&[1.0, 0.0, 1.0], &[octavator(), transpose, velocity]));
-    let played = run(&mut chain, 1, &[(0, 0, Event::On { note: C, velocity: 0.8, length: None })], steady);
+    let played = run(&mut chain, 1, &[(0, 0, Event::On { note: C, velocity: 0.8, length: None, index: 0 })], steady);
     assert_eq!(
         played,
-        vec![(0, Event::On { note: C + 2, velocity: 0.4, length: None }), (0, Event::On { note: C + 14, velocity: 0.4, length: None })]
+        vec![(0, Event::On { note: C + 2, velocity: 0.4, length: None, index: 0 }), (0, Event::On { note: C + 14, velocity: 0.4, length: None, index: 0 })]
     );
 }
 
@@ -198,8 +222,8 @@ fn bypassing_a_device_lets_go_of_what_it_moved_then_passes_notes_through() {
     chain.block(0, steady(0));
     chain.set_value(3, 1.0);
     chain.key(20, on(E));
-    // TS: const played = [...chain.block(128, steady(1))]  (a copy, so the chain can be borrowed again)
-    let played: Vec<(usize, Event)> = chain.block(128, steady(1)).to_vec();
+    // TS: const played = chain.block(128, steady(1)).map(([offset, event]) => [offset, unindexed(event)])
+    let played: Vec<(usize, Event)> = chain.block(128, steady(1)).iter().map(|&(offset, event)| (offset, unindexed(event))).collect();
     assert_eq!(played, vec![(0, off(C)), (0, off(C + 12)), (20, on(E))]);
 }
 
@@ -293,7 +317,7 @@ fn euclidean_patterns_are_bjorklunds_turned_by_rotate() {
 }
 
 /// A Euclidean sequencer: sixteenths through euclid (3 of 8, accent 0.5) and a ratchet, playing the chord.
-// TS: device(fixed(0), [input, clock(sync, 1/16), euclid(8, 3, 0, 0.5), ratchet(repeats), pick(notes, ticks, chord, 1, 0.5)], 4)
+// TS: device(fixed(0), [input, clock(sync, 1/16), euclid(8, 3, 0, 0.5), ratchet(repeats), pick(notes, ticks, chord), length(0.5)], 5)
 fn euclidean(repeats: f64) -> Vec<f64> {
     device(
         fixed(0.0),
@@ -302,9 +326,10 @@ fn euclidean(repeats: f64) -> Vec<f64> {
             node(CLOCK, &[&[0]], &[fixed(0.25)]),
             node(EUCLID, &[&[1]], &[fixed(8.0), fixed(3.0), fixed(0.0), fixed(0.5)]),
             node(RATCHET, &[&[2]], &[fixed(repeats)]),
-            node(PICK, &[&[0], &[3]], &[fixed(CHORD), fixed(1.0), fixed(0.5)]),
+            node(PICK, &[&[0], &[3]], &[fixed(CHORD)]),
+            node(LENGTH, &[&[4]], &[fixed(0.5)]),
         ],
-        4,
+        5,
     )
 }
 
@@ -330,24 +355,36 @@ fn a_ratchet_repeats_each_onset_through_its_step_even_past_the_block() {
     assert!(played.contains(&(sixteenth / 6, off(C))));
 }
 
-/// A strum: each note a 64th (1500 samples here) after the one before, together within a 32nd.
-// TS: device(fixed(0), [input, strum(notes: input, spread 1/64, direction, tilt, window 1/32)], 1)
+/// A strum built from parts: `order` numbers a chord's notes (direction, together within a 32nd),
+/// `delay` plays each a 64th (1500 samples here) after the one before, and `velocity` tilts them.
+// TS: device(fixed(0), [input, order(direction, 1/32), delay(beats: index x 1/64), velocity(scale: 1 + index x tilt)], 3)
 fn strum(direction: f64, tilt: f64) -> Vec<f64> {
-    device(fixed(0.0), &[node(INPUT, &[], &[]), node(STRUM, &[&[0]], &[fixed(0.0625), fixed(direction), fixed(tilt), fixed(0.125)])], 1)
+    device(
+        fixed(0.0),
+        &[
+            node(INPUT, &[], &[]),
+            node(ORDER, &[&[0]], &[fixed(direction), fixed(0.125)]),
+            node(DELAY, &[&[1]], &[per(INDEX, 0.0625, 0.0)]),
+            node(VELOCITY, &[&[2]], &[per(INDEX, tilt, 1.0)]),
+        ],
+        3,
+    )
 }
 
 #[test]
-fn a_strum_spreads_a_chord_and_its_note_offs_wait_as_long_as_its_ons() {
+fn a_strum_from_parts_spreads_a_chord_and_its_note_offs_wait_as_long_as_its_ons() {
     let mut chain = parse(&chain_words(&[], &[strum(0.0, 0.0)]));
     let chord = [(0, 10, on(E)), (0, 10, on(G)), (0, 10, on(C)), (156, 32, off(C)), (156, 32, off(E)), (156, 32, off(G))];
     let played = run(&mut chain, 200, &chord, steady);
     assert_eq!(ons(&played), vec![(10, C), (1510, E), (3010, G)]);
     let release = 156 * 128 + 32;
-    assert!(played.contains(&(release, off(C))) && played.contains(&(release + 1500, off(E))) && played.contains(&(release + 3000, off(G))));
+    // TS: const offAt = (note) => played.find(([, event]) => event.kind === "off" && event.note === note)?.[0]
+    let off_at = |note: i32| played.iter().find(|&&(_, event)| matches!(event, Event::Off { note: off, .. } if off == note)).map(|&(time, _)| time);
+    assert_eq!([off_at(C), off_at(E), off_at(G)], [Some(release), Some(release + 1500), Some(release + 3000)]);
 }
 
 #[test]
-fn a_strum_goes_down_alternates_and_tilts_its_velocity() {
+fn a_strum_from_parts_goes_down_alternates_and_tilts_its_velocity() {
     let notes = |direction: f64, tilt: f64, keys: &[(u64, i32, Event)]| {
         let mut chain = parse(&chain_words(&[], &[strum(direction, tilt)]));
         run(&mut chain, 300, keys, steady)
@@ -366,7 +403,47 @@ fn a_strum_goes_down_alternates_and_tilts_its_velocity() {
 }
 
 #[test]
-fn a_strum_lets_go_of_what_it_played_when_the_chain_clears() {
+fn an_echo_from_parts_repeats_each_note_climbing_and_fading() {
+    // A stack makes three copies, each a fifth up from the last and numbered by copy; delay plays copy n
+    // an eighth (12000 samples) times n later, and velocity fades each by a third.
+    let copy = |interval: f64| [fixed(interval), fixed(1.0), fixed(1.0)];
+    let fields: Vec<Vec<f64>> = [copy(0.0), copy(7.0), copy(14.0)].concat();
+    let echo = device(
+        fixed(0.0),
+        &[
+            node(INPUT, &[], &[]),
+            node(STACK, &[&[0]], &fields),
+            node(DELAY, &[&[1]], &[per(INDEX, 0.5, 0.0)]),
+            node(VELOCITY, &[&[2]], &[per(INDEX, -1.0 / 3.0, 1.0)]),
+        ],
+        3,
+    );
+    let mut chain = parse(&chain_words(&[], &[echo]));
+    let played = run(&mut chain, 300, &[(0, 0, on(C)), (10, 0, off(C))], steady);
+    assert_eq!(ons(&played), vec![(0, C), (EIGHTH, C + 7), (2 * EIGHTH, C + 14)]);
+    // Each copy's note off comes as long after its note on as the key was held.
+    assert!(played.contains(&(1280, off(C))) && played.contains(&(EIGHTH + 1280, off(C + 7))) && played.contains(&(2 * EIGHTH + 1280, off(C + 14))));
+}
+
+#[test]
+fn chance_lets_notes_through_the_same_way_every_time_and_drops_the_offs_of_those_it_dropped() {
+    let maybe = device(fixed(0.0), &[node(INPUT, &[], &[]), node(CHANCE, &[&[0]], &[fixed(0.5)])], 1);
+    let keys: Vec<(u64, i32, Event)> = (0..16).flat_map(|index| [(index * 2, 0, on(C + index as i32)), (index * 2 + 1, 0, off(C + index as i32))]).collect();
+    let played = || {
+        let mut chain = parse(&chain_words(&[], &[maybe.clone()]));
+        run(&mut chain, 40, &keys, steady)
+    };
+    let first = played();
+    assert_eq!(first, played());
+    let kept = ons(&first).len();
+    assert!(kept > 2 && kept < 14, "{kept} of 16");
+    // As many note offs as note ons: the dropped notes' offs went with them.
+    // TS: first.filter(([, event]) => event.kind === "off").length
+    assert_eq!(first.iter().filter(|(_, event)| matches!(event, Event::Off { .. })).count(), kept);
+}
+
+#[test]
+fn a_delay_lets_go_of_what_it_played_when_the_chain_clears() {
     let mut chain = parse(&chain_words(&[], &[strum(0.0, 0.0)]));
     run(&mut chain, 20, &[(0, 0, on(C)), (0, 0, on(E)), (0, 0, on(G))], steady);
     chain.clear();

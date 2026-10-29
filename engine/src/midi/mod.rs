@@ -9,8 +9,11 @@
 //! - **Events** are notes and ticks, each at a sample offset into the block. A note may carry a
 //!   length (a step of an arpeggio): the chain lets it go itself, that many samples on, even in a
 //!   later block.
-//! - **Fields** are a number, a value through its shaping (a param), or a random number between two,
-//!   drawn the same way every time (seeded by the step or the note), so an export comes out the same.
+//! - **Fields** are a number, a value through its shaping (a param), a random number between two,
+//!   drawn the same way every time (seeded by the step or the note), so an export comes out the same,
+//!   or something read off each note (its index, pitch or velocity) times one number plus another.
+//! - **A note's index** is its place among notes made together: a stack's copies, or a chord `order`
+//!   numbered. Its note off carries the same index, so a node can tell copies of one pitch apart.
 //!
 //! Nothing allocates while playing: every list is made with room when the chain loads, and a list that
 //! is full drops what doesn't fit rather than growing.
@@ -24,7 +27,7 @@ mod chain;
 mod clock;
 mod nodes;
 mod rhythm;
-mod strum;
+mod time;
 mod words;
 
 pub use chain::Chain;
@@ -45,13 +48,13 @@ pub const MAX_RELEASES: usize = 256;
 /// One thing a node passes on.
 // TS:
 //   type Event =
-//     | { kind: "on"; note: number; velocity: number; length?: number }  // length in samples
-//     | { kind: "off"; note: number }
+//     | { kind: "on"; note: number; velocity: number; length?: number; index: number }  // length in samples
+//     | { kind: "off"; note: number; index: number }
 //     | { kind: "tick"; step: number; samples: number; level: number };  // a clock's step, a step's length, and how loud (an accent)
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
-    On { note: i32, velocity: f32, length: Option<u32> },
-    Off { note: i32 },
+    On { note: i32, velocity: f32, length: Option<u32>, index: u8 },
+    Off { note: i32, index: u8 },
     Tick { step: i64, samples: f64, level: f32 },
 }
 
@@ -68,23 +71,77 @@ pub struct BlockTransport {
     pub playing: bool,
 }
 
-/// What a field reads: a number, a value through its shaping, or a random number from `min` to `max`.
-// TS: type Field = { fixed: number } | { value: number; shaping: Shaping } | { random: [min: number, max: number] }
+/// What a field reads: a number, a value through its shaping, a random number from `min` to `max`, or
+/// something about the note it's read for, times a field plus a field (each a number or a value).
+// TS: type Field = { fixed: number } | { value: number; shaping: Shaping } | { random: [min: number, max: number] } | { per: Per; times: Field; plus: Field }
+// `Box<Field>` keeps a field inside a field: it's made when the chain loads, never while playing.
 pub enum Field {
     Fixed(f64),
     Bound(usize, Shaping),
     Random(f64, f64),
+    Per(Per, Box<Field>, Box<Field>),
+}
+
+/// What a per-note field reads off the note.
+// TS: type Per = "index" | "pitch" | "velocity"
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Per {
+    Index,
+    Pitch,
+    Velocity,
+}
+
+/// The note a field is read for: none (a step's field) reads as all zeros.
+// TS: interface NoteContext { index: number; pitch: number; velocity: number }
+#[derive(Clone, Copy, Default)]
+pub struct NoteContext {
+    pub index: u8,
+    pub pitch: i32,
+    pub velocity: f32,
+}
+
+impl NoteContext {
+    /// The note an event is, if it's a note.
+    // TS: event.kind === "tick" ? {} : { index: event.index, pitch: event.note, velocity: event.velocity ?? 0 }
+    pub fn of(event: Event) -> Self {
+        match event {
+            Event::On { note, velocity, index, .. } => NoteContext { index, pitch: note, velocity },
+            Event::Off { note, index } => NoteContext { index, pitch: note, velocity: 0.0 },
+            Event::Tick { .. } => NoteContext::default(),
+        }
+    }
 }
 
 impl Field {
-    /// The field's number now: `values` are the chain's, and `draw` the random number (0 to 1) for
-    /// this step or note, asked for only by a random field.
-    // TS: field.fixed ?? (field.value !== undefined ? resolveNumber(values[field.value], field.shaping) : min + draw() * (max - min))
-    pub fn read(&self, values: &[f64], draw: impl FnOnce() -> f64) -> f64 {
+    /// The field's number now: `values` are the chain's, `draw` the random number (0 to 1) for this
+    /// step or note, asked for only by a random field, and `note` what a per-note field reads.
+    // TS: field.fixed ?? (field.value !== undefined ? resolveNumber(...) : field.random ? min + draw() * (max - min) : per(note) * times + plus)
+    pub fn read(&self, values: &[f64], draw: impl FnOnce() -> f64, note: NoteContext) -> f64 {
         match self {
             Field::Fixed(value) => *value,
             Field::Bound(value, shaping) => shaping.resolve(values[*value]),
             Field::Random(min, max) => min + draw() * (max - min),
+            Field::Per(per, times, plus) => {
+                // TS: const read = { index: note.index, pitch: note.pitch, velocity: note.velocity }[per]
+                let read = match per {
+                    Per::Index => f64::from(note.index),
+                    Per::Pitch => f64::from(note.pitch),
+                    Per::Velocity => f64::from(note.velocity),
+                };
+                read * times.plain(values) + plus.plain(values)
+            }
+        }
+    }
+
+    /// A per-note field's own fields, which are only ever numbers or values (words.rs).
+    // TS: field.fixed ?? resolveNumber(values[field.value], field.shaping)
+    // Its own function, not `read`: `read` calling itself with a new closure each time would ask the
+    // compiler for a new copy of it each time, without end.
+    fn plain(&self, values: &[f64]) -> f64 {
+        match self {
+            Field::Fixed(value) => *value,
+            Field::Bound(value, shaping) => shaping.resolve(values[*value]),
+            Field::Random(..) | Field::Per(..) => 0.0,
         }
     }
 }

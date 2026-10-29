@@ -21,17 +21,25 @@ import {
   midiDefinitionSchema,
   nodeSpecNamed,
   numberFieldSchema,
+  perNoteSchema,
+  PER_NOTE,
   type FieldSpec,
   type MidiDefinition,
   type NumberField,
   type Wire,
 } from "./format";
 
-/** A field as the engine reads it: a number, a param through its shaping, or a random range. */
+/** A number, or a param through its shaping: what a per-note field multiplies and adds. */
+type PlainPlan = { fixed: number } | { param: string; scale: number; offset: number; table?: [number, number][] };
+
+/**
+ * A field as the engine reads it: a number, a param through its shaping, a random range, or
+ * something read off each note times one plain field plus another.
+ */
 export type FieldPlan =
-  | { fixed: number }
-  | { param: string; scale: number; offset: number; table?: [number, number][] }
-  | { random: [number, number] };
+  | PlainPlan
+  | { random: [number, number] }
+  | { per: (typeof PER_NOTE)[number]; times: PlainPlan; plus: PlainPlan };
 
 export interface PlannedNode {
   name: string;
@@ -82,15 +90,40 @@ const boundSpec = (
   return { spec };
 };
 
-/** A number field: a number in the spec's range, a param, or a random range inside it. */
+/**
+ * A per-note field: what it reads, times a number or param, plus another. Its range isn't checked,
+ * since what it gives depends on the note; the node clamps what it reads.
+ */
+const perPlan = (value: unknown, where: string, params?: ParamSchema): Planned => {
+  const parsed = perNoteSchema.safeParse(value);
+  if (!parsed.success) return { problems: [`${where}: { "per": "index" | "pitch" | "velocity", "times"?, "plus"? }`] };
+  const plain = (part: number | ParamBinding | undefined, fallback: number, at: string): Planned => {
+    if (part === undefined || typeof part === "number") return { plans: [{ fixed: part ?? fallback }] };
+    const checked = boundSpec(part, `${where}.${at}`, params);
+    return "problem" in checked ? { problems: [checked.problem] } : { plans: [binding(part)] };
+  };
+  const times = plain(parsed.data.times, 1, "times");
+  const plus = plain(parsed.data.plus, 0, "plus");
+  if ("problems" in times || "problems" in plus)
+    return { problems: [...("problems" in times ? times.problems : []), ...("problems" in plus ? plus.problems : [])] };
+  return {
+    plans: [{ per: parsed.data.per, times: times.plans[0] as PlainPlan, plus: plus.plans[0] as PlainPlan }],
+  };
+};
+
+const isPerNote = (value: unknown): boolean => typeof value === "object" && value !== null && "per" in value;
+
+/** A number field: a number in the spec's range, a param, a random range inside it, or read off each note. */
 const numberPlan = (
   value: unknown,
   where: string,
   range: { min: number; max: number },
   params?: ParamSchema,
 ): Planned => {
+  if (isPerNote(value)) return perPlan(value, where, params);
   const parsed = numberFieldSchema.safeParse(value);
-  if (!parsed.success) return { problems: [`${where}: a number, a param binding or { "random": [min, max] }`] };
+  if (!parsed.success)
+    return { problems: [`${where}: a number, a param binding, { "random": [min, max] } or { "per": ... }`] };
   const field: NumberField = parsed.data;
   const inRange = (number: number) => number >= range.min && number <= range.max;
   if (typeof field === "number") {
@@ -104,6 +137,7 @@ const numberPlan = (
       ? { plans: [{ random: [min, max] }] }
       : { problems: [`${where}: a random range from low to high, inside ${range.min} to ${range.max}`] };
   }
+  if ("per" in field) return perPlan(field, where, params);
   const checked = boundSpec(field, where, params);
   return "problem" in checked ? { problems: [checked.problem] } : { plans: [binding(field)] };
 };
@@ -152,6 +186,7 @@ const FIELD_PLANS: {
     return "problem" in checked ? { problems: [checked.problem] } : { plans: [binding(parsed.data)] };
   },
   beats: (spec, value = spec.default, where, params) => {
+    if (isPerNote(value)) return perPlan(value, where, params);
     if (typeof value === "string") {
       const beats = beatsOf(value);
       return beats ? { plans: [{ fixed: beats }] } : { problems: [`${where}: "${value}" isn't a note division`] };
@@ -321,7 +356,9 @@ export const compileMidiDevice = (input: unknown, params?: ParamSchema): MidiDev
       fields: fieldPlans[name],
     }),
   );
-  const read = nodes.flatMap((node) => node.fields.flatMap((field) => ("param" in field ? [field.param] : [])));
+  const paramsOf = (field: FieldPlan): string[] =>
+    "param" in field ? [field.param] : "per" in field ? [...paramsOf(field.times), ...paramsOf(field.plus)] : [];
+  const read = nodes.flatMap((node) => node.fields.flatMap(paramsOf));
   return { nodes, output: place.get(definition.output)!, params: [...new Set(read)] };
 };
 
@@ -342,6 +379,8 @@ export interface CompiledChain {
 const fieldWords = (field: FieldPlan, valueOf: (param: string) => number): number[] => {
   if ("fixed" in field) return [0, field.fixed];
   if ("random" in field) return [2, ...field.random];
+  if ("per" in field)
+    return [3, PER_NOTE.indexOf(field.per), ...fieldWords(field.times, valueOf), ...fieldWords(field.plus, valueOf)];
   return [1, valueOf(field.param), field.scale, field.offset, field.table?.length ?? 0, ...(field.table ?? []).flat()];
 };
 

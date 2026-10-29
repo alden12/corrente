@@ -152,7 +152,7 @@ impl Track {
             for &(offset, event) in chain.block(self.clock, transport) {
                 match event {
                     Event::On { note, velocity, .. } => self.play_on(offset as i32, note, f64::from(velocity), samples),
-                    Event::Off { note } => self.play_off(offset as i32, note),
+                    Event::Off { note, .. } => self.play_off(offset as i32, note),
                     Event::Tick { .. } => {}
                 }
             }

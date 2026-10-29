@@ -7,12 +7,12 @@ import { MIDI_FORMAT, NODE_SPECS, type FieldSpec } from "./format";
 /** What a field takes, in a few words. */
 const FIELD_TAKES: { [Type in FieldSpec["type"]]: (field: Extract<FieldSpec, { type: Type }>) => string } = {
   number: (field) =>
-    `a number ${field.min} to ${field.max} (default ${field.default}), a param, or { random: [min, max] }`,
+    `a number ${field.min} to ${field.max} (default ${field.default}), a param, { random: [min, max] }, or read off each note`,
   choice: (field) =>
     `one of ${field.options.join(", ")} (default ${field.default}), or an enum param with those options`,
   switch: (field) => `true or false (default ${field.default}), or a boolean param`,
   beats: (field) =>
-    `a note division like "1/16" or "1/8T", a number of beats (default "${field.default}"), or a param (an enum of divisions, or a number in beats)`,
+    `a note division like "1/16" or "1/8T", a number of beats (default "${field.default}"), a param (an enum of divisions, or a number in beats), or read off each note`,
   copies: () => "a list of { interval, velocity?, on? }, each a number field (on: true, false or a boolean param)",
 };
 
@@ -24,8 +24,12 @@ export const midiFormatDoc = () => ({
     "instrument hears them. `schema` is its params, as an instrument's. `definition` is " +
     `{ "format": ${MIDI_FORMAT}, "nodes": { name: { "node": kind, "inputs": {...} } }, "output": name }: a small graph ` +
     "of event nodes, each after what it reads. `inputs` names each port's source (a node's name, or a list of names " +
-    'merged) and sets each field. A field is a value, a param binding { "param": id }, or { "random": [min, max] }, ' +
-    "drawn the same way every time. Wires carry notes or a clock's ticks; a port takes only its own kind. `output` is " +
+    'merged) and sets each field. A field is a value, a param binding { "param": id }, { "random": [min, max] } ' +
+    '(drawn the same way every time), or read off each note: { "per": "index" | "pitch" | "velocity", "times"?: ' +
+    'number or param, "plus"?: number or param }. A note\'s index is its place among notes made together: a ' +
+    "stack's copies, a pick's place in what's held, or a chord `order` numbered. Build devices from small nodes: " +
+    "a strum is order then a delay by index; an echo a stack then a delay by index, fading by a velocity by index. " +
+    "Wires carry notes or a clock's ticks; a port takes only its own kind. `output` is " +
     "the node whose notes the device plays. Every problem comes back at once when it's checked.",
   midiNodes: Object.fromEntries(
     NODE_SPECS.map((spec) => [

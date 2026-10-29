@@ -16,10 +16,11 @@
  * - **Nodes** are kinds from the palette (NODE_SPECS), named like an instrument's nodes.
  * - **Each input** is a port or a field, by the node's spec. A port takes the node (or nodes, merged)
  *   it reads, which must output what the port carries: notes, or a clock's ticks. A field takes a
- *   value: a number, a param binding (as an instrument's, `{ "param": "rate" }`), or
- *   `{ "random": [min, max] }`, drawn the same way every time; a choice an option's name; a switch
- *   true or false; a length in beats a note division (`"1/8"`) or a number of beats. A field left out
- *   keeps its spec's default.
+ *   value: a number, a param binding (as an instrument's, `{ "param": "rate" }`),
+ *   `{ "random": [min, max] }`, drawn the same way every time, or something read off each note,
+ *   `{ "per": "index", "times": ..., "plus": ... }`; a choice an option's name; a switch true or
+ *   false; a length in beats a note division (`"1/8"`) or a number of beats. A field left out keeps
+ *   its spec's default.
  * - **`output`** is the node whose notes the device plays on: to the next device, or the voices.
  *
  * The palette is small on purpose: a device can't invent a node, so whatever it says, the engine can
@@ -37,7 +38,20 @@ export type Wire = "notes" | "ticks";
 /** A random number from `min` to `max`, drawn the same way every time for the same step or note. */
 export const randomSchema = z.strictObject({ random: z.tuple([z.number().finite(), z.number().finite()]) });
 
-export const numberFieldSchema = z.union([z.number().finite(), paramBindingSchema, randomSchema]);
+/** What a per-note field reads off each note: its index (its place in a chord or among copies), pitch or velocity. */
+export const PER_NOTE = ["index", "pitch", "velocity"] as const;
+
+/** A number or a param: what a per-note field multiplies and adds. */
+const plainFieldSchema = z.union([z.number().finite(), paramBindingSchema]);
+
+/** Something read off each note, `times` one number (1 if left out) `plus` another (0). */
+export const perNoteSchema = z.strictObject({
+  per: z.enum(PER_NOTE),
+  times: plainFieldSchema.optional(),
+  plus: plainFieldSchema.optional(),
+});
+
+export const numberFieldSchema = z.union([z.number().finite(), paramBindingSchema, randomSchema, perNoteSchema]);
 
 /** One copy a stack makes: moved by `interval` semitones, its velocity scaled, and on or off. */
 export const copySchema = z.strictObject({
@@ -76,8 +90,8 @@ export interface NodeSpec {
 /** The directions a pick walks what's held; a chord plays all of it at once. */
 export const PICK_DIRECTIONS = ["up", "down", "updown", "random", "played", "chord"] as const;
 
-/** The directions a strum plays a chord's notes on the same sample. */
-export const STRUM_DIRECTIONS = ["up", "down", "alternate"] as const;
+/** The directions `order` numbers a chord's notes on the same sample. */
+export const ORDER_DIRECTIONS = ["up", "down", "alternate"] as const;
 
 /**
  * The palette, in the order the engine numbers the kinds (engine/src/midi/nodes.rs's SPECS): each
@@ -95,21 +109,18 @@ export const NODE_SPECS: readonly NodeSpec[] = [
   {
     name: "pick",
     description:
-      "holds the notes it's given and plays one on each tick (or all, for `chord`), for `gate` of a step: walking `direction` over `octaves` octaves, at the loudest held velocity times the tick's level",
+      "holds the notes it's given, lowest first, and plays one on each tick (or all, for `chord`) for the tick's step, walking `direction`, at the loudest held velocity times the tick's level; each numbered by its place in what's held. Stack the notes first to walk more octaves, and `length` after to shorten them",
     ports: [
       { name: "notes", wire: "notes" },
       { name: "ticks", wire: "ticks" },
     ],
-    fields: [
-      { name: "direction", type: "choice", options: PICK_DIRECTIONS, default: "up" },
-      { name: "octaves", type: "number", min: 1, max: 8, default: 1 },
-      { name: "gate", type: "number", min: 0, max: 1, default: 0.5 },
-    ],
+    fields: [{ name: "direction", type: "choice", options: PICK_DIRECTIONS, default: "up" }],
     output: "notes",
   },
   {
     name: "stack",
-    description: "plays copies of each note, each moved by its interval, its velocity scaled, and on or off",
+    description:
+      "plays copies of each note, each moved by its interval, its velocity scaled, and on or off, numbered by copy from 0: an octaver, a chord, an echo's repeats (with a delay by index)",
     ports: [{ name: "notes", wire: "notes" }],
     fields: [{ name: "copies", type: "copies" }],
     output: "notes",
@@ -149,16 +160,38 @@ export const NODE_SPECS: readonly NodeSpec[] = [
     output: "ticks",
   },
   {
-    name: "strum",
+    name: "order",
     description:
-      "spreads the notes of a chord out in time, each `spread` after the one before: notes starting within `window` of the first are one strum. Notes on the same sample go lowest first (up), highest first (down), or alternately; each note after the first is `tilt` louder (or quieter, below 0)",
+      "numbers the notes that start together (a chord) by their place in it: notes on the same sample from the lowest up, the highest down, or alternately chord by chord; later ones within `window` of the first follow on as they came. Read the number with { per: index }",
     ports: [{ name: "notes", wire: "notes" }],
     fields: [
-      { name: "spread", type: "beats", default: "1/64" },
-      { name: "direction", type: "choice", options: STRUM_DIRECTIONS, default: "up" },
-      { name: "tilt", type: "number", min: -1, max: 1, default: 0 },
+      { name: "direction", type: "choice", options: ORDER_DIRECTIONS, default: "up" },
       { name: "window", type: "beats", default: "1/32" },
     ],
+    output: "notes",
+  },
+  {
+    name: "delay",
+    description:
+      "plays each note `beats` later, and its note off as much later as its note on; with { per: index } each note of a chord or copy of a stack waits its own time (a strum, an echo)",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [{ name: "beats", type: "beats", default: "1/8" }],
+    output: "notes",
+  },
+  {
+    name: "length",
+    description:
+      "scales how long each note with a length lasts (a pick's or a ratchet's steps): 0.5 plays half a step, staccato; notes held by a key pass through",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [{ name: "scale", type: "number", min: 0, max: 4, default: 1 }],
+    output: "notes",
+  },
+  {
+    name: "chance",
+    description:
+      "lets each note through with `probability`, drawn the same way every time so a render repeats; a dropped note's note off goes with it",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [{ name: "probability", type: "number", min: 0, max: 1, default: 1 }],
     output: "notes",
   },
 ];

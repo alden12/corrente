@@ -28,10 +28,8 @@ const arpeggiator = device(
   {
     keys: { node: "input" },
     clock: { node: "clock", inputs: { sync: "keys", beats: { param: "rate" } } },
-    out: {
-      node: "pick",
-      inputs: { ticks: "clock", notes: "keys", octaves: { param: "octaves" }, gate: { param: "gate" } },
-    },
+    arp: { node: "pick", inputs: { ticks: "clock", notes: "keys", direction: { param: "pattern" } } },
+    out: { node: "length", inputs: { notes: "arp", scale: { param: "gate" } } },
   },
   "out",
 );
@@ -39,12 +37,12 @@ const arpeggiator = device(
 describe("compileMidiDevice", () => {
   it("puts each node after what it reads, whatever order they're written in", () => {
     const plan = compileMidiDevice(arpeggiator, arpeggiatorSchema);
-    expect(plan.nodes.map((node) => node.name)).toEqual(["keys", "clock", "out"]);
-    expect(plan.nodes.map((node) => NODE_SPECS[node.kind].name)).toEqual(["input", "clock", "pick"]);
+    expect(plan.nodes.map((node) => node.name)).toEqual(["keys", "clock", "arp", "out"]);
+    expect(plan.nodes.map((node) => NODE_SPECS[node.kind].name)).toEqual(["input", "clock", "pick", "length"]);
     // The pick reads the keys (place 0) and the clock (place 1), in its ports' order: notes, then ticks.
     expect(plan.nodes[2].ports).toEqual([[0], [1]]);
-    expect(plan.output).toBe(2);
-    expect(plan.params).toEqual(["rate", "octaves", "gate"]);
+    expect(plan.output).toBe(3);
+    expect(plan.params).toEqual(["rate", "pattern", "gate"]);
   });
 
   it("reads a choice of divisions as each one's beats, and a field left out as its default", () => {
@@ -68,7 +66,14 @@ describe("compileMidiDevice", () => {
       },
     ]);
     // Direction left out: up, the first option.
-    expect(plan.nodes[2].fields[0]).toEqual({ fixed: 0 });
+    const plain = compileMidiDevice(
+      device({
+        keys: { node: "input" },
+        clock: { node: "clock" },
+        out: { node: "pick", inputs: { notes: "keys", ticks: "clock" } },
+      }),
+    );
+    expect(plain.nodes[2].fields[0]).toEqual({ fixed: 0 });
   });
 
   it("reads a choice param by option name", () => {
@@ -120,6 +125,28 @@ describe("compileMidiDevice", () => {
     expect(plan.nodes[1].fields).toEqual([{ random: [0.5, 1] }]);
   });
 
+  it("reads a field off each note: its index, times a param, plus a number", () => {
+    const params: ParamSchema = [{ id: "tilt", label: "Tilt", kind: "number", min: -1, max: 1, default: 0 }];
+    const plan = compileMidiDevice(
+      device({
+        keys: { node: "input" },
+        chord: { node: "order", inputs: { notes: "keys" } },
+        out: {
+          node: "velocity",
+          inputs: { notes: "chord", scale: { per: "index", times: { param: "tilt" }, plus: 1 } },
+        },
+      }),
+      params,
+    );
+    expect(plan.nodes[2].fields).toEqual([
+      { per: "index", times: { param: "tilt", scale: 1, offset: 0 }, plus: { fixed: 1 } },
+    ]);
+    expect(plan.params).toEqual(["tilt"]);
+    // As words: per (3), index (0), then times (value 1, the device's first param after its bypass) and plus.
+    const doubles = [...new Float64Array(chainWords([{ plan, values: { tilt: 0.5 }, bypassed: false }]).words.buffer)];
+    expect(doubles).toEqual(expect.arrayContaining([3, 0, 1, 1, 1, 0, 0, 0, 1]));
+  });
+
   it("finds every problem at once, each naming where it is", () => {
     const problems = problemsOf(
       device(
@@ -127,7 +154,8 @@ describe("compileMidiDevice", () => {
           keys: { node: "input" },
           wobble: { node: "lfo" },
           clock: { node: "clock", inputs: { beats: "1/7x" } },
-          out: { node: "pick", inputs: { notes: "clock", ticks: "nowhere", octaves: 12, speed: 2 } },
+          out: { node: "pick", inputs: { notes: "clock", ticks: "nowhere", speed: 2 } },
+          loud: { node: "velocity", inputs: { notes: "keys", scale: 12 } },
           up: { node: "transpose", inputs: { notes: "keys", semitones: { param: "missing" } } },
         },
         "clock",
@@ -140,7 +168,7 @@ describe("compileMidiDevice", () => {
       "out.notes: takes notes, and clock outputs ticks",
       "out.ticks: there's no node nowhere",
       'clock.beats: "1/7x" isn\'t a note division',
-      "out.octaves: 12 is outside 1 to 8",
+      "loud.scale: 12 is outside 0 to 4",
       "up.semitones: there's no param missing",
       "output: clock outputs ticks, and a device plays notes",
     ]);
