@@ -1,9 +1,9 @@
 /**
  * The plugin's window, laid out like the app's desktop (PLUGIN-3.12): the activity rail and the
  * panel it has open (Explore, PLUGIN-3.5) on the left, and the plugin's one track in a column of
- * sections, as the app's workbench is: the keys (PLUGIN-3.11), its devices, then its macros (the
- * host's 16 knobs, PLUGIN-3.4, which a knob's right-click menu maps). MIDI devices (PLUGIN-3.8) come
- * in as a section above the devices. No transport, timeline or engine here: the
+ * sections, as the app's workbench is: the keys (PLUGIN-3.11), its macros (the host's 16 knobs,
+ * PLUGIN-3.4, which a knob's right-click menu maps), then its devices. The keys and macros start
+ * folded, so the devices open in view. MIDI devices (PLUGIN-3.8) come in as a section above the devices. No transport, timeline or engine here: the
  * plugin makes the sound, and `PluginDevice` tells it what to play.
  */
 import { useRef, useSyncExternalStore } from "react";
@@ -57,13 +57,16 @@ export function PluginApp({
   const dispatch: Dispatch = (command, author = "you") => applyEdit(project, command, author);
   const [panelCollapsed, setPanelCollapsed] = usePersistentBoolean("corrente:plugin-panel-collapsed", false);
   const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:plugin-devices-open", true);
-  const [macrosOpen, setMacrosOpen] = usePersistentBoolean("corrente:plugin-macros-open", true);
+  const [macrosOpen, setMacrosOpen] = usePersistentBoolean("corrente:plugin-macros-open", false);
   // The knobs wear their macro badges only while the macros show; mapping one by right-click works either way.
   const extras = macrosOpen ? macroView.extras : { ...macroView.extras, badge: () => undefined };
   const columnRef = useRef<HTMLElement>(null);
   // The computer keyboard plays the keys only while the window has it; the pads play either way.
   const taken = useSyncExternalStore(keyboardTaken.subscribe, keyboardTaken.read);
-  const keys = useDesktopKeys(notes, taken, useSongKey(project, dispatch));
+  const keys = useDesktopKeys(notes, taken, useSongKey(project, dispatch), {
+    key: "corrente:plugin-keys-open",
+    initial: false,
+  });
   const scrollToDevice = (key: string) =>
     columnRef.current
       ?.querySelector(`[data-device="${CSS.escape(key)}"]`)
@@ -107,8 +110,13 @@ export function PluginApp({
             }
           />
         </section>
+        {/* Ruled off from the devices while open; folded, its header's own rule does that. */}
+        <section aria-label="Macros" className={macrosOpen ? "border-b border-line" : undefined}>
+          <SectionHeader title="Macros" fold={{ open: macrosOpen, onToggle: () => setMacrosOpen(!macrosOpen) }} />
+          {macrosOpen && <MacroStrip view={macroView} />}
+        </section>
         {track ? (
-          <section aria-label="Devices">
+          <section aria-label="Devices" className="pb-6">
             <DevicesBar
               track={track}
               projectStore={project}
@@ -132,10 +140,6 @@ export function PluginApp({
         ) : (
           <p className="p-4 text-muted">No track to show.</p>
         )}
-        <section aria-label="Macros" className="pb-6">
-          <SectionHeader title="Macros" fold={{ open: macrosOpen, onToggle: () => setMacrosOpen(!macrosOpen) }} />
-          {macrosOpen && <MacroStrip view={macroView} />}
-        </section>
       </main>
     </div>
   );

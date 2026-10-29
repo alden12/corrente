@@ -32,7 +32,6 @@ mod tests;
 
 use corrente_engine::BLOCK;
 use device::Prepared;
-use nice_plug::midi::{Channel, Key, VoiceID};
 use nice_plug::prelude::*;
 use params::Macros;
 use std::sync::Arc;
@@ -224,30 +223,22 @@ impl Corrente {
 }
 
 impl Corrente {
-    /// Play the notes the window's keys played since the last buffer, at its start, and `send` each
-    /// out to the host as MIDI, so a host can record them (PLUGIN-3.11). Never waits for the lock.
+    /// Play the notes the window's keys played since the last buffer, at its start (PLUGIN-3.11).
+    /// They aren't sent out to the host: Live doesn't take a VST3 instrument's MIDI out, so a host
+    /// can't record them yet. Never waits for the lock.
     // TS:
     //   const played = this.params.played.tryTake(); if (!played) return;
-    //   for (const [note, velocity] of played) {
-    //     const event = velocity > 0 ? { kind: "on", note, velocity } : { kind: "off", note };
-    //     if (this.events.length < MAX_EVENTS) this.events.push([this.position, event]);
-    //     send(velocity > 0 ? noteOn(0, note, velocity) : noteOff(0, note));
-    //   }
-    // `drain(..)` takes every item out of the list, keeping its room. `impl FnMut(..)` is any function
-    // taking that, which may change what it holds (TS: `(event: NoteEvent) => void`).
-    fn take_played(&mut self, mut send: impl FnMut(NoteEvent<()>)) {
+    //   for (const [note, velocity] of played)
+    //     if (this.events.length < MAX_EVENTS)
+    //       this.events.push([this.position, velocity > 0 ? { kind: "on", note, velocity } : { kind: "off", note }]);
+    // `drain(..)` takes every item out of the list, keeping its room.
+    fn take_played(&mut self) {
         let Ok(mut played) = self.params.played.try_lock() else { return };
         for (note, velocity) in played.drain(..) {
             let event = if velocity > 0.0 { Event::On { note, velocity } } else { Event::Off { note } };
             if self.events.len() < MAX_EVENTS {
                 self.events.push((self.position, event));
             }
-            let (voice_id, channel, key) = (VoiceID::Wildcard, Channel::Number(0), Key::Number(note));
-            send(if velocity > 0.0 {
-                NoteEvent::NoteOn { timing: 0, voice_id, channel, key, velocity }
-            } else {
-                NoteEvent::NoteOff { timing: 0, voice_id, channel, key, velocity: 0.0 }
-            });
         }
     }
 }
@@ -265,8 +256,6 @@ impl Plugin for Corrente {
         ..AudioIOLayout::const_default()
     }];
     const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
-    /// The window's keys go out to the host too (PLUGIN-3.11), so it can record what's played on them.
-    const MIDI_OUTPUT: MidiConfig = MidiConfig::Basic;
 
     type Editor = editor::RackEditor;
     type SysExMessage = ();
@@ -307,11 +296,8 @@ impl Plugin for Corrente {
     }
 
     fn process(&mut self, buffer: &mut Buffer, _aux: &mut AuxiliaryBuffers, context: &mut impl ProcessContext<Self>) -> ProcessStatus {
-        // TS: this.takePlayed((event) => context.trySendEvent(event))
-        // `let _ =` drops the result on purpose: a host with no room for one more event loses it.
-        self.take_played(|event| {
-            let _ = context.try_send_event(event);
-        });
+        // TS: this.takePlayed()
+        self.take_played();
         // TS: for each sample index: take every MIDI event timed at or before it, then play out one sample.
         // `while let Some(x) = ...` loops for as long as the expression gives a value.
         let mut next_event = context.next_event();

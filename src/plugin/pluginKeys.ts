@@ -1,7 +1,8 @@
 /**
  * The keys in the plugin's window (PLUGIN-3.11): the app's keys panel, playing the plugin. What its
  * pads and the computer keyboard play goes to the plugin as notes, which it plays through the
- * device as it does the host's and sends out to the host as MIDI, for the host to record.
+ * device as it does the host's. They don't go out to the host, so it can't record them: Live
+ * doesn't take a VST3 instrument's MIDI out.
  *
  * Who has the computer keyboard is a choice (`keyboardTaken`): the host's by default, which plays
  * notes from it (Ableton's computer MIDI keyboard), or the window's, so its keys play from it. Taken,

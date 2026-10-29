@@ -16,8 +16,14 @@ import { KEY_ROW_COUNT, keyboardRows, octavesSpanned, padsByCode, type KeyRowMod
 import { useKeyboardPlaying, useShiftHeld } from "./useKeyboardPlaying";
 import { keysPanelHeight } from "./panelGeometry";
 
-export function useDesktopKeys(liveNotes: LiveNotes, started: boolean, songKey: SongKey) {
-  const [open, setOpen] = usePersistentBoolean("corrente:keys-open", true);
+export function useDesktopKeys(
+  liveNotes: LiveNotes,
+  started: boolean,
+  songKey: SongKey,
+  // Where the panel remembers being open, and whether it starts so: the plugin's window starts folded.
+  fold: { key: string; initial: boolean } = { key: "corrente:keys-open", initial: true },
+) {
+  const [open, setOpen] = usePersistentBoolean(fold.key, fold.initial);
   // Not persisted: a strip you set while playing, not a preference.
   const [velocity, setVelocity] = useState(PAD_VELOCITY);
   const [shownRows, setShownRows] = usePersistentNumber("corrente:keys-rows-shown", KEY_ROW_COUNT, 1, KEY_ROW_COUNT);

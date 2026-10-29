@@ -104,7 +104,7 @@ pub struct Macros {
     /// A sound Explore is trying plays instead of the package (`preview`).
     pub previewing: AtomicBool,
     /// Notes the window's keys played (PLUGIN-3.11), each a key and its velocity (0 lets it go), for
-    /// the audio thread to play and send out to the host.
+    /// the audio thread to play.
     pub played: Mutex<Vec<(u8, f32)>>,
 }
 
