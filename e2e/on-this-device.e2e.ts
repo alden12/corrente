@@ -117,7 +117,7 @@ test("the start card welcomes a standalone run, every load, and Account settings
   await expect(start).toContainText("Welcome to Corrente");
   await expect(start.getByRole("region", { name: "Local only" })).toContainText("export your projects regularly");
   await expect(start.getByRole("link", { name: "Source on GitHub" })).toBeVisible();
-  await expect(start.getByRole("link", { name: "Get the plugin" })).toHaveAttribute("href", /releases\/latest$/);
+  await expect(start.getByRole("link", { name: "Get the plugin (VST3 / CLAP)" })).toHaveAttribute("href", /releases\/latest$/);
   await dismissStart(page);
 
   await page.reload();

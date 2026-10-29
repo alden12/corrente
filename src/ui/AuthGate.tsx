@@ -10,8 +10,8 @@
  */
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
-import { WelcomeHeader } from "./WelcomeHeader";
-import { continueSignedOut, hosting } from "../hosting";
+import { PLUGIN_LABEL, WelcomeHeader } from "./WelcomeHeader";
+import { continueSignedOut, hosting, PLUGIN_URL } from "../hosting";
 import { linkClass } from "./hosting/OnThisDevice";
 import { authEnabled, readAuthState, subscribeAuth, signInWithProvider, signOut, type AuthUser } from "../auth/session";
 import { writeCurrentUser, DEFAULT_USER } from "./currentUser";
@@ -77,7 +77,7 @@ const GITHUB_ENABLED = false;
 function LoginScreen() {
   return (
     <GateCard>
-      <WelcomeHeader />
+      <WelcomeHeader pluginLink={false} />
       <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
         <h2 id="auth-title" className="text-base font-medium text-ink">
           Get started
@@ -110,6 +110,17 @@ function LoginScreen() {
             ", by invitation."
           )}
         </p>
+      </div>
+      <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
+        <p className="text-[11px] text-faint leading-relaxed">Corrente&apos;s devices in your DAW, for macOS.</p>
+        <a
+          href={PLUGIN_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="w-full text-center font-mono text-sm font-semibold px-5 py-2.5 rounded-lg border border-line bg-card text-ink hover:border-faint"
+        >
+          {PLUGIN_LABEL}
+        </a>
       </div>
     </GateCard>
   );
