@@ -128,11 +128,11 @@ test("an empty Sampler picker reveals the Samples page", async ({ page }) => {
 test("an unsized library panel opens narrower on a small window, and follows the window as it grows", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.setViewportSize({ width: 900, height: 800 });
   await page.goto("/");
   await dismissStart(page);
-  // 1024 leaves the middle 560px: each side panel gets (1024 - 560) / 2.
-  await expect.poll(() => libWidth(page)).toBe(232);
+  // 900, the narrowest desktop, leaves the middle 560px beside the 48px rail: the panel gets 900 - 48 - 560.
+  await expect.poll(() => libWidth(page)).toBe(292);
   await page.setViewportSize({ width: 1600, height: 900 });
   await expect.poll(() => libWidth(page)).toBe(350);
 });
