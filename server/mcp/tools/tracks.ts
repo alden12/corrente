@@ -1,5 +1,5 @@
 /** MCP tools: Tracks. */
-import { keyLabel } from "../../../src/audio/theory/key";
+import { keyParts } from "../../../src/audio/theory/key";
 import { z } from "zod";
 import { instrumentFamily } from "../../../src/audio/instruments/catalog";
 import { instrumentsFor, makeTrackId, ok, fail, projectHasInstrument } from "../shared";
@@ -28,7 +28,7 @@ export function registerTracksTools({
             connected: target.connected(),
             tempoBpm: target.project.tempo,
             timeSignature: target.project.timeSignature,
-            key: keyLabel(target.project.key),
+            key: keyParts(target.project.key),
             lengthBeats: target.project.length,
             selectedTrackId: target.project.selectedId,
             instruments: instrumentsFor(target.project).map((def) => ({

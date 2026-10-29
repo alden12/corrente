@@ -26,6 +26,31 @@ export const keySchema = z.object({
 /** "C major", "F# dorian". */
 export const keyLabel = (key: ProjectKey): string => `${PITCH_CLASSES[key.tonic]} ${key.scale}`;
 
+/**
+ * Every name a tonic goes by, sharps and flats alike, and its pitch class: what an agent may write
+ * (it will often reach for a flat key, Bb or Eb). The key is stored as a pitch class, so either
+ * spelling is the same key.
+ */
+export const TONIC_NAMES: Readonly<Record<string, number>> = {
+  ...Object.fromEntries(PITCH_CLASSES.map((name, pitchClass) => [name, pitchClass])),
+  Db: 1,
+  Eb: 3,
+  Gb: 6,
+  Ab: 8,
+  Bb: 10,
+  Cb: 11,
+  Fb: 4,
+  "E#": 5,
+  "B#": 0,
+};
+
+/** The key in parts, for an agent to read without parsing the label. */
+export const keyParts = (key: ProjectKey) => ({
+  tonic: PITCH_CLASSES[key.tonic],
+  scale: key.scale,
+  label: keyLabel(key),
+});
+
 /** A scale as the engine reads it: bit n set when the note n semitones above the tonic is in it. */
 export const scaleMask = (scale: ScaleName): number =>
   (SCALES[scale] as readonly number[]).reduce((mask, interval) => mask | (1 << interval), 0);

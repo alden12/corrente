@@ -1,6 +1,6 @@
 /** MCP tools: Transport (project-level). */
-import { keyLabel, keySchema } from "../../../src/audio/theory/key";
-import { PITCH_CLASSES, SCALE_NAMES } from "../../../src/audio/theory/scales";
+import { keyLabel, keySchema, TONIC_NAMES } from "../../../src/audio/theory/key";
+import { SCALE_NAMES } from "../../../src/audio/theory/scales";
 import { z } from "zod";
 import { GROOVES, grooveById } from "../../../src/audio/grooves/catalog";
 import { BUILTIN_SAMPLES, builtinRef, assetRef } from "../../../src/audio/samples/catalog";
@@ -48,11 +48,14 @@ export function registerTransportTools({ server, target }: ToolContext): void {
     "set_key",
     {
       title: "Set key",
-      description: `Set the song's key: a tonic (C, C#, D ... B) and a scale (${SCALE_NAMES.join(", ")}). The pads and computer keyboard play in it, and MIDI devices that work in degrees follow it. list_tracks reports it.`,
-      inputSchema: { tonic: z.enum(PITCH_CLASSES), scale: keySchema.shape.scale },
+      description: `Set the song's key: a tonic, sharp or flat (C, C#, Db, D ... Bb, B), and a scale (${SCALE_NAMES.join(", ")}). The pads and computer keyboard play in it, and MIDI devices that work in degrees follow it. list_tracks reports it. The key is kept as a pitch class, so Bb and A# are the same key (reported as A#).`,
+      inputSchema: {
+        tonic: z.enum(Object.keys(TONIC_NAMES) as [string, ...string[]]),
+        scale: keySchema.shape.scale,
+      },
     },
     async ({ tonic, scale }) => {
-      const pitchClass = PITCH_CLASSES.indexOf(tonic);
+      const pitchClass = TONIC_NAMES[tonic];
       if (!target.send({ type: "setKey", tonic: pitchClass, scale })) return fail(target.whyNotConnected());
       target.project.setKey(pitchClass, scale);
       return ok(`Key set to ${keyLabel(target.project.key)}.`);

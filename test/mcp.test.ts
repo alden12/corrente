@@ -297,7 +297,7 @@ describe("MCP server (tracks)", () => {
 
   it("set_key sets the song's key, and list_tracks reports it", async () => {
     const messages = await connectTab();
-    expect(parse(await call("list_tracks")).key).toBe("C major");
+    expect(parse(await call("list_tracks")).key).toEqual({ tonic: "C", scale: "major", label: "C major" });
     expect((await call("set_key", { tonic: "F#", scale: "dorian" })).isError).toBeFalsy();
     await waitFor(() => typesOf(messages).includes("setKey"));
     expect(messages.find((message) => (message as { type: string }).type === "setKey")).toEqual({
@@ -305,7 +305,10 @@ describe("MCP server (tracks)", () => {
       tonic: 6,
       scale: "dorian",
     });
-    expect(parse(await call("list_tracks")).key).toBe("F# dorian");
+    expect(parse(await call("list_tracks")).key.label).toBe("F# dorian");
+    // A flat key is the same pitch class as its sharp.
+    expect((await call("set_key", { tonic: "Bb", scale: "major" })).isError).toBeFalsy();
+    expect(parse(await call("list_tracks")).key).toEqual({ tonic: "A#", scale: "major", label: "A# major" });
     expect((await call("set_key", { tonic: "H", scale: "major" })).isError).toBe(true);
   });
 
