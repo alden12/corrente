@@ -142,6 +142,7 @@ impl Chain {
     }
 
     /// The keys down now, with their velocities.
+    // TS: down(): readonly [note: number, velocity: number][] { return this.down }
     pub fn down(&self) -> &[(i32, f32)] {
         &self.down
     }

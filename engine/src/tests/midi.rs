@@ -43,6 +43,7 @@ fn node(kind: f64, ports: &[&[usize]], fields: &[Vec<f64>]) -> Vec<f64> {
 }
 
 /// A device's words: its bypass, its nodes, and which is its output.
+// TS: const device = (bypass, nodes, output) => [...bypass, nodes.length, output, ...nodes.flat()]
 fn device(bypass: Vec<f64>, nodes: &[Vec<f64>], output: usize) -> Vec<f64> {
     let mut words = bypass;
     words.extend([nodes.len() as f64, output as f64]);
@@ -51,6 +52,7 @@ fn device(bypass: Vec<f64>, nodes: &[Vec<f64>], output: usize) -> Vec<f64> {
 }
 
 /// A chain's words: how many values, the devices, then the values.
+// TS: const chainWords = (values, devices) => [values.length, devices.length, ...devices.flat(), ...values]
 fn chain_words(values: &[f64], devices: &[Vec<f64>]) -> Vec<f64> {
     let mut words = vec![values.len() as f64, devices.len() as f64];
     devices.iter().for_each(|device| words.extend(device));
@@ -59,6 +61,7 @@ fn chain_words(values: &[f64], devices: &[Vec<f64>]) -> Vec<f64> {
 }
 
 /// The octavator: copies an octave up and down, each switched by a value, at a level (values 0, 1, 2).
+// TS: a copy is [interval, level, on]; device(fixed(0), [input, stack(copies 3: dry, up, down)], 1)
 fn octavator() -> Vec<f64> {
     let copy = |interval: f64, on: Vec<f64>| [fixed(interval), bound(2), on];
     let mut fields = vec![fixed(0.0), fixed(1.0), fixed(1.0)];
@@ -68,6 +71,7 @@ fn octavator() -> Vec<f64> {
 }
 
 /// An arpeggiator: a clock in eighths synced to the keys, picking up the held notes for half a step.
+// TS: device(fixed(0), [input, clock(sync: input, beats 0.5), pick(notes: input, ticks: clock, direction, octaves, gate 0.5)], 2)
 fn arpeggiator(direction: f64, octaves: f64) -> Vec<f64> {
     device(
         fixed(0.0),
@@ -80,11 +84,13 @@ fn arpeggiator(direction: f64, octaves: f64) -> Vec<f64> {
     )
 }
 
+// TS: const parse = (words) => { const chain = midi.parse(words); if (!chain) throw new Error("the words make a chain"); return chain }
 fn parse(words: &[f64]) -> Chain {
     midi::parse(words).expect("the words make a chain")
 }
 
 /// Playing from beat 0 at 120.
+// TS: const steady = (block) => ({ beat: block * 128 * PER_SAMPLE, perSample: PER_SAMPLE, playing: true })
 fn steady(block: u64) -> BlockTransport {
     BlockTransport { beat: block as f64 * 128.0 * PER_SAMPLE, per_sample: PER_SAMPLE, playing: true }
 }
@@ -102,6 +108,7 @@ fn run(chain: &mut Chain, blocks: u64, keys: &[(u64, i32, Event)], transport: im
     played
 }
 
+// TS: const on = (note) => ({ kind: "on", note, velocity: 1 }); const off = (note) => ({ kind: "off", note })
 fn on(note: i32) -> Event {
     Event::On { note, velocity: 1.0, length: None }
 }
@@ -142,6 +149,8 @@ fn the_octavator_plays_its_copies_and_lets_go_of_the_same_notes() {
     // Up on, down off, level 0.5.
     let mut chain = parse(&chain_words(&[1.0, 0.0, 0.5], &[octavator()]));
     let played = run(&mut chain, 1, &[(0, 5, on(C)), (0, 90, off(C))], steady);
+    // TS: const velocity = (note) => played.map(([, event]) => event).find((event) => event.kind === "on" && event.note === note)
+    // `matches!(value, pattern if condition)` is true when the value fits the pattern.
     let velocity = |note| played.iter().find_map(|&(_, event)| matches!(event, Event::On { note: on, .. } if on == note).then_some(event));
     assert_eq!(ons(&played), vec![(5, C), (5, C + 12)]);
     assert_eq!(velocity(C + 12), Some(Event::On { note: C + 12, velocity: 0.5, length: None }));
@@ -157,6 +166,7 @@ fn a_note_lets_go_of_what_it_became_even_after_a_knob_moves() {
     chain.set_value(0, 0.0);
     chain.set_value(1, 1.0);
     chain.key(10, off(C));
+    // TS: const released = chain.block(128, steady(1)).map(([, event]) => event)
     let released: Vec<Event> = chain.block(128, steady(1)).iter().map(|&(_, event)| event).collect();
     assert_eq!(released, vec![off(C), off(C + 12)]);
 }
@@ -176,6 +186,7 @@ fn devices_chain_in_order_and_each_reads_its_own_fields() {
 #[test]
 fn bypassing_a_device_lets_go_of_what_it_moved_then_passes_notes_through() {
     // Value 3 is the device's bypass.
+    // TS: const words = octavator(); words.splice(0, 2, ...bound(3))  (its fixed bypass becomes value 3)
     let mut words = octavator();
     words.splice(0..2, bound(3));
     let mut chain = parse(&chain_words(&[1.0, 0.0, 1.0, 0.0], &[words]));
@@ -183,6 +194,7 @@ fn bypassing_a_device_lets_go_of_what_it_moved_then_passes_notes_through() {
     chain.block(0, steady(0));
     chain.set_value(3, 1.0);
     chain.key(20, on(E));
+    // TS: const played = [...chain.block(128, steady(1))]  (a copy, so the chain can be borrowed again)
     let played: Vec<(usize, Event)> = chain.block(128, steady(1)).to_vec();
     assert_eq!(played, vec![(0, off(C)), (0, off(C + 12)), (20, on(E))]);
 }
@@ -202,6 +214,7 @@ fn the_arpeggiator_walks_down_and_up_and_down_over_its_octaves() {
     let walk = |direction: f64, octaves: f64| {
         let mut chain = parse(&chain_words(&[], &[arpeggiator(direction, octaves)]));
         let played = run(&mut chain, 600, &[(0, 0, on(C)), (0, 0, on(E))], steady);
+        // TS: return ons(played).map(([, note]) => note).slice(0, 6)
         ons(&played).into_iter().map(|(_, note)| note).take(6).collect::<Vec<_>>()
     };
     assert_eq!(walk(1.0, 1.0), vec![E, C, E, C, E, C]);
@@ -234,6 +247,7 @@ fn a_loop_jumping_back_steps_on_without_playing_a_step_twice() {
     let mut chain = parse(&chain_words(&[], &[arpeggiator(0.0, 1.0)]));
     let looping = |block: u64| BlockTransport { beat: (block as f64 * 128.0 * PER_SAMPLE) % 2.0, per_sample: PER_SAMPLE, playing: true };
     let played = ons(&run(&mut chain, 1125, &[(0, 0, on(C)), (0, 0, on(E)), (0, 0, on(G))], looping));
+    // TS: const perLoop = [0, 1, 2].map((lap) => played.filter(([time]) => Math.floor(time / 48000) === lap).length)
     let per_loop: Vec<usize> = (0..3).map(|lap| played.iter().filter(|&&(time, _)| time / 48000 == lap).count()).collect();
     assert_eq!(per_loop, vec![4, 4, 4], "{played:?}");
 }
@@ -243,11 +257,14 @@ fn a_random_field_draws_the_same_numbers_every_time() {
     let words = chain_words(&[], &[device(fixed(0.0), &[node(INPUT, &[], &[]), node(VELOCITY, &[&[0]], &[random(0.0, 1.0)])], 1)]);
     let velocities = || {
         let mut chain = parse(&words);
+        // TS: const keys = range(8).map((index) => [0, index * 10, on(C + index)])
         let keys: Vec<(u64, i32, Event)> = (0..8).map(|index| (0, index * 10, on(C + index))).collect();
         run(&mut chain, 1, &keys, steady).into_iter().map(|(_, event)| event).collect::<Vec<_>>()
     };
     let first = velocities();
     assert_eq!(first, velocities());
+    // TS: const distinct = new Set(first.flatMap((event) => event.kind === "on" ? [event.velocity] : []))
+    // A float can't go in a HashSet (NaN isn't equal to itself), so each goes in as its bits.
     let distinct: std::collections::HashSet<u32> =
         first.iter().filter_map(|event| if let Event::On { velocity, .. } = event { Some(velocity.to_bits()) } else { None }).collect();
     assert!(distinct.len() > 4, "{first:?}");

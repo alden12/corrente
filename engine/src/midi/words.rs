@@ -76,6 +76,7 @@ impl Reader<'_> {
     }
 
     /// A device: its nodes checked against each other, and its output.
+    // TS: device(index): Device | undefined  (each read below gives up with undefined if the words run out)
     fn device(&mut self, index: usize) -> Option<Device> {
         let bypass = self.field()?;
         let node_count = self.count()?;
