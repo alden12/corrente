@@ -35,7 +35,12 @@ import type { PluginMacros } from "./pluginMacros";
 import { useMacros } from "./useMacros";
 
 /** A page with nothing to update to: one opened in a plain browser. */
-const NO_UPDATES: PageUpdates = { ready: createValueStore(false), reload: () => {} };
+const NO_UPDATES: PageUpdates = {
+  ready: createValueStore(false),
+  reload: () => {},
+  release: createValueStore<{ needed: boolean } | null>(null),
+  download: () => {},
+};
 
 /** The rail's views the plugin has: Explore. Projects, activity and the agent are the app's. */
 const PLUGIN_RAIL = RAIL_ITEMS.filter((item) => item.view === "explore");
@@ -76,6 +81,7 @@ export function PluginApp({
     initial: false,
   });
   const updateReady = useSyncExternalStore(updates.ready.subscribe, updates.ready.read);
+  const release = useSyncExternalStore(updates.release.subscribe, updates.release.read);
   const keysOpen = keys.panel.open;
   useEffect(() => keyboardTaken.set(keysOpen), [keysOpen]);
   const scrollToDevice = (key: string) =>
@@ -103,6 +109,17 @@ export function PluginApp({
       )}
       <main ref={columnRef} className="relative isolate flex-1 min-w-0 overflow-y-auto">
         {updateReady && <UpdateNotice onReload={updates.reload} />}
+        {release && (
+          <UpdateNotice
+            message={
+              release.needed
+                ? "A new version of the plugin is out, and this window's updates need it."
+                : "A new version of the plugin is out."
+            }
+            action="Download"
+            onReload={updates.download}
+          />
+        )}
         <section aria-label="Keys" className="border-b border-line" style={{ height: keys.height }}>
           <KeysPanel {...keys.panel} />
         </section>

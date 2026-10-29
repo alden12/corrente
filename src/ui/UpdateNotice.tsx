@@ -18,7 +18,18 @@ import { Button } from "./controls/Button";
  * a newer one saved, so it can't go on and there is no Later. Edits made meanwhile are held, as they
  * are offline, and go up after the reload.
  */
-export function UpdateNotice({ onReload, required = false }: { onReload: () => void; required?: boolean }) {
+export function UpdateNotice({
+  onReload,
+  required = false,
+  message = required ? "This version of Corrente is out of date." : "A new version is ready.",
+  action = "Reload",
+}: {
+  onReload: () => void;
+  required?: boolean;
+  /** What's new, and what its button does: the plugin's window offers a download this way (PLUGIN-5). */
+  message?: string;
+  action?: string;
+}) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed && !required) return null;
 
@@ -28,9 +39,9 @@ export function UpdateNotice({ onReload, required = false }: { onReload: () => v
       className="flex items-center justify-center gap-3 px-3 py-1.5 text-[12px] font-medium bg-panel text-muted"
     >
       <span className="w-2 h-2 rounded-full bg-you" />
-      <span>{required ? "This version of Corrente is out of date." : "A new version is ready."}</span>
+      <span>{message}</span>
       <Button variant="solid" size="sm" onClick={onReload}>
-        Reload
+        {action}
       </Button>
       {!required && (
         <Button variant="ghost" size="sm" onClick={() => setDismissed(true)}>

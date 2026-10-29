@@ -38,6 +38,8 @@ declare global {
       macro(name: string, position: number): void;
       /** A newer build of this page is ready (HOST-23.2.3.1). */
       update(): void;
+      /** A newer plugin is out; `needed` if this page's updates wait for it. */
+      release(needed: boolean): void;
     };
   }
 }
@@ -108,6 +110,10 @@ window.corrente = {
   },
   macro: (name, position) => device?.fromHost(name, position),
   update: () => updates?.ready.set(true),
+  release: (needed) => {
+    // A new object only when the news changes, so the store doesn't announce the same news every minute.
+    if (updates && updates.release.read()?.needed !== needed) updates.release.set({ needed });
+  },
 };
 if (window.ipc) {
   send({ type: "ready" });

@@ -44,6 +44,8 @@ export type ToPlugin =
   /** Is a newer build of this page ready (`pageUpdates.ts`)? And reopen the page on it. */
   | { type: "update" }
   | { type: "reload" }
+  /** Open a web address in the system's browser: the window can't follow a link itself. */
+  | { type: "open"; url: string }
   | { type: "log"; text: string };
 
 /** The project as the plugin saves it: with its schema version, so a later page can upcast it. */

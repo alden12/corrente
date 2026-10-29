@@ -392,3 +392,13 @@ fn only_the_newest_few_downloaded_pages_are_kept() {
     assert_eq!(kept, ["b3", "b4", "b5"]);
     let _ = std::fs::remove_dir_all(folder);
 }
+
+#[test]
+fn a_newer_release_is_news_and_needed_once_the_engine_moves_on() {
+    let release = |built: u64, engine: &str| updates::Build::parse(&site("release", built, engine, &[])[updates::MANIFEST]).unwrap();
+    // TS: expect(releaseNews(release(50, "engine-1"), own(100))).toBeUndefined();
+    assert_eq!(updates::release_news(&release(50, "engine-1"), &own(100)), None, "an older release isn't news");
+    assert_eq!(updates::release_news(&release(100, "engine-1"), &own(100)), None, "nor the one installed");
+    assert_eq!(updates::release_news(&release(200, "engine-1"), &own(100)), Some(updates::ReleaseNews { needed: false }), "a newer one is");
+    assert_eq!(updates::release_news(&release(200, "engine-2"), &own(100)), Some(updates::ReleaseNews { needed: true }), "and needed with another engine");
+}

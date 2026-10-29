@@ -16,15 +16,18 @@
 //!   - `rack`: the page's project snapshot, saved with the host's project.
 //!   - `macros`: what each macro is mapped to, by the param's binding name (PLUGIN-3.4).
 //!   - `keys`: hand the keyboard back to the host (after a click that wasn't into a text field).
-//!   - `update`: is a newer build of the page ready? Answered with `window.corrente.update()` if so.
+//!   - `update`: is a newer build of the page ready? Answered with `window.corrente.update()` if so,
+//!     and `window.corrente.release(needed)` if a newer plugin is out.
 //!   - `reload`: open the page again on the newest build.
+//!   - `open`: open a web address in the system's browser (a link the page can't follow itself).
 //!   - `log`: a line for the plugin's log.
 //! - **A value a macro is mapped to moves the macro too**, as a drag the host hears (begin, set, end),
 //!   so the host's control and the page's knob agree, and the host can record it. The other way, a
 //!   macro the host moves (a knob, automation) moves the page's knob: `window.corrente.macro`.
 //! - **The plugin calls the page** with `window.corrente.restore(rack, macros, samples)` when it's ready, and
 //!   `window.corrente.macro(name, position)` when the host moves a mapped macro, and
-//!   `window.corrente.update()` when a newer build of the page is ready.
+//!   `window.corrente.update()` when a newer build of the page is ready, and
+//!   `window.corrente.release(needed)` when a newer plugin is out (needed: the page's updates wait for it).
 //!
 //! Rust notes, for reading this file:
 //! - `Rc<RefCell<T>>` is shared ownership on one thread (`Rc`) of something borrowed writable on
@@ -89,6 +92,7 @@ enum Message {
     Keys,
     Update,
     Reload,
+    Open { url: String },
     Log { text: String },
 }
 
@@ -222,6 +226,25 @@ fn keys_to_host(webview: &WebView) {
 /// Elsewhere, the keyboard isn't the webview's to hand back yet.
 #[cfg(not(target_os = "macos"))]
 fn keys_to_host(_webview: &WebView) {}
+
+/// Open `url` in the system's browser: only a web address, so the page can't have it run anything else.
+// TS: if (url.startsWith("https://")) spawn(OPENER, [url]);
+fn open_in_browser(url: &str) {
+    if !url.starts_with("https://") {
+        return nice_error!("the window asked to open something that isn't a web address");
+    }
+    // `cfg!` picks the system's opener: `open` on macOS, `explorer` on Windows, else `xdg-open`.
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    if let Err(error) = std::process::Command::new(opener).arg(url).spawn() {
+        nice_error!("the browser didn't open: {error}");
+    }
+}
 
 /// A file the scheme serves, with its type.
 fn respond(body: Cow<'static, [u8]>, path: &str) -> Response<Cow<'static, [u8]>> {
@@ -369,6 +392,10 @@ impl Editor for RackEditor {
                     if newest.id().is_some() && newest.id().map(str::to_owned) != current {
                         reply("window.corrente?.update?.()".to_owned());
                     }
+                    // TS: const news = updates.news(); if (news) reply(`window.corrente?.release?.(${news.needed})`);
+                    if let Some(news) = updates::news() {
+                        reply(format!("window.corrente?.release?.({})", news.needed));
+                    }
                 }
                 // TS: source = newestSource(); webview.deref()?.value?.loadUrl(PAGE);
                 Message::Reload => {
@@ -381,6 +408,7 @@ impl Editor for RackEditor {
                         }
                     }
                 }
+                Message::Open { url } => open_in_browser(&url),
                 Message::Log { text } => nice_log!("window: {text}"),
             }
         };

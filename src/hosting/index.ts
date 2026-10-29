@@ -110,3 +110,6 @@ export const canSignInHere = hosting.mode === "standalone" && hosting.canSignIn;
 
 /** The open source's home: the app's own repository, so nothing private. */
 export const SOURCE_URL = "https://github.com/alden12/corrente";
+
+/** The plugin's latest release, with its downloads and how to install it (PLUGIN-5). */
+export const PLUGIN_URL = `${SOURCE_URL}/releases/latest`;

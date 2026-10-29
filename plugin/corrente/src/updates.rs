@@ -11,6 +11,9 @@
 //! - **Served from disk** over the same `corrente://` scheme (`Source`), so the page keeps its origin
 //!   and with it its storage. Only files its manifest lists are served. The built-in build is the
 //!   fallback, offline or before any download.
+//! - **A newer plugin** is a GitHub release (PLUGIN-5), which carries its build's manifest too. The
+//!   same check reads the latest one's (`release_news`): built later than this binary's own means a
+//!   new version is out, and with another engine or protocol, one the window's updates now wait for.
 //!
 //! Rust notes, for reading this file:
 //! - `OnceLock` is a value set once, the first time it's asked for, and shared after (TS: a lazily
@@ -34,6 +37,14 @@ pub const MANIFEST: &str = "plugin-build.json";
 const SITE: &str = match option_env!("CORRENTE_UPDATE_URL") {
     Some(url) => url,
     None => "https://corrente.cloud",
+};
+
+/// Where the latest release's manifest is: GitHub sends this on to the newest release's asset. Or
+/// another address the plugin was built against, to try this out.
+// TS: const RELEASE = process.env.CORRENTE_RELEASE_URL ?? "https://github.com/alden12/corrente/releases/latest/download";
+const RELEASE: &str = match option_env!("CORRENTE_RELEASE_URL") {
+    Some(url) => url,
+    None => "https://github.com/alden12/corrente/releases/latest/download",
 };
 
 /// How often a window opening may check the site.
@@ -230,11 +241,33 @@ fn prune(folder: &Path) {
         });
 }
 
-/// A path from the site, or none if it couldn't be had (offline, an error, too large).
-// TS: try { return await (await fetch(`${SITE}/${path}`, { signal: AbortSignal.timeout(30_000) })).bytes(); } catch { return undefined; }
-fn from_site(agent: &ureq::Agent, path: &str) -> Option<Vec<u8>> {
-    let mut response = agent.get(&format!("{SITE}/{path}")).call().ok()?;
+/// What's at `url`, or none if it couldn't be had (offline, an error, too large). Redirects are followed.
+// TS: try { return await (await fetch(url, { signal: AbortSignal.timeout(30_000) })).bytes(); } catch { return undefined; }
+fn from_site(agent: &ureq::Agent, url: &str) -> Option<Vec<u8>> {
+    let mut response = agent.get(url).call().ok()?;
     response.body_mut().with_config().limit(LARGEST).read_to_vec().ok()
+}
+
+/// What's new about the plugin itself: a newer release, and whether this binary can't take the
+/// window's updates any more without it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReleaseNews {
+    pub needed: bool,
+}
+
+/// What the latest `release` means for a binary whose own build is `own`: news if it was built later.
+// TS: return release.built > own.built ? { needed: !release.fits(own) } : undefined;
+pub fn release_news(release: &Build, own: &Build) -> Option<ReleaseNews> {
+    (release.built > own.built).then(|| ReleaseNews { needed: !release.fits(own) })
+}
+
+/// The latest release's news, once a check has read it.
+static NEWS: Mutex<Option<ReleaseNews>> = Mutex::new(None);
+
+/// What the last check found about a newer plugin, if anything.
+// TS: return news;
+pub fn news() -> Option<ReleaseNews> {
+    NEWS.lock().ok().and_then(|news| *news)
 }
 
 /// When a window last started a check, in this process.
@@ -243,7 +276,7 @@ static LAST_CHECK: Mutex<Option<Instant>> = Mutex::new(None);
 /// Check the site for a newer build on a thread of its own, unless a window did in the last hour.
 // TS:
 //   if (lastCheck && Date.now() - lastCheck < CHECK_EVERY) return; lastCheck = Date.now();
-//   setTimeout(() => { const folder = buildsFolder(); if (folder) { mkdir(folder); download(folder, own, fromSite); } });
+//   setTimeout(() => { const folder = buildsFolder(); if (folder) { mkdir(folder); news = releaseNews(latestRelease(), own); download(folder, own, fromSite); } });
 pub fn check_in_background(own: Build) {
     let Ok(mut last) = LAST_CHECK.lock() else { return };
     if last.is_some_and(|at| at.elapsed() < CHECK_EVERY) {
@@ -256,7 +289,12 @@ pub fn check_in_background(own: Build) {
             return;
         }
         let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(30))).build().into();
-        if let Some(build) = download(&folder, &own, |path| from_site(&agent, path)) {
+        // TS: const release = Build.parse(await fromSite(`${RELEASE}/${MANIFEST}`)); news = release && releaseNews(release, own);
+        let release = from_site(&agent, &format!("{RELEASE}/{MANIFEST}")).and_then(|bytes| Build::parse(&bytes));
+        if let (Some(release), Ok(mut news)) = (release, NEWS.lock()) {
+            *news = release_news(&release, &own);
+        }
+        if let Some(build) = download(&folder, &own, |path| from_site(&agent, &format!("{SITE}/{path}"))) {
             nice_plug::nice_log!("a newer page is ready: build {}", build.id);
         }
     });
