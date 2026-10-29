@@ -93,7 +93,8 @@ export function ActivityRail({
           local/dev too, from your handle, so it is there whether or not anyone is signed in. */}
       <div className="mt-auto flex flex-col items-center w-full">
         {indicators}
-        <BetaChip className="my-1.5" />
+        {/* Scaled down so it sits under the rail's icons rather than competing with them. */}
+        <BetaChip className="mt-1.5 mb-3 scale-80" />
         {onOpenSettings && (
           <button
             type="button"
