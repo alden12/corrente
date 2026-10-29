@@ -73,8 +73,8 @@ export interface NodeSpec {
   output: Wire;
 }
 
-/** The directions a pick walks what's held. */
-export const PICK_DIRECTIONS = ["up", "down", "updown", "random", "played"] as const;
+/** The directions a pick walks what's held; a chord plays all of it at once. */
+export const PICK_DIRECTIONS = ["up", "down", "updown", "random", "played", "chord"] as const;
 
 /**
  * The palette, in the order the engine numbers the kinds (engine/src/midi/nodes.rs's SPECS): each
@@ -92,7 +92,7 @@ export const NODE_SPECS: readonly NodeSpec[] = [
   {
     name: "pick",
     description:
-      "holds the notes it's given and plays one on each tick, for `gate` of a step: walking `direction` over `octaves` octaves",
+      "holds the notes it's given and plays one on each tick (or all, for `chord`), for `gate` of a step: walking `direction` over `octaves` octaves, at the loudest held velocity times the tick's level",
     ports: [
       { name: "notes", wire: "notes" },
       { name: "ticks", wire: "ticks" },
@@ -124,6 +124,26 @@ export const NODE_SPECS: readonly NodeSpec[] = [
     ports: [{ name: "notes", wire: "notes" }],
     fields: [{ name: "scale", type: "number", min: 0, max: 4, default: 1 }],
     output: "notes",
+  },
+  {
+    name: "euclid",
+    description:
+      "passes on the ticks landing on `pulses` hits spread evenly over `steps`, turned by `rotate`, numbered by hit; every hit but a cycle's first is `accent` quieter",
+    ports: [{ name: "ticks", wire: "ticks" }],
+    fields: [
+      { name: "steps", type: "number", min: 1, max: 64, default: 16 },
+      { name: "pulses", type: "number", min: 0, max: 64, default: 4 },
+      { name: "rotate", type: "number", min: 0, max: 63, default: 0 },
+      { name: "accent", type: "number", min: 0, max: 1, default: 0 },
+    ],
+    output: "ticks",
+  },
+  {
+    name: "ratchet",
+    description: "plays each tick `repeats` times, evenly through its step",
+    ports: [{ name: "ticks", wire: "ticks" }],
+    fields: [{ name: "repeats", type: "number", min: 1, max: 8, default: 1 }],
+    output: "ticks",
   },
 ];
 

@@ -1,9 +1,8 @@
 /**
- * The MIDI devices the engine plays (INST-11.1), by type: each one's definition in the MIDI format,
- * reading the same params as the TypeScript device it replaces. A track whose devices are all here
- * plays them in the engine, ahead of its instrument's voices; any other track plays its devices in
- * TypeScript (GraphMidiDevice) until INST-11.2 moves the rest over. DOM-free, for the offline
- * renderer too.
+ * The MIDI devices the engine plays (INST-11.1, INST-11.2), by type: each one's definition in the MIDI
+ * format, reading the same params as the TypeScript device it replaces, so saved projects play the
+ * same. A track whose instrument is on the engine plays its devices there, ahead of its voices.
+ * DOM-free, for the offline renderer too.
  */
 import { compileMidiDevice, type ChainDevice, type MidiDevicePlan } from "../compile";
 import type { MidiDefinition } from "../format";
@@ -11,8 +10,14 @@ import { midiDeviceSchema } from "../device/catalog";
 import { engineValueOf } from "../../definitions/values";
 import type { ParamStore } from "../../params/store";
 import { octavatorDefinition } from "./octavator";
+import { arpeggiatorDefinition } from "./arpeggiator";
+import { euclideanDefinition } from "./euclidean";
 
-const DEFINITIONS: Record<string, MidiDefinition> = { octavator: octavatorDefinition };
+const DEFINITIONS: Record<string, MidiDefinition> = {
+  octavator: octavatorDefinition,
+  arpeggiator: arpeggiatorDefinition,
+  euclidean: euclideanDefinition,
+};
 
 /** A device on a track, as the project holds it. */
 export interface MidiDeviceSource {

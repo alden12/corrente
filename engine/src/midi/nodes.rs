@@ -5,17 +5,20 @@
 //! - **input**: the notes the device is given.
 //! - **clock** (clock.rs): ticks every `beats`, optionally free-running from the first note on `sync`.
 //! - **pick**: holds the notes it's given and, on each tick, plays one of them for `gate` of a step:
-//!   walking up, down, up and down, at random, or in the order played, over `octaves` octaves.
+//!   walking up, down, up and down, at random, or in the order played, over `octaves` octaves; or
+//!   all of them at once (chord). At the loudest held velocity, times the tick's level.
 //! - **stack**: plays copies of each note, each moved by its interval, its velocity scaled, and on or
 //!   off: an octaver, a chord, a fixed harmony.
 //! - **transpose**: moves each note by `semitones`.
 //! - **velocity**: scales each note's velocity.
+//! - **euclid** and **ratchet** (rhythm.rs): pass on some of a clock's ticks, or repeat them.
 //!
 //! A note that's moved keeps track of where it went, so its note off lets go of the same notes even if
 //! a knob moved in between. A note off nobody played passes through as it is: letting go of a note
 //! that isn't sounding does nothing.
 
 use super::clock::Clock;
+use super::rhythm::{self, Ratchet};
 use super::{BlockTransport, Event, Field, MAX_COPIES, MAX_EVENTS, MAX_HELD, Timed, draw};
 
 /// What a port or an output carries.
@@ -43,13 +46,15 @@ pub enum Fields {
 }
 
 // TS: the same list as midi/format.ts's NODE_SPECS, by kind number.
-pub const SPECS: [Spec; 6] = [
+pub const SPECS: [Spec; 8] = [
     Spec { ports: &[], fields: Fields::Exactly(0), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Ticks },
     Spec { ports: &[Wire::Notes, Wire::Ticks], fields: Fields::Exactly(3), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Copies, output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
+    Spec { ports: &[Wire::Ticks], fields: Fields::Exactly(4), output: Wire::Ticks },
+    Spec { ports: &[Wire::Ticks], fields: Fields::Exactly(1), output: Wire::Ticks },
 ];
 pub const KIND_INPUT: usize = 0;
 pub const KIND_CLOCK: usize = 1;
@@ -57,6 +62,8 @@ pub const KIND_PICK: usize = 2;
 pub const KIND_STACK: usize = 3;
 pub const KIND_TRANSPOSE: usize = 4;
 pub const KIND_VELOCITY: usize = 5;
+pub const KIND_EUCLID: usize = 6;
+pub const KIND_RATCHET: usize = 7;
 
 /// A node's state, by kind.
 // TS: a discriminated union of each kind's state.
@@ -68,6 +75,8 @@ pub enum Kind {
     Stack(NoteMap),
     Transpose(NoteMap),
     Velocity,
+    Euclid,
+    Ratchet(Ratchet),
 }
 
 impl Kind {
@@ -80,6 +89,8 @@ impl Kind {
             KIND_STACK => Kind::Stack(NoteMap::new()),
             KIND_TRANSPOSE => Kind::Transpose(NoteMap::new()),
             KIND_VELOCITY => Kind::Velocity,
+            KIND_EUCLID => Kind::Euclid,
+            KIND_RATCHET => Kind::Ratchet(Ratchet::new()),
             _ => return None,
         })
     }
@@ -142,6 +153,8 @@ impl Node {
                 };
                 push(out, offset, event);
             }),
+            Kind::Euclid => rhythm::euclid(&inputs[0], fields, context, out),
+            Kind::Ratchet(ratchet) => ratchet.process(&inputs[0], fields, context, out),
         }
     }
 
@@ -152,8 +165,9 @@ impl Node {
         match &mut self.kind {
             Kind::Clock(clock) => clock.clear(),
             Kind::Pick(pick) => pick.clear(),
+            Kind::Ratchet(ratchet) => ratchet.clear(),
             Kind::Stack(map) | Kind::Transpose(map) => map.clear(offset, out),
-            Kind::Input | Kind::Velocity => {}
+            Kind::Input | Kind::Velocity | Kind::Euclid => {}
         }
     }
 }
@@ -246,6 +260,7 @@ const DOWN: usize = 1;
 const UP_DOWN: usize = 2;
 const RANDOM: usize = 3;
 const PLAYED: usize = 4;
+const CHORD: usize = 5;
 
 impl Pick {
     // TS: new Pick()
@@ -272,9 +287,9 @@ impl Pick {
                     next_note += 1;
                     self.hold(event);
                 }
-                (_, Some((offset, Event::Tick { step, samples }))) => {
+                (_, Some((offset, Event::Tick { step, samples, level }))) => {
                     next_tick += 1;
-                    self.play(offset, step, samples, fields, context, out);
+                    self.play(offset, (step, samples, level), fields, context, out);
                 }
                 // Something on the ticks port that isn't a tick: words.rs only wires clocks there.
                 _ => next_tick += 1,
@@ -301,18 +316,35 @@ impl Pick {
         }
     }
 
-    /// Play step `step`'s note, if anything's held, for `gate` of the step's `samples`.
-    // TS: const sequence = held x octaves, in the direction's order; const note = sequence[index of step]; out.push([offset, on(note, length)])
-    fn play(&mut self, offset: usize, step: i64, samples: f64, fields: &[Field], context: &Context, out: &mut Vec<Timed>) {
+    /// Play a tick's note (`step`, `samples` long, at `level`), if anything's held, for `gate` of the
+    /// step, at the loudest held velocity times the level. A chord plays every held note.
+    // TS: const sequence = held x octaves, in the direction's order; const note = sequence[index of step]; out.push([offset, on(note, loudest * level, length)])
+    // `(step, samples, level): (i64, f64, f32)` takes a tuple and names its parts, as TS's `[step, samples, level]: [...]`.
+    fn play(&mut self, offset: usize, (step, samples, level): (i64, f64, f32), fields: &[Field], context: &Context, out: &mut Vec<Timed>) {
         if self.held.is_empty() {
             return;
         }
+        // TS: const velocity = Math.max(...held.map(([, velocity]) => velocity)) * level
+        // `fold(0.0, f32::max)` is a reduce starting at 0 that keeps the larger each time.
+        let velocity = self.held.iter().map(|&(_, velocity, _)| velocity).fold(0.0, f32::max) * level;
         let first = *self.first_step.get_or_insert(step);
         let direction = context.field(fields, 0, step).round() as usize;
         let octaves = context.field(fields, 1, step).round().clamp(1.0, 8.0) as usize;
         let gate = context.field(fields, 2, step).clamp(0.0, 1.0);
         let length = (gate * samples).round().max(1.0) as u32;
         let count = self.held.len() * octaves;
+        // TS: const on = (note: number) => ({ kind: "on", note, velocity, length })
+        let on = |note: i32| Event::On { note, velocity, length: Some(length) };
+        // TS: if (direction === CHORD) { every held note in every octave; return }
+        if direction == CHORD {
+            (0..count).for_each(|index| {
+                let note = self.held[index % self.held.len()].0 + 12 * (index / self.held.len()) as i32;
+                if (0..=127).contains(&note) {
+                    push(out, offset, on(note));
+                }
+            });
+            return;
+        }
         let walked = (step - first).max(0) as usize;
         // Which of the `count` notes (held by pitch, then the next octave up, and so on) this step plays.
         // TS: { up: walked % count, [DOWN]: count - 1 - walked % count, [UP_DOWN]: bounce, [RANDOM]: draw, [PLAYED]: by when played }
@@ -327,7 +359,7 @@ impl Pick {
             _ => walked % count,
         };
         let (octave, place) = (index / self.held.len(), index % self.held.len());
-        let (note, velocity, _) = if direction == PLAYED {
+        let (note, _, _) = if direction == PLAYED {
             // The `place`th note by when it was played: count those played before each.
             let rank = |&(_, _, when): &(i32, f32, u64)| self.held.iter().filter(|&&(_, _, other)| other < when).count();
             *self.held.iter().find(|held| rank(held) == place).unwrap_or(&self.held[place])
@@ -336,7 +368,7 @@ impl Pick {
         };
         let note = note + 12 * octave as i32;
         if (0..=127).contains(&note) {
-            push(out, offset, Event::On { note, velocity, length: Some(length) });
+            push(out, offset, on(note));
         }
     }
 

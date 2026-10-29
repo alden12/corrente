@@ -2,7 +2,7 @@
 //! writes them, then played block by block as a track plays them. The octavator and an arpeggiator
 //! are built from nodes here; the clock is checked against a transport driven as a host drives it.
 
-use crate::midi::{self, BlockTransport, Chain, Event};
+use crate::midi::{self, BlockTransport, Chain, Event, pattern};
 
 /// At 120 beats a minute and 48 kHz, beats a sample, and an eighth's length in samples.
 const PER_SAMPLE: f64 = 2.0 / 48000.0;
@@ -17,6 +17,9 @@ const PICK: f64 = 2.0;
 const STACK: f64 = 3.0;
 const TRANSPOSE: f64 = 4.0;
 const VELOCITY: f64 = 5.0;
+const EUCLID: f64 = 6.0;
+const RATCHET: f64 = 7.0;
+const CHORD: f64 = 5.0;
 
 // TS: const fixed = (value: number) => [0, value]; const bound = (value: number) => [1, value, 1, 0, 0]; const random = (min, max) => [2, min, max]
 fn fixed(value: f64) -> Vec<f64> {
@@ -268,4 +271,60 @@ fn a_random_field_draws_the_same_numbers_every_time() {
     let distinct: std::collections::HashSet<u32> =
         first.iter().filter_map(|event| if let Event::On { velocity, .. } = event { Some(velocity.to_bits()) } else { None }).collect();
     assert!(distinct.len() > 4, "{first:?}");
+}
+
+/// A pattern's onsets as x and rests as ., first step first.
+// TS: const drawn = ([onsets, steps]) => range(steps).map((step) => (onsets >> step) & 1 ? "x" : ".").join("")
+fn drawn((onsets, steps): (u64, usize)) -> String {
+    (0..steps).map(|step| if onsets >> step & 1 == 1 { 'x' } else { '.' }).collect()
+}
+
+#[test]
+fn euclidean_patterns_are_bjorklunds_turned_by_rotate() {
+    assert_eq!(drawn(pattern(8.0, 3.0, 0.0)), "x..x..x.");
+    assert_eq!(drawn(pattern(8.0, 5.0, 0.0)), "x.xx.xx.");
+    assert_eq!(drawn(pattern(16.0, 4.0, 0.0)), "x...x...x...x...");
+    // Rotate 1: each step plays what the next did.
+    assert_eq!(drawn(pattern(8.0, 3.0, 1.0)), "..x..x.x");
+    assert_eq!(drawn(pattern(4.0, 0.0, 0.0)), "....");
+    assert_eq!(drawn(pattern(4.0, 9.0, 0.0)), "xxxx");
+    assert_eq!(drawn(pattern(64.0, 64.0, 0.0)), "x".repeat(64));
+}
+
+/// A Euclidean sequencer: sixteenths through euclid (3 of 8, accent 0.5) and a ratchet, playing the chord.
+// TS: device(fixed(0), [input, clock(sync, 1/16), euclid(8, 3, 0, 0.5), ratchet(repeats), pick(notes, ticks, chord, 1, 0.5)], 4)
+fn euclidean(repeats: f64) -> Vec<f64> {
+    device(
+        fixed(0.0),
+        &[
+            node(INPUT, &[], &[]),
+            node(CLOCK, &[&[0]], &[fixed(0.25)]),
+            node(EUCLID, &[&[1]], &[fixed(8.0), fixed(3.0), fixed(0.0), fixed(0.5)]),
+            node(RATCHET, &[&[2]], &[fixed(repeats)]),
+            node(PICK, &[&[0], &[3]], &[fixed(CHORD), fixed(1.0), fixed(0.5)]),
+        ],
+        4,
+    )
+}
+
+#[test]
+fn a_euclidean_plays_the_chord_on_its_onsets_the_first_of_each_cycle_loudest() {
+    let sixteenth = EIGHTH / 2;
+    let mut chain = parse(&chain_words(&[], &[euclidean(1.0)]));
+    let played = run(&mut chain, 400, &[(0, 0, on(C)), (0, 0, on(E))], steady);
+    let steps: Vec<(u64, i32)> = [0, 3, 6, 8].iter().flat_map(|&step| [(step * sixteenth, C), (step * sixteenth, E)]).collect();
+    assert_eq!(ons(&played), steps);
+    // TS: const velocities = played.flatMap(([, event]) => event.kind === "on" ? [event.velocity] : [])
+    let velocities: Vec<f32> = played.iter().filter_map(|&(_, event)| if let Event::On { velocity, .. } = event { Some(velocity) } else { None }).collect();
+    assert_eq!(velocities, vec![1.0, 1.0, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0]);
+}
+
+#[test]
+fn a_ratchet_repeats_each_onset_through_its_step_even_past_the_block() {
+    let sixteenth = EIGHTH / 2;
+    let mut chain = parse(&chain_words(&[], &[euclidean(3.0)]));
+    let played = run(&mut chain, 40, &[(0, 0, on(C))], steady);
+    // A sixteenth (6000 samples) in thirds, each played for half a third.
+    assert_eq!(ons(&played), vec![(0, C), (sixteenth / 3, C), (2 * sixteenth / 3, C)]);
+    assert!(played.contains(&(sixteenth / 6, off(C))));
 }

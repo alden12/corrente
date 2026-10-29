@@ -74,14 +74,9 @@ describe("EngineMidiChain", () => {
   });
 
   it("plays in the engine only when every device on the track has an engine definition", () => {
-    const arpeggiator: MidiDeviceSource = {
-      id: "c",
-      type: "arpeggiator",
-      bypassed: false,
-      params: new ParamStore(midiDeviceSchema("arpeggiator")),
-    };
+    const unknown: MidiDeviceSource = { ...octavator("c"), type: "nothing-like-it" };
     expect(playsInEngine([])).toBe(true);
-    expect(playsInEngine([octavator("a")])).toBe(true);
-    expect(playsInEngine([octavator("a"), arpeggiator])).toBe(false);
+    expect(playsInEngine([octavator("a"), { ...octavator("b"), type: "arpeggiator" }])).toBe(true);
+    expect(playsInEngine([octavator("a"), unknown])).toBe(false);
   });
 });

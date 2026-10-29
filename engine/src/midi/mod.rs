@@ -23,9 +23,12 @@
 mod chain;
 mod clock;
 mod nodes;
+mod rhythm;
 mod words;
 
 pub use chain::Chain;
+#[cfg(test)]
+pub use rhythm::pattern;
 pub use words::parse;
 
 use crate::router::Shaping;
@@ -43,12 +46,12 @@ pub const MAX_RELEASES: usize = 256;
 //   type Event =
 //     | { kind: "on"; note: number; velocity: number; length?: number }  // length in samples
 //     | { kind: "off"; note: number }
-//     | { kind: "tick"; step: number; samples: number };  // a clock's step, and a step's length
+//     | { kind: "tick"; step: number; samples: number; level: number };  // a clock's step, a step's length, and how loud (an accent)
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
     On { note: i32, velocity: f32, length: Option<u32> },
     Off { note: i32 },
-    Tick { step: i64, samples: f64 },
+    Tick { step: i64, samples: f64, level: f32 },
 }
 
 /// An event `offset` samples into the block.

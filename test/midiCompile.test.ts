@@ -160,7 +160,7 @@ describe("compileMidiDevice", () => {
       ),
     ).toEqual([
       "out.notes: wire it to the node it reads",
-      "out.direction: pattern's sideways isn't one of up, down, updown, random, played",
+      "out.direction: pattern's sideways isn't one of up, down, updown, random, played, chord",
     ]);
     expect(
       problemsOf(

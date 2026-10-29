@@ -115,11 +115,12 @@ describe("MIDI devices in the engine", () => {
     bank.loadMidi(0, chainWords([{ plan: arpeggiator, values: {}, bypassed: false }]).words);
     bank.noteOn(0, 60, 1, 0);
     bank.noteOn(0, 64, 0.5, 0);
-    // An eighth is 12000 samples: 60 for 6000, nothing, then 64 at its velocity.
+    // An eighth is 12000 samples: 60 for 6000, nothing, then 64, at the loudest held velocity as
+    // the TypeScript arpeggiator played.
     const sound = render(bank, 200);
     expect(sound[100]).toBeCloseTo(1, 6);
     expect(sound[7000]).toBe(0);
-    expect(sound[12100]).toBeCloseTo(0.5, 6);
+    expect(sound[12100]).toBeCloseTo(1, 6);
     expect(sound[24100]).toBeCloseTo(1, 6);
   });
 

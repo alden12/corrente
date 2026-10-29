@@ -49,7 +49,7 @@ impl Clock {
                 (_, Some((offset, step))) => {
                     self.last = Some((step, transport.playing));
                     if out.len() < MAX_EVENTS {
-                        out.push((offset, Event::Tick { step, samples }));
+                        out.push((offset, Event::Tick { step, samples, level: 1.0 }));
                     }
                     position = offset + 1;
                 }
