@@ -69,8 +69,6 @@ interface Builder {
   edges: GraphEdge[];
   definition: AuthoredDefinition;
   params: ParamSchema;
-  /** Params drawn as boxes wired in, rather than written on the inputs. */
-  paramBoxes: boolean;
 }
 
 const paramId = (param: string) => `param:${param}`;
@@ -139,6 +137,11 @@ const paramText = (builder: Builder, binding: ParamBinding): string =>
 const amountText = (builder: Builder, amount: number | ParamBinding | undefined): string | undefined =>
   amount === undefined ? undefined : typeof amount === "number" ? round(amount) : paramText(builder, amount);
 
+/** A wire from a param's node into `to`'s `toPort`, labelled with what's done to it on the way. */
+const wireParam = (builder: Builder, param: string, to: string, toPort: string, label: string | undefined) => {
+  builder.edges.push({ from: paramNode(builder, param), fromPort: "value", to, toPort, ...(label ? { label } : {}) });
+};
+
 type Item = unknown;
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -177,31 +180,13 @@ const wire = (builder: Builder, item: Item, to: string, toPort: string, channel?
   if ("beats" in item) {
     const beats = item.beats;
     if (isObject(beats) && typeof beats.param === "string") {
-      const binding = beats as ParamBinding;
-      if (!builder.paramBoxes) return `${paramText(builder, binding)}, synced`;
-      builder.edges.push({
-        from: paramNode(builder, binding.param),
-        fromPort: "value",
-        to,
-        toPort,
-        label: withChannel(`synced, as ${item.as}`),
-      });
+      wireParam(builder, beats.param, to, toPort, withChannel(`synced, as ${String(item.as)}`));
       return undefined;
     }
     return `${String(beats)} beats as ${String(item.as)}`;
   }
-  if (typeof item.param === "string") {
-    const binding = item as ParamBinding;
-    if (!builder.paramBoxes) return paramText(builder, binding);
-    const label = withChannel(bindingText(binding));
-    builder.edges.push({
-      from: paramNode(builder, binding.param),
-      fromPort: "value",
-      to,
-      toPort,
-      ...(label ? { label } : {}),
-    });
-  }
+  if (typeof item.param === "string")
+    wireParam(builder, item.param, to, toPort, withChannel(bindingText(item as ParamBinding)));
   return undefined;
 };
 
@@ -215,12 +200,8 @@ const outputNode = (builder: Builder, id: string, title: string, channels: strin
 };
 
 /** `definition` as boxes and wires, its params named from `params`. */
-export function deviceGraph(
-  definition: AuthoredDefinition,
-  params: ParamSchema,
-  { paramBoxes = false }: { paramBoxes?: boolean } = {},
-): DeviceGraph {
-  const builder: Builder = { nodes: new Map(), edges: [], definition, params, paramBoxes };
+export function deviceGraph(definition: AuthoredDefinition, params: ParamSchema): DeviceGraph {
+  const builder: Builder = { nodes: new Map(), edges: [], definition, params };
   Object.entries(definition.nodes).forEach(([name, node]) => {
     const spec = blockNamed(node.block);
     const id = `node:${name}`;

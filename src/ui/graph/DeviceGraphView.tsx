@@ -5,15 +5,25 @@
  *
  * Blocks are boxes titled by their node's name, with the block they run beneath; a box marked "voice"
  * runs once per note, "stereo" once per channel. Signals (each voice's, the host's, the track's input)
- * and, if asked for, params are boxes on the left; the output on the right. A number or a param
- * written on an input is what feeds it without a wire.
+ * are boxes on the left, params small tags beside them, wired in dashed; the output is on the right. A
+ * number written on an input is what feeds it without a wire. A legend says what each outline means.
  */
 import "@xyflow/react/dist/style.css";
-import { useMemo, useState } from "react";
-import { Background, Controls, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { useMemo, type CSSProperties } from "react";
+import {
+  Background,
+  Controls,
+  Handle,
+  Panel,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react";
 import { engineDevice } from "../../audio/definitions/engineDevices";
 import { deviceGraph, type GraphNode } from "../../audio/definitions/graph";
-import { BOX_WIDTH, HEADER_HEIGHT, ROW_HEIGHT, boxHeight, layoutGraph } from "./layoutGraph";
+import { HEADER_HEIGHT, ROW_HEIGHT, layoutGraph, nodeSize } from "./layoutGraph";
 
 /** Each kind of box's accent, as a token: blocks plain, sources and the output marked. */
 const ACCENTS: Record<GraphNode["kind"], string> = {
@@ -23,17 +33,52 @@ const ACCENTS: Record<GraphNode["kind"], string> = {
   output: "var(--color-hot)",
 };
 
+/** The legend's words for each outline, in the order the graph reads. */
+const LEGEND: { kind: GraphNode["kind"]; label: string }[] = [
+  { kind: "param", label: "Param, a control you set" },
+  { kind: "signal", label: "Signal coming in" },
+  { kind: "block", label: "Block" },
+  { kind: "output", label: "Output" },
+];
+
+/** React Flow's own controls and labels, on the app's tokens so they follow the theme. */
+const THEMED = {
+  "--xy-controls-button-background-color": "var(--color-panel)",
+  "--xy-controls-button-background-color-hover": "var(--color-ground)",
+  "--xy-controls-button-color": "var(--color-ink)",
+  "--xy-controls-button-color-hover": "var(--color-strong)",
+  "--xy-controls-button-border-color": "var(--color-line)",
+  "--xy-controls-box-shadow": "none",
+} as CSSProperties;
+
 /** Where a port's row sits, from the box's top: outputs first, then inputs. */
 const rowTop = (row: number) => HEADER_HEIGHT + row * ROW_HEIGHT + ROW_HEIGHT / 2;
 
-type BoxNode = Node<{ node: GraphNode }, "box">;
+type BoxNode = Node<{ node: GraphNode }, "box" | "param">;
+
+const HANDLE = "!w-2 !h-2 !min-w-0 !min-h-0 !border-0 !bg-muted";
+
+/** A param: its name over its range, and the handle its wires leave from. */
+function ParamTag({ data: { node } }: NodeProps<BoxNode>) {
+  return (
+    <div
+      className="flex flex-col justify-center rounded-full border bg-panel px-3"
+      style={{ ...nodeSize(node), borderColor: ACCENTS.param }}
+      title={node.subtitle ? `${node.title}: ${node.subtitle}` : node.title}
+    >
+      <p className="text-[11.5px] leading-tight font-medium text-strong truncate">{node.title}</p>
+      {node.subtitle && <p className="font-mono text-[9.5px] leading-tight text-faint truncate">{node.subtitle}</p>}
+      <Handle type="source" position={Position.Right} id="value" className={`${HANDLE} !bg-agent`} />
+    </div>
+  );
+}
 
 function Box({ data: { node } }: NodeProps<BoxNode>) {
-  const handle = "!w-2 !h-2 !min-w-0 !min-h-0 !border-0 !bg-muted";
+  const handle = HANDLE;
   return (
     <div
       className="rounded-lg border bg-panel text-ink shadow-sm"
-      style={{ width: BOX_WIDTH, height: boxHeight(node), borderColor: ACCENTS[node.kind] }}
+      style={{ ...nodeSize(node), borderColor: ACCENTS[node.kind] }}
     >
       <div className="flex items-center gap-1.5 px-2.5 border-b border-line-soft" style={{ height: HEADER_HEIGHT }}>
         <div className="min-w-0 flex-1">
@@ -86,20 +131,44 @@ function Box({ data: { node } }: NodeProps<BoxNode>) {
   );
 }
 
-const NODE_TYPES = { box: Box };
+const NODE_TYPES = { box: Box, param: ParamTag };
+
+function Legend() {
+  return (
+    <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-md border border-line bg-panel text-[11.5px] text-ink">
+      {LEGEND.map(({ kind, label }) => (
+        <p key={kind} className="flex items-center gap-2">
+          <span
+            className={`w-4 h-3 shrink-0 border-[1.5px] ${kind === "param" ? "rounded-full" : "rounded-sm"}`}
+            style={{ borderColor: ACCENTS[kind] }}
+          />
+          {label}
+        </p>
+      ))}
+      <p className="flex items-center gap-2">
+        <span className="font-mono text-[9px] uppercase tracking-wider text-you">voice</span>
+        runs once per note
+      </p>
+      <p className="flex items-center gap-2">
+        <span className="font-mono text-[9px] uppercase tracking-wider text-muted">stereo</span>
+        once per channel
+      </p>
+    </div>
+  );
+}
 
 export default function DeviceGraphView({ type }: { type: string }) {
-  const [paramBoxes, setParamBoxes] = useState(false);
   const spec = engineDevice(type);
   const { nodes, edges } = useMemo(() => {
     if (!spec) return { nodes: [], edges: [] };
-    const graph = deviceGraph(spec.authored, spec.schema, { paramBoxes });
+    const graph = deviceGraph(spec.authored, spec.schema);
     const placed = layoutGraph(graph);
+    const params = new Set(graph.nodes.filter((node) => node.kind === "param").map((node) => node.id));
     return {
       nodes: graph.nodes.map(
         (node): BoxNode => ({
           id: node.id,
-          type: "box",
+          type: node.kind === "param" ? "param" : "box",
           position: placed.get(node.id)!,
           data: { node },
           draggable: true,
@@ -113,13 +182,16 @@ export default function DeviceGraphView({ type }: { type: string }) {
           target: edge.to,
           targetHandle: edge.toPort,
           ...(edge.label ? { label: edge.label } : {}),
-          style: { stroke: "var(--color-muted)", strokeWidth: 1.25 },
+          // A param's wire is dashed in its colour, so controls read apart from the signal path.
+          style: params.has(edge.from)
+            ? { stroke: "var(--color-agent)", strokeWidth: 1, strokeDasharray: "4 3" }
+            : { stroke: "var(--color-muted)", strokeWidth: 1.25 },
           labelStyle: { fill: "var(--color-ink)", fontSize: 10, fontFamily: "var(--font-mono)" },
           labelBgStyle: { fill: "var(--color-panel)" },
         }),
       ),
     };
-  }, [spec, paramBoxes]);
+  }, [spec]);
 
   if (!spec) {
     return (
@@ -127,14 +199,14 @@ export default function DeviceGraphView({ type }: { type: string }) {
     );
   }
   return (
-    <div className="relative flex-1 min-h-0 bg-ground">
+    <div className="relative flex-1 min-h-0 bg-ground" style={THEMED}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
-        // Fitted, but no smaller than can be read: a big instrument opens on its start, to pan along.
+        // The whole graph fitted on opening, never zoomed in past its own size.
         fitView
-        fitViewOptions={{ minZoom: 0.6, maxZoom: 1 }}
+        fitViewOptions={{ maxZoom: 1, padding: 0.05 }}
         minZoom={0.1}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -142,11 +214,10 @@ export default function DeviceGraphView({ type }: { type: string }) {
       >
         <Background color="var(--color-line)" gap={24} />
         <Controls showInteractive={false} />
+        <Panel position="top-right">
+          <Legend />
+        </Panel>
       </ReactFlow>
-      <label className="absolute top-3 right-3 flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-line bg-panel text-[12px] text-ink cursor-pointer">
-        <input type="checkbox" checked={paramBoxes} onChange={(event) => setParamBoxes(event.target.checked)} />
-        Params as boxes
-      </label>
     </div>
   );
 }

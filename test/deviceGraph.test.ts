@@ -6,14 +6,14 @@ import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
 
 /** A device's definition as boxes and wires (INST-44), read as written. */
 
-const graphOf = (type: string, paramBoxes = false) => {
+const graphOf = (type: string) => {
   const spec = engineDevice(type)!;
-  return deviceGraph(spec.authored, spec.schema, { paramBoxes });
+  return deviceGraph(spec.authored, spec.schema);
 };
 const node = (graph: ReturnType<typeof graphOf>, id: string) => graph.nodes.find((each) => each.id === id)!;
 
 describe("a device's graph", () => {
-  it("draws Auto-Pan's blocks, its signals and output, with its params written on their inputs", () => {
+  it("draws Auto-Pan's blocks, its params, its signals and output", () => {
     const graph = graphOf("auto-pan");
     expect(graph.nodes.map((each) => each.id).toSorted()).toEqual(
       [
@@ -25,12 +25,14 @@ describe("a device's graph", () => {
         "signal:host",
         "signal:input",
         "output:out",
+        ...graph.nodes.filter((each) => each.kind === "param").map((each) => each.id),
       ].toSorted(),
     );
-    // A param and a number are written on the input; a param with a scale says so.
-    expect(node(graph, "node:free").inputs).toEqual([{ name: "rate", value: "Rate" }]);
+    // A number is written on the input; a param is wired in, its wire saying what's done to it.
     expect(node(graph, "node:wave").inputs).toContainEqual({ name: "c", value: "0" });
-    expect(node(graph, "node:level").inputs).toContainEqual({ name: "b", value: "Depth × -0.5 + 1" });
+    expect(node(graph, "param:rate")).toMatchObject({ kind: "param", title: "Rate", subtitle: "0.05 to 10 Hz" });
+    expect(graph.edges).toContainEqual({ from: "param:rate", fromPort: "value", to: "node:free", toPort: "rate" });
+    expect(graph.edges).toContainEqual(expect.objectContaining({ to: "node:level", toPort: "b", label: "× -0.5 + 1" }));
     // A stereo node stays one box; a wire per channel says which.
     expect(node(graph, "node:level").stereo).toBe(true);
     expect(
@@ -41,12 +43,6 @@ describe("a device's graph", () => {
       "left",
       "right",
     ]);
-  });
-
-  it("draws params as boxes when asked, wired into the inputs they feed", () => {
-    const graph = graphOf("auto-pan", true);
-    expect(node(graph, "param:rate")).toMatchObject({ kind: "param", title: "Rate", subtitle: "0.05 to 10 Hz" });
-    expect(graph.edges).toContainEqual({ from: "param:rate", fromPort: "value", to: "node:free", toPort: "rate" });
   });
 
   it("marks an instrument's voice blocks, and sums its voices to the output when it doesn't say", () => {
