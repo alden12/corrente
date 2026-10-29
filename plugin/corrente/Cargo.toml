@@ -22,6 +22,10 @@ base64 = "0.22"
 symphonia = { version = "0.5", features = ["mp3", "aiff"] }
 # The window (editor.rs): the app's device rack in a webview, attached to the host's view.
 wry = "0.57"
+# Newer builds of the window's page, from corrente.cloud (updates.rs): fetched over HTTPS, each file
+# checked against its sha256.
+ureq = "3"
+sha2 = "0.10"
 
 # The same macOS bindings wry uses: to ask whether the host's view is in a window yet, and to try again
 # on the main thread's next turn when it isn't.

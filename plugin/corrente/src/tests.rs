@@ -266,7 +266,7 @@ fn a_sound_tried_plays_instead_and_is_not_saved() {
 // TS: const response = serve(new Request(`corrente://localhost${path}`)); return [response.status, response.body];
 fn fetch(path: &str) -> (u16, Vec<u8>) {
     let request = wry::http::Request::builder().uri(format!("corrente://localhost{path}")).body(Vec::new()).unwrap();
-    let response = editor::serve(request);
+    let response = editor::serve(request, &updates::Source::BuiltIn);
     (response.status().as_u16(), response.body().to_vec())
 }
 
@@ -284,6 +284,8 @@ fn the_page_and_what_it_links_are_built_in() {
     assert!(links.iter().any(|link| link.ends_with(".js")), "the page links its script: {links:?}");
     links.iter().for_each(|link| assert_eq!(fetch(link).0, 200, "{link} is built in"));
     assert_eq!(fetch("/nothing-here.js").0, 404);
+    // TS: expect(updates.ownBuild(app.FILES)).toBeDefined();
+    assert!(updates::own_build(editor::app::FILES).is_some(), "its manifest is built in, to compare newer builds with");
 }
 
 #[test]
@@ -310,4 +312,83 @@ fn the_windows_keys_play() {
     plugin.params.play(60, 0.9);
     plugin.take_played();
     assert!(peak(&play(&mut plugin, &[], 20)) > 0.01, "the key sounds");
+}
+
+/// A site serving one build: its manifest (built at `built`, against engine `engine`) and its files.
+// TS: const site = (built, engine, files) => { const manifest = { id, built, engine, protocol: 1, files: files.map(...) }; return { [MANIFEST]: JSON.stringify(manifest), ...files }; };
+fn site(id: &str, built: u64, engine: &str, files: &[(&str, &str)]) -> BTreeMap<String, Vec<u8>> {
+    use sha2::{Digest, Sha256};
+    let listed: Vec<serde_json::Value> = files
+        .iter()
+        .map(|(path, text)| serde_json::json!({ "path": path, "sha256": Sha256::digest(text.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect::<String>() }))
+        .collect();
+    let manifest = serde_json::json!({ "id": id, "built": built, "engine": engine, "protocol": 1, "files": listed });
+    let mut served: BTreeMap<String, Vec<u8>> = files.iter().map(|(path, text)| (path.to_string(), text.as_bytes().to_vec())).collect();
+    served.insert(updates::MANIFEST.to_owned(), manifest.to_string().into_bytes());
+    served
+}
+
+/// An empty folder of its own, for one test.
+// TS: return mkdtempSync(join(tmpdir(), `corrente-${name}-`));
+fn empty_folder(name: &str) -> PathBuf {
+    let folder = std::env::temp_dir().join(format!("corrente-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    std::fs::create_dir_all(&folder).unwrap();
+    folder
+}
+
+/// The plugin's own build, as `site` would describe it.
+fn own(built: u64) -> updates::Build {
+    updates::Build::parse(&site("own", built, "engine-1", &[])[updates::MANIFEST]).unwrap()
+}
+
+#[test]
+fn a_newer_page_that_fits_is_downloaded_whole_and_served() {
+    let folder = empty_folder("newer");
+    let served = site("b2", 200, "engine-1", &[("plugin.html", "<p>new</p>"), ("assets/app.js", "go()")]);
+    // TS: const build = download(folder, own(100), (path) => served[path]);
+    let build = updates::download(&folder, &own(100), |path| served.get(path).cloned()).expect("taken");
+    assert_eq!(build.id, "b2");
+    let source = updates::newest(&folder, &own(100));
+    assert_eq!(source.id(), Some("b2"), "the page comes from it now");
+    assert_eq!(source.read("assets/app.js", &[]).as_deref(), Some(&b"go()"[..]));
+    assert_eq!(source.read(updates::MANIFEST, &[]), None, "only what the manifest lists is served");
+    // TS: expect(download(folder, own(100), fetch)).toBeUndefined(); // nothing newer
+    assert_eq!(updates::download(&folder, &own(100), |path| served.get(path).cloned()), None, "it's there already");
+    // A plugin whose own build is newer keeps its own.
+    assert_eq!(updates::newest(&folder, &own(300)), updates::Source::BuiltIn);
+    let _ = std::fs::remove_dir_all(folder);
+}
+
+#[test]
+fn a_page_this_binary_cant_play_or_that_doesnt_check_out_is_never_taken() {
+    let folder = empty_folder("refused");
+    let take = |served: BTreeMap<String, Vec<u8>>| updates::download(&folder, &own(100), |path| served.get(path).cloned());
+    assert_eq!(take(site("engine", 200, "engine-2", &[("plugin.html", "x")])), None, "another engine waits for a new binary");
+    assert_eq!(take(site("older", 50, "engine-1", &[("plugin.html", "x")])), None, "older than its own");
+    assert_eq!(take(site("escape", 200, "engine-1", &[("../outside.html", "x")])), None, "a path outside its folder");
+    let mut tampered = site("tampered", 200, "engine-1", &[("plugin.html", "x")]);
+    tampered.insert("plugin.html".to_owned(), b"not x".to_vec());
+    assert_eq!(take(tampered), None, "a file that doesn't match its hash");
+    let mut missing = site("missing", 200, "engine-1", &[("plugin.html", "x")]);
+    missing.remove("plugin.html");
+    assert_eq!(take(missing), None, "a file that didn't come");
+    // TS: expect(readdirSync(folder)).toEqual([]); // nothing half-downloaded is left
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 0, "nothing is left behind");
+    assert_eq!(updates::newest(&folder, &own(100)), updates::Source::BuiltIn);
+    let _ = std::fs::remove_dir_all(folder);
+}
+
+#[test]
+fn only_the_newest_few_downloaded_pages_are_kept() {
+    let folder = empty_folder("kept");
+    (1..=5).for_each(|step| {
+        let served = site(&format!("b{step}"), 100 + step, "engine-1", &[("plugin.html", "x")]);
+        assert!(updates::download(&folder, &own(100), |path| served.get(path).cloned()).is_some());
+    });
+    // TS: expect(readdirSync(folder).sort()).toEqual(["b3", "b4", "b5"]);
+    let mut kept: Vec<String> = std::fs::read_dir(&folder).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    kept.sort();
+    assert_eq!(kept, ["b3", "b4", "b5"]);
+    let _ = std::fs::remove_dir_all(folder);
 }

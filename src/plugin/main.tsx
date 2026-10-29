@@ -26,6 +26,7 @@ import { PluginPreview } from "./pluginPreview";
 import { PluginMacros, type Slots } from "./pluginMacros";
 import { keysToHost } from "./keysToHost";
 import { pluginNotes } from "./pluginKeys";
+import { pageUpdates, type PageUpdates } from "./pageUpdates";
 
 declare global {
   interface Window {
@@ -35,6 +36,8 @@ declare global {
     corrente?: {
       restore(rack: string | null, macros?: Slots | null, samples?: SavedSamples | null): void;
       macro(name: string, position: number): void;
+      /** A newer build of this page is ready (HOST-23.2.3.1). */
+      update(): void;
     };
   }
 }
@@ -50,6 +53,8 @@ startLibrary();
 
 const project = new ProjectStore(false);
 const macros = new PluginMacros(send);
+/** Only a page in the plugin asks: a plain browser has no newer build to be offered. */
+const updates: PageUpdates | undefined = window.ipc ? pageUpdates(send) : undefined;
 /** Made on restore, with the samples the plugin saved. */
 let device: PluginDevice | undefined;
 
@@ -81,7 +86,14 @@ const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSa
   const preview = new SoundPreview(new PluginPreview(samples, send), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <PluginApp project={project} preview={preview} device={device} macros={macros} notes={pluginNotes(send)} />
+      <PluginApp
+        project={project}
+        preview={preview}
+        device={device}
+        macros={macros}
+        notes={pluginNotes(send)}
+        updates={updates}
+      />
     </StrictMode>,
   );
 };
@@ -95,6 +107,7 @@ window.corrente = {
     restore(rack, slots ?? null, samples ?? NO_SAMPLES);
   },
   macro: (name, position) => device?.fromHost(name, position),
+  update: () => updates?.ready.set(true),
 };
 if (window.ipc) {
   send({ type: "ready" });

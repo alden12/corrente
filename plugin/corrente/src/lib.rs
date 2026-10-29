@@ -27,6 +27,7 @@ mod device;
 mod editor;
 mod package;
 mod params;
+mod updates;
 #[cfg(test)]
 mod tests;
 

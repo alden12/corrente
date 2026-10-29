@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "vite",
     "dev:mobile": "MOBILE_HTTPS=1 vite --host --mode test",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/pluginBuild.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

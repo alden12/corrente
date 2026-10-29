@@ -41,6 +41,9 @@ export type ToPlugin =
   | { type: "keys" }
   /** A key of the window's keys went down (a velocity above 0) or up (0), PLUGIN-3.11. */
   | { type: "note"; note: number; velocity: number }
+  /** Is a newer build of this page ready (`pageUpdates.ts`)? And reopen the page on it. */
+  | { type: "update" }
+  | { type: "reload" }
   | { type: "log"; text: string };
 
 /** The project as the plugin saves it: with its schema version, so a later page can upcast it. */

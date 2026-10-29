@@ -24,12 +24,18 @@ import { useSongKey } from "../ui/pads/songKey";
 import { usePersistentBoolean } from "../ui/usePersistent";
 import { DeviceRack } from "../ui/workbench/DeviceRack";
 import { DevicesBar } from "../ui/workbench/DevicesBar";
+import { UpdateNotice } from "../ui/UpdateNotice";
+import { createValueStore } from "../listeners";
 import { MacroStrip } from "./MacroStrip";
+import type { PageUpdates } from "./pageUpdates";
 import type { PluginDevice } from "./pluginDevice";
 import { PluginExplore } from "./PluginExplore";
 import { keyboardTaken } from "./pluginKeys";
 import type { PluginMacros } from "./pluginMacros";
 import { useMacros } from "./useMacros";
+
+/** A page with nothing to update to: one opened in a plain browser. */
+const NO_UPDATES: PageUpdates = { ready: createValueStore(false), reload: () => {} };
 
 /** The rail's views the plugin has: Explore. Projects, activity and the agent are the app's. */
 const PLUGIN_RAIL = RAIL_ITEMS.filter((item) => item.view === "explore");
@@ -40,6 +46,7 @@ export function PluginApp({
   device,
   macros,
   notes,
+  updates = NO_UPDATES,
 }: {
   project: ProjectStore;
   preview: SoundPreview;
@@ -47,6 +54,8 @@ export function PluginApp({
   macros: PluginMacros;
   /** What the keys play: the plugin (`pluginNotes`). */
   notes: LiveNotes;
+  /** A newer build of the page (HOST-23.2.3.1); none in a plain browser. */
+  updates?: PageUpdates;
 }) {
   useProject(project);
   const macroView = useMacros(device, macros);
@@ -66,6 +75,7 @@ export function PluginApp({
     key: "corrente:plugin-keys-open",
     initial: false,
   });
+  const updateReady = useSyncExternalStore(updates.ready.subscribe, updates.ready.read);
   const keysOpen = keys.panel.open;
   useEffect(() => keyboardTaken.set(keysOpen), [keysOpen]);
   const scrollToDevice = (key: string) =>
@@ -92,6 +102,7 @@ export function PluginApp({
         </div>
       )}
       <main ref={columnRef} className="relative isolate flex-1 min-w-0 overflow-y-auto">
+        {updateReady && <UpdateNotice onReload={updates.reload} />}
         <section aria-label="Keys" className="border-b border-line" style={{ height: keys.height }}>
           <KeysPanel {...keys.panel} />
         </section>

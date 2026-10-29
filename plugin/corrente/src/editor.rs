@@ -4,8 +4,9 @@
 //!
 //! - **The page** is the app's built `dist/`, built into the binary (build.rs, PLUGIN-3.3) and served
 //!   over a `corrente://` scheme, or the Vite dev server's when the plugin is built with
-//!   `CORRENTE_DEV_URL` (`http://localhost:5180/plugin.html`), for fast iteration. Updating it like
-//!   the site is HOST-23.2.3's.
+//!   `CORRENTE_DEV_URL` (`http://localhost:5180/plugin.html`), for fast iteration. A newer build
+//!   downloaded from corrente.cloud is served in its place, once the page offers it (updates.rs,
+//!   HOST-23.2.3.1).
 //! - **Page to plugin**, as JSON through wry's IPC handler, on the main thread:
 //!   - `ready`: the page asks for its saved state, and gets it back through `window.corrente.restore`.
 //!   - `load`: a device package (src/audio/bank/devicePackage.ts) on every change. The same device
@@ -15,12 +16,15 @@
 //!   - `rack`: the page's project snapshot, saved with the host's project.
 //!   - `macros`: what each macro is mapped to, by the param's binding name (PLUGIN-3.4).
 //!   - `keys`: hand the keyboard back to the host (after a click that wasn't into a text field).
+//!   - `update`: is a newer build of the page ready? Answered with `window.corrente.update()` if so.
+//!   - `reload`: open the page again on the newest build.
 //!   - `log`: a line for the plugin's log.
 //! - **A value a macro is mapped to moves the macro too**, as a drag the host hears (begin, set, end),
 //!   so the host's control and the page's knob agree, and the host can record it. The other way, a
 //!   macro the host moves (a knob, automation) moves the page's knob: `window.corrente.macro`.
 //! - **The plugin calls the page** with `window.corrente.restore(rack, macros, samples)` when it's ready, and
-//!   `window.corrente.macro(name, position)` when the host moves a mapped macro.
+//!   `window.corrente.macro(name, position)` when the host moves a mapped macro, and
+//!   `window.corrente.update()` when a newer build of the page is ready.
 //!
 //! Rust notes, for reading this file:
 //! - `Rc<RefCell<T>>` is shared ownership on one thread (`Rc`) of something borrowed writable on
@@ -30,6 +34,7 @@
 //! - `#[cfg(target_os = "macos")]` compiles what follows on macOS only.
 
 use crate::params::{Macros, Slots};
+use crate::updates::{self, Source};
 use nice_plug::context::gui::GuiContext;
 use nice_plug::editor::dpi::NativeSize;
 use nice_plug::editor::{EditorHandle, HostMethods, SpawnedEditor};
@@ -39,7 +44,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::error::Error;
 use std::rc::{Rc, Weak};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicU32, Ordering};
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::http::{Request, Response};
@@ -52,6 +57,9 @@ const PAGE: &str = match option_env!("CORRENTE_DEV_URL") {
     Some(url) => url,
     None => "corrente://localhost/plugin.html",
 };
+
+/// Whether the page updates itself: not when it's the dev server's.
+const UPDATES: bool = option_env!("CORRENTE_DEV_URL").is_none();
 
 /// Run in every page before its own scripts: its errors go to the plugin's log, so a run in a DAW,
 /// with no devtools open, still says what went wrong.
@@ -79,6 +87,8 @@ enum Message {
     /// A key of the window's keyboard went down (velocity above 0) or up (0).
     Note { note: u8, velocity: f32 },
     Keys,
+    Update,
+    Reload,
     Log { text: String },
 }
 
@@ -236,17 +246,33 @@ pub(crate) mod app {
     include!(concat!(env!("OUT_DIR"), "/app.rs"));
 }
 
-/// The `corrente://` scheme: a file of the app's `dist/`, or a page saying the app wasn't built in.
-pub(crate) fn serve(request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+/// The build built into the plugin, read from its manifest once.
+// TS: return (own ??= updates.ownBuild(app.FILES));
+fn own_build() -> Option<&'static updates::Build> {
+    static OWN: OnceLock<Option<updates::Build>> = OnceLock::new();
+    OWN.get_or_init(|| updates::own_build(app::FILES)).as_ref()
+}
+
+/// Where the page should come from now: the newest downloaded build this binary can play, else its own.
+// TS: const own = ownBuild(), folder = updates.buildsFolder(); return UPDATES && own && folder ? updates.newest(folder, own) : "builtIn";
+fn newest_source() -> Source {
+    match (UPDATES, own_build(), updates::builds_folder()) {
+        (true, Some(own), Some(folder)) => updates::newest(&folder, own),
+        _ => Source::BuiltIn,
+    }
+}
+
+/// The `corrente://` scheme: a file of the page's build (`source`), or a page saying the app wasn't built in.
+pub(crate) fn serve(request: Request<Vec<u8>>, source: &Source) -> Response<Cow<'static, [u8]>> {
     // TS: if (app.FILES.length === 0) return page("Built without the app ...");
     if app::FILES.is_empty() {
         let page = "<p style=\"font-family: sans-serif\">Built without the app: run `yarn build` in packages/app before building the plugin, or use `yarn plugin:bundle`.</p>";
         return respond(Cow::Borrowed(page.as_bytes()), "missing.html");
     }
-    // TS: const file = app.FILES.find(([path]) => path === request.path.replace(/^\//, "")); return file ? respond(file[1]) : notFound;
+    // TS: const path = request.path.replace(/^\//, ""); const bytes = source.read(path, app.FILES); return bytes ? respond(bytes, path) : notFound;
     let path = request.uri().path().trim_start_matches('/');
-    match app::FILES.iter().find(|(name, _)| *name == path) {
-        Some((_, bytes)) => respond(Cow::Borrowed(bytes), path),
+    match source.read(path, app::FILES) {
+        Some(bytes) => respond(bytes, path),
         None => Response::builder().status(404).body(Cow::Borrowed(&b"Not found"[..])).unwrap(),
     }
 }
@@ -273,7 +299,13 @@ impl Editor for RackEditor {
         _host: Option<HostMethods>,
     ) -> Result<SpawnedEditor<RackWindow>, Box<dyn Error>> {
         let webview: Rc<RefCell<Option<WebView>>> = Rc::new(RefCell::new(None));
-        let (params, reply_to, keys_to) = (self.params.clone(), Rc::downgrade(&webview), Rc::downgrade(&webview));
+        let (params, reply_to, keys_to, reload_to) = (self.params.clone(), Rc::downgrade(&webview), Rc::downgrade(&webview), Rc::downgrade(&webview));
+        // The page's build, shared by the scheme and the handler, which moves it on at a reload.
+        let source = Arc::new(Mutex::new(newest_source()));
+        let (serve_from, reload_source) = (source.clone(), source.clone());
+        if let (true, Some(own)) = (UPDATES, own_build()) {
+            updates::check_in_background(own.clone());
+        }
         // TS: const reply = (script: string) => webview.deref()?.value?.evaluateScript(script);
         let reply = move |script: String| {
             if let Some(view) = reply_to.upgrade().as_ref().and_then(|view| view.borrow().as_ref().map(|view| view.evaluate_script(&script))) {
@@ -330,6 +362,25 @@ impl Editor for RackEditor {
                         }
                     }
                 }
+                // TS: const newest = newestSource(); if (newest.id && newest.id !== source.id) reply("window.corrente?.update?.()");
+                Message::Update => {
+                    let newest = newest_source();
+                    let current = reload_source.lock().ok().and_then(|current| current.id().map(str::to_owned));
+                    if newest.id().is_some() && newest.id().map(str::to_owned) != current {
+                        reply("window.corrente?.update?.()".to_owned());
+                    }
+                }
+                // TS: source = newestSource(); webview.deref()?.value?.loadUrl(PAGE);
+                Message::Reload => {
+                    if let Ok(mut current) = reload_source.lock() {
+                        *current = newest_source();
+                    }
+                    if let Some(view) = reload_to.upgrade() {
+                        if let Some(Err(error)) = view.borrow().as_ref().map(|view| view.load_url(PAGE)) {
+                            nice_error!("the window didn't reload: {error}");
+                        }
+                    }
+                }
                 Message::Log { text } => nice_log!("window: {text}"),
             }
         };
@@ -339,7 +390,11 @@ impl Editor for RackEditor {
         let build: Build = Box::new(move |parent| {
             WebViewBuilder::new()
                 .with_bounds(first)
-                .with_custom_protocol("corrente".into(), |_id, request| serve(request))
+                // A lock the handler holds only to swap the build, so the scheme never waits long for it.
+                .with_custom_protocol("corrente".into(), move |_id, request| match serve_from.lock() {
+                    Ok(source) => serve(request, &source),
+                    Err(_) => serve(request, &Source::BuiltIn),
+                })
                 .with_url(PAGE)
                 .with_initialization_script(REPORTER)
                 .with_ipc_handler(handle_message)
