@@ -6,7 +6,7 @@ import type { MacroView } from "./useMacros";
 
 export function MacroStrip({ view }: { view: MacroView }) {
   return (
-    <div className="grid grid-cols-8 gap-1 px-3 pt-3">
+    <div className="grid grid-cols-8 gap-1 p-3">
       {view.mapping.map((name, index) => {
         const label = `M${index + 1}`;
         return name ? (

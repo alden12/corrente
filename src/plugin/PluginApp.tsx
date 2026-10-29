@@ -6,7 +6,7 @@
  * folded, so the devices open in view. MIDI devices (PLUGIN-3.8) come in as a section above the devices. No transport, timeline or engine here: the
  * plugin makes the sound, and `PluginDevice` tells it what to play.
  */
-import { useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { LiveNotes } from "../audio/live/liveNotes";
 import { applyEdit } from "../audio/commands/applyEdit";
 import type { Dispatch } from "../audio/commands/types";
@@ -14,7 +14,6 @@ import type { SoundPreview } from "../audio/live/preview";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { useProject } from "../audio/project/useProject";
 import { ActivityRail } from "../ui/ActivityRail";
-import { IconButton } from "../ui/controls/IconButton";
 import { SectionHeader } from "../ui/controls/SectionHeader";
 import { requestExploreSearch } from "../ui/explore/explorePage";
 import { RAIL_ITEMS } from "../ui/libraryViews";
@@ -22,7 +21,6 @@ import { KnobExtrasProvider } from "../ui/knobExtras";
 import { KeysPanel } from "../ui/keys/KeysPanel";
 import { useDesktopKeys } from "../ui/keys/useDesktopKeys";
 import { useSongKey } from "../ui/pads/songKey";
-import { KeyboardIcon } from "../ui/shellIcons";
 import { usePersistentBoolean } from "../ui/usePersistent";
 import { DeviceRack } from "../ui/workbench/DeviceRack";
 import { DevicesBar } from "../ui/workbench/DevicesBar";
@@ -61,12 +59,15 @@ export function PluginApp({
   // The knobs wear their macro badges only while the macros show; mapping one by right-click works either way.
   const extras = macrosOpen ? macroView.extras : { ...macroView.extras, badge: () => undefined };
   const columnRef = useRef<HTMLElement>(null);
-  // The computer keyboard plays the keys only while the window has it; the pads play either way.
+  // The window takes the computer keyboard while the keys are open, and hands it back to the host
+  // (Live's computer MIDI keyboard) while they're folded; the pads play either way.
   const taken = useSyncExternalStore(keyboardTaken.subscribe, keyboardTaken.read);
   const keys = useDesktopKeys(notes, taken, useSongKey(project, dispatch), {
     key: "corrente:plugin-keys-open",
     initial: false,
   });
+  const keysOpen = keys.panel.open;
+  useEffect(() => keyboardTaken.set(keysOpen), [keysOpen]);
   const scrollToDevice = (key: string) =>
     columnRef.current
       ?.querySelector(`[data-device="${CSS.escape(key)}"]`)
@@ -92,23 +93,7 @@ export function PluginApp({
       )}
       <main ref={columnRef} className="relative isolate flex-1 min-w-0 overflow-y-auto">
         <section aria-label="Keys" className="border-b border-line" style={{ height: keys.height }}>
-          <KeysPanel
-            {...keys.panel}
-            actions={
-              <IconButton
-                label={
-                  taken
-                    ? "The computer keyboard plays these keys: give it back to the host"
-                    : "Play these keys from the computer keyboard"
-                }
-                size="sm"
-                active={taken}
-                onClick={() => keyboardTaken.set(!taken)}
-              >
-                <KeyboardIcon />
-              </IconButton>
-            }
-          />
+          <KeysPanel {...keys.panel} />
         </section>
         {/* Ruled off from the devices while open; folded, its header's own rule does that. */}
         <section aria-label="Macros" className={macrosOpen ? "border-b border-line" : undefined}>

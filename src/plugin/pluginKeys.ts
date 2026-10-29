@@ -4,9 +4,9 @@
  * device as it does the host's. They don't go out to the host, so it can't record them: Live
  * doesn't take a VST3 instrument's MIDI out.
  *
- * Who has the computer keyboard is a choice (`keyboardTaken`): the host's by default, which plays
- * notes from it (Ableton's computer MIDI keyboard), or the window's, so its keys play from it. Taken,
- * the page stops handing the keyboard back after each click (`keysToHost`).
+ * Who has the computer keyboard (`keyboardTaken`) follows the keys' fold: open, the window has it, so
+ * its keys play from it and the page stops handing it back after each click (`keysToHost`); folded,
+ * the host has it, which plays notes from it (Ableton's computer MIDI keyboard).
  */
 import { LiveNotes } from "../audio/live/liveNotes";
 import { createValueStore } from "../listeners";
