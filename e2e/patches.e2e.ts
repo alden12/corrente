@@ -99,20 +99,20 @@ test("clicking a patch tries it without touching the project; Swap applies it to
 
   const trackHeaders = page.getByTitle("Double-click to rename");
   const before = await trackHeaders.count();
-  // The seed track is a Micro VA.
-  const kind = (name: string) => page.getByRole("tablist").getByText(name, { exact: true });
-  await expect(kind("micro-va")).toBeVisible();
+  // The seed track is a Micro VA: its tab's portrait says so on hover (DAW-89).
+  const kind = (label: string) => page.getByRole("tablist").getByTitle(label, { exact: true });
+  await expect(kind("Micro VA")).toBeVisible();
 
   // The primary click only tries it (COMM-1.4.1): the try panel opens, the track is unchanged.
   await openExploreCategory(page, "Patches");
   await page.getByRole("button", { name: "Warm Strings", exact: true }).click();
   const trying = page.getByRole("region", { name: "Trying Warm Strings" });
   await expect(trying).toBeVisible();
-  await expect(kind("micro-va")).toBeVisible();
+  await expect(kind("Micro VA")).toBeVisible();
 
   // Swap is the edit: the selected track becomes nimbus, no track is added, the panel closes.
   await trying.getByRole("button", { name: /^Swap onto/ }).click();
-  await expect(kind("nimbus")).toBeVisible();
+  await expect(kind("Nimbus")).toBeVisible();
   await expect(trackHeaders).toHaveCount(before);
   await expect(trying).toHaveCount(0);
 });

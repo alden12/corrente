@@ -18,7 +18,7 @@ test("a Drum Kit track shows the step grid; toggling a cell writes a note", asyn
   // loads the built-in pads. Switch the editor to Pads to get the step grid.
   await openExploreCategory(page, "Instruments");
   await swapFromExplore(page, "Drum Kit");
-  await expect(page.getByRole("tablist").getByText("drumkit", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Drum Kit", { exact: true })).toBeVisible();
   await page.getByRole("radio", { name: "Pads", exact: true }).click();
 
   // A pad row for the built-in Kick, with its step cells.

@@ -54,6 +54,7 @@ export function DesktopShell({
   dispatch,
   liveNotes,
   preview,
+  projectId,
   selectedTrack,
   isPlaying,
   started,
@@ -171,7 +172,10 @@ export function DesktopShell({
           recorder={recorder}
         />
       )}
+      {/* Remade for another project: its tabs are that project's. */}
       <CenterWorkbench
+        key={projectId ?? "none"}
+        projectId={projectId}
         projectStore={projectStore}
         scheduler={scheduler}
         recorder={recorder}

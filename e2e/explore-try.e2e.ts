@@ -27,7 +27,7 @@ test.describe("desktop", () => {
 
     await trying(page, "FM").getByRole("button", { name: "Add as a new track" }).click();
     await expect(trackHeaders).toHaveCount(before + 1);
-    await expect(page.getByRole("tablist").getByText("fm", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tablist").getByTitle("FM", { exact: true })).toBeVisible();
     await expect(trying(page, "FM")).toHaveCount(0);
   });
 
@@ -56,7 +56,7 @@ test.describe("desktop", () => {
 
     // One new track, carrying the sound and the take; trying is over, so the keys play it now.
     await expect(trackHeaders).toHaveCount(before + 1);
-    await expect(page.getByRole("tablist").getByText("fm", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tablist").getByTitle("FM", { exact: true })).toBeVisible();
     await expect(page.getByTestId("lane").getByText("Take 1")).toBeVisible();
     await expect(trying(page, "FM")).toHaveCount(0);
 

@@ -464,6 +464,7 @@ export function AppShell() {
     dispatch,
     liveNotes,
     preview,
+    projectId: storeHolds,
     selectedTrack,
     isPlaying,
     started,

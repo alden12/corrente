@@ -36,13 +36,13 @@ test("selecting a track in the list selects it in the workbench", async ({ page 
   // tab's kind chip = sampler.
   await openExploreCategory(page, "Instruments");
   await page.getByRole("button", { name: 'Add "Sampler" as a new track', exact: true }).click();
-  await expect(page.getByRole("tablist").getByText("sampler", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Sampler", { exact: true })).toBeVisible();
 
   // In the Tracks list, select the seed (Micro VA) track -> the workbench follows.
   await openProjectTracks(page);
   await openGroupCard(page, "main");
   await tracks(page).getByTestId("tree-track").filter({ hasText: "Micro VA" }).click();
-  await expect(page.getByRole("tablist").getByText("micro-va", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Micro VA", { exact: true })).toBeVisible();
 
   // The filter narrows the list by name.
   await page.getByRole("searchbox", { name: "Filter tracks" }).fill("zzz");
@@ -59,13 +59,13 @@ test("add an empty track from a group, then assign it an instrument", async ({ p
   // instrument track (no instrument yet); it is selected.
   await page.getByRole("button", { name: /Add a track to main/i }).click();
   await page.getByRole("menuitem", { name: "New MIDI track" }).click();
-  await expect(page.getByRole("tablist").getByText("empty", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Empty", { exact: true })).toBeVisible();
   await expect(tracks(page).getByText("No instrument")).toBeVisible();
   await expect(page.getByText("This track has no instrument yet. Choose one:")).toBeVisible();
 
   // Picking an instrument assigns it - the tab's kind chip becomes that instrument.
   await page.getByRole("button", { name: "FM", exact: true }).click();
-  await expect(page.getByRole("tablist").getByText("fm", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("FM", { exact: true })).toBeVisible();
 });
 
 test("assign the Nimbus synth to a track and see its controls", async ({ page }) => {
@@ -79,7 +79,7 @@ test("assign the Nimbus synth to a track and see its controls", async ({ page })
   await page.getByRole("button", { name: "Nimbus", exact: true }).click();
 
   // The tab's kind chip becomes the instrument, and its schema-driven controls render.
-  await expect(page.getByRole("tablist").getByText("nimbus", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Nimbus", { exact: true })).toBeVisible();
   await expect(page.getByText("Pulse Width", { exact: true })).toBeVisible();
 });
 
@@ -93,7 +93,7 @@ test("add an empty audio track from a group's + menu", async ({ page }) => {
   // tab kind chip reads "audio", with the empty audio-clip panel in the workbench.
   await page.getByRole("button", { name: /Add a track to main/i }).click();
   await page.getByRole("menuitem", { name: "New audio track" }).click();
-  await expect(page.getByRole("tablist").getByText("audio", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist").getByTitle("Audio", { exact: true })).toBeVisible();
   await expect(page.getByText("No audio clip.")).toBeVisible();
 });
 

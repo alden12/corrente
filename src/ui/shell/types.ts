@@ -34,6 +34,8 @@ export interface ShellProps {
   liveNotes: LiveNotes;
   /** The sound being tried in Explore (COMM-1.4.1); live notes play it while one is open. */
   preview: SoundPreview;
+  /** The project the store holds, or null while none has loaded: the desktop's tabs are kept per project (DAW-89). */
+  projectId: string | null;
   /** The track the workbench edits; `undefined` shows the workbench's empty state. */
   selectedTrack: Track | undefined;
   isPlaying: boolean;

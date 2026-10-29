@@ -98,6 +98,22 @@ function deviceDrawing(kind: "instrument" | "effect", type: string, project: Dev
   return device && { kind, type, devices: kind === "instrument" ? { instruments: [device] } : { effects: [device] } };
 }
 
+/**
+ * An instrument's art as Explore draws it, for showing it elsewhere (an editor tab, DAW-89): its
+ * shipped portrait, or for a custom one what draws it, and its colour.
+ */
+export function instrumentArt(
+  type: string,
+  project: DeviceSource,
+): { portrait?: Portrait; drawing?: PortraitJob; hue?: number } {
+  const info = pickableInstrumentInfos().find((each) => each.type === type);
+  return {
+    portrait: (PORTRAITS as Record<string, Portrait>)[PORTRAIT_KEYS.instrument(type)],
+    drawing: info?.custom ? deviceDrawing("instrument", type, project) : undefined,
+    hue: info && deviceHue(info),
+  };
+}
+
 /** What draws a project's own MIDI device's portrait: the device, to register where it's drawn. */
 function midiDrawing(type: string, project: ExploreProject): PortraitJob | undefined {
   const device = project.customMidiDevices.find((each) => each.type === type);

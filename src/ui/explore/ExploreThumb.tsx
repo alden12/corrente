@@ -72,6 +72,7 @@ export function ExploreThumb({
   drawing,
   hue: ownHue,
   size,
+  badge = true,
 }: {
   category: ExploreCategory;
   seed?: string;
@@ -82,6 +83,8 @@ export function ExploreThumb({
   /** A device's own colour, in place of the category's. */
   hue?: number;
   size: number;
+  /** The category's badge over a portrait; too small to read on a tab-sized thumb. */
+  badge?: boolean;
 }) {
   const hue = ownHue ?? CATEGORIES[category].hue + hueShift(seed);
   const [watch, drawn] = useDrawnPortrait(shipped ? undefined : drawing);
@@ -116,7 +119,7 @@ export function ExploreThumb({
       ) : (
         <Glyph category={category} size={size * 0.48} />
       )}
-      {portrait && (
+      {portrait && badge && (
         <span
           className="absolute top-0.5 left-0.5 flex items-center justify-center rounded-full bg-black/45 text-white"
           style={{ width: size * BADGE, height: size * BADGE }}

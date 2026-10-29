@@ -15,13 +15,23 @@ export function InlineRename({
   onCommit,
   className = "",
   title,
+  startEditing = false,
+  onDone,
 }: {
   value: string;
   onCommit: (name: string) => void;
   className?: string;
   title?: string;
+  /** Open as the input, for a rename started elsewhere (an editor tab's menu, DAW-89). */
+  startEditing?: boolean;
+  /** Called once the rename is committed or cancelled. */
+  onDone?: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(startEditing);
+  const setEditing = (on: boolean) => {
+    setEditingState(on);
+    if (!on) onDone?.();
+  };
   const [draft, setDraft] = useState(value);
 
   const commit = () => {
