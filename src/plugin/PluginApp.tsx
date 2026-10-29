@@ -48,6 +48,8 @@ export function PluginApp({
   const [panelCollapsed, setPanelCollapsed] = usePersistentBoolean("corrente:plugin-panel-collapsed", false);
   const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:plugin-devices-open", true);
   const [macrosOpen, setMacrosOpen] = usePersistentBoolean("corrente:plugin-macros-open", true);
+  // The knobs wear their macro badges only while the macros show; mapping one by right-click works either way.
+  const extras = macrosOpen ? macroView.extras : { ...macroView.extras, badge: () => undefined };
   const columnRef = useRef<HTMLElement>(null);
   const scrollToDevice = (key: string) =>
     columnRef.current
@@ -83,7 +85,7 @@ export function PluginApp({
               onDevice={scrollToDevice}
             />
             {devicesOpen && (
-              <KnobExtrasProvider value={macroView.extras}>
+              <KnobExtrasProvider value={extras}>
                 <DeviceRack
                   track={track}
                   samples={project.getSamples()}
