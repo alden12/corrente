@@ -1,13 +1,14 @@
 /**
  * The activity rail (far left): a thin icon bar that switches the library panel
  * between one view at a time - Explore / Project / Activity / Agent - under a Search icon that
- * opens Explore's search, with the app's status and your account at its foot. Clicking the active
+ * opens Explore's search, with the app's status, the beta chip and your account at its foot. Clicking the active
  * icon collapses the panel to just this rail; clicking any other icon selects
  * that view (expanding first if collapsed). The set of views is data (libraryViews.tsx),
  * shared with the touch shell's strip, so adding one is a single entry there.
  */
 import type { ReactNode } from "react";
 import { AccountAvatar } from "./AccountAvatar";
+import { BetaChip } from "./BetaChip";
 import { RAIL_ITEMS, type LibraryView, type RailItem } from "./libraryViews";
 
 export type { LibraryView, RailItem } from "./libraryViews";
@@ -92,6 +93,7 @@ export function ActivityRail({
           local/dev too, from your handle, so it is there whether or not anyone is signed in. */}
       <div className="mt-auto flex flex-col items-center w-full">
         {indicators}
+        <BetaChip className="my-1.5" />
         {onOpenSettings && (
           <button
             type="button"
