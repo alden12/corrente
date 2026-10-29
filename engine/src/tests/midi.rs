@@ -19,6 +19,7 @@ const TRANSPOSE: f64 = 4.0;
 const VELOCITY: f64 = 5.0;
 const EUCLID: f64 = 6.0;
 const RATCHET: f64 = 7.0;
+const STRUM: f64 = 8.0;
 const CHORD: f64 = 5.0;
 
 // TS: const fixed = (value: number) => [0, value]; const bound = (value: number) => [1, value, 1, 0, 0]; const random = (min, max) => [2, min, max]
@@ -327,4 +328,49 @@ fn a_ratchet_repeats_each_onset_through_its_step_even_past_the_block() {
     // A sixteenth (6000 samples) in thirds, each played for half a third.
     assert_eq!(ons(&played), vec![(0, C), (sixteenth / 3, C), (2 * sixteenth / 3, C)]);
     assert!(played.contains(&(sixteenth / 6, off(C))));
+}
+
+/// A strum: each note a 64th (1500 samples here) after the one before, together within a 32nd.
+// TS: device(fixed(0), [input, strum(notes: input, spread 1/64, direction, tilt, window 1/32)], 1)
+fn strum(direction: f64, tilt: f64) -> Vec<f64> {
+    device(fixed(0.0), &[node(INPUT, &[], &[]), node(STRUM, &[&[0]], &[fixed(0.0625), fixed(direction), fixed(tilt), fixed(0.125)])], 1)
+}
+
+#[test]
+fn a_strum_spreads_a_chord_and_its_note_offs_wait_as_long_as_its_ons() {
+    let mut chain = parse(&chain_words(&[], &[strum(0.0, 0.0)]));
+    let chord = [(0, 10, on(E)), (0, 10, on(G)), (0, 10, on(C)), (156, 32, off(C)), (156, 32, off(E)), (156, 32, off(G))];
+    let played = run(&mut chain, 200, &chord, steady);
+    assert_eq!(ons(&played), vec![(10, C), (1510, E), (3010, G)]);
+    let release = 156 * 128 + 32;
+    assert!(played.contains(&(release, off(C))) && played.contains(&(release + 1500, off(E))) && played.contains(&(release + 3000, off(G))));
+}
+
+#[test]
+fn a_strum_goes_down_alternates_and_tilts_its_velocity() {
+    let notes = |direction: f64, tilt: f64, keys: &[(u64, i32, Event)]| {
+        let mut chain = parse(&chain_words(&[], &[strum(direction, tilt)]));
+        run(&mut chain, 300, keys, steady)
+    };
+    let chord = |block: u64| [(block, 0, on(C)), (block, 0, on(E)), (block, 0, on(G))];
+    let down = notes(1.0, 0.0, &chord(0));
+    assert_eq!(ons(&down).iter().map(|&(_, note)| note).collect::<Vec<_>>(), vec![G, E, C]);
+    // Alternate: up, then down for the next chord (well past the window).
+    let both: Vec<(u64, i32, Event)> = chord(0).into_iter().chain(chord(100)).collect();
+    let alternating = ons(&notes(2.0, 0.0, &both)).iter().map(|&(_, note)| note).collect::<Vec<_>>();
+    assert_eq!(alternating, vec![C, E, G, G, E, C]);
+    // Tilt -0.25: each note a quarter quieter than full.
+    // TS: const velocities = played.flatMap(([, event]) => event.kind === "on" ? [event.velocity] : [])
+    let velocities: Vec<f32> = notes(0.0, -0.25, &chord(0)).iter().filter_map(|&(_, event)| if let Event::On { velocity, .. } = event { Some(velocity) } else { None }).collect();
+    assert_eq!(velocities, vec![1.0, 0.75, 0.5]);
+}
+
+#[test]
+fn a_strum_lets_go_of_what_it_played_when_the_chain_clears() {
+    let mut chain = parse(&chain_words(&[], &[strum(0.0, 0.0)]));
+    run(&mut chain, 20, &[(0, 0, on(C)), (0, 0, on(E)), (0, 0, on(G))], steady);
+    chain.clear();
+    // Only C (at 0) and E (at 1500) had played; G was still waiting, and is dropped.
+    let after: Vec<Event> = chain.block(20 * 128, steady(20)).iter().map(|&(_, event)| event).collect();
+    assert!(!after.contains(&on(G)), "{after:?}");
 }

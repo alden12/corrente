@@ -1,8 +1,8 @@
 /** MCP tools: MIDI devices (on an instrument track's note chain). */
 import { z } from "zod";
-import { midiDeviceInfos, hasMidiDevice, midiDeviceSchema } from "../../../src/audio/midi/device/catalog";
+import { midiDeviceSchema } from "../../../src/audio/midi/device/catalog";
 import { readParamValue, validateParam } from "../../../src/audio/params/validate";
-import { makeMidiDeviceId, ok, fail } from "../shared";
+import { makeMidiDeviceId, midiDevicesFor, projectHasMidiDevice, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
 
 export function registerMidiDevicesTools({
@@ -29,7 +29,7 @@ export function registerMidiDevicesTools({
         JSON.stringify(
           {
             track: r.id,
-            available: midiDeviceInfos().map((def) => ({ id: def.type, label: def.label })),
+            available: midiDevicesFor(target.project).map((def) => ({ id: def.type, label: def.label })),
             devices: r.track.midiDevices.map((device) => ({
               id: device.id,
               type: device.type,
@@ -48,16 +48,16 @@ export function registerMidiDevicesTools({
     {
       title: "Add MIDI device",
       description:
-        "Append a MIDI device to an instrument track's note chain (see list_midi_devices for types). Returns the new device id.",
+        "Append a MIDI device to an instrument track's note chain (see list_midi_devices for types, including the project's own from create_midi_device). Returns the new device id.",
       inputSchema: { ...trackArg, device: z.string() },
     },
     async ({ track, device }) => {
       const r = resolveInstrumentTrack(track);
       if ("error" in r) return fail(r.error);
-      if (!hasMidiDevice(device)) {
+      if (!projectHasMidiDevice(target.project, device)) {
         return fail(
-          `Unknown MIDI device "${device}". Options: ${midiDeviceInfos()
-            .map((d) => d.type)
+          `Unknown MIDI device "${device}". Options: ${midiDevicesFor(target.project)
+            .map((info) => info.type)
             .join(", ")}.`,
         );
       }

@@ -210,6 +210,91 @@ describe("MCP server (tracks)", () => {
     await call("remove_custom_device", { deviceType: type });
   });
 
+  /** A strum as a MIDI device (INST-35): a spread knob in beats, and the strum's direction. */
+  const strum = {
+    label: "Strum",
+    schema: [
+      { id: "spread", label: "Spread", kind: "number", min: 0.01, max: 0.25, default: 0.0625, taper: "linear" },
+      { id: "direction", label: "Direction", kind: "enum", options: ["up", "down", "alternate"], default: "up" },
+    ],
+    definition: {
+      format: 1,
+      nodes: {
+        keys: { node: "input" },
+        strum: {
+          node: "strum",
+          inputs: { notes: "keys", spread: { param: "spread" }, direction: { param: "direction" } },
+        },
+      },
+      output: "strum",
+    },
+  };
+
+  it("create_midi_device stores a MIDI device the project's tracks can then add, edit and remove", async () => {
+    const messages = await connectTab();
+    /** The tab's first message of a type, once it arrives. */
+    const sent = async (type: string) => {
+      await waitFor(() => typesOf(messages).includes(type));
+      return messages.find((message) => (message as { type: string }).type === type);
+    };
+    const trackId = await makeTrack();
+    const created = await call("create_midi_device", strum);
+    expect(created.isError).toBeFalsy();
+    const type = /type (cm-\w+)/.exec(created.content[0].text)![1];
+    expect(await sent("addCustomMidiDevice")).toMatchObject({ def: { type, label: "Strum" } });
+    expect(parse(await call("list_midi_devices", { track: trackId })).available).toContainEqual({
+      id: type,
+      label: "Strum",
+    });
+    expect((await call("add_midi_device", { track: trackId, device: type })).isError).toBeFalsy();
+    expect(parse(await call("list_custom_devices")).midiDevices).toEqual([
+      { type, label: "Strum", params: 2, uses: 1 },
+    ]);
+    // An edit keeps the type, so the track's device picks it up.
+    const edited = await call("update_midi_device", {
+      deviceType: type,
+      ...strum,
+      label: undefined,
+      schema: strum.schema.slice(0, 1),
+      definition: {
+        ...strum.definition,
+        nodes: {
+          ...strum.definition.nodes,
+          strum: { node: "strum", inputs: { notes: "keys", spread: { param: "spread" }, direction: "alternate" } },
+        },
+      },
+    });
+    expect(edited.isError).toBeFalsy();
+    expect(await sent("updateCustomMidiDevice")).toMatchObject({ def: { type, label: "Strum" } });
+    expect(parse(await call("get_custom_device", { deviceType: type }))).toMatchObject({
+      kind: "midi",
+      label: "Strum",
+    });
+    expect((await call("remove_custom_device", { deviceType: type })).isError).toBeFalsy();
+    expect(await sent("removeCustomMidiDevice")).toEqual({ type: "removeCustomMidiDevice", deviceType: type });
+  });
+
+  it("create_midi_device names every problem, and the format doc lists the MIDI nodes", async () => {
+    await connectTab();
+    const broken = await call("create_midi_device", {
+      ...strum,
+      definition: {
+        format: 1,
+        nodes: {
+          keys: { node: "input" },
+          strum: { node: "strum", inputs: { notes: "nowhere", spread: { param: "missing" } } },
+        },
+        output: "strum",
+      },
+    });
+    expect(broken.isError).toBe(true);
+    expect(broken.content[0].text).toContain("strum.notes: there's no node nowhere");
+    expect(broken.content[0].text).toContain("strum.spread: there's no param missing");
+    expect(parse(await call("list_custom_devices")).midiDevices).toEqual([]);
+    const doc = parse(await call("describe_device_format"));
+    expect(Object.keys(doc.midiNodes)).toEqual(expect.arrayContaining(["input", "clock", "pick", "euclid", "strum"]));
+  });
+
   it("list_tracks reports the instrument palette and starts with no tracks", async () => {
     const data = parse(await call("list_tracks"));
     expect(data.connected).toBe(false);

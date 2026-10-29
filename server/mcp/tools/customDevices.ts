@@ -1,8 +1,16 @@
-/** MCP tools: Custom devices (author instruments and effects for the engine, stored in the project). */
+/** MCP tools: Custom devices (author instruments, effects and MIDI devices for the engine, stored in the project). */
 import { z } from "zod";
 import { parseCustomDevice, type CustomKind } from "../../../src/audio/definitions/custom";
 import { DEVICE_COLOR_NAMES, type DeviceColor } from "../../../src/audio/deviceColors";
-import { makeCustomInstrumentId, makeCustomEffectId, deviceFormatDoc, ok, fail } from "../shared";
+import {
+  makeCustomInstrumentId,
+  makeCustomEffectId,
+  makeCustomMidiDeviceId,
+  deviceFormatDoc,
+  ok,
+  fail,
+} from "../shared";
+import { parseCustomMidiDevice } from "../../../src/audio/midi/custom";
 import type { ToolContext } from "../context";
 import type { DeviceEdit } from "../../../src/audio/mcp/protocol";
 import { checkEffect, checkInstrument } from "../../../src/audio/render/deviceCheck";
@@ -61,7 +69,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "Describe device format",
       description:
-        "The format for custom instruments and effects: params, the engine's blocks with their ports and ranges, and how to wire them. Read this before create_instrument / create_effect.",
+        "The format for custom instruments, effects and MIDI devices: params, the engine's blocks with their ports and ranges, the MIDI event nodes, and how to wire them. Read this before create_instrument / create_effect / create_midi_device.",
       inputSchema: {},
     },
     async () => ok(JSON.stringify(deviceFormatDoc(), null, 2)),
@@ -165,12 +173,64 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     async ({ deviceType, ...input }) => update("effect", deviceType, input),
   );
 
+  /**
+   * A MIDI device: checked here, then sent as an edit like any other (no library yet), so it lands
+   * in the open app and the server's copy of the project together.
+   */
+  const storeMidi = (
+    verb: "Created" | "Updated",
+    type: string,
+    input: DeviceInput,
+    current?: { label?: string; color?: DeviceColor },
+  ) => {
+    const result = parseCustomMidiDevice({
+      ...input,
+      type,
+      label: input.label ?? current?.label,
+      color: input.color ?? current?.color,
+    });
+    if (!result.ok) return fail(`Invalid MIDI device:\n${result.errors.map((error) => `- ${error}`).join("\n")}`);
+    const command = verb === "Created" ? "addCustomMidiDevice" : "updateCustomMidiDevice";
+    if (!target.send({ type: command, def: result.device })) return fail(target.whyNotConnected());
+    target.project.addCustomMidiDevice(result.device);
+    return ok(
+      `${verb} MIDI device "${result.device.label ?? type}" (type ${type}).` +
+        (verb === "Created" ? ` Use add_midi_device with device "${type}".` : ""),
+    );
+  };
+
+  server.registerTool(
+    "create_midi_device",
+    {
+      title: "Create custom MIDI device",
+      description:
+        "Author a custom MIDI device (see describe_device_format's midiDevice and midiNodes) and store it in the project. It changes a track's notes before its instrument: arpeggiate, strum, harmonise, add rhythm. Returns its type id; use it with add_midi_device.",
+      inputSchema: deviceInput,
+    },
+    async (input) => storeMidi("Created", makeCustomMidiDeviceId(), input),
+  );
+
+  server.registerTool(
+    "update_midi_device",
+    {
+      title: "Edit custom MIDI device",
+      description:
+        "Replace a custom MIDI device's definition, keeping its type id, so every track using it picks up the change (params it still has keep their values). Pass the whole new device: read it with get_custom_device, change it, send it back. Omit label or color to keep the current ones.",
+      inputSchema: { deviceType: z.string(), ...deviceInput },
+    },
+    async ({ deviceType, ...input }) => {
+      const current = target.project.customMidiDevices.find((device) => device.type === deviceType);
+      if (!current) return fail(`No custom MIDI device with type "${deviceType}". Use list_custom_devices.`);
+      return storeMidi("Updated", deviceType, input, current);
+    },
+  );
+
   server.registerTool(
     "get_custom_device",
     {
       title: "Get custom device",
       description:
-        "A custom instrument's or effect's full device (label, schema and definition), to read before update_instrument / update_effect.",
+        "A custom instrument's, effect's or MIDI device's full device (label, schema and definition), to read before update_instrument / update_effect / update_midi_device.",
       inputSchema: { deviceType: z.string() },
     },
     async ({ deviceType }) => {
@@ -178,6 +238,8 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
       if (instrument) return ok(JSON.stringify({ kind: "instrument", ...instrument }, null, 2));
       const effect = target.project.customEffects.find((def) => def.type === deviceType);
       if (effect) return ok(JSON.stringify({ kind: "effect", ...effect }, null, 2));
+      const midi = target.project.customMidiDevices.find((def) => def.type === deviceType);
+      if (midi) return ok(JSON.stringify({ kind: "midi", ...midi }, null, 2));
       return fail(`No custom device with type "${deviceType}". Use list_custom_devices.`);
     },
   );
@@ -187,7 +249,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     {
       title: "List custom devices",
       description:
-        "The project's user/AI-authored instruments and effects. `uses` counts the tracks playing an instrument or the slots holding an effect; one at 0 is safe to remove.",
+        "The project's user/AI-authored instruments, effects and MIDI devices. `uses` counts the tracks playing an instrument or the slots holding an effect or MIDI device; one at 0 is safe to remove.",
       inputSchema: {},
     },
     async () => {
@@ -202,6 +264,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
           {
             instruments: target.project.customInstruments.map(describe),
             effects: target.project.customEffects.map(describe),
+            midiDevices: target.project.customMidiDevices.map(describe),
           },
           null,
           2,
@@ -214,7 +277,7 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     "remove_custom_device",
     {
       title: "Remove custom device",
-      description: "Delete a custom instrument or effect by its type id (see list_custom_devices).",
+      description: "Delete a custom instrument, effect or MIDI device by its type id (see list_custom_devices).",
       inputSchema: { deviceType: z.string() },
     },
     async ({ deviceType }) => {
@@ -227,6 +290,11 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
         if (!target.send({ type: "removeCustomEffect", deviceType })) return fail(target.whyNotConnected());
         target.project.removeCustomEffect(deviceType);
         return ok(`Removed custom effect ${deviceType}.`);
+      }
+      if (target.project.customMidiDevices.some((def) => def.type === deviceType)) {
+        if (!target.send({ type: "removeCustomMidiDevice", deviceType })) return fail(target.whyNotConnected());
+        target.project.removeCustomMidiDevice(deviceType);
+        return ok(`Removed custom MIDI device ${deviceType}.`);
       }
       return fail(`No custom device with type "${deviceType}". Use list_custom_devices.`);
     },

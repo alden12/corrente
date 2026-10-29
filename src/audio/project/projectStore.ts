@@ -36,7 +36,15 @@ import {
   EMPTY_INSTRUMENT,
 } from "../instruments/catalog";
 import { hasEffect, effectSchema, registerEffect, unregisterEffect, DEFAULT_EFFECT } from "../effects/catalog";
-import { hasMidiDevice, midiDeviceSchema, DEFAULT_MIDI_DEVICE } from "../midi/device/catalog";
+import {
+  hasMidiDevice,
+  midiDeviceSchema,
+  DEFAULT_MIDI_DEVICE,
+  registerMidiDevice,
+  unregisterMidiDevice,
+} from "../midi/device/catalog";
+import { parseCustomMidiDevices, type CustomMidiDevice } from "../midi/custom";
+import { registerEngineMidiDevice, unregisterEngineMidiDevice } from "../midi/engine";
 import { parseCustomDevices, type CustomDevice, type UnreadableDevices } from "../definitions/custom";
 import type { DeviceRef } from "../library/backend";
 import type { SoundDevices } from "../patches/sound";
@@ -213,6 +221,9 @@ export class ProjectStore {
   private deviceRefs: Record<string, DeviceRef> = {};
   /** Custom devices this build could not read, kept as stored and written back out (parseCustomDevices). */
   private unreadableDevices: UnreadableDevices = { instruments: [], effects: [] };
+  /** Custom MIDI devices (INST-11.3), and the ones this build could not read, kept as stored. */
+  private customMidiDeviceDefs: CustomMidiDevice[] = [];
+  private unreadableMidiDevices: unknown[] = [];
   private selectedTrackId: string | null = null;
   private readonly listeners = createListeners();
   private cached: ProjectStructure | null = null;
@@ -1465,6 +1476,7 @@ export class ProjectStore {
       // Ones this build could not read go back out as they came in, for a build that can.
       customInstruments: [...this.customInstrumentDefs, ...(this.unreadableDevices.instruments as CustomDevice[])],
       customEffects: [...this.customEffectDefs, ...(this.unreadableDevices.effects as CustomDevice[])],
+      customMidiDevices: [...this.customMidiDeviceDefs, ...(this.unreadableMidiDevices as CustomMidiDevice[])],
       deviceLibrary: sortedByKey(this.deviceRefs),
     });
   }
@@ -1517,6 +1529,9 @@ export class ProjectStore {
   get customEffects(): CustomDevice[] {
     return this.customEffectDefs;
   }
+  get customMidiDevices(): CustomMidiDevice[] {
+    return this.customMidiDeviceDefs;
+  }
   /** Which library version a custom device's copy is, where the project knows. */
   deviceRef(type: string): DeviceRef | undefined {
     return this.deviceRefs[type];
@@ -1556,6 +1571,20 @@ export class ProjectStore {
     unregisterEffect(type);
     unregisterEngineDevice(type);
   }
+  private registerMidiDef(def: CustomMidiDevice): void {
+    registerMidiDevice({
+      type: def.type,
+      label: def.label ?? def.type,
+      color: def.color,
+      schema: def.schema,
+      custom: true,
+    });
+    registerEngineMidiDevice(def.type, def.definition);
+  }
+  private unregisterMidiDef(type: string): void {
+    unregisterMidiDevice(type);
+    unregisterEngineMidiDevice(type);
+  }
 
   /**
    * Validate + (re)register the project's custom device schemas, replacing any previously
@@ -1566,7 +1595,12 @@ export class ProjectStore {
   private syncCustomDevices(data: ProjectData): void {
     for (const def of this.customInstrumentDefs) this.unregisterInstrumentDef(def.type);
     for (const def of this.customEffectDefs) this.unregisterEffectDef(def.type);
+    for (const def of this.customMidiDeviceDefs) this.unregisterMidiDef(def.type);
     const { instruments, effects, unreadable } = parseCustomDevices(data);
+    const midi = parseCustomMidiDevices(data.customMidiDevices);
+    this.customMidiDeviceDefs = midi.devices;
+    this.unreadableMidiDevices = midi.unreadable;
+    midi.devices.forEach((def) => this.registerMidiDef(def));
     this.customInstrumentDefs = instruments;
     this.customEffectDefs = effects;
     this.unreadableDevices = unreadable;
@@ -1605,6 +1639,23 @@ export class ProjectStore {
     this.emit();
   }
 
+  /** Add (or replace by type) a custom MIDI device (INST-11.3), as addCustomInstrument does. */
+  addCustomMidiDevice(def: CustomMidiDevice): void {
+    this.customMidiDeviceDefs = [...this.customMidiDeviceDefs.filter((existing) => existing.type !== def.type), def];
+    this.registerMidiDef(def);
+    this.tracks
+      .flatMap((track) => (track.kind === "instrument" ? track.midiDevices : []))
+      .filter((device) => device.type === def.type)
+      .forEach((device) => device.params.reschema(def.schema));
+    this.emit();
+  }
+  removeCustomMidiDevice(type: string): void {
+    if (!this.customMidiDeviceDefs.some((def) => def.type === type)) return;
+    this.customMidiDeviceDefs = this.customMidiDeviceDefs.filter((def) => def.type !== type);
+    this.unregisterMidiDef(type);
+    this.emit();
+  }
+
   /**
    * Take a sound's custom devices into the project (COMM-1.11.1): the ones it doesn't have yet. A
    * device's type is its id for good and a project holds one version of each, so where the project
@@ -1620,14 +1671,17 @@ export class ProjectStore {
       .forEach((device) => this.addCustomEffect(device));
   }
 
-  /** How many tracks play a custom instrument, or how many slots hold a custom effect: what
-   *  removing it would leave without a sound. */
+  /** How many tracks play a custom instrument, or how many slots hold a custom effect or MIDI
+   *  device: what removing it would leave without a sound. */
   customDeviceUses(type: string): number {
     const instruments = this.tracks.filter((track) => track.kind === "instrument" && track.instrumentType === type);
     const effects = [...this.tracks, ...this.groups]
       .flatMap((host) => host.effects)
       .filter((effect) => effect.type === type);
-    return instruments.length + effects.length;
+    const midi = this.tracks
+      .flatMap((track) => (track.kind === "instrument" ? track.midiDevices : []))
+      .filter((device) => device.type === type);
+    return instruments.length + effects.length + midi.length;
   }
   removeCustomEffect(type: string): void {
     if (!this.customEffectDefs.some((def) => def.type === type)) return;

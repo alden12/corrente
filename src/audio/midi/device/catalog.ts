@@ -57,6 +57,8 @@ export interface MidiDeviceInfo {
   tags?: readonly Tag[];
   /** Its colour (DAW-61.2); read it through `deviceColor`, which fills in one that is missing. */
   color?: DeviceColor;
+  /** A project's own device (INST-11.3), registered while that project is open. */
+  custom?: boolean;
 }
 
 /** The MIDI-device data registry (insertion order = palette / add-button order). */
@@ -66,6 +68,11 @@ const REGISTRY = new Map<string, MidiDeviceInfo>();
  *  separately in registry.ts, so this stays DOM-free for the server. */
 export function registerMidiDevice(info: MidiDeviceInfo): void {
   REGISTRY.set(info.type, info);
+}
+
+/** Take a device out of the registry: a project's own device, as the project closes or drops it. */
+export function unregisterMidiDevice(type: string): void {
+  REGISTRY.delete(type);
 }
 
 /** Every registered device, in registration order (iterate this, never hardcode). */

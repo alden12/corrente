@@ -10,6 +10,7 @@
  * still owns id-minting, effect-chain reuse, and the orphan-track repair, which
  * need the live store).
  */
+import type { CustomMidiDevice } from "../midi/custom";
 import { ParamStore } from "../params/store";
 import { ClipStore } from "../sequencer/clipStore";
 import { effectSchema } from "../effects/catalog";
@@ -69,6 +70,7 @@ export interface TransportState {
   /** User-authored devices embedded in the project (see ProjectData). */
   customInstruments?: CustomDevice[];
   customEffects?: CustomDevice[];
+  customMidiDevices?: CustomMidiDevice[];
   /** Which library version each custom device is (see ProjectData). */
   deviceLibrary?: Record<string, DeviceRef>;
 }
@@ -149,6 +151,7 @@ export function snapshotProject(tracks: Track[], groups: Group[], transport: Tra
     authorship: { ...(transport.authorship ?? {}) },
     customInstruments: (transport.customInstruments ?? []).map((def) => ({ ...def })),
     customEffects: (transport.customEffects ?? []).map((def) => ({ ...def })),
+    customMidiDevices: (transport.customMidiDevices ?? []).map((def) => ({ ...def })),
     deviceLibrary: { ...(transport.deviceLibrary ?? {}) },
     deviceFormatVersion: DEVICE_FORMAT_VERSION,
   };

@@ -1,10 +1,10 @@
 /**
  * A track's MIDI devices in the engine (INST-11.1), kept in step with the project: an
- * `EngineInstrument` holds one. A new set of devices (added, removed, moved, or a store swapped) loads
- * the chain again, which starts the keys down again in it; a knob or a bypass moves its value alone,
+ * `EngineInstrument` holds one. A new set of devices (added, removed, moved, a store swapped, or a
+ * device's definition edited) loads the chain again, which starts the keys down again in it; a knob or a bypass moves its value alone,
  * so the notes it holds play on.
  */
-import { chainWords } from "../midi/compile";
+import { chainWords, type MidiDevicePlan } from "../midi/compile";
 import { chainDevicesOf, engineMidiPlan, engineParamValue, type MidiDeviceSource } from "../midi/engine";
 import { bindParams, type ParamBinding } from "../params/binding";
 import type { ToBank } from "./messages";
@@ -14,6 +14,8 @@ type Send = (message: DistributiveOmit<Extract<ToBank, { type: "midi" | "midiVal
 
 export class EngineMidiChain {
   private devices: readonly MidiDeviceSource[] = [];
+  /** The plan each device played when the chain last loaded. */
+  private plans: (MidiDevicePlan | undefined)[] = [];
   /** Which of the chain's values is each device's bypass. */
   private bypassValues: number[] = [];
   /** Whether each device is bypassed, as last sent. */
@@ -34,7 +36,12 @@ export class EngineMidiChain {
       devices.length === this.devices.length &&
       devices.every((device, index) => {
         const before = this.devices[index];
-        return device.id === before.id && device.type === before.type && device.params === before.params;
+        return (
+          device.id === before.id &&
+          device.type === before.type &&
+          device.params === before.params &&
+          engineMidiPlan(device.type) === this.plans[index]
+        );
       });
     if (!same) {
       this.load(devices);
@@ -51,6 +58,7 @@ export class EngineMidiChain {
   private load(devices: readonly MidiDeviceSource[]): void {
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     this.devices = devices;
+    this.plans = devices.map((device) => engineMidiPlan(device.type));
     this.bypassed = devices.map((device) => device.bypassed);
     const chain = chainWords(chainDevicesOf(devices));
     this.send({ type: "midi", words: chain.words });

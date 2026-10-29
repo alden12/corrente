@@ -24,6 +24,7 @@ mod chain;
 mod clock;
 mod nodes;
 mod rhythm;
+mod strum;
 mod words;
 
 pub use chain::Chain;

@@ -8,6 +8,8 @@ import type { ProjectStore } from "../../src/audio/project/projectStore";
 import { catalogEntry, hasInstrument, pickableInstrumentInfos } from "../../src/audio/instruments/catalog";
 import { effectCatalogEntry, effectInfos, hasEffect } from "../../src/audio/effects/catalog";
 import { definitionFormatDoc } from "../../src/audio/definitions/describe";
+import { midiFormatDoc } from "../../src/audio/midi/describe";
+import { hasMidiDevice, midiDeviceCatalogEntry, midiDeviceInfos } from "../../src/audio/midi/device/catalog";
 import { paramSpecSchema } from "../../src/audio/params/declaration";
 
 /** The param kinds a schema may declare, read off the same zod that checks them. */
@@ -23,6 +25,7 @@ export const makeClipId = () => `c-${randomId().slice(0, 8)}`;
 export const makePlacementId = () => `p-${randomId().slice(0, 8)}`;
 export const makeCustomInstrumentId = () => `ci-${randomId().slice(0, 8)}`;
 export const makeCustomEffectId = () => `ce-${randomId().slice(0, 8)}`;
+export const makeCustomMidiDeviceId = () => `cm-${randomId().slice(0, 8)}`;
 
 /** The custom-device format, as data the AI can read before authoring one: the engine's, in a wrapper. */
 export const deviceFormatDoc = () => ({
@@ -43,6 +46,7 @@ export const deviceFormatDoc = () => ({
     "that never stops; fix those before using it.",
   paramKinds: paramKindsDoc,
   ...definitionFormatDoc(),
+  ...midiFormatDoc(),
   designing:
     'To design to a brief ("warm and a bit glassy"), look it up with list_patches\' `tags` first: the patches ' +
     "carrying those tags, and their instruments' definitions, are worked examples to start from.",
@@ -74,3 +78,8 @@ export const projectHasInstrument = (project: ProjectStore, type: string) =>
 /** Whether a project can use an effect type: a built-in, or its own custom one. */
 export const projectHasEffect = (project: ProjectStore, type: string) =>
   hasEffect(type) && (!effectCatalogEntry(type).custom || owns(project.customEffects, type));
+export const midiDevicesFor = (project: ProjectStore) =>
+  midiDeviceInfos().filter((info) => !info.custom || owns(project.customMidiDevices, info.type));
+/** Whether a project can use a MIDI device type: a built-in, or its own custom one. */
+export const projectHasMidiDevice = (project: ProjectStore, type: string) =>
+  hasMidiDevice(type) && (!midiDeviceCatalogEntry(type).custom || owns(project.customMidiDevices, type));

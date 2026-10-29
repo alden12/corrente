@@ -17,6 +17,7 @@
  * (unknown keys are ignored, not rejected) and the server stores the original JSON, so
  * validation is a gate, never a filter - evolving/extra fields never break a save.
  */
+import type { CustomMidiDevice } from "../midi/custom";
 import { z } from "zod";
 import type { CustomDevice } from "../definitions/custom";
 import { KEYFRAME_INDEX_PATH } from "../history/keyframes";
@@ -221,6 +222,8 @@ export const projectDataSchema = z.object({
   samples: z.array(sampleAssetSchema).optional(),
   customInstruments: z.array(customInstrumentSchema).optional(),
   customEffects: z.array(customEffectSchema).optional(),
+  /** Custom MIDI devices (INST-11.3), unchecked here like the others: parseCustomMidiDevices sets aside what won't read. */
+  customMidiDevices: z.array(z.unknown() as unknown as z.ZodType<CustomMidiDevice>).optional(),
   /**
    * Which library version each custom device's copy is, by type (COMM-1.11.2). Optional: a device
    * from before the library, or one taken in with a patch, has none.

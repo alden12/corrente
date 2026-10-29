@@ -12,7 +12,9 @@
  *
  * Pure data, DOM/Node-free - the server imports this.
  */
-export const PROTOCOL_VERSION = 1;
+// 2: custom MIDI devices' edit commands (INST-11.3). A version-1 client can't apply them, but only
+// meets one in a project where someone adds a custom MIDI device, so it's still served.
+export const PROTOCOL_VERSION = 2;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

@@ -73,6 +73,9 @@ const APPLY: ApplyMap = {
   // Adding replaces by type, so an edit is the same store call; the command stays distinct for history.
   updateCustomInstrument: (project, command) => project.addCustomInstrument(command.def, command.library),
   updateCustomEffect: (project, command) => project.addCustomEffect(command.def, command.library),
+  addCustomMidiDevice: (project, command) => project.addCustomMidiDevice(command.def),
+  updateCustomMidiDevice: (project, command) => project.addCustomMidiDevice(command.def),
+  removeCustomMidiDevice: (project, command) => project.removeCustomMidiDevice(command.deviceType),
   setAudioClip: (project, command) => project.setAudioClip(command.trackId, command.clipId, command.patch),
   addAudioClip: (project, command) => project.addAudioClip(command),
   // A recorded MIDI take: create the clip (with its notes), punch it in over the

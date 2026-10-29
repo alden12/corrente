@@ -6,6 +6,7 @@
  * (a track or a group) addressed by `hostId`; transport and tempo are
  * project-level.
  */
+import type { CustomMidiDevice } from "../midi/custom";
 import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
 import type { ClipContent, ProjectData } from "../project/types";
@@ -77,6 +78,10 @@ export type ServerToBrowser =
   | DeviceEdit
   | { type: "removeCustomInstrument"; deviceType: string }
   | { type: "removeCustomEffect"; deviceType: string }
+  // Custom MIDI devices (INST-11.3), the same way: a MIDI-format definition, addressed by `type`.
+  | { type: "addCustomMidiDevice"; def: CustomMidiDevice }
+  | { type: "updateCustomMidiDevice"; def: CustomMidiDevice }
+  | { type: "removeCustomMidiDevice"; deviceType: string }
   // Group structure (bus tree; id assigned by the creator so both ends agree)
   | { type: "createGroup"; id: string; name?: string; parentId?: string | null }
   | { type: "removeGroup"; groupId: string }

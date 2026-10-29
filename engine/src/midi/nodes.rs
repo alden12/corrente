@@ -12,6 +12,7 @@
 //! - **transpose**: moves each note by `semitones`.
 //! - **velocity**: scales each note's velocity.
 //! - **euclid** and **ratchet** (rhythm.rs): pass on some of a clock's ticks, or repeat them.
+//! - **strum** (strum.rs): spreads the notes of a chord out in time.
 //!
 //! A note that's moved keeps track of where it went, so its note off lets go of the same notes even if
 //! a knob moved in between. A note off nobody played passes through as it is: letting go of a note
@@ -19,6 +20,7 @@
 
 use super::clock::Clock;
 use super::rhythm::{self, Ratchet};
+use super::strum::Strum;
 use super::{BlockTransport, Event, Field, MAX_COPIES, MAX_EVENTS, MAX_HELD, Timed, draw};
 
 /// What a port or an output carries.
@@ -46,7 +48,7 @@ pub enum Fields {
 }
 
 // TS: the same list as midi/format.ts's NODE_SPECS, by kind number.
-pub const SPECS: [Spec; 8] = [
+pub const SPECS: [Spec; 9] = [
     Spec { ports: &[], fields: Fields::Exactly(0), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Ticks },
     Spec { ports: &[Wire::Notes, Wire::Ticks], fields: Fields::Exactly(3), output: Wire::Notes },
@@ -55,6 +57,7 @@ pub const SPECS: [Spec; 8] = [
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Ticks], fields: Fields::Exactly(4), output: Wire::Ticks },
     Spec { ports: &[Wire::Ticks], fields: Fields::Exactly(1), output: Wire::Ticks },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(4), output: Wire::Notes },
 ];
 pub const KIND_INPUT: usize = 0;
 pub const KIND_CLOCK: usize = 1;
@@ -64,6 +67,7 @@ pub const KIND_TRANSPOSE: usize = 4;
 pub const KIND_VELOCITY: usize = 5;
 pub const KIND_EUCLID: usize = 6;
 pub const KIND_RATCHET: usize = 7;
+pub const KIND_STRUM: usize = 8;
 
 /// A node's state, by kind.
 // TS: a discriminated union of each kind's state.
@@ -77,6 +81,7 @@ pub enum Kind {
     Velocity,
     Euclid,
     Ratchet(Ratchet),
+    Strum(Strum),
 }
 
 impl Kind {
@@ -91,6 +96,7 @@ impl Kind {
             KIND_VELOCITY => Kind::Velocity,
             KIND_EUCLID => Kind::Euclid,
             KIND_RATCHET => Kind::Ratchet(Ratchet::new()),
+            KIND_STRUM => Kind::Strum(Strum::new()),
             _ => return None,
         })
     }
@@ -155,6 +161,7 @@ impl Node {
             }),
             Kind::Euclid => rhythm::euclid(&inputs[0], fields, context, out),
             Kind::Ratchet(ratchet) => ratchet.process(&inputs[0], fields, context, out),
+            Kind::Strum(strum) => strum.process(&inputs[0], fields, context, out),
         }
     }
 
@@ -166,6 +173,7 @@ impl Node {
             Kind::Clock(clock) => clock.clear(),
             Kind::Pick(pick) => pick.clear(),
             Kind::Ratchet(ratchet) => ratchet.clear(),
+            Kind::Strum(strum) => strum.clear(offset, out),
             Kind::Stack(map) | Kind::Transpose(map) => map.clear(offset, out),
             Kind::Input | Kind::Velocity | Kind::Euclid => {}
         }

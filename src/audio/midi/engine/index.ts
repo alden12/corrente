@@ -13,11 +13,12 @@ import { octavatorDefinition } from "./octavator";
 import { arpeggiatorDefinition } from "./arpeggiator";
 import { euclideanDefinition } from "./euclidean";
 
-const DEFINITIONS: Record<string, MidiDefinition> = {
-  octavator: octavatorDefinition,
-  arpeggiator: arpeggiatorDefinition,
-  euclidean: euclideanDefinition,
-};
+/** The built-ins, and each open project's own devices (INST-11.3) as they register. */
+const DEFINITIONS = new Map<string, MidiDefinition>([
+  ["octavator", octavatorDefinition],
+  ["arpeggiator", arpeggiatorDefinition],
+  ["euclidean", euclideanDefinition],
+]);
 
 /** A device on a track, as the project holds it. */
 export interface MidiDeviceSource {
@@ -29,9 +30,23 @@ export interface MidiDeviceSource {
 
 const plans = new Map<string, MidiDevicePlan>();
 
-/** A device type's plan, compiled once against its schema; undefined if the engine doesn't play it. */
+/** Play a project's own device by its definition, replacing any before it (checked: parseCustomMidiDevice). */
+export const registerEngineMidiDevice = (type: string, definition: MidiDefinition): void => {
+  DEFINITIONS.set(type, definition);
+  plans.delete(type);
+};
+
+export const unregisterEngineMidiDevice = (type: string): void => {
+  DEFINITIONS.delete(type);
+  plans.delete(type);
+};
+
+/**
+ * A device type's plan, compiled once against its schema; undefined if the engine doesn't play it.
+ * A device edited gets a new plan, so whoever holds the old one can tell.
+ */
 export const engineMidiPlan = (type: string): MidiDevicePlan | undefined => {
-  const definition = DEFINITIONS[type];
+  const definition = DEFINITIONS.get(type);
   if (!definition) return undefined;
   const plan = plans.get(type) ?? compileMidiDevice(definition, midiDeviceSchema(type));
   plans.set(type, plan);

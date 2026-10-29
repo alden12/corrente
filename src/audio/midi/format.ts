@@ -76,6 +76,9 @@ export interface NodeSpec {
 /** The directions a pick walks what's held; a chord plays all of it at once. */
 export const PICK_DIRECTIONS = ["up", "down", "updown", "random", "played", "chord"] as const;
 
+/** The directions a strum plays a chord's notes on the same sample. */
+export const STRUM_DIRECTIONS = ["up", "down", "alternate"] as const;
+
 /**
  * The palette, in the order the engine numbers the kinds (engine/src/midi/nodes.rs's SPECS): each
  * kind's ports and fields, in the order the words carry them. The two change together.
@@ -144,6 +147,19 @@ export const NODE_SPECS: readonly NodeSpec[] = [
     ports: [{ name: "ticks", wire: "ticks" }],
     fields: [{ name: "repeats", type: "number", min: 1, max: 8, default: 1 }],
     output: "ticks",
+  },
+  {
+    name: "strum",
+    description:
+      "spreads the notes of a chord out in time, each `spread` after the one before: notes starting within `window` of the first are one strum. Notes on the same sample go lowest first (up), highest first (down), or alternately; each note after the first is `tilt` louder (or quieter, below 0)",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [
+      { name: "spread", type: "beats", default: "1/64" },
+      { name: "direction", type: "choice", options: STRUM_DIRECTIONS, default: "up" },
+      { name: "tilt", type: "number", min: -1, max: 1, default: 0 },
+      { name: "window", type: "beats", default: "1/32" },
+    ],
+    output: "notes",
   },
 ];
 
