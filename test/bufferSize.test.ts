@@ -1,20 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
-  LIVE_STEP_KEY,
-  PLAYBACK_STEP_KEY,
   SETTING_KEY,
   BufferControl,
   type BufferActivity,
   type BufferEngine,
   type BufferStore,
 } from "../src/audio/engine/bufferControl";
-import { QUIET_FOR_MS, SETTLE_MS, canChange, wantedSize, type BufferSize } from "../src/audio/engine/bufferSize";
+import {
+  QUIET_FOR_MS,
+  SETTLE_MS,
+  SLOW_SECONDS_TO_GROW,
+  canChange,
+  wantedSize,
+  type BufferSize,
+} from "../src/audio/engine/bufferSize";
 import type { RecorderStatus } from "../src/audio/recording/recorder";
 
 /**
- * The output buffer picked for you (INST-36.9, INST-43): the smallest while stopped, and for
- * playback until this device glitches; each size grows on slow blocks heard at it, kept per device;
- * bigger for playback as Play is pressed, back once stopped and quiet; settable by hand.
+ * The output buffer picked for you (INST-36.9, INST-43, INST-53): the smallest while stopped, and for
+ * playback until this device glitches; each size grows on slow blocks heard at it in several separate
+ * seconds, for the session; bigger for playback as Play is pressed, back once stopped and quiet;
+ * settable by hand.
  */
 
 describe("the policy", () => {
@@ -56,7 +62,13 @@ const setUp = (saved: Record<string, string> = {}) => {
       return () => {};
     },
   } satisfies BufferEngine & { changes: BufferSize[] };
-  const state = { playing: false, status: "idle" as RecorderStatus, holding: false, lastPlayedAt: -Infinity };
+  const state = {
+    playing: false,
+    status: "idle" as RecorderStatus,
+    holding: false,
+    lastPlayedAt: -Infinity,
+    hidden: false,
+  };
   const activity: BufferActivity = {
     transport: {
       get isPlaying() {
@@ -72,11 +84,17 @@ const setUp = (saved: Record<string, string> = {}) => {
         return state.lastPlayedAt;
       },
     },
+    page: {
+      get hidden() {
+        return state.hidden;
+      },
+    },
   };
   const stored = { ...saved };
   const store: BufferStore = { read: (key) => stored[key] ?? null, write: (key, value) => (stored[key] = value) };
   const control = new BufferControl(engine, activity, store, () => time);
   control.start()();
+  const slow = (blocks: number) => slowListener(blocks);
   return {
     engine,
     state,
@@ -84,7 +102,13 @@ const setUp = (saved: Record<string, string> = {}) => {
     control,
     wait: (ms: number) => (time += ms),
     now: () => time,
-    slow: (blocks: number) => slowListener(blocks),
+    slow,
+    /** Slow blocks in enough separate seconds to grow a size. */
+    struggle: () =>
+      Array.from({ length: SLOW_SECONDS_TO_GROW }).forEach(() => {
+        slow(1);
+        time += 1000;
+      }),
   };
 };
 
@@ -103,12 +127,11 @@ describe("BufferControl", () => {
   });
 
   it("grows the playback size after slow blocks during playback, switching as Play is pressed", async () => {
-    const { engine, state, stored, control, slow, wait } = setUp();
+    const { engine, state, control, struggle, wait } = setUp();
     state.playing = true;
-    slow(4);
+    struggle();
     expect(control.snapshot.playbackSize).toBe("balanced");
     expect(control.snapshot.liveSize).toBe("interactive");
-    expect(stored[PLAYBACK_STEP_KEY]).toBe("1");
     // Not mid-playback: at the next Play.
     expect(engine.changes).toEqual([]);
     state.playing = false;
@@ -123,62 +146,85 @@ describe("BufferControl", () => {
   });
 
   it("doesn't grow playback for a take, and keeps the live size for one", async () => {
-    const { state, control, slow } = setUp({ [PLAYBACK_STEP_KEY]: "2" });
+    const { state, control, struggle } = setUp();
+    state.playing = true;
+    struggle();
+    state.playing = false;
     state.status = "counting";
     expect(control.beforePlay()).toBeNull();
     state.status = "recording";
     state.playing = true;
-    slow(10);
-    expect(control.snapshot.playbackSize).toBe("playback");
+    struggle();
+    expect(control.snapshot.playbackSize).toBe("balanced");
   });
 
-  it("grows the live size after slow blocks while stopped, and keeps it for this device", async () => {
+  it("grows the live size after slow blocks in separate seconds while stopped, for this session only", async () => {
     const { engine, stored, control, slow, wait } = setUp();
-    slow(2);
+    slow(1);
+    wait(1000);
+    slow(1);
     expect(control.snapshot.liveSize).toBe("interactive");
-    slow(2);
+    wait(1000);
+    slow(1);
     expect(control.snapshot.liveSize).toBe("balanced");
-    expect(stored[LIVE_STEP_KEY]).toBe("1");
     wait(QUIET_FOR_MS);
     await control.tick();
     expect(engine.bufferSize).toBe("balanced");
-    expect(setUp(stored).control.snapshot.liveSize).toBe("balanced");
+    // The next launch starts at the smallest again.
+    expect(setUp(stored).control.snapshot.liveSize).toBe("interactive");
+  });
+
+  it("doesn't grow for one bad second, however many slow blocks or reports it has", () => {
+    const { control, slow } = setUp();
+    Array.from({ length: 10 }).forEach(() => slow(50));
+    expect(control.snapshot.liveSize).toBe("interactive");
+  });
+
+  it("ignores slow blocks while the page is hidden", () => {
+    const { state, control, struggle } = setUp();
+    state.hidden = true;
+    struggle();
+    expect(control.snapshot.liveSize).toBe("interactive");
   });
 
   it("waits for a held note and quiet before shrinking back", async () => {
-    const { engine, state, control, wait, now } = setUp({ [LIVE_STEP_KEY]: "0", [PLAYBACK_STEP_KEY]: "2" });
+    const { engine, state, control, struggle, wait, now } = setUp();
+    state.playing = true;
+    struggle();
+    state.playing = false;
     await control.beforePlay();
-    expect(engine.bufferSize).toBe("playback");
+    expect(engine.bufferSize).toBe("balanced");
     state.holding = true;
     state.lastPlayedAt = now();
     wait(QUIET_FOR_MS);
     await control.tick();
-    expect(engine.bufferSize).toBe("playback");
+    expect(engine.bufferSize).toBe("balanced");
     state.holding = false;
     state.lastPlayedAt = now();
     await control.tick();
-    expect(engine.bufferSize).toBe("playback");
+    expect(engine.bufferSize).toBe("balanced");
     wait(QUIET_FOR_MS);
     await control.tick();
     expect(engine.bufferSize).toBe("interactive");
   });
 
   it("ignores slow blocks while the engine settles after starting, as on a fresh install", () => {
-    const { engine, control, slow, wait, now } = setUp();
+    const { engine, control, struggle, wait, now } = setUp();
     engine.startedAt = now();
-    slow(10);
-    wait(SETTLE_MS);
-    slow(3);
+    struggle();
     expect(control.snapshot.liveSize).toBe("interactive");
-    slow(1);
+    wait(SETTLE_MS);
+    struggle();
     expect(control.snapshot.liveSize).toBe("balanced");
   });
 
-  it("ignores slow blocks spread over more than a minute", () => {
+  it("ignores slow seconds spread over more than a minute", () => {
     const { control, slow, wait } = setUp();
-    slow(3);
-    wait(61_000);
-    slow(3);
+    slow(1);
+    wait(30_000);
+    slow(1);
+    wait(31_000);
+    slow(1);
     expect(control.snapshot.liveSize).toBe("interactive");
   });
 
@@ -194,7 +240,10 @@ describe("BufferControl", () => {
   });
 
   it("does nothing before audio has started", async () => {
-    const { engine, control, wait } = setUp({ [PLAYBACK_STEP_KEY]: "2" });
+    const { engine, state, control, struggle, wait } = setUp();
+    state.playing = true;
+    struggle();
+    state.playing = false;
     engine.started = false;
     wait(QUIET_FOR_MS);
     await control.tick();

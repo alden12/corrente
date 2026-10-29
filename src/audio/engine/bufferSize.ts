@@ -5,9 +5,16 @@
  *
  * So the buffer is the smallest while the timeline is stopped, when anything you hear you're
  * playing, and stays that size for playback too until this device shows it can't keep up: slow
- * blocks while stopped grow the live size, slow blocks during playback grow the playback size, each
- * kept per device. A device that copes never changes size; one that struggles plays back larger,
- * switching as Play is pressed. It can also be set by hand.
+ * blocks while stopped grow the live size, slow blocks during playback grow the playback size. A
+ * device that copes never changes size; one that struggles plays back larger, switching as Play is
+ * pressed. It can also be set by hand.
+ *
+ * **Only sustained trouble grows a size, and only until the app is next opened (INST-53).** A slow
+ * block isn't always a glitch you hear (the browser renders several per hardware callback, so there
+ * is slack), and one busy moment (a device loading, garbage collection) used to grow a size for good,
+ * leaving notes late from then on. Now it takes slow blocks in several separate seconds of a minute,
+ * none counted while the page is hidden or just after a device loads, and every launch starts at the
+ * smallest again.
  *
  * A new size is a new AudioContext, a brief dropout, so going back to the live size waits for a
  * moment nothing would be cut: the transport stopped, no take in progress, no note held, and quiet
@@ -24,8 +31,8 @@ export const BUFFER_SETTINGS: readonly BufferSetting[] = ["auto", ...BUFFER_SIZE
 
 /** How long everything must have been quiet before the buffer shrinks back, so no tail is cut. */
 export const QUIET_FOR_MS = 1500;
-/** Slow blocks within a minute, at a size, that grow it a step on this device. */
-export const SLOW_BLOCKS_TO_GROW = 4;
+/** Separate seconds with slow blocks, within a minute at a size, that grow it a step for this session. */
+export const SLOW_SECONDS_TO_GROW = 3;
 export const SLOW_WINDOW_MS = 60_000;
 /**
  * How long after audio starts (or the buffer changes) slow blocks don't count. The engine is still
@@ -34,7 +41,7 @@ export const SLOW_WINDOW_MS = 60_000;
  */
 export const SETTLE_MS = 15_000;
 
-/** How far each size has grown on this device: steps up BUFFER_SIZES from the smallest. */
+/** How far each size has grown this session: steps up BUFFER_SIZES from the smallest. */
 export interface Steps {
   live: number;
   playback: number;

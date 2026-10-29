@@ -130,7 +130,17 @@ export function AppShell() {
   const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
   // The output buffer, picked from whether someone is playing live (INST-36.9).
   const [bufferControl] = useState(
-    () => new BufferControl(engine, { transport: scheduler, recorder, notes: liveNotes }),
+    () =>
+      new BufferControl(engine, {
+        transport: scheduler,
+        recorder,
+        notes: liveNotes,
+        page: {
+          get hidden() {
+            return document.visibilityState === "hidden";
+          },
+        },
+      }),
   );
   useEffect(() => bufferControl.start(), [bufferControl]);
   useEffect(() => {

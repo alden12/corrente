@@ -1,15 +1,15 @@
 /**
- * Applies the output buffer policy (bufferSize.ts, INST-36.9, INST-43) to the engine: back to the
- * live size once stopped and quiet, checked once a second; up to the playback size as Play is
- * pressed, when that's bigger. Slow blocks grow the size they were heard at; those steps and the
- * setting are kept per device (browser storage), since what a phone can run is the phone's.
- * DOM-free apart from that storage, which it can go without.
+ * Applies the output buffer policy (bufferSize.ts, INST-36.9, INST-43, INST-53) to the engine: back
+ * to the live size once stopped and quiet, checked once a second; up to the playback size as Play is
+ * pressed, when that's bigger. Sustained slow blocks grow the size they were heard at, for this
+ * session. The setting is kept per device (browser storage). DOM-free apart from that storage, which
+ * it can go without; whether the page is hidden is asked of the caller.
  */
 import type { RecorderStatus } from "../recording/recorder";
 import {
   BUFFER_SETTINGS,
   BUFFER_SIZES,
-  SLOW_BLOCKS_TO_GROW,
+  SLOW_SECONDS_TO_GROW,
   SETTLE_MS,
   SLOW_WINDOW_MS,
   canChange,
@@ -36,17 +36,17 @@ export interface BufferActivity {
   transport: { readonly isPlaying: boolean };
   recorder: { getState(): { status: RecorderStatus } };
   notes: { readonly holding: boolean; readonly lastPlayedAt: number };
+  /** Whether the page is hidden: a background tab is throttled, and its slow blocks say nothing. */
+  page: { readonly hidden: boolean };
 }
 
-/** Where the setting and the grown step are kept. */
+/** Where the setting is kept. */
 export interface BufferStore {
   read(key: string): string | null;
   write(key: string, value: string): void;
 }
 
 export const SETTING_KEY = "corrente:buffer-setting";
-export const LIVE_STEP_KEY = "corrente:buffer-live-step";
-export const PLAYBACK_STEP_KEY = "corrente:buffer-playback-step";
 
 /** Browser storage, or nothing where it's blocked (a private window): the defaults then hold. */
 const browserStore: BufferStore = {
@@ -69,18 +69,19 @@ const browserStore: BufferStore = {
 export interface BufferSnapshot {
   setting: BufferSetting;
   size: BufferSize;
-  /** The sizes playing live and playing back get on this device, after any slow blocks grew them. */
+  /** The sizes playing live and playing back get this session, after any slow blocks grew them. */
   liveSize: BufferSize;
   playbackSize: BufferSize;
 }
 
 export class BufferControl {
   private setting: BufferSetting;
-  private readonly steps: Steps;
+  /** Not kept: each launch starts at the smallest (INST-53). */
+  private readonly steps: Steps = { live: 0, playback: 0 };
   /** When the transport was last seen playing or a take in progress. */
   private lastBusy: number;
-  /** Slow-block reports within the window, at the size they were heard at. */
-  private slow: { at: number; blocks: number }[] = [];
+  /** When slow blocks were reported within the window, at the size they were heard at. */
+  private slow: number[] = [];
   private changing = false;
   private snapshotCache: BufferSnapshot | null = null;
   private readonly listeners = createListeners();
@@ -97,18 +98,13 @@ export class BufferControl {
     this.now = now;
     const saved = store.read(SETTING_KEY);
     this.setting = BUFFER_SETTINGS.find((setting) => setting === saved) ?? "auto";
-    const stepAt = (key: string) => {
-      const step = Number(store.read(key));
-      return Number.isInteger(step) && step > 0 ? Math.min(step, BUFFER_SIZES.length - 1) : 0;
-    };
-    this.steps = { live: stepAt(LIVE_STEP_KEY), playback: stepAt(PLAYBACK_STEP_KEY) };
     this.lastBusy = now();
   }
 
   /** Check once a second and hear slow blocks; returns a stop. */
   start(): () => void {
     const timer = setInterval(() => void this.tick(), 1000);
-    const stopSlow = this.engine.onSlowBlocks((blocks) => this.heardSlow(blocks));
+    const stopSlow = this.engine.onSlowBlocks(() => this.heardSlow());
     return () => {
       clearInterval(timer);
       stopSlow();
@@ -179,27 +175,25 @@ export class BufferControl {
   }
 
   /**
-   * Slow blocks, picked for you: enough of them within a minute grow the size they were heard at a
-   * step, for good on this device, once the engine has settled after starting. Heard while playing back, that's the playback size; else the live
-   * one.
+   * Slow blocks, picked for you: in enough separate seconds within a minute, they grow the size they
+   * were heard at a step for this session, once the engine has settled after starting and while the
+   * page is shown. Heard while playing back, that's the playback size; else the live one. The engine
+   * reports about once a second, per bank, so seconds are counted rather than reports or blocks: one
+   * bad second can't grow a size on its own.
    */
-  private heardSlow(blocks: number): void {
-    if (this.setting !== "auto") return;
+  private heardSlow(): void {
+    if (this.setting !== "auto" || this.activity.page.hidden) return;
     const now = this.now();
     if (now - this.engine.startedAt < SETTLE_MS) return;
     const playing = this.activity.transport.isPlaying;
     const size = playing ? playbackSize(this.steps) : liveSize(this.steps);
     if (this.engine.bufferSize !== size || size === BUFFER_SIZES[BUFFER_SIZES.length - 1]) return;
-    this.slow = [...this.slow.filter((report) => now - report.at < SLOW_WINDOW_MS), { at: now, blocks }];
-    if (this.slow.reduce((sum, report) => sum + report.blocks, 0) < SLOW_BLOCKS_TO_GROW) return;
+    this.slow = [...this.slow.filter((at) => now - at < SLOW_WINDOW_MS), now];
+    const seconds = new Set(this.slow.map((at) => Math.floor(at / 1000))).size;
+    if (seconds < SLOW_SECONDS_TO_GROW) return;
     this.slow = [];
-    if (playing) {
-      this.steps.playback = Math.max(this.steps.live, this.steps.playback) + 1;
-      this.store.write(PLAYBACK_STEP_KEY, String(this.steps.playback));
-    } else {
-      this.steps.live++;
-      this.store.write(LIVE_STEP_KEY, String(this.steps.live));
-    }
+    if (playing) this.steps.playback = Math.max(this.steps.live, this.steps.playback) + 1;
+    else this.steps.live++;
     this.changed();
   }
 

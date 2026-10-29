@@ -15,6 +15,9 @@ import { BANK_PROCESSOR, INPUTS_PER_TRACK, type BankOptions, type FromBank, type
 const now: () => number =
   typeof globalThis.performance?.now === "function" ? () => globalThis.performance.now() : () => Date.now();
 
+/** How long after a device or sample loads its slow blocks aren't counted. */
+const LOAD_SETTLE_SECONDS = 2;
+
 class EngineBankProcessor extends AudioWorkletProcessor {
   private readonly bank: EngineBank;
   /** Whether each track has a device: an empty one's output is left as the silence it starts as. */
@@ -25,6 +28,12 @@ class EngineBankProcessor extends AudioWorkletProcessor {
   /** Blocks over budget since the last report, and blocks rendered since then. */
   private slow = 0;
   private counted = 0;
+  /**
+   * Until when (`currentTime`, seconds) slow blocks aren't counted: a device just loaded is still
+   * setting up (its memory, its first blocks), and that says nothing about what this device can play
+   * (INST-53).
+   */
+  private settlingUntil = 0;
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
@@ -37,6 +46,7 @@ class EngineBankProcessor extends AudioWorkletProcessor {
         try {
           this.bank.load(track, plan, values, options);
           this.loaded[track] = 1;
+          this.settlingUntil = currentTime + LOAD_SETTLE_SECONDS;
           this.port.postMessage({ type: "loaded", track } satisfies FromBank);
         } catch (error) {
           if (!(error instanceof PlanRejected)) throw error;
@@ -63,6 +73,7 @@ class EngineBankProcessor extends AudioWorkletProcessor {
       sample: ({ track, param, ref, audio }) => {
         try {
           this.bank.setSample(track, param, ref, audio);
+          this.settlingUntil = currentTime + LOAD_SETTLE_SECONDS;
           this.port.postMessage({ type: "sampled", track, param, ref } satisfies FromBank);
         } catch (error) {
           if (!(error instanceof RangeError)) throw error;
@@ -93,7 +104,7 @@ class EngineBankProcessor extends AudioWorkletProcessor {
     }
     const started = now();
     this.bank.process(currentTime);
-    if (now() - started > this.budget) this.slow++;
+    if (now() - started > this.budget && currentTime >= this.settlingUntil) this.slow++;
     this.report();
     // Plain loops: a closure per block would be garbage.
     for (let track = 0; track < outputs.length; track++) {

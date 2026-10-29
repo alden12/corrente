@@ -41,7 +41,7 @@ export function BufferSettings({ control }: { control: BufferControl }) {
       </label>
       <p className="text-[11px] text-faint leading-relaxed">
         {setting === "auto"
-          ? `Now ${SIZE_NAMES[size]}. As small as this device manages, so notes answer at once: ${SIZE_NAMES[liveSize]} while stopped, ${SIZE_NAMES[playbackSize]} for playback. If either glitches here, it steps up a size and keeps it.`
+          ? `Now ${SIZE_NAMES[size]}. As small as this device manages, so notes answer at once: ${SIZE_NAMES[liveSize]} while stopped, ${SIZE_NAMES[playbackSize]} for playback. If either keeps glitching, it steps up a size until Corrente is next opened.`
           : `Always ${SIZE_NAMES[setting]}. Smaller answers sooner; larger glitches less.`}{" "}
         A change is a moment's silence, so it waits for one: on Play, or once stopped.
       </p>
