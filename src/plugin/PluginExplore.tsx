@@ -40,7 +40,7 @@ export function PluginExplore({
 
   return (
     <ExploreScopeProvider value={PLUGIN_SCOPE}>
-      <div className="w-80 shrink-0 bg-rail border-r border-line flex flex-col min-h-0">
+      <div className="flex-1 min-w-0 bg-rail border-r border-line flex flex-col min-h-0">
         <div className="flex-1 min-h-0 overflow-y-auto">
           <ExploreView
             projectStore={project}

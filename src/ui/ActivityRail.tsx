@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from "react";
 import { AccountAvatar } from "./AccountAvatar";
-import { RAIL_ITEMS, type LibraryView } from "./libraryViews";
+import { RAIL_ITEMS, type LibraryView, type RailItem } from "./libraryViews";
 
 export type { LibraryView, RailItem } from "./libraryViews";
 
@@ -20,23 +20,26 @@ export function ActivityRail({
   onOpenSettings,
   onSearch,
   indicators,
+  items = RAIL_ITEMS,
 }: {
   active: LibraryView;
   collapsed: boolean;
   onSelect: (view: LibraryView) => void;
   /** Fired when the *active* icon is clicked: collapse the panel to the rail (or reopen). */
   onToggleCollapse: () => void;
-  /** Fired by the mark at the bottom: open the settings panel on its Account tab. */
-  onOpenSettings: () => void;
+  /** Fired by the mark at the bottom: open the settings panel on its Account tab. Without it there's no mark (the plugin's window, PLUGIN-3.12). */
+  onOpenSettings?: () => void;
   /** Search: not a view of its own, but a way into Explore's search box (COMM-1.9.3). */
   onSearch: () => void;
   /** The app's status, above the account button (DAW-87): `RailIndicators`. */
   indicators?: ReactNode;
+  /** The views it offers: all of them in the app, fewer in the plugin's window. */
+  items?: readonly RailItem[];
 }) {
   return (
     <nav
       aria-label="Library views"
-      className="[grid-area:rail] h-full bg-frame border-r border-line flex flex-col items-center py-1.5"
+      className="[grid-area:rail] w-12 shrink-0 h-full bg-frame border-r border-line flex flex-col items-center py-1.5"
     >
       <button
         type="button"
@@ -58,7 +61,7 @@ export function ActivityRail({
           <path d="M10.2 10.2 13.5 13.5" />
         </svg>
       </button>
-      {RAIL_ITEMS.map((item) => {
+      {items.map((item) => {
         const selected = item.view === active && !collapsed;
         return (
           <button
@@ -89,15 +92,17 @@ export function ActivityRail({
           local/dev too, from your handle, so it is there whether or not anyone is signed in. */}
       <div className="mt-auto flex flex-col items-center w-full">
         {indicators}
-        <button
-          type="button"
-          title="Account and settings"
-          aria-label="Account and settings"
-          onClick={onOpenSettings}
-          className="flex items-center justify-center w-full h-11 cursor-pointer"
-        >
-          <AccountAvatar size={30} />
-        </button>
+        {onOpenSettings && (
+          <button
+            type="button"
+            title="Account and settings"
+            aria-label="Account and settings"
+            onClick={onOpenSettings}
+            className="flex items-center justify-center w-full h-11 cursor-pointer"
+          >
+            <AccountAvatar size={30} />
+          </button>
+        )}
       </div>
     </nav>
   );

@@ -48,7 +48,7 @@ export function DevicesBar({
   projectStore,
   open,
   onToggle,
-  rollGone,
+  rollGone = false,
   onRoll,
   onDevice,
 }: {
@@ -57,9 +57,9 @@ export function DevicesBar({
   /** Whether the devices show, or are folded away under this bar. */
   open: boolean;
   onToggle: () => void;
-  /** The roll has scrolled off the top, so the bar offers the way back. */
-  rollGone: boolean;
-  onRoll: () => void;
+  /** The roll has scrolled off the top, so the bar offers the way back. The plugin's window has no roll. */
+  rollGone?: boolean;
+  onRoll?: () => void;
   /** Scroll to the device with this fold key. */
   onDevice: (key: string) => void;
 }) {

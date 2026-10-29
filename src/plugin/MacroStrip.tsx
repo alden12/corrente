@@ -1,12 +1,12 @@
 /**
- * The 16 macros along the top of the plugin's rack (PLUGIN-3.4): what each of the host's knobs moves.
+ * The 16 macros in the plugin's Macros section (PLUGIN-3.4, PLUGIN-3.12): what each of the host's knobs moves.
  * A knob's right-click menu maps one; clicking a mapped macro here unmaps it.
  */
 import type { MacroView } from "./useMacros";
 
 export function MacroStrip({ view }: { view: MacroView }) {
   return (
-    <section aria-label="Macros" className="grid grid-cols-8 gap-1 px-3 pt-3">
+    <div className="grid grid-cols-8 gap-1 px-3 pt-3">
       {view.mapping.map((name, index) => {
         const label = `M${index + 1}`;
         return name ? (
@@ -30,6 +30,6 @@ export function MacroStrip({ view }: { view: MacroView }) {
           </span>
         );
       })}
-    </section>
+    </div>
   );
 }
