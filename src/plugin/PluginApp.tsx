@@ -1,28 +1,35 @@
 /**
  * The plugin's window, laid out like the app's desktop (PLUGIN-3.12): the activity rail and the
  * panel it has open (Explore, PLUGIN-3.5) on the left, and the plugin's one track in a column of
- * sections, as the app's workbench is: its devices, then its macros (the host's 16 knobs,
- * PLUGIN-3.4, which a knob's right-click menu maps). The keys (PLUGIN-3.11) and MIDI devices
- * (PLUGIN-3.8) come in as sections above the devices. No transport, timeline or engine here: the
+ * sections, as the app's workbench is: the keys (PLUGIN-3.11), its devices, then its macros (the
+ * host's 16 knobs, PLUGIN-3.4, which a knob's right-click menu maps). MIDI devices (PLUGIN-3.8) come
+ * in as a section above the devices. No transport, timeline or engine here: the
  * plugin makes the sound, and `PluginDevice` tells it what to play.
  */
-import { useRef } from "react";
+import { useRef, useSyncExternalStore } from "react";
+import type { LiveNotes } from "../audio/live/liveNotes";
 import { applyEdit } from "../audio/commands/applyEdit";
 import type { Dispatch } from "../audio/commands/types";
 import type { SoundPreview } from "../audio/live/preview";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { useProject } from "../audio/project/useProject";
 import { ActivityRail } from "../ui/ActivityRail";
+import { IconButton } from "../ui/controls/IconButton";
 import { SectionHeader } from "../ui/controls/SectionHeader";
 import { requestExploreSearch } from "../ui/explore/explorePage";
 import { RAIL_ITEMS } from "../ui/libraryViews";
 import { KnobExtrasProvider } from "../ui/knobExtras";
+import { KeysPanel } from "../ui/keys/KeysPanel";
+import { useDesktopKeys } from "../ui/keys/useDesktopKeys";
+import { useSongKey } from "../ui/pads/songKey";
+import { KeyboardIcon } from "../ui/shellIcons";
 import { usePersistentBoolean } from "../ui/usePersistent";
 import { DeviceRack } from "../ui/workbench/DeviceRack";
 import { DevicesBar } from "../ui/workbench/DevicesBar";
 import { MacroStrip } from "./MacroStrip";
 import type { PluginDevice } from "./pluginDevice";
 import { PluginExplore } from "./PluginExplore";
+import { keyboardTaken } from "./pluginKeys";
 import type { PluginMacros } from "./pluginMacros";
 import { useMacros } from "./useMacros";
 
@@ -34,11 +41,14 @@ export function PluginApp({
   preview,
   device,
   macros,
+  notes,
 }: {
   project: ProjectStore;
   preview: SoundPreview;
   device: PluginDevice;
   macros: PluginMacros;
+  /** What the keys play: the plugin (`pluginNotes`). */
+  notes: LiveNotes;
 }) {
   useProject(project);
   const macroView = useMacros(device, macros);
@@ -51,6 +61,9 @@ export function PluginApp({
   // The knobs wear their macro badges only while the macros show; mapping one by right-click works either way.
   const extras = macrosOpen ? macroView.extras : { ...macroView.extras, badge: () => undefined };
   const columnRef = useRef<HTMLElement>(null);
+  // The computer keyboard plays the keys only while the window has it; the pads play either way.
+  const taken = useSyncExternalStore(keyboardTaken.subscribe, keyboardTaken.read);
+  const keys = useDesktopKeys(notes, taken, useSongKey(project, dispatch));
   const scrollToDevice = (key: string) =>
     columnRef.current
       ?.querySelector(`[data-device="${CSS.escape(key)}"]`)
@@ -75,6 +88,25 @@ export function PluginApp({
         </div>
       )}
       <main ref={columnRef} className="relative isolate flex-1 min-w-0 overflow-y-auto">
+        <section aria-label="Keys" className="border-b border-line" style={{ height: keys.height }}>
+          <KeysPanel
+            {...keys.panel}
+            actions={
+              <IconButton
+                label={
+                  taken
+                    ? "The computer keyboard plays these keys: give it back to the host"
+                    : "Play these keys from the computer keyboard"
+                }
+                size="sm"
+                active={taken}
+                onClick={() => keyboardTaken.set(!taken)}
+              >
+                <KeyboardIcon />
+              </IconButton>
+            }
+          />
+        </section>
         {track ? (
           <section aria-label="Devices">
             <DevicesBar

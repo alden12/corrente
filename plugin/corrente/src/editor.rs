@@ -76,6 +76,8 @@ enum Message {
     Value { value: usize, raw: f64 },
     Rack { rack: String },
     Macros { slots: Slots },
+    /// A key of the window's keyboard went down (velocity above 0) or up (0).
+    Note { note: u8, velocity: f32 },
     Keys,
     Log { text: String },
 }
@@ -318,6 +320,8 @@ impl Editor for RackEditor {
                 }
                 // TS: params.setMacros(slots).forEach(([index, raw]) => moveMacro(index, raw));
                 Message::Macros { slots } => params.set_macros(slots).into_iter().for_each(|(index, raw)| move_macro(&params, &context, index, raw)),
+                // TS: params.play(note, velocity);
+                Message::Note { note, velocity } => params.play(note, velocity),
                 // TS: if (webview.deref()?.value) keysToHost(webview.deref().value);
                 Message::Keys => {
                     if let Some(view) = keys_to.upgrade() {

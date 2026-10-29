@@ -39,6 +39,8 @@ export type ToPlugin =
   | { type: "macros"; slots: (string | null)[] }
   /** Hand the keyboard back to the host, which plays notes from it (`keysToHost.ts`). */
   | { type: "keys" }
+  /** A key of the window's keys went down (a velocity above 0) or up (0), PLUGIN-3.11. */
+  | { type: "note"; note: number; velocity: number }
   | { type: "log"; text: string };
 
 /** The project as the plugin saves it: with its schema version, so a later page can upcast it. */

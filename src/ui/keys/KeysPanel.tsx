@@ -13,7 +13,7 @@
  * of the accidental rows, so each accidental sits between the two notes it is between as a black
  * key does, and a key that plays nothing is not drawn at all.
  */
-import { useEffect, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { PadButton } from "../pads/PadButton";
 import type { PadSettings } from "../pads/padSettings";
 import { ScalePadControls } from "../pads/ScalePads";
@@ -57,6 +57,7 @@ export function KeysPanel({
   rowMode,
   velocity,
   onVelocity,
+  actions,
 }: {
   /** The layout, bottom row first (`keyboardRows`). */
   rows: KeyCell[][];
@@ -72,6 +73,8 @@ export function KeysPanel({
   /** The velocity the keys strike at, 0..1. */
   velocity: number;
   onVelocity: (velocity: number) => void;
+  /** At the header's right: the plugin's window puts who has the computer keyboard there (PLUGIN-3.11). */
+  actions?: ReactNode;
 }) {
   const keycap = useKeycapLabels();
   const held = useHeldKeys(keyboard);
@@ -85,7 +88,7 @@ export function KeysPanel({
 
   return (
     <div className="h-full bg-ground flex flex-col min-h-0 overflow-hidden">
-      <SectionHeader title="Keys" fold={{ open, onToggle }}>
+      <SectionHeader title="Keys" fold={{ open, onToggle }} actions={actions}>
         {open && (
           <>
             <span className="font-mono text-[10px] text-faint shrink-0">{hint}</span>

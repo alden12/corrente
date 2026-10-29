@@ -300,3 +300,22 @@ fn each_engine_block_gets_the_beat_at_its_own_start_wrapped_by_the_host_loop() {
     // Outside the loop, nothing wraps.
     assert_eq!(block_beat(20.0, 127, per_sample, Some((8.0, 12.0))), 20.0);
 }
+
+#[test]
+fn the_windows_keys_play_and_go_out_to_the_host() {
+    // TS:
+    //   const plugin = active(BUILT_IN); plugin.params.play(60, 0.9);
+    //   const sent = []; plugin.takePlayed((event) => sent.push(event));
+    //   expect(peak(play(plugin, [], 20))).toBeGreaterThan(0.01);
+    //   plugin.params.play(60, 0); plugin.takePlayed((event) => sent.push(event));
+    //   expect(sent.map((event) => event.kind)).toEqual(["on", "off"]);
+    let mut plugin = active(BUILT_IN);
+    let mut sent = Vec::new();
+    plugin.params.play(60, 0.9);
+    plugin.take_played(|event| sent.push(event));
+    assert!(peak(&play(&mut plugin, &[], 20)) > 0.01, "the key sounds");
+    plugin.params.play(60, 0.0);
+    plugin.take_played(|event| sent.push(event));
+    // `matches!` asks whether a value has a shape, as a TS type guard would.
+    assert!(matches!(sent[..], [NoteEvent::NoteOn { key: Key::Number(60), .. }, NoteEvent::NoteOff { key: Key::Number(60), .. }]), "each went out");
+}

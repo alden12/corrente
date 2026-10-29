@@ -25,6 +25,7 @@ import { PluginDevice, projectOfRack, type ToPlugin } from "./pluginDevice";
 import { PluginPreview } from "./pluginPreview";
 import { PluginMacros, type Slots } from "./pluginMacros";
 import { keysToHost } from "./keysToHost";
+import { pluginNotes } from "./pluginKeys";
 
 declare global {
   interface Window {
@@ -80,7 +81,7 @@ const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSa
   const preview = new SoundPreview(new PluginPreview(samples, send), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <PluginApp project={project} preview={preview} device={device} macros={macros} />
+      <PluginApp project={project} preview={preview} device={device} macros={macros} notes={pluginNotes(send)} />
     </StrictMode>,
   );
 };

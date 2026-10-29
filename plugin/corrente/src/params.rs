@@ -80,6 +80,8 @@ fn mapped_values(targets: &[Option<Target>]) -> Vec<(usize, f64)> {
 
 /// Room for the value changes waiting for the audio thread: one per value, so more than any device has.
 const MAX_CHANGES: usize = 256;
+/// Room for the notes the window's keys play between two blocks: every key down and up at once, twice.
+const MAX_PLAYED: usize = 512;
 
 pub struct Macros {
     pub knobs: Vec<FloatParam>,
@@ -101,6 +103,9 @@ pub struct Macros {
     pub rate: AtomicU32,
     /// A sound Explore is trying plays instead of the package (`preview`).
     pub previewing: AtomicBool,
+    /// Notes the window's keys played (PLUGIN-3.11), each a key and its velocity (0 lets it go), for
+    /// the audio thread to play and send out to the host.
+    pub played: Mutex<Vec<(u8, f32)>>,
 }
 
 impl Macros {
@@ -126,7 +131,7 @@ impl Macros {
                     }))
             })
             .collect();
-        // TS: return { knobs, targets, slots: undefined, package, rack: "", changes: [], incoming: undefined, retired: undefined, rate: 0, previewing: false }
+        // TS: return { knobs, targets, slots: undefined, package, rack: "", changes: [], incoming: undefined, retired: undefined, rate: 0, previewing: false, played: [] }
         Macros {
             knobs,
             targets,
@@ -138,6 +143,7 @@ impl Macros {
             retired: Mutex::new(None),
             rate: AtomicU32::new(0),
             previewing: AtomicBool::new(false),
+            played: Mutex::new(Vec::with_capacity(MAX_PLAYED)),
         }
     }
 
@@ -301,6 +307,17 @@ impl Macros {
 
     /// Value `index` moved to `raw` in the window: saved with the package, and queued for the audio
     /// thread. A value already waiting is replaced, so a fast drag queues one change, not hundreds.
+    /// A note the window's keys played (velocity 0 lets it go), for the audio thread's next block.
+    // TS: if (this.played.length < MAX_PLAYED) this.played.push([note, velocity]); else log
+    pub fn play(&self, note: u8, velocity: f32) {
+        let Ok(mut played) = self.played.lock() else { return };
+        if played.len() < MAX_PLAYED {
+            played.push((note.min(127), velocity.clamp(0.0, 1.0)));
+        } else {
+            nice_error!("too many notes waiting from the window; one was dropped");
+        }
+    }
+
     pub fn set_value(&self, index: usize, raw: f64) {
         // TS: this.package.values[index]?.setRaw(raw);
         if let Some(value) = self.package.lock().ok().as_deref_mut().and_then(|package| package.values.get_mut(index)) {
