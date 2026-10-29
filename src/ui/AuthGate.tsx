@@ -112,7 +112,7 @@ function LoginScreen() {
         </p>
       </div>
       <div className="w-full pt-4 border-t border-line flex flex-col gap-2">
-        <p className="text-[11px] text-faint leading-relaxed">Corrente&apos;s devices in your DAW, for macOS.</p>
+        <p className="text-[11px] text-faint leading-relaxed">Corrente&apos;s devices in your DAW.</p>
         <a
           href={PLUGIN_URL}
           target="_blank"

@@ -8,7 +8,7 @@ import { GitHubIcon } from "./shellIcons";
 
 /** The plugin's formats, named rather than shown: their logos come with their owners' terms. */
 export const PLUGIN_LABEL = "Get the plugin (VST3 / CLAP)";
-const PLUGIN_TITLE = "Corrente's devices in your DAW, as a VST3 or CLAP plugin for macOS";
+const PLUGIN_TITLE = "Corrente's devices in your DAW, as a VST3 or CLAP plugin";
 
 /** `pluginLink`: the plugin as a text link in the line under the name; a screen with a button for it leaves it out. */
 export function WelcomeHeader({ pluginLink = true }: { pluginLink?: boolean }) {
