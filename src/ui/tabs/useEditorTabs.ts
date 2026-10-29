@@ -8,12 +8,15 @@
  */
 import { useEffect, useState } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
+import { engineDevice } from "../../audio/definitions/engineDevices";
 import { readPersistent, writePersistent } from "../persistentStore";
+import { subscribeGraphRequests } from "./openGraph";
 import {
   closeOtherTabs,
   closeTab,
   keepActive,
   keepTab,
+  openTab,
   parseTabs,
   retainTabs,
   showTab,
@@ -23,6 +26,10 @@ import {
 } from "./editorTabs";
 
 const keyFor = (projectId: string) => `corrente:editor-tabs:${projectId}`;
+
+/** Whether a tab's target is still there: its track in the project, its device registered. */
+const exists = (store: ProjectStore, target: TabTarget): boolean =>
+  target.kind === "track" ? !!store.getTrack(target.trackId) : !!engineDevice(target.type);
 
 export interface EditorTabsView {
   state: EditorTabs;
@@ -55,7 +62,7 @@ export function useEditorTabs(
     setSeen({ selectedTrackId, trackIds });
     // Not while the project has no tracks: one still loading would lose every tab.
     setState((current) => {
-      const live = trackIds ? retainTabs(current, (target) => !!store.getTrack(target.trackId)) : current;
+      const live = trackIds ? retainTabs(current, (target) => exists(store, target)) : current;
       return selectedTrackId ? showTab(live, { kind: "track", trackId: selectedTrackId }) : live;
     });
   }
@@ -64,7 +71,15 @@ export function useEditorTabs(
     if (projectId) writePersistent(keyFor(projectId), JSON.stringify(state));
   }, [projectId, state]);
 
-  const select = (target: TabTarget) => store.selectTrack(target.trackId);
+  // A graph asked for from a menu anywhere opens as a tab of its own.
+  useEffect(() => subscribeGraphRequests((target) => setState((current) => openTab(current, target))), []);
+
+  // Showing a track's tab selects it too, so the rest of the app follows; it's shown directly as well,
+  // since a track already selected (behind a graph tab) doesn't announce being selected again.
+  const select = (target: TabTarget) => {
+    setState((current) => showTab(current, target));
+    if (target.kind === "track") store.selectTrack(target.trackId);
+  };
   return {
     state,
     open: select,
@@ -72,13 +87,13 @@ export function useEditorTabs(
       const next = closeTab(state, key);
       setState(next);
       const shown = next.tabs.find((tab) => tabKey(tab.target) === next.active);
-      if (next.active !== state.active && shown) select(shown.target);
+      if (next.active !== state.active && shown?.target.kind === "track") store.selectTrack(shown.target.trackId);
     },
     closeOthers: (key) => {
       const next = closeOtherTabs(state, key);
       setState(next);
       const shown = next.tabs[0];
-      if (shown) select(shown.target);
+      if (shown?.target.kind === "track") store.selectTrack(shown.target.trackId);
     },
     keep: (key) => setState((current) => keepTab(current, key)),
     keepShown: () => setState(keepActive),

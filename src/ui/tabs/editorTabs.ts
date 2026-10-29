@@ -8,11 +8,15 @@
  * double-click it or edit what it shows.
  *
  * **A limit:** past `TAB_LIMIT`, the tab used longest ago closes, never the one you're on.
+ *
+ * A tab is a track's editor or **a device's graph** (INST-44), opened from a menu as a kept tab.
  */
 import { z } from "zod";
 
-/** What a tab shows: a track's editor. Other kinds (a device's graph, INST-44) join this union. */
-export type TabTarget = { kind: "track"; trackId: string };
+/** What a tab shows: a track's editor, or a device's graph by its type. */
+export type TabTarget =
+  | { kind: "track"; trackId: string }
+  | { kind: "graph"; device: "instrument" | "effect"; type: string };
 
 export interface Tab {
   target: TabTarget;
@@ -34,7 +38,8 @@ export const TAB_LIMIT = 10;
 export const NO_TABS: EditorTabs = { tabs: [], active: null };
 
 /** A tab's identity: two tabs on the same target are the same tab. */
-export const tabKey = (target: TabTarget): string => `${target.kind}:${target.trackId}`;
+export const tabKey = (target: TabTarget): string =>
+  target.kind === "track" ? `track:${target.trackId}` : `graph:${target.type}`;
 
 const activeTab = (state: EditorTabs): Tab | undefined => state.tabs.find((tab) => tabKey(tab.target) === state.active);
 
@@ -51,13 +56,16 @@ const limited = (state: EditorTabs): EditorTabs => {
   return { ...state, tabs: state.tabs.filter((tab) => !closing.has(tab)) };
 };
 
+/** The next showing's count: one past the latest. */
+const nextUse = (state: EditorTabs): number => Math.max(0, ...state.tabs.map((tab) => tab.usedAt)) + 1;
+
 /**
  * Show `target`: its tab if it has one, else in the preview tab (replacing what was previewed there),
  * or a new preview tab at the end if there's none.
  */
 export function showTab(state: EditorTabs, target: TabTarget): EditorTabs {
   const key = tabKey(target);
-  const now = Math.max(0, ...state.tabs.map((tab) => tab.usedAt)) + 1;
+  const now = nextUse(state);
   if (state.tabs.some((tab) => tabKey(tab.target) === key)) {
     return {
       tabs: state.tabs.map((tab) => (tabKey(tab.target) === key ? { ...tab, usedAt: now } : tab)),
@@ -68,6 +76,13 @@ export function showTab(state: EditorTabs, target: TabTarget): EditorTabs {
   const previewAt = state.tabs.findIndex((tab) => tab.preview);
   const tabs = previewAt >= 0 ? state.tabs.with(previewAt, opened) : [...state.tabs, opened];
   return limited({ tabs, active: key });
+}
+
+/** Open `target` as a kept tab, at the end (or go to it, if it's open), as a menu's "View graph" does. */
+export function openTab(state: EditorTabs, target: TabTarget): EditorTabs {
+  const key = tabKey(target);
+  if (state.tabs.some((tab) => tabKey(tab.target) === key)) return showTab(state, target);
+  return limited({ tabs: [...state.tabs, { target, preview: false, usedAt: nextUse(state) }], active: key });
 }
 
 /** Keep the tab `key` (no longer the preview), as a double-click or an edit in it does. */
@@ -109,7 +124,10 @@ export function retainTabs(state: EditorTabs, exists: (target: TabTarget) => boo
 const savedTabs = z.object({
   tabs: z.array(
     z.object({
-      target: z.object({ kind: z.literal("track"), trackId: z.string() }),
+      target: z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("track"), trackId: z.string() }),
+        z.object({ kind: z.literal("graph"), device: z.enum(["instrument", "effect"]), type: z.string() }),
+      ]),
       preview: z.boolean(),
       usedAt: z.number(),
     }),

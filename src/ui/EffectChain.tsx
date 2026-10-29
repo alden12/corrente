@@ -43,6 +43,7 @@ export function EffectChain({
             label={info.label}
             kind="fx"
             foldKey={fx.id}
+            graph="effect"
             bypass={{
               bypassed: fx.bypassed,
               onToggle: () =>

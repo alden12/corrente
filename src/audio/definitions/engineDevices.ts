@@ -15,6 +15,8 @@ import { plainDefinition } from "./stereo";
 export interface EngineDeviceSpec {
   definition: DeviceDefinition;
   schema: ParamSchema;
+  /** The definition as written, stereo nodes and all: what its graph draws (graph.ts, INST-44). */
+  authored: AuthoredDefinition;
 }
 
 /** A device as it's written: stereo nodes allowed, made plain as it registers. */
@@ -27,7 +29,7 @@ const DEVICES = new Map<string, EngineDeviceSpec>();
 
 /** Record that a device type runs on the new engine, and how. */
 export const registerEngineDevice = (type: string, spec: AuthoredDeviceSpec): void => {
-  DEVICES.set(type, { schema: spec.schema, definition: plainDefinition(spec.definition) });
+  DEVICES.set(type, { schema: spec.schema, definition: plainDefinition(spec.definition), authored: spec.definition });
 };
 
 /** Forget a device registered under `type` (a custom one, as its project unloads or drops it). */

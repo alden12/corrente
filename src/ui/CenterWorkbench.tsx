@@ -4,13 +4,17 @@
  * hosts in its editor sheet too. The app's status indicators are at the foot of the activity rail
  * (DAW-87).
  */
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import type { ProjectStore, Track } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { Recorder } from "../audio/recording/recorder";
 import type { Dispatch } from "../audio/commands/types";
 import { EditorTabBar } from "./tabs/EditorTabBar";
+import { tabKey } from "./tabs/editorTabs";
 import { useEditorTabs } from "./tabs/useEditorTabs";
+
+/** A device's graph (INST-44), fetched with React Flow the first time one is opened. */
+const DeviceGraphView = lazy(() => import("./graph/DeviceGraphView"));
 import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
 
 export function CenterWorkbench({
@@ -47,6 +51,10 @@ export function CenterWorkbench({
     );
   }
 
+  // The tab shown, if it's a device's graph rather than the selected track.
+  const shown = tabs.state.tabs.find((tab) => tabKey(tab.target) === tabs.state.active)?.target;
+  const graph = shown?.kind === "graph" ? shown : undefined;
+
   // An edit made in a tab keeps it, as VS Code keeps a preview you type into.
   const editing: Dispatch = (command, author) => {
     tabs.keepShown();
@@ -57,16 +65,24 @@ export function CenterWorkbench({
     <div className="[grid-area:center] bg-ground flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
       <EditorTabBar tabs={tabs} projectStore={projectStore} dispatch={dispatch} />
 
-      <WorkbenchColumn
-        key={selectedTrack.id}
-        track={selectedTrack}
-        projectStore={projectStore}
-        scheduler={scheduler}
-        recorder={recorder}
-        dispatch={editing}
-        onRevealSamples={onRevealSamples}
-        keys={keys}
-      />
+      {graph ? (
+        <Suspense
+          fallback={<p className="flex-1 flex items-center justify-center text-sm text-muted">Drawing the graph…</p>}
+        >
+          <DeviceGraphView key={graph.type} type={graph.type} />
+        </Suspense>
+      ) : (
+        <WorkbenchColumn
+          key={selectedTrack.id}
+          track={selectedTrack}
+          projectStore={projectStore}
+          scheduler={scheduler}
+          recorder={recorder}
+          dispatch={editing}
+          onRevealSamples={onRevealSamples}
+          keys={keys}
+        />
+      )}
     </div>
   );
 }

@@ -1,15 +1,18 @@
 /**
  * The editor tabs' bar over the workbench (DAW-89): each tab wears its instrument's portrait and the
- * track's name, in italics while it's the preview. Clicking a tab opens it; double-clicking keeps it;
- * × closes it; right-clicking offers renaming the track and closing tabs. The mouse wheel scrolls the
- * bar sideways.
+ * track's name, in italics while it's the preview, or a device's portrait and name for its graph
+ * (INST-44). Clicking a tab opens it; double-clicking keeps it; × closes it; right-clicking offers
+ * renaming the track, its instrument's graph and closing tabs. The mouse wheel scrolls the bar sideways.
  */
-import { useState, type WheelEvent } from "react";
+import { useState, type ReactNode, type WheelEvent } from "react";
 import type { Dispatch } from "../../audio/commands/types";
 import { EMPTY_INSTRUMENT, instrumentInfos } from "../../audio/instruments/catalog";
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import { ExploreThumb } from "../explore/ExploreThumb";
-import { instrumentArt } from "../explore/exploreItems";
+import { deviceArt } from "../explore/exploreItems";
+import { engineDevice } from "../../audio/definitions/engineDevices";
+import type { MenuItem } from "../Menu";
+import { openDeviceGraph } from "./openGraph";
 import { InlineRename } from "../InlineRename";
 import { useContextMenu } from "../useContextMenu";
 import { tabKey, type Tab } from "./editorTabs";
@@ -36,10 +39,48 @@ function TrackThumb({ track, projectStore }: { track: Track; projectStore: Proje
       category="instruments"
       size={THUMB}
       badge={false}
-      {...instrumentArt(track.instrumentType, projectStore)}
+      {...deviceArt("instrument", track.instrumentType, projectStore)}
     />
   );
 }
+
+/** What a tab shows of itself: its art, its name, and its own menu items. */
+interface Face {
+  thumb: ReactNode;
+  thumbTitle: string;
+  name: string;
+  suffix?: string;
+  menu: MenuItem[];
+}
+
+/** A track's tab, or a device graph's; none if its track is gone. */
+const faceOf = (tab: Tab, projectStore: ProjectStore, rename: () => void): Face | undefined => {
+  const target = tab.target;
+  if (target.kind === "graph") {
+    const art = deviceArt(target.device, target.type, projectStore);
+    return {
+      thumb: <ExploreThumb category={`${target.device}s`} size={THUMB} badge={false} {...art} />,
+      thumbTitle: `${art.label}'s graph`,
+      name: art.label,
+      suffix: "graph",
+      menu: [],
+    };
+  }
+  const track = projectStore.getTrack(target.trackId);
+  if (!track) return undefined;
+  const graphable = track.kind === "instrument" && !!engineDevice(track.instrumentType);
+  return {
+    thumb: <TrackThumb track={track} projectStore={projectStore} />,
+    thumbTitle: kindOf(track),
+    name: track.name,
+    menu: [
+      { label: "Rename track", onClick: rename },
+      ...(graphable
+        ? [{ label: "View instrument graph", onClick: () => openDeviceGraph("instrument", track.instrumentType) }]
+        : []),
+    ],
+  };
+};
 
 /** The wheel turned over the bar scrolls it sideways; a trackpad's sideways swipe already does. */
 const scrollSideways = (event: WheelEvent<HTMLDivElement>) => {
@@ -97,10 +138,14 @@ function EditorTab({
 }) {
   const [renaming, setRenaming] = useState(false);
   const { openAt, menu } = useContextMenu();
-  const track = projectStore.getTrack(tab.target.trackId);
-  if (!track) return null;
   const key = tabKey(tab.target);
   const nameClass = `text-[13px] truncate ${active ? "font-semibold text-strong" : "text-muted"} ${tab.preview ? "italic" : ""}`;
+  const face = faceOf(tab, projectStore, () => {
+    tabs.keep(key);
+    setRenaming(true);
+  });
+  if (!face) return null;
+  const trackId = tab.target.kind === "track" ? tab.target.trackId : undefined;
   return (
     // No fill on the active tab: the bar is its own surface (`frame`) and the teal underline is what
     // marks selection.
@@ -112,13 +157,7 @@ function EditorTab({
       onDoubleClick={() => tabs.keep(key)}
       onContextMenu={(event) =>
         openAt(event, [
-          {
-            label: "Rename track",
-            onClick: () => {
-              tabs.keep(key);
-              setRenaming(true);
-            },
-          },
+          ...face.menu,
           ...(tab.preview ? [{ label: "Keep tab open", onClick: () => tabs.keep(key) }] : []),
           ...(closable
             ? [
@@ -134,26 +173,29 @@ function EditorTab({
       className={`group relative flex items-center gap-2 h-full pl-3 pr-1.5 border-r border-line max-w-60 shrink-0 cursor-pointer select-none ${active ? "" : "hover:bg-panel/60"}`}
     >
       {active && <span className="absolute left-0 right-0 bottom-0 h-0.5 bg-you" />}
-      <span title={kindOf(track)} className="flex shrink-0">
-        <TrackThumb track={track} projectStore={projectStore} />
+      <span title={face.thumbTitle} className="flex shrink-0">
+        {face.thumb}
       </span>
-      {renaming ? (
+      {renaming && trackId ? (
         <InlineRename
-          value={track.name}
-          onCommit={(name) => dispatch({ type: "setTrack", trackId: track.id, name })}
+          value={face.name}
+          onCommit={(name) => dispatch({ type: "setTrack", trackId, name })}
           startEditing
           onDone={() => setRenaming(false)}
           className={nameClass}
         />
       ) : (
-        <span title={tab.preview ? `${track.name} (double-click to keep this tab)` : track.name} className={nameClass}>
-          {track.name}
+        <span title={tab.preview ? `${face.name} (double-click to keep this tab)` : face.name} className={nameClass}>
+          {face.name}
+          {face.suffix && (
+            <span className="ml-1.5 font-mono text-[10px] font-normal not-italic text-faint">{face.suffix}</span>
+          )}
         </span>
       )}
       {closable ? (
         <button
           type="button"
-          aria-label={`Close ${track.name}`}
+          aria-label={`Close ${face.name}`}
           title="Close"
           onClick={(event) => {
             event.stopPropagation();

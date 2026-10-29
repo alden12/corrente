@@ -5,9 +5,11 @@ import {
   closeTab,
   keepActive,
   keepTab,
+  openTab,
   parseTabs,
   retainTabs,
   showTab,
+  tabKey,
   type EditorTabs,
 } from "../src/ui/tabs/editorTabs";
 
@@ -17,8 +19,9 @@ const track = (trackId: string) => ({ kind: "track" as const, trackId });
 /** Each tab as its track, with a * for the preview and [] round the shown one. */
 const shape = (state: EditorTabs) =>
   state.tabs.map((tab) => {
-    const name = `${tab.target.trackId}${tab.preview ? "*" : ""}`;
-    return `track:${tab.target.trackId}` === state.active ? `[${name}]` : name;
+    const id = tab.target.kind === "track" ? tab.target.trackId : `${tab.target.type} graph`;
+    const name = `${id}${tab.preview ? "*" : ""}`;
+    return tabKey(tab.target) === state.active ? `[${name}]` : name;
   });
 /** Show each track in turn. */
 const showAll = (state: EditorTabs, ...ids: string[]) =>
@@ -69,6 +72,16 @@ describe("editor tabs", () => {
     const state = showAll(keepActive(showAll(NO_TABS, "a")), "b");
     expect(shape(retainTabs(state, (target) => target.trackId !== "b"))).toEqual(["a"]);
     expect(retainTabs(state, () => true)).toBe(state);
+  });
+
+  it("opens a graph as a kept tab at the end, leaving the preview where it is", () => {
+    const graph = { kind: "graph" as const, device: "instrument" as const, type: "fm" };
+    const state = openTab(showAll(keepActive(showAll(NO_TABS, "a")), "b"), graph);
+    expect(shape(state)).toEqual(["a", "b*", "[fm graph]"]);
+    // Selecting another track replaces the preview, not the graph; opening the graph again goes to it.
+    expect(shape(showAll(state, "c"))).toEqual(["a", "[c*]", "fm graph"]);
+    expect(shape(openTab(showAll(state, "c"), graph))).toEqual(["a", "c*", "[fm graph]"]);
+    expect(parseTabs(JSON.stringify(state))).toEqual(state);
   });
 
   it("reads back what it saved, and nothing from what doesn't read", () => {

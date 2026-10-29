@@ -99,18 +99,20 @@ function deviceDrawing(kind: "instrument" | "effect", type: string, project: Dev
 }
 
 /**
- * An instrument's art as Explore draws it, for showing it elsewhere (an editor tab, DAW-89): its
- * shipped portrait, or for a custom one what draws it, and its colour.
+ * A device's art as Explore draws it, for showing it elsewhere (an editor tab, DAW-89): its shipped
+ * portrait, or for a custom one what draws it, its colour and its name.
  */
-export function instrumentArt(
+export function deviceArt(
+  kind: "instrument" | "effect",
   type: string,
   project: DeviceSource,
-): { portrait?: Portrait; drawing?: PortraitJob; hue?: number } {
-  const info = pickableInstrumentInfos().find((each) => each.type === type);
+): { portrait?: Portrait; drawing?: PortraitJob; hue?: number; label: string } {
+  const info = (kind === "instrument" ? pickableInstrumentInfos() : effectInfos()).find((each) => each.type === type);
   return {
-    portrait: (PORTRAITS as Record<string, Portrait>)[PORTRAIT_KEYS.instrument(type)],
-    drawing: info?.custom ? deviceDrawing("instrument", type, project) : undefined,
+    portrait: (PORTRAITS as Record<string, Portrait>)[PORTRAIT_KEYS[kind](type)],
+    drawing: info?.custom ? deviceDrawing(kind, type, project) : undefined,
     hue: info && deviceHue(info),
+    label: info?.label ?? type,
   };
 }
 

@@ -2,9 +2,10 @@
  * One Explore item as a playlist row (COMM-1.9.1): number, artwork, name and tags, then its
  * actions. The whole left side is the primary tap (audition it on the selected track); the heart
  * favourites it (COMM-1.9.3), the "+" adds a new track (in the plugin, replaces the track's sound),
- * and the menu removes what is yours to remove.
+ * and the menu shows a device's graph on the desktop (INST-44) and removes what is yours to remove.
  */
-import { Menu } from "../Menu";
+import { Menu, type MenuItem } from "../Menu";
+import { openDeviceGraph, useCanViewGraph } from "../tabs/openGraph";
 import { ExploreThumb } from "./ExploreThumb";
 import { CATEGORIES, type ExploreItem } from "./exploreItems";
 import { ADD_HINT, ONE_TRACK_ADD_HINT, PICK_HINT } from "./exploreActions";
@@ -32,6 +33,15 @@ export function ExploreRow({
   trying?: boolean;
 }) {
   const addHint = (useExploreScope().oneTrack ? ONE_TRACK_ADD_HINT : ADD_HINT)[item.source.kind]?.(item.name);
+  const { source } = item;
+  const device = source.kind === "instrument" || source.kind === "effect" ? source : undefined;
+  const graphable = useCanViewGraph(device?.type);
+  const menu: MenuItem[] = [
+    ...(device && graphable
+      ? [{ label: "View device graph", onClick: () => openDeviceGraph(device.kind, device.type) }]
+      : []),
+    ...(onRemove ? [{ label: onRemove.label, danger: true, onClick: onRemove.run }] : []),
+  ];
   return (
     <div
       className={`group flex items-center gap-1 pr-2 hover:bg-you/10 ${trying ? "bg-you/15" : ""}`}
@@ -95,11 +105,11 @@ export function ExploreRow({
           +
         </button>
       )}
-      {onRemove && (
+      {menu.length > 0 && (
         <Menu
           label={`Actions: ${item.name}`}
           triggerClassName="shrink-0 w-7 h-7 text-[17px] leading-none text-faint hover:text-ink cursor-pointer"
-          items={[{ label: onRemove.label, danger: true, onClick: onRemove.run }]}
+          items={menu}
         />
       )}
     </div>
