@@ -51,6 +51,7 @@ export function serveRenders(port: WorkerPort): void {
       const scratch = new ProjectStore(false);
       job.devices?.instruments?.forEach((device) => scratch.addCustomInstrument(device));
       job.devices?.effects?.forEach((device) => scratch.addCustomEffect(device));
+      if (job.kind === "midi" && job.device) scratch.addCustomMidiDevice(job.device);
       drawPortrait(job, { engine, loadSample: (ref: string) => ask(id, "sample", ref) }).then(
         (portrait) => port.post({ kind: "drawn", id, portrait }),
         (error: unknown) => port.post({ kind: "failed", id, message: String(error) }),

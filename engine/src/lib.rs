@@ -369,6 +369,22 @@ pub extern "C" fn eng_output(track: i32, channel: i32) -> *const f32 {
     with_track(track, |track| track.output(channel).map(|output| output.as_ptr())).flatten().unwrap_or(std::ptr::null())
 }
 
+/// Where the notes a track's MIDI devices played into its voices last block are: three words a note,
+/// its offset, its note and its velocity (0 for a note off). 0 if there's no such track. The address
+/// stays put, so JS views it once; eng_midi_played_count says how many notes it holds now.
+// TS: return addressOf(withTrack(track, (track) => track.played())) ?? 0
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_midi_played(track: i32) -> *const f32 {
+    with_track(track, |track| track.played().as_ptr()).unwrap_or(std::ptr::null())
+}
+
+/// How many notes eng_midi_played holds after the last eng_process.
+// TS: return withTrack(track, (track) => track.played().length / 3) ?? 0
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_midi_played_count(track: i32) -> i32 {
+    with_track(track, |track| (track.played().len() / 3) as i32).unwrap_or(0)
+}
+
 /// Where the transport is at the start of the coming block: `beat` (counted from where it started),
 /// `tempo` in beats a minute, and `playing` (0 or 1). Feeds the host signals every plan can read.
 // TS: withEngine((engine) => engine.setTransport(beat, tempo, playing !== 0))

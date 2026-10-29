@@ -6,6 +6,7 @@
 import { renderDevice, type DeviceChain, type RenderSetup, type Stimulus } from "../render/renderDevice";
 import type { PatchDocument } from "../patches/patch";
 import type { SoundDevices } from "../patches/sound";
+import type { CustomMidiDevice } from "../midi/custom";
 import { capturePhrase } from "./capturePhrase";
 import { envelope, isSustained, phaseScope, phrase, ringSeconds, transfer, type Portrait } from "./draw";
 
@@ -17,6 +18,8 @@ export type PortraitJob = (
   | { kind: "instrument"; type: string }
   | { kind: "effect"; type: string }
   | { kind: "patch"; sound: Pick<PatchDocument, "instrumentType" | "params" | "effects"> }
+  // A MIDI device's phrase: a project's own device goes with it, to register where it's drawn (INST-52).
+  | { kind: "midi"; type: string; device?: CustomMidiDevice }
 ) & { devices?: SoundDevices };
 
 /** The rate portraits play at, so a sample is decoded at it. */
@@ -59,9 +62,9 @@ async function effectPortrait(type: string, setup: RenderSetup): Promise<Portrai
   return { line: transfer(through, SAMPLE_RATE, NOTE.frequency) };
 }
 
-/** A MIDI device: the phrase it makes of a held chord. No audio, so no render. */
-export const midiPortrait = (type: string): Portrait => {
-  const { notes, spanSec } = capturePhrase(type);
+/** A MIDI device: the phrase it plays on the engine. Notes, not audio, so nothing is heard. */
+export const midiPortrait = (type: string, setup: RenderSetup): Portrait => {
+  const { notes, spanSec } = capturePhrase(type, setup.engine);
   return { fill: phrase(notes, spanSec) };
 };
 
@@ -70,6 +73,7 @@ const DRAW: {
 } = {
   instrument: ({ type }, setup) => instrumentPortrait({ instrument: { type } }, setup),
   effect: ({ type }, setup) => effectPortrait(type, setup),
+  midi: async ({ type }, setup) => midiPortrait(type, setup),
   patch: ({ sound }, setup) =>
     instrumentPortrait(
       {

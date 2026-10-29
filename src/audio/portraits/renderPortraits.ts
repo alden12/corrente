@@ -33,7 +33,7 @@ export async function renderPortraits(setup: RenderSetup): Promise<Record<string
       (info) =>
         [PORTRAIT_KEYS.effect(info.type), () => drawPortrait({ kind: "effect", type: info.type }, setup)] as const,
     ),
-    ...midiDeviceInfos().map((info) => [PORTRAIT_KEYS.midi(info.type), () => midiPortrait(info.type)] as const),
+    ...midiDeviceInfos().map((info) => [PORTRAIT_KEYS.midi(info.type), () => midiPortrait(info.type, setup)] as const),
   ];
   // One at a time, so the order keeps the output file stable from run to run.
   const portraits: Record<string, Portrait> = {};

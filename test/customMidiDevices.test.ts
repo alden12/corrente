@@ -6,6 +6,8 @@ import { engineMidiPlan } from "../src/audio/midi/engine";
 import { EngineMidiChain } from "../src/audio/bank/midiChain";
 import { renderProject } from "../src/audio/render/renderProject";
 import { nodeRenderSetup } from "../server/render/nodeRender";
+import { drawPortrait } from "../src/audio/portraits/devicePortrait";
+import { exploreItems } from "../src/ui/explore/exploreItems";
 
 /**
  * Custom MIDI devices in a project (INST-11.3): checked by compiling them, registered so tracks and
@@ -76,6 +78,14 @@ describe("custom MIDI devices", () => {
     expect(reopened.customMidiDevices).toEqual([strum()]);
     expect((reopened.getTracks()[0] as InstrumentTrack).midiDevices[0].type).toBe("cm-strum");
     expect(reopened.snapshot().customMidiDevices).toEqual([strum(), unreadable]);
+  });
+
+  it("gets a portrait drawn from what it plays on the engine, which Explore asks for", async () => {
+    const { project } = projectWithStrum();
+    const item = exploreItems({ savedPatches: [], samples: [], project }).find((each) => each.key === "midi:cm-strum");
+    expect(item?.drawing).toEqual({ kind: "midi", type: "cm-strum", device: strum() });
+    const portrait = await drawPortrait(item!.drawing!, nodeRenderSetup());
+    expect(portrait.fill).toMatch(/^M/);
   });
 
   it("an edit gives the device a new plan, and the engine chain playing it loads again", () => {

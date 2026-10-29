@@ -141,6 +141,25 @@ export class EngineBank {
     if (code !== 0) throw new PlanRejected(track, code);
   }
 
+  /**
+   * The notes a track's MIDI devices played into its voices in the last block, in order: each its
+   * offset into the block, its note, and its velocity, 0 for a note off. For drawing what a device
+   * plays (its portrait), not for playing: it makes a list.
+   */
+  midiPlayed(track: number): { offset: number; note: number; velocity: number }[] {
+    this.trackAt(track);
+    const words = new Float32Array(
+      this.engine.memory.buffer,
+      this.engine.eng_midi_played(track),
+      this.engine.eng_midi_played_count(track) * 3,
+    );
+    return Array.from({ length: words.length / 3 }, (_, at) => ({
+      offset: words[at * 3],
+      note: words[at * 3 + 1],
+      velocity: words[at * 3 + 2],
+    }));
+  }
+
   /** Move a MIDI device value (numbered as chainWords' `values`) at `time`. */
   setMidiValue(track: number, value: number, raw: number, time: number): void {
     this.queue.add(EVENT.midiValue, track, value, raw, time);

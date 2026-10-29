@@ -12,12 +12,18 @@ import type { ParamStore } from "../../params/store";
 import { octavatorDefinition } from "./octavator";
 import { arpeggiatorDefinition } from "./arpeggiator";
 import { euclideanDefinition } from "./euclidean";
+import { strumDefinition } from "./strum";
+import { scaleQuantiserDefinition } from "./scaleQuantiser";
+import { harmoniserDefinition } from "./harmoniser";
 
 /** The built-ins, and each open project's own devices (INST-11.3) as they register. */
 const DEFINITIONS = new Map<string, MidiDefinition>([
   ["octavator", octavatorDefinition],
   ["arpeggiator", arpeggiatorDefinition],
   ["euclidean", euclideanDefinition],
+  ["strum", strumDefinition],
+  ["scale-quantiser", scaleQuantiserDefinition],
+  ["harmoniser", harmoniserDefinition],
 ]);
 
 /** A device on a track, as the project holds it. */

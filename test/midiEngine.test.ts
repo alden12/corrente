@@ -151,9 +151,11 @@ describe("MIDI devices in the engine", () => {
       render(bank, 4, block);
       block += 4;
     };
-    Array.from({ length: 20 }, (_, index) => round(index));
+    // The allocator settles in over the first couple of hundred loads (one more 64 KB page, measured
+    // at about 250, then flat to 1000), so warm up past that before calling it flat.
+    Array.from({ length: 300 }, (_, index) => round(index));
     const warm = bank.engine.memory.buffer.byteLength;
-    Array.from({ length: 200 }, (_, index) => round(20 + index));
+    Array.from({ length: 200 }, (_, index) => round(300 + index));
     expect(bank.engine.memory.buffer.byteLength).toBe(warm);
   });
 });

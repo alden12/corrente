@@ -18,6 +18,7 @@ import { PORTRAIT_KEYS } from "../../audio/portraits/keys";
 import type { Portrait } from "../../audio/portraits/draw";
 import type { PortraitJob } from "../../audio/portraits/devicePortrait";
 import type { DeviceSource } from "../../audio/patches/sound";
+import type { ProjectStore } from "../../audio/project/projectStore";
 import PORTRAITS from "./portraits.json";
 import { deviceHue } from "../../audio/deviceColors";
 
@@ -87,11 +88,20 @@ export interface ExploreItem {
 type Unrated = Omit<ExploreItem, "favouritable">;
 
 /** What draws a custom device's portrait: it at its defaults, carrying its definition. */
+/** Where Explore's custom devices come from: the open project. */
+type ExploreProject = DeviceSource & Pick<ProjectStore, "customMidiDevices">;
+
 function deviceDrawing(kind: "instrument" | "effect", type: string, project: DeviceSource): PortraitJob | undefined {
   const device = (kind === "instrument" ? project.customInstruments : project.customEffects).find(
     (each) => each.type === type,
   );
   return device && { kind, type, devices: kind === "instrument" ? { instruments: [device] } : { effects: [device] } };
+}
+
+/** What draws a project's own MIDI device's portrait: the device, to register where it's drawn. */
+function midiDrawing(type: string, project: ExploreProject): PortraitJob | undefined {
+  const device = project.customMidiDevices.find((each) => each.type === type);
+  return device && { kind: "midi", type, device };
 }
 
 /** What draws a saved patch's portrait: its sound, with the custom devices it carries. */
@@ -109,7 +119,7 @@ export function exploreItems({
   savedPatches: Patch[];
   samples: { id: string; name: string }[];
   /** The open project, whose custom devices Explore lists. */
-  project: DeviceSource;
+  project: ExploreProject;
 }): ExploreItem[] {
   const instruments = pickableInstrumentInfos();
   const instrumentOf = (type: string) => instruments.find((info) => info.type === type);
@@ -176,6 +186,7 @@ export function exploreItems({
         tags: info.tags ?? [],
         builtin: !info.custom,
         hue: deviceHue(info),
+        ...(info.custom ? { drawing: midiDrawing(info.type, project) } : {}),
         source: { kind: "midi", type: info.type },
       }),
     ),

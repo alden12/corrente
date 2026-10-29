@@ -33,6 +33,10 @@ export interface EngineExports {
    * them. A chain of none takes them away. 0, or -1 if the words don't make a chain (nothing changes).
    */
   eng_midi_load(track: number, words: number, length: number): number;
+  /** Where the notes a track's MIDI devices played last block are: three floats a note (offset, note, velocity or 0 for off). */
+  eng_midi_played(track: number): number;
+  /** How many notes eng_midi_played holds. */
+  eng_midi_played_count(track: number): number;
   /** Moves a MIDI device value (a param or a bypass, numbered by chainWords). */
   eng_midi_value(track: number, value: number, raw: number): void;
   /** Moves a param's raw value (numbered by binding.ts): each source reading it ramps to its shaped value. */

@@ -48,6 +48,27 @@ export const euclideanSchema: ParamSchema = [
   { id: "accent", label: "Accent", kind: "number", min: 0, max: 1, default: 0, taper: "linear" },
 ] as const;
 
+/** Strum (INST-35): a chord's notes one after another, up, down or alternating, tilted in velocity. */
+export const strumSchema: ParamSchema = [
+  { id: "direction", label: "Direction", kind: "enum", options: ["up", "down", "alternate"], default: "up" },
+  { id: "spread", label: "Spread", kind: "number", min: 0, max: 0.25, default: 0.0625, taper: "linear", unit: "beats" },
+  { id: "tilt", label: "Tilt", kind: "number", min: -0.3, max: 0.3, default: -0.1, taper: "linear" },
+] as const;
+
+/** Scale quantiser (DAW-12): every note into the song's key, snapping to its side. */
+export const scaleQuantiserSchema: ParamSchema = [
+  { id: "snap", label: "Snap", kind: "enum", options: ["nearest", "down", "up"], default: "nearest" },
+] as const;
+
+/** Harmoniser (DAW-12): one or two notes above each, an interval apart in the song's key. */
+export const harmoniserSchema: ParamSchema = [
+  { id: "interval", label: "Interval", kind: "enum", options: ["3rd", "4th", "5th", "6th"], default: "3rd" },
+  { id: "voices", label: "Voices", kind: "enum", options: ["1", "2"], default: "1" },
+  { id: "level", label: "Level", kind: "number", min: 0, max: 1, default: 0.8, taper: "linear" },
+  { id: "low", label: "Lowest", kind: "number", min: 24, max: 96, default: 48, step: 1, taper: "linear" },
+  { id: "high", label: "Highest", kind: "number", min: 36, max: 108, default: 84, step: 1, taper: "linear" },
+] as const;
+
 export interface MidiDeviceInfo {
   /** Stable id used on the wire, in persistence, and to address the factory. */
   type: string;
@@ -116,4 +137,25 @@ registerMidiDevice({
   schema: euclideanSchema,
   tags: ["rhythm", "percussion"],
   color: "amber",
+});
+registerMidiDevice({
+  type: "strum",
+  label: "Strum",
+  schema: strumSchema,
+  tags: ["keys", "pluck"],
+  color: "orange",
+});
+registerMidiDevice({
+  type: "scale-quantiser",
+  label: "Scale Quantiser",
+  schema: scaleQuantiserSchema,
+  tags: ["lead", "bass"],
+  color: "cyan",
+});
+registerMidiDevice({
+  type: "harmoniser",
+  label: "Harmoniser",
+  schema: harmoniserSchema,
+  tags: ["lead", "keys"],
+  color: "indigo",
 });

@@ -5,6 +5,7 @@ import { midiDeviceInfos } from "../src/audio/midi/device/catalog";
 import { exploreItems } from "../src/ui/explore/exploreItems";
 import { renderPortraits } from "../src/audio/portraits/renderPortraits";
 import { nodeRenderSetup } from "../server/render/nodeRender";
+import { wasm } from "./support/engine";
 import PORTRAITS from "../src/ui/explore/portraits.json";
 
 const sine = (frequency: number, seconds: number, sampleRate = 8000, shape = (value: number) => value) =>
@@ -16,7 +17,7 @@ const numbers = (path: string) => [...path.matchAll(/-?\d+(\.\d+)?/g)].map((matc
 describe("capturePhrase", () => {
   it("captures something from every MIDI device, inside the phrase", () => {
     for (const info of midiDeviceInfos()) {
-      const { notes, spanSec } = capturePhrase(info.type);
+      const { notes, spanSec } = capturePhrase(info.type, wasm);
       expect(notes.length, info.type).toBeGreaterThan(0);
       expect(
         notes.every((note) => note.start >= 0 && note.start < spanSec),
@@ -26,14 +27,30 @@ describe("capturePhrase", () => {
   });
 
   it("feeds a pass-through device a melody, so its copies have somewhere to go", () => {
-    const { notes, spanSec } = capturePhrase("octavator");
+    const { notes, spanSec } = capturePhrase("octavator", wasm);
     // Each melody note and its octave copy, so more than one onset, and none lasting the phrase.
     expect(new Set(notes.map((note) => note.start)).size).toBeGreaterThan(1);
     expect(notes.every((note) => note.length < spanSec / 2)).toBe(true);
   });
 
+  it("feeds it a chord too, so a strum rolls it and a harmoniser stacks it in key", () => {
+    const strum = capturePhrase("strum", wasm, { params: { spread: 0.125 } });
+    const chord = strum.notes.filter((note) => note.start >= strum.spanSec / 2);
+    expect(chord.map((note) => note.pitch)).toEqual([60, 64, 67]);
+    expect(chord[1].start - chord[0].start).toBeCloseTo(0.0625, 3);
+    // The E flat snaps to D (the lower at a tie), and a third above C, D, G in C major is E, F, B.
+    const quantised = capturePhrase("scale-quantiser", wasm)
+      .notes.slice(0, 3)
+      .map((note) => note.pitch);
+    expect(quantised).toEqual([60, 62, 67]);
+    const harmonised = capturePhrase("harmoniser", wasm)
+      .notes.slice(0, 6)
+      .map((note) => note.pitch);
+    expect(harmonised).toEqual([60, 64, 62, 65, 67, 71]);
+  });
+
   it("steps a generator through the phrase once, not twice at its start", () => {
-    const { notes } = capturePhrase("arpeggiator", { bars: 2 });
+    const { notes } = capturePhrase("arpeggiator", wasm, { bars: 2 });
     const starts = notes.map((note) => note.start);
     expect(new Set(starts).size).toBe(starts.length);
     expect(Math.max(...starts)).toBeGreaterThan(1);
