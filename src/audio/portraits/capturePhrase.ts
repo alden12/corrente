@@ -7,7 +7,7 @@
  * **The input depends on the device.** A generator (one with a clock: an arpeggiator, a Euclidean)
  * is fed a held chord, which it turns into rhythm. A device that changes the notes it's given does
  * nothing a held chord can show, so it is fed a short melody, with a note out of the key, then a
- * chord struck: enough for an octaver's copies, a quantiser's snapping, a harmoniser's stacks and a
+ * short chord: enough for an octaver's copies, a quantiser's snapping, a harmoniser's stacks and a
  * strum's roll to show.
  */
 import { EngineBank } from "../bank/bank";
@@ -43,10 +43,13 @@ type Played = { pitch: number; start: number; end: number };
 /** What the device is fed: a held chord for a generator, else a melody then a chord. */
 const inputFor = (generates: boolean, spanSec: number): Played[] => {
   if (generates) return CHORD.map((pitch) => ({ pitch, start: 0, end: spanSec }));
+  // Every note as short as the melody's, the chord's too: held for the rest of the phrase, each of its
+  // notes drew as a long bar, and a strum's roll was a sliver at the start of it.
   const step = spanSec / 2 / MELODY.length;
+  const length = step * 0.85;
   return [
-    ...MELODY.map((pitch, index) => ({ pitch, start: index * step, end: index * step + step * 0.85 })),
-    ...CHORD.map((pitch) => ({ pitch, start: spanSec / 2, end: spanSec * 0.95 })),
+    ...MELODY.map((pitch, index) => ({ pitch, start: index * step, end: index * step + length })),
+    ...CHORD.map((pitch) => ({ pitch, start: spanSec / 2, end: spanSec / 2 + length })),
   ];
 };
 
