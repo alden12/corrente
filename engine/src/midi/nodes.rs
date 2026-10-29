@@ -14,12 +14,15 @@
 //! - **euclid** and **ratchet** (rhythm.rs): pass on some of a clock's ticks, or repeat them.
 //! - **order**, **delay**, **length** and **chance** (time.rs): number the notes of a chord, play notes
 //!   later, change how long they last, or let them through by chance.
+//! - **degrees** and **range** (pitch.rs): move notes in the song's key, snapping those not in it, or
+//!   by octaves into a range.
 //!
 //! A note that's moved keeps track of where it went, so its note off lets go of the same notes even if
 //! a knob moved in between. A note off nobody played passes through as it is: letting go of a note
 //! that isn't sounding does nothing.
 
 use super::clock::Clock;
+use super::pitch;
 use super::rhythm::{self, Ratchet};
 use super::time::{Chance, Delay, Order};
 use super::{BlockTransport, Event, Field, MAX_COPIES, MAX_EVENTS, MAX_HELD, NoteContext, Timed, draw};
@@ -49,7 +52,7 @@ pub enum Fields {
 }
 
 // TS: the same list as midi/format.ts's NODE_SPECS, by kind number.
-pub const SPECS: [Spec; 12] = [
+pub const SPECS: [Spec; 14] = [
     Spec { ports: &[], fields: Fields::Exactly(0), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Ticks },
     Spec { ports: &[Wire::Notes, Wire::Ticks], fields: Fields::Exactly(1), output: Wire::Notes },
@@ -62,6 +65,8 @@ pub const SPECS: [Spec; 12] = [
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(2), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(2), output: Wire::Notes },
 ];
 
 pub const KIND_INPUT: usize = 0;
@@ -76,6 +81,8 @@ pub const KIND_ORDER: usize = 8;
 pub const KIND_DELAY: usize = 9;
 pub const KIND_LENGTH: usize = 10;
 pub const KIND_CHANCE: usize = 11;
+pub const KIND_DEGREES: usize = 12;
+pub const KIND_RANGE: usize = 13;
 
 /// A node's state, by kind.
 // TS: a discriminated union of each kind's state.
@@ -83,9 +90,11 @@ pub enum Kind {
     Input,
     Clock(Clock),
     Pick(Pick),
-    /// Stack and transpose both move notes and remember where each went.
+    /// Stack, transpose, degrees and range move notes and remember where each went.
     Stack(NoteMap),
     Transpose(NoteMap),
+    Degrees(NoteMap),
+    Range(NoteMap),
     Velocity,
     Euclid,
     Ratchet(Ratchet),
@@ -111,6 +120,8 @@ impl Kind {
             KIND_DELAY => Kind::Delay(Delay::new()),
             KIND_LENGTH => Kind::Length,
             KIND_CHANCE => Kind::Chance(Chance::new()),
+            KIND_DEGREES => Kind::Degrees(NoteMap::new()),
+            KIND_RANGE => Kind::Range(NoteMap::new()),
             _ => return None,
         })
     }
@@ -192,6 +203,18 @@ impl Node {
                 };
                 push(out, offset, event);
             }),
+            // TS: snap each note into the key on its side, then move it `steps` degrees. Fields: steps, snap.
+            Kind::Degrees(map) => map.process(&inputs[0], out, |note, _| {
+                let key = context.transport.key;
+                let snapped = pitch::snap(key, note.pitch, context.note_field(fields, 1, note).round() as usize);
+                let steps = context.note_field(fields, 0, note).round() as i32;
+                Some((pitch::degrees(key, snapped, steps), note.velocity, note.index))
+            }, 1),
+            // TS: fold each note by octaves into low..high. Fields: low, high.
+            Kind::Range(map) => map.process(&inputs[0], out, |note, _| {
+                let (low, high) = (context.note_field(fields, 0, note).round() as i32, context.note_field(fields, 1, note).round() as i32);
+                Some((pitch::fold(note.pitch, low, high), note.velocity, note.index))
+            }, 1),
             Kind::Euclid => rhythm::euclid(&inputs[0], fields, context, out),
             Kind::Ratchet(ratchet) => ratchet.process(&inputs[0], fields, context, out),
             Kind::Order(order) => order.process(&inputs[0], fields, context, out),
@@ -208,7 +231,7 @@ impl Node {
             Kind::Clock(clock) => clock.clear(),
             Kind::Pick(pick) => pick.clear(),
             Kind::Ratchet(ratchet) => ratchet.clear(),
-            Kind::Stack(map) | Kind::Transpose(map) => map.clear(offset, out),
+            Kind::Stack(map) | Kind::Transpose(map) | Kind::Degrees(map) | Kind::Range(map) => map.clear(offset, out),
             Kind::Order(order) => order.clear(),
             Kind::Delay(delay) => delay.clear(offset, out),
             Kind::Chance(chance) => chance.clear(),

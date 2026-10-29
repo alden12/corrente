@@ -119,4 +119,44 @@ describe("custom MIDI devices", () => {
     );
     expect(difference).toBeLessThan(1e-4);
   }, 30000);
+
+  it("plays in the song's key: a step up in degrees sounds like the notes moved by hand, in each key", async () => {
+    const stepUp: CustomMidiDevice = {
+      type: "cm-step-up",
+      schema: [],
+      definition: {
+        format: 1,
+        nodes: { keys: { node: "input" }, up: { node: "degrees", inputs: { notes: "keys", steps: 1 } } },
+        output: "up",
+      },
+    };
+    // E, then B: a step up is F and C in C major, F# and C# in D major.
+    const melody = (pitches: number[]) =>
+      pitches.map((pitch, index) => ({ pitch, start: index, length: 1, velocity: 0.8 }));
+    const render = (key: number, notes: ReturnType<typeof melody>, withDevice: boolean) => {
+      const project = new ProjectStore(false);
+      project.setTempo(120);
+      project.setLength(4);
+      project.setKey(key, "major");
+      if (withDevice) project.addCustomMidiDevice(stepUp);
+      const track = project.addTrack("subtractive") as InstrumentTrack;
+      if (withDevice) project.addMidiDevice(track.id, "cm-step-up");
+      notes.forEach((note) => track.clips[0].store.addNote(note));
+      // The catalogs are process-wide: take the device out once it's rendered.
+      return renderProject(project, nodeRenderSetup(), { tailSec: 1 }).finally(
+        () => withDevice && project.removeCustomMidiDevice("cm-step-up"),
+      );
+    };
+    const largestDifference = (left: Float32Array, right: Float32Array) =>
+      left.reduce((most, sample, index) => Math.max(most, Math.abs(sample - right[index])), 0);
+    const cases = [
+      { key: 0, moved: [65, 72] },
+      { key: 2, moved: [66, 73] },
+    ];
+    for (const { key, moved } of cases) {
+      const played = await render(key, melody([64, 71]), true);
+      const byHand = await render(key, melody(moved), false);
+      expect(largestDifference(played.channels[0], byHand.channels[0])).toBeLessThan(1e-4);
+    }
+  }, 30000);
 });

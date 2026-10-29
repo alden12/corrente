@@ -23,6 +23,8 @@ const ORDER: f64 = 8.0;
 const DELAY: f64 = 9.0;
 const LENGTH: f64 = 10.0;
 const CHANCE: f64 = 11.0;
+const DEGREES: f64 = 12.0;
+const RANGE: f64 = 13.0;
 const CHORD: f64 = 5.0;
 
 // TS: const fixed = (value: number) => [0, value]; const bound = (value: number) => [1, value, 1, 0, 0]; const random = (min, max) => [2, min, max]
@@ -450,4 +452,82 @@ fn a_delay_lets_go_of_what_it_played_when_the_chain_clears() {
     // Only C (at 0) and E (at 1500) had played; G was still waiting, and is dropped.
     let after: Vec<Event> = chain.block(20 * 128, steady(20)).iter().map(|&(_, event)| event).collect();
     assert!(!after.contains(&on(G)), "{after:?}");
+}
+
+/// G major: G, A, B, C, D, E, F#.
+const G_MAJOR: Key = Key { tonic: 7, scale: 0b1010_1011_0101 };
+
+/// A device that moves each note `steps` degrees of the key, snapping on `side` (0 nearest, 1 down, 2 up).
+// TS: device(fixed(0), [input, degrees(steps, snap)], 1)
+fn in_degrees(steps: Vec<f64>, side: f64) -> Vec<f64> {
+    device(fixed(0.0), &[node(INPUT, &[], &[]), node(DEGREES, &[&[0]], &[steps, fixed(side)])], 1)
+}
+
+/// Each of `notes` played and let go in turn, under `transport`: the notes it became.
+// TS: notes.flatMap((note, n) => [[n * 2, 0, on(note)], [n * 2 + 1, 0, off(note)]]) then ons(run(...))
+fn played_through(device: Vec<f64>, notes: &[i32], transport: impl Fn(u64) -> BlockTransport) -> Vec<i32> {
+    let mut chain = parse(&chain_words(&[], &[device]));
+    let keys: Vec<(u64, i32, Event)> = notes.iter().enumerate().flat_map(|(at, &note)| [(at as u64 * 2, 0, on(note)), (at as u64 * 2 + 1, 0, off(note))]).collect();
+    ons(&run(&mut chain, notes.len() as u64 * 2, &keys, transport)).iter().map(|&(_, note)| note).collect()
+}
+
+#[test]
+fn degrees_move_notes_up_and_down_the_songs_scale() {
+    let scale = [60, 62, 64, 65, 67, 69, 71];
+    // A third up in C major: C to E, D to F, ..., A and B over the octave to C and D.
+    assert_eq!(played_through(in_degrees(fixed(2.0), 0.0), &scale, steady), vec![64, 65, 67, 69, 71, 72, 74]);
+    assert_eq!(played_through(in_degrees(fixed(-1.0), 0.0), &[60, 64], steady), vec![59, 62]);
+    // A step up from E is F in C major, F# in G major: the key comes from the transport.
+    let in_g = |block: u64| BlockTransport { key: G_MAJOR, ..steady(block) };
+    assert_eq!(played_through(in_degrees(fixed(1.0), 0.0), &[64], steady), vec![65]);
+    assert_eq!(played_through(in_degrees(fixed(1.0), 0.0), &[64], in_g), vec![66]);
+}
+
+#[test]
+fn degrees_snap_a_note_not_in_the_key_to_its_side_the_lower_at_a_tie() {
+    // C#, Eb, F#, Ab, Bb in C major: each halfway between two notes of it.
+    let black = [61, 63, 66, 68, 70];
+    assert_eq!(played_through(in_degrees(fixed(0.0), 0.0), &black, steady), vec![60, 62, 65, 67, 69]);
+    assert_eq!(played_through(in_degrees(fixed(0.0), 1.0), &black, steady), vec![60, 62, 65, 67, 69]);
+    assert_eq!(played_through(in_degrees(fixed(0.0), 2.0), &black, steady), vec![62, 64, 67, 69, 71]);
+    // Notes in the key are left where they are; snapping, then a step, from C# up is D then E.
+    assert_eq!(played_through(in_degrees(fixed(0.0), 0.0), &[60, 64, 71], steady), vec![60, 64, 71]);
+    assert_eq!(played_through(in_degrees(fixed(1.0), 2.0), &[61], steady), vec![64]);
+}
+
+#[test]
+fn a_note_moved_in_one_key_lets_go_of_the_same_note_after_the_key_changes() {
+    let mut chain = parse(&chain_words(&[], &[in_degrees(fixed(1.0), 0.0)]));
+    // E becomes F in C major; the key turns to G major before E is let go.
+    let transport = |block: u64| BlockTransport { key: if block < 5 { Key::C_MAJOR } else { G_MAJOR }, ..steady(block) };
+    let played = run(&mut chain, 10, &[(0, 0, on(E)), (8, 0, off(E))], transport);
+    assert_eq!(ons(&played), vec![(0, 65)]);
+    assert!(played.contains(&(8 * 128, off(65))));
+    assert!(!played.iter().any(|&(_, event)| event == off(66)));
+}
+
+#[test]
+fn a_harmoniser_from_parts_makes_each_note_a_chord_in_the_key() {
+    // A stack of three plain copies, numbered 0 to 2, then two degrees up for each: a triad on every note.
+    let copy = [fixed(0.0), fixed(1.0), fixed(1.0)];
+    let copies: Vec<Vec<f64>> = [copy.clone(), copy.clone(), copy].concat();
+    let triads = device(
+        fixed(0.0),
+        &[node(INPUT, &[], &[]), node(STACK, &[&[0]], &copies), node(DEGREES, &[&[1]], &[per(INDEX, 2.0, 0.0), fixed(0.0)])],
+        2,
+    );
+    let mut chain = parse(&chain_words(&[], &[triads]));
+    let played = run(&mut chain, 4, &[(0, 0, on(C)), (1, 0, off(C)), (2, 0, on(62)), (3, 0, off(62))], steady);
+    // C major on C, D minor on D; every note it made is let go.
+    assert_eq!(ons(&played).iter().map(|&(_, note)| note).collect::<Vec<_>>(), vec![C, E, G, 62, 65, 69]);
+    let offs = played.iter().filter(|&&(_, event)| matches!(event, Event::Off { .. })).count();
+    assert_eq!(offs, 6);
+}
+
+#[test]
+fn range_folds_notes_by_octaves_into_its_span() {
+    let span = |low: f64, high: f64| device(fixed(0.0), &[node(INPUT, &[], &[]), node(RANGE, &[&[0]], &[fixed(low), fixed(high)])], 1);
+    assert_eq!(played_through(span(60.0, 71.0), &[48, 60, 65, 75, 96], steady), vec![60, 60, 65, 63, 60]);
+    // A span under an octave can't hold every note: one below lands on the first octave at or above low.
+    assert_eq!(played_through(span(60.0, 64.0), &[55, 70], steady), vec![67, 58]);
 }

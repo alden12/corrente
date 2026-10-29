@@ -93,6 +93,9 @@ export const PICK_DIRECTIONS = ["up", "down", "updown", "random", "played", "cho
 /** The directions `order` numbers a chord's notes on the same sample. */
 export const ORDER_DIRECTIONS = ["up", "down", "alternate"] as const;
 
+/** Where `degrees` moves a note that isn't in the key: to the nearer note in it (the lower at a tie), or down, or up. */
+export const SNAP_SIDES = ["nearest", "down", "up"] as const;
+
 /**
  * The palette, in the order the engine numbers the kinds (engine/src/midi/nodes.rs's SPECS): each
  * kind's ports and fields, in the order the words carry them. The two change together.
@@ -192,6 +195,28 @@ export const NODE_SPECS: readonly NodeSpec[] = [
       "lets each note through with `probability`, drawn the same way every time so a render repeats; a dropped note's note off goes with it",
     ports: [{ name: "notes", wire: "notes" }],
     fields: [{ name: "probability", type: "number", min: 0, max: 1, default: 1 }],
+    output: "notes",
+  },
+  {
+    name: "degrees",
+    description:
+      "moves each note `steps` degrees of the song's key (the project's, set with set_key), after snapping one not in it to the key's nearest note on its `snap` side: 0 steps keeps a melody in key; after a stack of plain copies, { per: index, times: 2 } makes each note a chord in key",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [
+      { name: "steps", type: "number", min: -21, max: 21, default: 0 },
+      { name: "snap", type: "choice", options: SNAP_SIDES, default: "nearest" },
+    ],
+    output: "notes",
+  },
+  {
+    name: "range",
+    description:
+      "moves each note by octaves to lie from `low` to `high` (MIDI notes, C4 = 60), so harmonies and wide arpeggios stay where an instrument sounds good; a span under an octave sends a note below it to the first octave at or above `low`",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [
+      { name: "low", type: "number", min: 0, max: 127, default: 36 },
+      { name: "high", type: "number", min: 0, max: 127, default: 96 },
+    ],
     output: "notes",
   },
 ];

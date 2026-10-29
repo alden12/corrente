@@ -28,7 +28,9 @@ export const midiFormatDoc = () => ({
     '(drawn the same way every time), or read off each note: { "per": "index" | "pitch" | "velocity", "times"?: ' +
     'number or param, "plus"?: number or param }. A note\'s index is its place among notes made together: a ' +
     "stack's copies, a pick's place in what's held, or a chord `order` numbered. Build devices from small nodes: " +
-    "a strum is order then a delay by index; an echo a stack then a delay by index, fading by a velocity by index. " +
+    "a strum is order then a delay by index; an echo a stack then a delay by index, fading by a velocity by index; " +
+    "a harmoniser a stack of plain copies then degrees by index. degrees plays in the song's key (list_tracks' key, " +
+    "set with set_key), so a device follows the key as it changes. " +
     "Wires carry notes or a clock's ticks; a port takes only its own kind. `output` is " +
     "the node whose notes the device plays. Every problem comes back at once when it's checked.",
   midiNodes: Object.fromEntries(

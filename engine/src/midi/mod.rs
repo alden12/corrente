@@ -26,6 +26,7 @@
 mod chain;
 mod clock;
 mod nodes;
+mod pitch;
 mod rhythm;
 mod time;
 mod words;
