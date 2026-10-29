@@ -62,3 +62,16 @@ test("a track's whole chain opens as one graph, its devices in frames that fold"
   expect(await page.locator(".react-flow__node").count()).toBeLessThan(boxes);
   await expect(page.locator('.react-flow__edge[data-id^="link:"]')).toHaveCount(2);
 });
+
+test("a tab opened past the bar's edge scrolls into view", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Effects");
+  // Enough graph tabs to run past the bar's width; each opens shown.
+  for (const effect of ["Reverb", "Chorus", "Flanger", "Phaser", "Tremolo", "Widener", "Lo-Fi"]) {
+    await page.getByRole("button", { name: `Actions: ${effect}` }).click();
+    await page.getByRole("menuitem", { name: "View device graph" }).click();
+    await expect(tabs(page).last()).toBeInViewport();
+  }
+  await expect(tabs(page).first()).not.toBeInViewport();
+});

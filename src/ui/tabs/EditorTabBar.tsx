@@ -2,9 +2,10 @@
  * The editor tabs' bar over the workbench (DAW-89): each tab wears its instrument's portrait and the
  * track's name, in italics while it's the preview, or a device's portrait and name for its graph
  * (INST-44). Clicking a tab opens it; double-clicking keeps it; × closes it; right-clicking offers
- * renaming the track, its instrument's graph and closing tabs. The mouse wheel scrolls the bar sideways.
+ * renaming the track, its instrument's graph and closing tabs. The mouse wheel scrolls the bar sideways,
+ * and the tab shown scrolls into view.
  */
-import { useState, type ReactNode, type WheelEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode, type WheelEvent } from "react";
 import type { Dispatch } from "../../audio/commands/types";
 import { EMPTY_INSTRUMENT, instrumentInfos } from "../../audio/instruments/catalog";
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
@@ -171,6 +172,11 @@ function EditorTab({
   const [renaming, setRenaming] = useState(false);
   const { openAt, menu } = useContextMenu();
   const key = tabKey(tab.target);
+  // The tab shown scrolls into the bar's view, so one opened past the edge isn't hidden.
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (active) element.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
   const nameClass = `text-[13px] truncate ${active ? "font-semibold text-strong" : "text-muted"} ${tab.preview ? "italic" : ""}`;
   const face = faceOf(tab, projectStore, () => {
     tabs.keep(key);
@@ -182,6 +188,7 @@ function EditorTab({
     // No fill on the active tab: the bar is its own surface (`frame`) and the teal underline is what
     // marks selection.
     <div
+      ref={element}
       role="tab"
       aria-selected={active}
       tabIndex={0}
