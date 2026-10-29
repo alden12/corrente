@@ -21,7 +21,6 @@
  *   views are re-made then (the addresses the engine gave stay put).
  */
 import type { CompiledPlan } from "../definitions/compile";
-import type { CompiledChain } from "../midi/compile";
 import { bindingOf, bindWords } from "./binding";
 import {
   BLOCK,
@@ -48,6 +47,8 @@ export class PlanRejected extends Error {
 const EMPTY_PLAN = Int32Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 /** Its binding: no values, no sources, no zones (binding.ts's words, as doubles). */
 const EMPTY_BINDING = new Int32Array(new Float64Array([0, 0, 0, 0]).buffer);
+/** A MIDI chain with no values and no devices (chainWords([])), written out so the worklet needn't load the compiler. */
+const EMPTY_CHAIN = new Int32Array(new Float64Array([0, 0]).buffer);
 
 interface Track {
   plan: CompiledPlan | null;
@@ -130,15 +131,13 @@ export class EngineBank {
   }
 
   /**
-   * Play a track's notes through MIDI devices (INST-11.1): `chain` is chainWords' output, the devices
+   * Play a track's notes through MIDI devices (INST-11.1): `words` are chainWords' words, the devices
    * in order (none takes them away). Takes effect at once; the keys down start again in it. Throws
-   * PlanRejected if the engine won't read it.
+   * PlanRejected if the engine won't read them.
    */
-  loadMidi(track: number, chain: CompiledChain): void {
+  loadMidi(track: number, words: Int32Array): void {
     this.trackAt(track);
-    const code = this.withWords(chain.words, (pointer) =>
-      this.engine.eng_midi_load(track, pointer, chain.words.length),
-    );
+    const code = this.withWords(words, (pointer) => this.engine.eng_midi_load(track, pointer, words.length));
     if (code !== 0) throw new PlanRejected(track, code);
   }
 
@@ -154,9 +153,10 @@ export class EngineBank {
     return result;
   }
 
-  /** Empty a track (its device went): it plays nothing, its queued events and knob values are dropped. */
+  /** Empty a track (its device went): it plays nothing, through no MIDI devices, and its queued events and knob values are dropped. */
   unload(track: number): void {
     const state = this.trackAt(track);
+    this.withWords(EMPTY_CHAIN, (pointer) => this.engine.eng_midi_load(track, pointer, EMPTY_CHAIN.length));
     this.withWords(EMPTY_PLAN, (pointer) => this.engine.eng_load(track, pointer, EMPTY_PLAN.length));
     this.withWords(EMPTY_BINDING, (pointer) => this.engine.eng_bind(track, pointer, EMPTY_BINDING.length));
     state.plan = null;

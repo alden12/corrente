@@ -13,6 +13,10 @@ export type ToBank =
   | { type: "noteOff"; track: number; note: number; time: number }
   | { type: "allOff"; track: number; time: number }
   | { type: "param"; track: number; param: string; value: number; time: number }
+  /** The track's MIDI devices as chainWords makes them (INST-11.1): none takes them away. */
+  | { type: "midi"; track: number; words: Int32Array }
+  /** Move a MIDI device value, numbered as chainWords' `values`, at `time`. */
+  | { type: "midiValue"; track: number; value: number; raw: number; time: number }
   /** A sample param now names `ref`, with its audio (none for an empty ref, or one that didn't load). */
   | { type: "sample"; track: number; param: string; ref: string; audio: SampleAudio | null }
   /** Where the transport is: `beat` at context time `time`, at `tempo`. Applies to every track. */

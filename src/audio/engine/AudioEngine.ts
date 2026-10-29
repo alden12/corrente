@@ -26,6 +26,7 @@ import { COMPENSATION_GLIDE_SECONDS, MixRouter, masterBus } from "./mixer";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
+import { playsInEngine } from "../midi/engine";
 import { onSlowBlocks, setTransport as setEngineTransport } from "../bank/pool";
 import type { BufferSize } from "./bufferSize";
 import type { Transport } from "../bank/messages";
@@ -480,16 +481,23 @@ export class AudioEngine {
    * pipeline. Devices carry no audio, so this only creates/disposes interpreters and
    * repoints their `next`: d0 -> d1 -> ... -> instrument. Bypassed devices stay linked
    * (they pass through internally) so a mid-note bypass never strands held notes.
+   *
+   * When the engine plays the instrument and every one of the devices (INST-11.1), the engine plays
+   * the devices too, ahead of the voices, and notes go straight to the instrument.
    */
   private reconcileMidiDevices(node: TrackNode, track: InstrumentTrack): void {
-    const want = new Set(track.midiDevices.map((device) => device.id));
+    const inEngine = node.instrument instanceof EngineInstrument && playsInEngine(track.midiDevices);
+    if (node.instrument instanceof EngineInstrument) node.instrument.setMidiDevices(inEngine ? track.midiDevices : []);
+    // The devices played here, in TypeScript.
+    const instances = inEngine ? [] : track.midiDevices;
+    const want = new Set(instances.map((device) => device.id));
     for (const [id, device] of node.midiDevices) {
       if (!want.has(id)) {
         device.dispose();
         node.midiDevices.delete(id);
       }
     }
-    for (const instance of track.midiDevices) {
+    for (const instance of instances) {
       if (!node.midiDevices.has(instance.id))
         node.midiDevices.set(
           instance.id,
@@ -497,9 +505,9 @@ export class AudioEngine {
         );
     }
     // Relink in the track's order, tail terminating in the instrument.
-    const chain = track.midiDevices.map((instance) => node.midiDevices.get(instance.id)!);
+    const chain = instances.map((instance) => node.midiDevices.get(instance.id)!);
     chain.forEach((device, index) => {
-      device.bypassed = track.midiDevices[index].bypassed;
+      device.bypassed = instances[index].bypassed;
       device.setNext(chain[index + 1] ?? node.instrument);
     });
     node.noteHead = chain[0] ?? node.instrument;

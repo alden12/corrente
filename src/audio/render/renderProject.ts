@@ -33,6 +33,8 @@ import { sampleAudioFor } from "./sampleAudio";
 import type { Rendered, RenderSetup } from "./renderDevice";
 import { trackNotes, type ScheduledNote } from "./trackNotes";
 import { midiChain } from "../midi/device/registry";
+import { chainWords } from "../midi/compile";
+import { chainDevicesOf, playsInEngine } from "../midi/engine";
 import { audioTape } from "./audioTape";
 import type { NoteTarget } from "../midi/device/GraphMidiDevice";
 
@@ -269,7 +271,10 @@ export async function renderProject(
       },
       allNotesOff: () => {},
     };
-    const { head, devices } = midiChain(strip.track.midiDevices, slot, clock);
+    // Devices the engine plays go to the slot with the notes (INST-11.1); the rest play here.
+    const inEngine = playsInEngine(strip.track.midiDevices);
+    if (inEngine) instruments.loadMidi(first.track, chainWords(chainDevicesOf(strip.track.midiDevices)).words);
+    const { head, devices } = midiChain(inEngine ? [] : strip.track.midiDevices, slot, clock);
     // Each note under the block it starts in, so a block plays just its own.
     const byBlock = trackNotes(strip.track, timeline).reduce((blocks, note) => {
       const block = Math.floor((note.start * sampleRate) / BLOCK);

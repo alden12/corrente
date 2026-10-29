@@ -51,6 +51,15 @@ class EngineBankProcessor extends AudioWorkletProcessor {
       noteOff: ({ track, note, time }) => this.bank.noteOff(track, note, time),
       allOff: ({ track, time }) => this.bank.allNotesOff(track, time),
       param: ({ track, param, value, time }) => this.bank.setParam(track, param, value, time),
+      midi: ({ track, words }) => {
+        try {
+          this.bank.loadMidi(track, words);
+        } catch (error) {
+          if (!(error instanceof PlanRejected)) throw error;
+          this.port.postMessage({ type: "refused", track, message: error.message } satisfies FromBank);
+        }
+      },
+      midiValue: ({ track, value, raw, time }) => this.bank.setMidiValue(track, value, raw, time),
       sample: ({ track, param, ref, audio }) => {
         try {
           this.bank.setSample(track, param, ref, audio);
