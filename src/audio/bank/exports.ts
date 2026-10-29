@@ -58,6 +58,8 @@ export interface EngineExports {
   eng_output(track: number, channel: number): number;
   /** Where the transport is at the start of the coming block. */
   eng_transport(beat: number, tempo: number, playing: number): void;
+  /** The song's key from the coming block: a tonic pitch class, and its scale as bits (theory/key.ts). */
+  eng_key(tonic: number, scale: number): void;
   /**
    * Makes room for a sample in a slot (0 to 255) and returns where to write it, each channel's frames
    * in turn; 0 if it won't fit. Memory may grow.

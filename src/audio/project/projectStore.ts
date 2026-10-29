@@ -11,6 +11,8 @@
  * Effects attach to a "host" - a track or a group - so a group's effect chain
  * reuses the same code path as a track's wholesale (the slice-5 routing).
  */
+import { DEFAULT_KEY, type ProjectKey } from "../theory/key";
+import { SCALE_NAMES, type ScaleName } from "../theory/scales";
 import { ParamStore } from "../params/store";
 import { ClipStore } from "../sequencer/clipStore";
 import { GRID, type NoteEvent } from "../sequencer/types";
@@ -189,6 +191,8 @@ export interface ProjectStructure {
   loopStart: number;
   /** Time signature (`numerator` beats per bar, each a `1/denominator` note). Default 4/4. */
   timeSignature: TimeSignature;
+  /** The song's key (DAW-12): what the pads play in, and the MIDI devices' degrees count in. */
+  key: ProjectKey;
   /** Project-wide groove template id (see grooves/catalog) + how strongly it applies. */
   grooveId: string;
   grooveAmount: number;
@@ -205,6 +209,7 @@ export class ProjectStore {
   private lengthBeats = 16;
   private loopStartBeats = 0;
   private timeSig: TimeSignature = { ...DEFAULT_TIME_SIGNATURE };
+  private musicalKey: ProjectKey = { ...DEFAULT_KEY };
   private grooveId = DEFAULT_GROOVE_ID;
   private grooveAmount = 1;
   private samples: SampleAsset[] = [];
@@ -270,6 +275,7 @@ export class ProjectStore {
       lengthBeats: this.lengthBeats,
       loopStartBeats: this.loopStartBeats,
       timeSignature: this.timeSig,
+      key: this.musicalKey,
       selectedTrackId: this.selectedTrackId,
       grooveId: this.grooveId,
       grooveAmount: this.grooveAmount,
@@ -316,6 +322,9 @@ export class ProjectStore {
   }
   get timeSignature(): TimeSignature {
     return this.timeSig;
+  }
+  get key(): ProjectKey {
+    return this.musicalKey;
   }
   /** Bar length in beats (a beat = a quarter-note). Integer for x/4, fractional for x/8. The
    *  scheduler, rulers, and grid all project the meter through the shared `beatsPerBar` helper. */
@@ -975,6 +984,16 @@ export class ProjectStore {
     this.emit();
   }
 
+  /** Set the song's key (DAW-12). A tonic out of range wraps round the octave, and a scale this
+   *  build doesn't know keeps the current one (this store coerces - the MCP boundary validates). */
+  setKey(tonic: number, scale: ScaleName): void {
+    const nextTonic = ((Math.round(tonic) % 12) + 12) % 12;
+    const nextScale = SCALE_NAMES.includes(scale) ? scale : this.musicalKey.scale;
+    if (nextTonic === this.musicalKey.tonic && nextScale === this.musicalKey.scale) return;
+    this.musicalKey = { tonic: nextTonic, scale: nextScale };
+    this.emit();
+  }
+
   /** The project-wide groove: which template, and how strongly it applies (0..1). */
   getGroove(): { id: string; amount: number } {
     return { id: this.grooveId, amount: this.grooveAmount };
@@ -1463,6 +1482,7 @@ export class ProjectStore {
       lengthBeats: this.lengthBeats,
       loopStartBeats: this.loopStartBeats,
       timeSignature: this.timeSig,
+      key: this.musicalKey,
       selectedTrackId: this.selectedTrackId,
       grooveId: this.grooveId,
       grooveAmount: this.grooveAmount,
@@ -1777,6 +1797,7 @@ export class ProjectStore {
     this.lengthBeats = data.lengthBeats ?? 16;
     this.loopStartBeats = clamp(data.loopStart ?? 0, 0, this.lengthBeats - MIN_LOOP);
     this.timeSig = { ...(data.timeSignature ?? DEFAULT_TIME_SIGNATURE) };
+    this.musicalKey = { ...(data.key ?? DEFAULT_KEY) };
     this.grooveId = data.grooveId ?? DEFAULT_GROOVE_ID;
     this.grooveAmount = clamp(data.grooveAmount ?? 1, 0, 1);
     this.samples = (data.samples ?? []).map((sample) => ({ ...sample }));

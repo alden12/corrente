@@ -1,11 +1,9 @@
 /**
  * The pads' key, scale and octave range (MOBILE-6).
  *
- * **A local setting, deliberately, and a temporary one.** The pads are the first real
- * consumer of a project-level key and scale; until the project carries one, persisting it
- * per browser is the honest version - it is a view preference here, not a property of the
- * music. When the project gains a key, this hook is where it gets read from instead, and
- * the pads do not change.
+ * **The key is the song's** (DAW-12): read from the project and set as an edit, so it saves
+ * with the song, undoes, and reaches Claude and the MIDI devices. The octave range and the
+ * rest stay per browser: they're how you like the pads, not part of the music.
  *
  * The octave range is **one control**: a pair of buttons moves it, a pair sizes it, and they
  * share a label. Both pairs work in whole *rows* rather than whole octaves, so on a tablet -
@@ -19,7 +17,8 @@
  */
 import { useState } from "react";
 import { usePersistentBoolean, usePersistentNumber, usePersistentString } from "../usePersistent";
-import { PITCH_CLASSES, SCALE_NAMES, pitchAt, type ScaleName } from "../../audio/theory/scales";
+import { PITCH_CLASSES, pitchAt, type ScaleName } from "../../audio/theory/scales";
+import type { ProjectKey } from "../../audio/theory/key";
 import { pitchName } from "../noteNames";
 import { CHORD_ROW_LIMIT, type ChordFamily, type ChordPrefs } from "../../audio/theory/chords";
 import {
@@ -94,9 +93,16 @@ export interface PadSettings {
   rangeLabel: string;
 }
 
-export function usePadSettings(octavesPerRow: number, maxRows: number): PadSettings {
-  const [tonic, setTonic] = usePersistentNumber("corrente:pads-tonic", 0, 0, PITCH_CLASSES.length - 1);
-  const [scale, setScale] = usePersistentString<ScaleName>("corrente:pads-scale", "major", SCALE_NAMES);
+/** The song's key, and how to change it: an edit, so it's undoable and saved (DAW-12). */
+export interface SongKey {
+  key: ProjectKey;
+  setKey: (key: ProjectKey) => void;
+}
+
+export function usePadSettings(octavesPerRow: number, maxRows: number, songKey: SongKey): PadSettings {
+  const { tonic, scale } = songKey.key;
+  const setTonic = (next: number) => songKey.setKey({ tonic: next, scale });
+  const setScale = (next: ScaleName) => songKey.setKey({ tonic, scale: next });
   const [storedOctave, setLowOctave] = usePersistentNumber(
     "corrente:pads-octave",
     3,

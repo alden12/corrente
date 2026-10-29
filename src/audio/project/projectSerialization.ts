@@ -10,6 +10,7 @@
  * still owns id-minting, effect-chain reuse, and the orphan-track repair, which
  * need the live store).
  */
+import type { ProjectKey } from "../theory/key";
 import type { CustomMidiDevice } from "../midi/custom";
 import { ParamStore } from "../params/store";
 import { ClipStore } from "../sequencer/clipStore";
@@ -61,6 +62,7 @@ export interface TransportState {
   lengthBeats: number;
   loopStartBeats: number;
   timeSignature: TimeSignature;
+  key: ProjectKey;
   selectedTrackId: string | null;
   grooveId: string;
   grooveAmount: number;
@@ -143,6 +145,7 @@ export function snapshotProject(tracks: Track[], groups: Group[], transport: Tra
     lengthBeats: transport.lengthBeats,
     loopStart: transport.loopStartBeats,
     timeSignature: transport.timeSignature,
+    key: { ...transport.key },
     selectedTrackId: transport.selectedTrackId,
     grooveId: transport.grooveId,
     grooveAmount: transport.grooveAmount,

@@ -80,6 +80,7 @@ export function buildStructure(tracks: Track[], groups: Group[], transport: Tran
     lengthBeats: transport.lengthBeats,
     loopStart: transport.loopStartBeats,
     timeSignature: transport.timeSignature,
+    key: transport.key,
     grooveId: transport.grooveId,
     grooveAmount: transport.grooveAmount,
     samples: transport.samples,

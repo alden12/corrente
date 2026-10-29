@@ -4,6 +4,7 @@
  * text diff (see apm: "History and versioning"). Pure functions over ProjectData, so the version
  * timeline (15B.4) and any history tooling can render "what changed" between commits.
  */
+import { DEFAULT_KEY, keyLabel } from "../theory/key";
 import type { ProjectData, TrackData, NoteClipData, AudioClipData } from "../project/types";
 import type { PatchValues, ParamValue } from "../params/types";
 
@@ -16,6 +17,8 @@ export function diffProjects(from: ProjectData, to: ProjectData): string[] {
     signature ? `${signature.numerator}/${signature.denominator}` : "4/4";
   if (timeSignatureLabel(from.timeSignature) !== timeSignatureLabel(to.timeSignature))
     lines.push(`Time signature ${timeSignatureLabel(from.timeSignature)} -> ${timeSignatureLabel(to.timeSignature)}`);
+  const songKey = (data: ProjectData) => keyLabel(data.key ?? DEFAULT_KEY);
+  if (songKey(from) !== songKey(to)) lines.push(`Key ${songKey(from)} -> ${songKey(to)}`);
 
   const before = new Map(from.tracks.map((track) => [track.id, track]));
   const after = new Map(to.tracks.map((track) => [track.id, track]));

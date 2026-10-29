@@ -32,7 +32,7 @@ import {
   type EngineExports,
 } from "./exports";
 import { EVENT, EventQueue, type TimedEvent } from "./events";
-import type { Transport } from "./messages";
+import type { EngineKey, Transport } from "./messages";
 
 /** A plan the engine refused: the code from eng_load (-1 a bad plan, -2 the wrong length). */
 export class PlanRejected extends Error {
@@ -284,6 +284,11 @@ export class EngineBank {
    */
   setTransport(transport: Transport): void {
     this.transport = { ...transport };
+  }
+
+  /** The song's key from the next block on, for the MIDI nodes that work in degrees. */
+  setKey({ tonic, scale }: EngineKey): void {
+    this.engine.eng_key(tonic, scale);
   }
 
   /** Render the block starting at `time` (seconds): play its events, then every track. */

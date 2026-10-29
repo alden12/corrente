@@ -6,6 +6,7 @@
  * (a track or a group) addressed by `hostId`; transport and tempo are
  * project-level.
  */
+import type { ScaleName } from "../theory/scales";
 import type { CustomMidiDevice } from "../midi/custom";
 import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
@@ -170,6 +171,8 @@ export type ServerToBrowser =
   // Transport (project-level)
   | { type: "setTempo"; bpm: number }
   | { type: "setTimeSignature"; numerator: number; denominator: number }
+  // The song's key (DAW-12): a tonic pitch class (0 = C) and a scale.
+  | { type: "setKey"; tonic: number; scale: ScaleName }
   | { type: "setGroove"; grooveId?: string; amount?: number }
   | { type: "setLength"; lengthBeats: number }
   | { type: "setLoopStart"; beats: number }

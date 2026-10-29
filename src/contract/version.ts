@@ -14,7 +14,9 @@
  */
 // 2: custom MIDI devices' edit commands (INST-11.3). A version-1 client can't apply them, but only
 // meets one in a project where someone adds a custom MIDI device, so it's still served.
-export const PROTOCOL_VERSION = 2;
+// 3: the song's key (DAW-12), `setKey`. The same as 2 for an older client: it only meets the command
+// in a project where someone sets the key.
+export const PROTOCOL_VERSION = 3;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

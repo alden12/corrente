@@ -19,6 +19,8 @@ export type ToBank =
   | { type: "midiValue"; track: number; value: number; raw: number; time: number }
   /** A sample param now names `ref`, with its audio (none for an empty ref, or one that didn't load). */
   | { type: "sample"; track: number; param: string; ref: string; audio: SampleAudio | null }
+  /** The song's key (DAW-12): a tonic pitch class and its scale as bits. Applies to every track. */
+  | ({ type: "key" } & EngineKey)
   /** Where the transport is: `beat` at context time `time`, at `tempo`. Applies to every track. */
   | ({ type: "transport" } & Transport)
   /** The bank is going: disconnecting a worklet node doesn't stop it, so it stops itself. */
@@ -35,6 +37,12 @@ export interface Transport {
   beat: number;
   tempo: number;
   playing: boolean;
+}
+
+/** The song's key as the engine reads it: the tonic's pitch class (0 = C) and the scale as bits (scaleMask). */
+export interface EngineKey {
+  tonic: number;
+  scale: number;
 }
 
 export type FromBank =

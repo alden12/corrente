@@ -23,7 +23,7 @@ import { usePersistentBoolean } from "../usePersistent";
 import { KitPads } from "./KitPads";
 import { ScalePadControls, ScalePads } from "./ScalePads";
 import { PAD_HEIGHT, fitPads } from "./geometry";
-import { CHORDS_KEY, usePadSettings } from "./padSettings";
+import { CHORDS_KEY, usePadSettings, type SongKey } from "./padSettings";
 import { usePadTouch, type PadNoteTarget } from "./usePadTouch";
 import { KeysToggle } from "./KeysToggle";
 
@@ -34,6 +34,7 @@ export function NotePads({
   octavesPerRow,
   room,
   fold,
+  songKey,
 }: {
   track: InstrumentTrack;
   samples: SampleAsset[];
@@ -44,6 +45,8 @@ export function NotePads({
   room: number;
   /** Shows and hides the pads, from the keyboard button at the header's right. Without it they always show. */
   fold?: Fold;
+  /** The song's key, which the pads play in (DAW-12). */
+  songKey: SongKey;
 }) {
   const open = fold?.open ?? true;
   // Read before the settings, because how many rows fit depends on whether the accidentals
@@ -51,7 +54,7 @@ export function NotePads({
   const [accidentals] = usePersistentBoolean("corrente:pads-accidentals", true);
   const [chords] = usePersistentBoolean(CHORDS_KEY, false);
   const rows = fitPads(room, accidentals && !chords);
-  const settings = usePadSettings(octavesPerRow, rows);
+  const settings = usePadSettings(octavesPerRow, rows, songKey);
   const touch = usePadTouch(notes);
   const isKit = track.instrumentType === "drumkit";
 

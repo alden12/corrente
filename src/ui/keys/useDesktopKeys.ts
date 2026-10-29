@@ -9,19 +9,19 @@ import { useState } from "react";
 import { pitchName } from "../../audio/params/noteName";
 import { pitchAt } from "../../audio/theory/scales";
 import type { LiveNotes } from "../../audio/live/liveNotes";
-import { OCTAVE_RANGE, usePadSettings, type PadSettings } from "../pads/padSettings";
+import { OCTAVE_RANGE, usePadSettings, type PadSettings, type SongKey } from "../pads/padSettings";
 import { PAD_VELOCITY, usePadTouch } from "../pads/usePadTouch";
 import { usePersistentBoolean, usePersistentNumber } from "../usePersistent";
 import { KEY_ROW_COUNT, keyboardRows, octavesSpanned, padsByCode, type KeyRowMode } from "./keyLayout";
 import { useKeyboardPlaying, useShiftHeld } from "./useKeyboardPlaying";
 import { keysPanelHeight } from "./panelGeometry";
 
-export function useDesktopKeys(liveNotes: LiveNotes, started: boolean) {
+export function useDesktopKeys(liveNotes: LiveNotes, started: boolean, songKey: SongKey) {
   const [open, setOpen] = usePersistentBoolean("corrente:keys-open", true);
   // Not persisted: a strip you set while playing, not a preference.
   const [velocity, setVelocity] = useState(PAD_VELOCITY);
   const [shownRows, setShownRows] = usePersistentNumber("corrente:keys-rows-shown", KEY_ROW_COUNT, 1, KEY_ROW_COUNT);
-  const padSettings = usePadSettings(1, KEY_ROW_COUNT);
+  const padSettings = usePadSettings(1, KEY_ROW_COUNT, songKey);
   // The pads' own Accidentals switch: on, alternate rows are the accidentals, as the pads show them
   // in a band above each row; off, every row is an octave and Shift reaches the sharps.
   const rowMode: KeyRowMode = padSettings.accidentals ? "accidentals" : "octaves";

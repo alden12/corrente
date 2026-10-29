@@ -70,6 +70,7 @@ class EngineBankProcessor extends AudioWorkletProcessor {
         }
       },
       transport: ({ time, beat, tempo, playing }) => this.bank.setTransport({ time, beat, tempo, playing }),
+      key: ({ tonic, scale }) => this.bank.setKey({ tonic, scale }),
       stop: () => (this.stopped = true),
     };
     this.port.onmessage = ({ data }: MessageEvent<ToBank>) => (handlers[data.type] as (message: ToBank) => void)(data);

@@ -62,13 +62,30 @@ pub enum Event {
 // TS: type Timed = [offset: number, event: Event]
 pub type Timed = (usize, Event);
 
-/// Where the transport is at the start of a block: its beat, beats a sample, and whether it's playing.
-// TS: interface BlockTransport { beat: number; perSample: number; playing: boolean }
+/// Where the transport is at the start of a block: its beat, beats a sample, whether it's playing, and
+/// the song's key.
+// TS: interface BlockTransport { beat: number; perSample: number; playing: boolean; key: Key }
 #[derive(Clone, Copy)]
 pub struct BlockTransport {
     pub beat: f64,
     pub per_sample: f64,
     pub playing: bool,
+    pub key: Key,
+}
+
+/// The song's key (DAW-12): its tonic's pitch class (0 = C), and its scale as bits, bit n set when the
+/// note n semitones above the tonic is in it (theory/key.ts's scaleMask).
+// TS: interface Key { tonic: number; scale: number }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Key {
+    pub tonic: u8,
+    pub scale: u16,
+}
+
+impl Key {
+    /// C major: C, D, E, F, G, A, B. What a song plays in until it's given a key.
+    // TS: const C_MAJOR = { tonic: 0, scale: scaleMask("major") }
+    pub const C_MAJOR: Key = Key { tonic: 0, scale: 0b1010_1011_0101 };
 }
 
 /// What a field reads: a number, a value through its shaping, a random number from `min` to `max`, or

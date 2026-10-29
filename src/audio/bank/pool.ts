@@ -16,6 +16,7 @@ import {
   type BankOptions,
   type FromBank,
   type ToBank,
+  type EngineKey,
   type Transport,
 } from "./messages";
 import { createListeners, type Listeners } from "../../listeners";
@@ -70,6 +71,19 @@ export const onSlowBlocks = (context: BaseAudioContext, listener: (blocks: numbe
 /** Each context's transport as last told, for its banks now and any made later. */
 const transports = new WeakMap<BaseAudioContext, Transport>();
 
+/** Each context's key as last told, for its banks now and any made later. */
+const keys = new WeakMap<BaseAudioContext, EngineKey>();
+
+/** Tell every engine bank on a context the song's key (DAW-12). */
+export const setKey = (context: BaseAudioContext, key: EngineKey): void => {
+  keys.set(context, key);
+  void pools
+    .get(context)
+    ?.then(({ banks }) =>
+      banks.forEach((bank) => bank.node.port.postMessage({ type: "key", ...key } satisfies ToBank)),
+    );
+};
+
 /** Tell every engine bank on a context where the transport is (the scheduler, an offline render). */
 export const setTransport = (context: BaseAudioContext, transport: Transport): void => {
   transports.set(context, transport);
@@ -118,6 +132,8 @@ const newBank = (context: BaseAudioContext, bytes: ArrayBuffer, stage: number): 
   };
   const transport = transports.get(context);
   if (transport) node.port.postMessage({ type: "transport", ...transport } satisfies ToBank);
+  const key = keys.get(context);
+  if (key) node.port.postMessage({ type: "key", ...key } satisfies ToBank);
   return bank;
 };
 

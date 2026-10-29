@@ -1,4 +1,6 @@
 /** MCP tools: Transport (project-level). */
+import { keyLabel, keySchema } from "../../../src/audio/theory/key";
+import { PITCH_CLASSES, SCALE_NAMES } from "../../../src/audio/theory/scales";
 import { z } from "zod";
 import { GROOVES, grooveById } from "../../../src/audio/grooves/catalog";
 import { BUILTIN_SAMPLES, builtinRef, assetRef } from "../../../src/audio/samples/catalog";
@@ -39,6 +41,21 @@ export function registerTransportTools({ server, target }: ToolContext): void {
         return fail(target.whyNotConnected());
       target.project.setTimeSignature(numerator, beatUnit);
       return ok(`Time signature set to ${numerator}/${beatUnit}.`);
+    },
+  );
+
+  server.registerTool(
+    "set_key",
+    {
+      title: "Set key",
+      description: `Set the song's key: a tonic (C, C#, D ... B) and a scale (${SCALE_NAMES.join(", ")}). The pads and computer keyboard play in it, and MIDI devices that work in degrees follow it. list_tracks reports it.`,
+      inputSchema: { tonic: z.enum(PITCH_CLASSES), scale: keySchema.shape.scale },
+    },
+    async ({ tonic, scale }) => {
+      const pitchClass = PITCH_CLASSES.indexOf(tonic);
+      if (!target.send({ type: "setKey", tonic: pitchClass, scale })) return fail(target.whyNotConnected());
+      target.project.setKey(pitchClass, scale);
+      return ok(`Key set to ${keyLabel(target.project.key)}.`);
     },
   );
 

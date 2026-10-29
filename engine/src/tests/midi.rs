@@ -2,7 +2,7 @@
 //! writes them, then played block by block as a track plays them. The octavator and an arpeggiator
 //! are built from nodes here; the clock is checked against a transport driven as a host drives it.
 
-use crate::midi::{self, BlockTransport, Chain, Event, pattern};
+use crate::midi::{self, BlockTransport, Chain, Event, Key, pattern};
 
 /// At 120 beats a minute and 48 kHz, beats a sample, and an eighth's length in samples.
 const PER_SAMPLE: f64 = 2.0 / 48000.0;
@@ -110,7 +110,7 @@ fn parse(words: &[f64]) -> Chain {
 /// Playing from beat 0 at 120.
 // TS: const steady = (block) => ({ beat: block * 128 * PER_SAMPLE, perSample: PER_SAMPLE, playing: true })
 fn steady(block: u64) -> BlockTransport {
-    BlockTransport { beat: block as f64 * 128.0 * PER_SAMPLE, per_sample: PER_SAMPLE, playing: true }
+    BlockTransport { beat: block as f64 * 128.0 * PER_SAMPLE, per_sample: PER_SAMPLE, playing: true, key: Key::C_MAJOR }
 }
 
 /// Play `blocks` blocks, telling the chain `keys` (block, offset, event) as they come: every event it
@@ -263,7 +263,7 @@ fn a_key_after_a_step_in_the_same_block_is_not_heard_by_it() {
 #[test]
 fn stopped_the_arpeggiator_starts_with_the_first_key() {
     let mut chain = parse(&chain_words(&[], &[arpeggiator(0.0, 1.0)]));
-    let stopped = |block: u64| BlockTransport { beat: 3.3 + block as f64 * 128.0 * PER_SAMPLE, per_sample: PER_SAMPLE, playing: false };
+    let stopped = |block: u64| BlockTransport { beat: 3.3 + block as f64 * 128.0 * PER_SAMPLE, per_sample: PER_SAMPLE, playing: false, key: Key::C_MAJOR };
     let start = 5 * 128 + 40;
     let played = ons(&run(&mut chain, 200, &[(5, 40, on(C))], stopped));
     assert_eq!(played, vec![(start, C), (start + EIGHTH, C), (start + 2 * EIGHTH, C)]);
@@ -273,7 +273,7 @@ fn stopped_the_arpeggiator_starts_with_the_first_key() {
 fn a_loop_jumping_back_steps_on_without_playing_a_step_twice() {
     // A two-beat loop: four eighths, then back to beat 0, as a host's loop does.
     let mut chain = parse(&chain_words(&[], &[arpeggiator(0.0, 1.0)]));
-    let looping = |block: u64| BlockTransport { beat: (block as f64 * 128.0 * PER_SAMPLE) % 2.0, per_sample: PER_SAMPLE, playing: true };
+    let looping = |block: u64| BlockTransport { beat: (block as f64 * 128.0 * PER_SAMPLE) % 2.0, per_sample: PER_SAMPLE, playing: true, key: Key::C_MAJOR };
     let played = ons(&run(&mut chain, 1125, &[(0, 0, on(C)), (0, 0, on(E)), (0, 0, on(G))], looping));
     // TS: const perLoop = [0, 1, 2].map((lap) => played.filter(([time]) => Math.floor(time / 48000) === lap).length)
     let per_loop: Vec<usize> = (0..3).map(|lap| played.iter().filter(|&&(time, _)| time / 48000 == lap).count()).collect();

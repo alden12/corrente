@@ -7,6 +7,7 @@
  * optional so the function stays pure for history auto-messages and tests; when
  * absent (or a name no longer resolves) the phrasing degrades to the type alone.
  */
+import { keyLabel } from "../theory/key";
 import type { EditCommand } from "./types";
 import { catalogEntry, hasInstrument } from "../instruments/catalog";
 import { effectCatalogEntry, hasEffect } from "../effects/catalog";
@@ -117,6 +118,7 @@ const DESCRIBE: DescribeMap = {
   stopAllClips: () => "Back to timeline",
   setTempo: (command) => `Set tempo ${command.bpm}`,
   setTimeSignature: (command) => `Set time signature ${command.numerator}/${command.denominator}`,
+  setKey: (command) => `Set key to ${keyLabel(command)}`,
   setGroove: (command) =>
     command.grooveId !== undefined
       ? `Set groove to ${grooveById(command.grooveId).name}`

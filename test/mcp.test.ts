@@ -295,6 +295,20 @@ describe("MCP server (tracks)", () => {
     );
   });
 
+  it("set_key sets the song's key, and list_tracks reports it", async () => {
+    const messages = await connectTab();
+    expect(parse(await call("list_tracks")).key).toBe("C major");
+    expect((await call("set_key", { tonic: "F#", scale: "dorian" })).isError).toBeFalsy();
+    await waitFor(() => typesOf(messages).includes("setKey"));
+    expect(messages.find((message) => (message as { type: string }).type === "setKey")).toEqual({
+      type: "setKey",
+      tonic: 6,
+      scale: "dorian",
+    });
+    expect(parse(await call("list_tracks")).key).toBe("F# dorian");
+    expect((await call("set_key", { tonic: "H", scale: "major" })).isError).toBe(true);
+  });
+
   it("list_tracks reports the instrument palette and starts with no tracks", async () => {
     const data = parse(await call("list_tracks"));
     expect(data.connected).toBe(false);

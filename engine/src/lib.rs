@@ -377,6 +377,14 @@ pub extern "C" fn eng_transport(beat: f64, tempo: f32, playing: i32) {
     with_engine(|engine| engine.set_transport(beat, tempo, playing != 0));
 }
 
+/// The song's key (DAW-12): `tonic` the pitch class (0 = C) and `scale` the notes in it as bits (bit n,
+/// n semitones above the tonic). The MIDI nodes that work in degrees read it from the coming block.
+// TS: withEngine((engine) => engine.setKey(tonic, scale))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_key(tonic: i32, scale: i32) {
+    with_engine(|engine| engine.set_key(tonic, scale));
+}
+
 /// Make room for a sample in slot `slot` (0 to 255), `frames` long with 1 or 2 `channels` at its own
 /// `rate`, and return where JS writes it: channel 0's frames, then channel 1's. 0 if the slot doesn't
 /// exist or the sample is too big. Memory may grow, so JS makes its views again after this.

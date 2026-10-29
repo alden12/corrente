@@ -27,7 +27,8 @@ import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
 import { playsInEngine } from "../midi/engine";
-import { onSlowBlocks, setTransport as setEngineTransport } from "../bank/pool";
+import { onSlowBlocks, setKey as setEngineKey, setTransport as setEngineTransport } from "../bank/pool";
+import { keyLabel, scaleMask } from "../theory/key";
 import type { BufferSize } from "./bufferSize";
 import type { Transport } from "../bank/messages";
 import { getAudioBuffer } from "../audioStore";
@@ -300,12 +301,24 @@ export class AudioEngine {
     return new Set(edited.map((device) => device.type));
   }
 
+  /** The song's key as last sent to each context's banks, so a reconcile sends it only when it changes. */
+  private readonly sentKeys = new WeakMap<BaseAudioContext, string>();
+
+  /** Tell the banks the song's key (DAW-12) when it has changed. */
+  private sendKey(ctx: BaseAudioContext, project: ProjectStore): void {
+    const label = keyLabel(project.key);
+    if (this.sentKeys.get(ctx) === label) return;
+    this.sentKeys.set(ctx, label);
+    setEngineKey(ctx, { tonic: project.key.tonic, scale: scaleMask(project.key.scale) });
+  }
+
   private reconcile(): void {
     const ctx = this.ctx;
     const project = this.project;
     if (!ctx || !project || !this.master) return;
 
     const edited = this.editedCustomDevices(project);
+    this.sendKey(ctx, project);
 
     const groups = project.getGroups();
     const tracks = project.getTracks();

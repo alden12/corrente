@@ -2,7 +2,7 @@
 //! What concerns one track is the track's: lib.rs looks it up with `track` and calls it.
 
 use super::binding::Binding;
-use crate::midi::{self, BlockTransport};
+use crate::midi::{self, BlockTransport, Key};
 use super::sampler::{MAX_SAMPLES, Sample};
 use super::track::Track;
 use super::{BLOCK, SILENT_SLOT, Slot};
@@ -18,6 +18,8 @@ pub struct Engine {
     tracks: Vec<Track>,
     /// The transport at the start of the coming block: beat, tempo (beats a minute), playing.
     transport: (f64, f32, bool),
+    /// The song's key, for the MIDI nodes that work in degrees.
+    key: Key,
     /// The host signals for the block, filled from `transport` and shared by every track.
     host: [Slot; HOST_SIGNALS],
     /// The samples samplers play, by slot: MAX_SAMPLES slots, each empty or holding one.
@@ -28,7 +30,7 @@ impl Engine {
     // `const fn` can also run at compile time, which lib.rs needs to set up the
     // one engine before anything calls it.
     pub const fn new() -> Self {
-        Engine { sample_rate: 48000, tracks: Vec::new(), transport: (0.0, 120.0, false), host: [SILENT_SLOT; HOST_SIGNALS], samples: Vec::new() }
+        Engine { sample_rate: 48000, tracks: Vec::new(), transport: (0.0, 120.0, false), key: Key::C_MAJOR, host: [SILENT_SLOT; HOST_SIGNALS], samples: Vec::new() }
     }
 
     /// Set the sample rate and how many tracks the bank has, all silent until a plan loads.
@@ -103,6 +105,13 @@ impl Engine {
         self.transport = (beat, tempo.max(1.0), playing);
     }
 
+    /// The song's key from the coming block on: a tonic (wrapped into 0 to 11) and a scale as bits
+    /// (the tonic's own bit always set, so a scale has at least its tonic).
+    // TS: this.key = { tonic: ((tonic % 12) + 12) % 12, scale: (scale & 0xfff) | 1 }
+    pub fn set_key(&mut self, tonic: i32, scale: i32) {
+        self.key = Key { tonic: tonic.rem_euclid(12) as u8, scale: (scale & 0xfff) as u16 | 1 };
+    }
+
     /// Make room for a sample in `slot`, replacing any there, and lend JS the memory to write it into:
     /// each channel's frames in turn. None for a slot that doesn't exist or a sample that won't fit.
     // TS: const sample = Sample.create(frames, channels, rate); if (!sample || slot >= this.samples.length) return undefined; this.samples[slot] = sample; return sample.data;
@@ -128,7 +137,7 @@ impl Engine {
         self.fill_host();
         let (host, samples) = (&self.host, &self.samples);
         let (beat, tempo, playing) = self.transport;
-        let block = BlockTransport { beat, per_sample: tempo as f64 / 60.0 / self.sample_rate as f64, playing };
+        let block = BlockTransport { beat, per_sample: tempo as f64 / 60.0 / self.sample_rate as f64, playing, key: self.key };
         self.tracks.iter_mut().for_each(|track| track.process(host, samples, block));
         self.transport = (beat + BLOCK as f64 * tempo as f64 / 60.0 / self.sample_rate as f64, tempo, playing);
     }

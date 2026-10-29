@@ -7,6 +7,7 @@
  * Everything private to this file is geometry: the three resizable, persisted splits
  * and the measured body height that keeps the timeline from crowding out the workbench.
  */
+import { useSongKey } from "../pads/songKey";
 import { currentProjectId } from "../../audio/projectRepository";
 import { exportProjectFile } from "../projectFile";
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -82,7 +83,7 @@ export function DesktopShell({
   const [dragging, setDragging] = useState(false);
   // The computer keyboard, played in key (DAW-12.1). Here rather than in the piano roll that shows
   // it, so the keys play whatever the workbench is showing.
-  const keys = useDesktopKeys(liveNotes, started);
+  const keys = useDesktopKeys(liveNotes, started, useSongKey(projectStore, dispatch));
 
   // Track the body height so the timeline can never crowd out the workbench:
   // the effective height is clamped to leave at least MIN_CENTER up top, which

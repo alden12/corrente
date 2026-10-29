@@ -177,6 +177,7 @@ const APPLY: ApplyMap = {
   stopAllClips: (project) => project.stopAllClips(),
   setTempo: (project, command) => project.setTempo(command.bpm),
   setTimeSignature: (project, command) => project.setTimeSignature(command.numerator, command.denominator),
+  setKey: (project, command) => project.setKey(command.tonic, command.scale),
   setGroove: (project, command) => project.setGroove(command.grooveId, command.amount),
   setLength: (project, command) => project.setLength(command.lengthBeats),
   setLoopStart: (project, command) => project.setLoopStart(command.beats),

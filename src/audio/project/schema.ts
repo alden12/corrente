@@ -17,6 +17,7 @@
  * (unknown keys are ignored, not rejected) and the server stores the original JSON, so
  * validation is a gate, never a filter - evolving/extra fields never break a save.
  */
+import { keySchema } from "../theory/key";
 import type { CustomMidiDevice } from "../midi/custom";
 import { z } from "zod";
 import type { CustomDevice } from "../definitions/custom";
@@ -219,6 +220,8 @@ export const projectDataSchema = z.object({
   grooveAmount: z.number().optional(),
   // Optional + healed to 4/4 on load (like loopStart/grooveId), so older docs need no schema bump.
   timeSignature: timeSignatureSchema.optional(),
+  // DAW-12: optional and read as C major when missing, so older docs need no schema bump.
+  key: keySchema.optional(),
   samples: z.array(sampleAssetSchema).optional(),
   customInstruments: z.array(customInstrumentSchema).optional(),
   customEffects: z.array(customEffectSchema).optional(),

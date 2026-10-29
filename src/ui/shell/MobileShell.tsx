@@ -34,6 +34,7 @@
  * only arrange - and so what makes it able to record, since they go out through the same
  * `LiveNotes` seam a MIDI keyboard does.
  */
+import { useSongKey } from "../pads/songKey";
 import { currentProjectId } from "../../audio/projectRepository";
 import { OnThisDeviceChip, onThisDevice } from "../hosting/OnThisDevice";
 import { SyncChip } from "../ConnectionStatus";
@@ -213,6 +214,7 @@ export function MobileShell({
   };
   const [agentOpen, setAgentOpen] = useState(false);
   const project = useProject(projectStore);
+  const songKey = useSongKey(projectStore, dispatch);
   /*
    * Choosing a track no longer raises a parked sheet (2026-10-12, Alden): tapping lanes to look
    * around kept throwing the editor over the arrangement you were looking at. The sheet stays at
@@ -318,6 +320,7 @@ export function MobileShell({
             octavesPerRow={shape.tier === "tablet" ? 2 : 1}
             room={keysRoom(browseHeight)}
             fold={tryKeysFold}
+            songKey={songKey}
           />
         )}
       />
@@ -505,6 +508,7 @@ export function MobileShell({
                 octavesPerRow={shape.tier === "tablet" ? 2 : 1}
                 room={keysRoom(studioHeight)}
                 fold={keysFold}
+                songKey={songKey}
               />
             </section>
           )}

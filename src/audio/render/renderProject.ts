@@ -19,6 +19,7 @@
  * audio clips where there's no way to load them. (Sidechain sources can't be set yet, DAW-63; the
  * core will need the same wiring as AudioEngine when they can.)
  */
+import { scaleMask } from "../theory/key";
 import { EngineBank } from "../bank/bank";
 import { BLOCK } from "../bank/exports";
 import { instrumentChain, piecesOf, runParts, type ChainPlan } from "../bank/chainPlan";
@@ -223,6 +224,7 @@ export async function renderProject(
     stages.flatMap((stage) => {
       const bank = banks.get(stage)!;
       bank.setTransport(transport);
+      bank.setKey({ tonic: project.key.tonic, scale: scaleMask(project.key.scale) });
       return byStage.get(stage)!.flatMap((slot) => {
         const { plan, sources } = slot.chain;
         bank.load(slot.track, plan, valuesOf(slot.chain, slot.effects));
