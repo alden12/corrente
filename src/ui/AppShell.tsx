@@ -27,10 +27,13 @@ import { initProjects, forkProjectFromSnapshot } from "../audio/projects/operati
 import { listProjects, subscribeProjects } from "../audio/projects/library";
 import {
   currentProjectId,
+  getRepository,
   loadedProjectId,
   setCurrentProject,
   subscribeCurrentProject,
 } from "../audio/projectRepository";
+import { followOpenProject } from "../audio/sync/followProject";
+import { healProjectName } from "../audio/projects/healName";
 import {
   reportUnreadableProject,
   rebuildProjectState,
@@ -264,6 +267,7 @@ export function AppShell() {
     let disposeUndo = () => {};
     let disposeCheckpoints = () => {};
     let disposeAskAgain = () => {};
+    let disposeNameHeal = () => {};
     // Best-effort: keep the offline cache + write-queue from being evicted under storage pressure.
     // Asked at once, and again after the first edit once the project is open, when the browser is
     // likelier to grant it (Chrome goes by engagement); the "On this device" panel shows what it
@@ -323,6 +327,15 @@ export function AppShell() {
           disposeAskAgain();
           void requestPersistentStorage().then(refreshStorageRisk);
         });
+        // A project opening as "Untitled" while its list knows a real name takes it back (DAW-90). After
+        // the session follower above, so a hosted project's session is listening and sends the rename.
+        disposeNameHeal = followOpenProject((projectId) => {
+          healProjectName(projectStore, editLog, [
+            listProjects().find((meta) => meta.id === projectId)?.name,
+            getRepository().getName(),
+          ]);
+          return () => {};
+        });
       })
       .catch((error) => {
         // A project that cannot be read is a question for the user, not a line in the console: the
@@ -340,6 +353,7 @@ export function AppShell() {
       disposeUndo();
       disposeCheckpoints();
       disposeAskAgain();
+      disposeNameHeal();
     };
   }, [projectStore, editLog, versionStore]);
 
