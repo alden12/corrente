@@ -46,11 +46,11 @@ test("with no MCP connected, the rail and Explore both lead to the setup", async
   await page.goto("/");
   await dismissStart(page);
   const guide = /\/MCP\.md$/;
-  await expect(page.getByRole("link", { name: "MCP not connected: how to connect Claude" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "MCP not connected: how to connect an agent" })).toHaveAttribute(
     "href",
     guide,
   );
   const card = page.getByRole("region", { name: "Make your own" });
   await expect(card).toBeVisible();
-  await expect(card.getByRole("link", { name: "Connect Claude over MCP" })).toHaveAttribute("href", guide);
+  await expect(card.getByRole("link", { name: "Connect an agent over MCP" })).toHaveAttribute("href", guide);
 });

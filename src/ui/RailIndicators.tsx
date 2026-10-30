@@ -1,6 +1,6 @@
 /**
  * The app's state at the foot of the activity rail, above the account button (DAW-87): the sync
- * connection, where a standalone run keeps its files, and whether Claude is connected over MCP. They
+ * connection, where a standalone run keeps its files, and whether an agent is connected over MCP. They
  * say how the app stands, not the selected track, so they sit with the app's own controls rather
  * than in the workbench's tab bar, and the plugin's window, which reuses the rail, shows them too.
  * Each is an icon, the rail being 48px; a press opens its details beside it.
@@ -23,7 +23,7 @@ const MCP_DOT: Record<McpStatus, string> = {
   disconnected: "border border-faint",
 };
 // Connecting is what a missing server looks like between retries, so it reads as not connected.
-const NOT_CONNECTED = "MCP not connected: how to connect Claude";
+const NOT_CONNECTED = "MCP not connected: how to connect an agent";
 const MCP_TITLE: Record<McpStatus, string> = {
   connected: "MCP connected",
   standby: "MCP connected, but driving another tab: the one most recently in front",

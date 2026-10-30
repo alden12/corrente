@@ -1,11 +1,11 @@
 /**
  * What Explore's home offers beyond its own items: a way back to your projects (COMM-2), and, while
- * no MCP client is connected, the invitation to make your own devices with Claude (COMM-4).
+ * no MCP client is connected, the invitation to make your own devices with an agent (COMM-4).
  */
 import type { McpStatus } from "../../audio/mcp/bridge";
 import { MCP_GUIDE_URL } from "../../hosting";
 
-/** What home links to beyond Explore: the open project, the list of projects, and Claude's setup. */
+/** What home links to beyond Explore: the open project, the list of projects, and an agent's setup. */
 export interface ExploreLinks {
   mcpStatus?: McpStatus;
   onOpenProject?: () => void;
@@ -54,15 +54,16 @@ const FolderIcon = ({ open = false }: { open?: boolean }) => (
 );
 
 /**
- * Making your own (COMM-4): devices are what Claude builds over MCP, and Explore is where you would
- * want more than the built-ins. Shown only while nothing is connected; the link is the setup.
+ * Making your own (COMM-4): devices are what an agent builds over MCP (any MCP client, not only
+ * Claude), and Explore is where you would want more than the built-ins. Shown only while nothing is
+ * connected; the link is the setup.
  */
 export function MakeYourOwn() {
   return (
     <section aria-label="Make your own" className="mx-3 mt-1 rounded-md border border-line px-3 py-2.5 text-[12px]">
-      <p className="font-semibold text-strong">Make your own with Claude</p>
+      <p className="font-semibold text-strong">Make your own with an agent</p>
       <p className="mt-0.5 text-muted">
-        Describe an instrument, an effect or a MIDI device, and Claude builds it here, ready to play.
+        Describe an instrument, an effect or a MIDI device, and your agent builds it here, ready to play.
       </p>
       <a
         href={MCP_GUIDE_URL}
@@ -70,7 +71,7 @@ export function MakeYourOwn() {
         rel="noreferrer"
         className="inline-block mt-1.5 text-you underline underline-offset-2 hover:text-strong"
       >
-        Connect Claude over MCP
+        Connect an agent over MCP
       </a>
     </section>
   );
