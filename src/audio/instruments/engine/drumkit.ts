@@ -5,7 +5,7 @@
 import type { EngineBuiltin } from "../../definitions/builtin";
 import type { ParamSchema } from "../../params/types";
 import type { ParamSpec } from "../../params/types";
-import { BUILTIN_SAMPLES, builtinRef } from "../../samples/catalog";
+import { DEFAULT_KIT, builtinRef } from "../../samples/catalog";
 
 // Drum kit: a multi-pad sample player. A played MIDI note *selects a pad* (it does not
 // pitch the sample); which note fires a pad is a per-pad param (`pad{n}.note`), defaulting
@@ -28,7 +28,7 @@ export const noteForPad = (padIndex: number): number => DRUMKIT_BASE_NOTE + padI
 const drumPadSpecs = (): ParamSpec[] =>
   Array.from({ length: DRUMKIT_PADS }, (_unused, index): ParamSpec[] => {
     const pad = index + 1;
-    const builtin = BUILTIN_SAMPLES[index]; // seed the first pads with the built-in kit
+    const builtin = DEFAULT_KIT.samples[index]; // seed the first pads with the default kit
     return [
       { id: `pad${pad}.sample`, label: "Sample", kind: "sample", default: builtin ? builtinRef(builtin.id) : "" },
       {

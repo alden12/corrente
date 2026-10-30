@@ -14,6 +14,7 @@
  */
 import type { Tag } from "../tags";
 import type { Patch, PatchEffect } from "./patch";
+import { BUILTIN_KITS, builtinRef, type BuiltinKit } from "../samples/catalog";
 
 /** Juno-style chorus settings for the lush presets (bundled as the one effect). */
 const chorusI: PatchEffect = { type: "chorus", params: { "chorus.rate": 0.7, "chorus.depth": 0.35, mix: 0.5 } };
@@ -42,12 +43,28 @@ const builtinFor =
   });
 
 const nimbus = builtinFor("nimbus");
+const drumkit = builtinFor("drumkit");
+
+/**
+ * A kit as a Drum Kit patch (INST-16: a kit is a patch): each of its samples on a pad, in order, on
+ * its General MIDI note. Pads past the kit keep their defaults.
+ */
+const kitPads = (kit: BuiltinKit): Patch["params"] =>
+  Object.fromEntries(
+    kit.samples.flatMap((sample, index) => [
+      [`pad${index + 1}.sample`, builtinRef(sample.id)],
+      ...(sample.gmNote === undefined ? [] : [[`pad${index + 1}.note`, sample.gmNote]]),
+    ]),
+  );
 const microVa = builtinFor("micro-va");
 const hybridWave = builtinFor("hybrid-wave");
 
 // Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
 // fills the rest from schema defaults when the patch is applied.
 export const FACTORY_PATCHES: Patch[] = [
+  // --- Drums ----------------------------------------------------------------
+  // Every kit but the default, which is what a Drum Kit already starts on.
+  ...BUILTIN_KITS.slice(1).map((kit) => drumkit(`${kit.name} Kit`, kit.tags, kitPads(kit))),
   // --- Bass -----------------------------------------------------------------
   nimbus("Deep Sub", ["bass", "dark", "soft"], {
     "osc.saw": 0.4,

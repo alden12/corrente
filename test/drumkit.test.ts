@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { instrumentSchema, hasInstrument } from "../src/audio/instruments/catalog";
 import { drumkitSchema, DRUMKIT_PADS, DRUMKIT_BASE_NOTE, noteForPad } from "../src/audio/instruments/engine/drumkit";
-import { BUILTIN_SAMPLES } from "../src/audio/samples/catalog";
+import { DEFAULT_KIT } from "../src/audio/samples/catalog";
+
+const BUILTIN_SAMPLES = DEFAULT_KIT.samples;
 
 describe("drumkit catalog", () => {
   it("is a registered instrument", () => {

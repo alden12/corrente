@@ -15,6 +15,7 @@
  * content hash (the bytes in the OPFS blob store). References use the stable id,
  * never the content hash, so trimming or re-encoding a sample never breaks them.
  */
+import type { Tag } from "../tags";
 
 export interface BuiltinSample {
   /** Stable id, e.g. "kick". The ref is `builtin:${id}`. */
@@ -40,15 +41,61 @@ export interface SampleAsset {
 
 // gmNote is the General MIDI drum number (unambiguous); the app displays it in C4 = 60
 // octave numbering, so 36 shows as "C2", etc.
-export const BUILTIN_SAMPLES: BuiltinSample[] = [
-  { id: "kick", name: "Kick", gmNote: 36 }, // Bass Drum 1
-  { id: "snare", name: "Snare", gmNote: 38 }, // Acoustic Snare
-  { id: "hat-closed", name: "Closed Hat", gmNote: 42 }, // Closed Hi-Hat
-  { id: "hat-open", name: "Open Hat", gmNote: 46 }, // Open Hi-Hat
-  { id: "clap", name: "Clap", gmNote: 39 }, // Hand Clap
-  { id: "rim", name: "Rim", gmNote: 37 }, // Side Stick
-  { id: "tom", name: "Tom", gmNote: 45 }, // Low Tom
+
+/** A set of built-in drum samples that belong together, on the General MIDI drum map. */
+export interface BuiltinKit {
+  id: string;
+  name: string;
+  /** What its patch is tagged in Explore (`tags.ts`). */
+  tags: readonly Tag[];
+  samples: BuiltinSample[];
+}
+
+/**
+ * The built-in kits. **The first is the default**: a new Drum Kit's pads start on it. Each sample's
+ * file is `assets/<id>.wav`; the house kit's are made by `assets/generate.mjs`, the 808's are rendered
+ * from its voices (`kits/voices808.ts`) on the engine by `yarn kits`.
+ */
+export const BUILTIN_KITS: BuiltinKit[] = [
+  {
+    id: "house",
+    name: "House",
+    tags: ["percussion"],
+    samples: [
+      { id: "kick", name: "Kick", gmNote: 36 }, // Bass Drum 1
+      { id: "snare", name: "Snare", gmNote: 38 }, // Acoustic Snare
+      { id: "hat-closed", name: "Closed Hat", gmNote: 42 }, // Closed Hi-Hat
+      { id: "hat-open", name: "Open Hat", gmNote: 46 }, // Open Hi-Hat
+      { id: "clap", name: "Clap", gmNote: 39 }, // Hand Clap
+      { id: "rim", name: "Rim", gmNote: 37 }, // Side Stick
+      { id: "tom", name: "Tom", gmNote: 45 }, // Low Tom
+    ],
+  },
+  // Synthesized from engine blocks (INST-9.1), in the classic drum machine's manner.
+  {
+    id: "808",
+    name: "808",
+    tags: ["percussion", "retro"],
+    samples: [
+      { id: "808-kick", name: "808 Kick", gmNote: 36 }, // Bass Drum 1
+      { id: "808-snare", name: "808 Snare", gmNote: 38 }, // Acoustic Snare
+      { id: "808-hat-closed", name: "808 Closed Hat", gmNote: 42 }, // Closed Hi-Hat
+      { id: "808-hat-open", name: "808 Open Hat", gmNote: 46 }, // Open Hi-Hat
+      { id: "808-clap", name: "808 Clap", gmNote: 39 }, // Hand Clap
+      { id: "808-rim", name: "808 Rim", gmNote: 37 }, // Side Stick
+      { id: "808-tom-low", name: "808 Low Tom", gmNote: 45 }, // Low Tom
+      { id: "808-tom-mid", name: "808 Mid Tom", gmNote: 47 }, // Low-Mid Tom
+      { id: "808-tom-high", name: "808 High Tom", gmNote: 50 }, // High Tom
+      { id: "808-cowbell", name: "808 Cowbell", gmNote: 56 }, // Cowbell
+    ],
+  },
 ];
+
+/** The kit a new Drum Kit's pads start on. */
+export const DEFAULT_KIT = BUILTIN_KITS[0];
+
+/** Every built-in sample, kit by kit: what the sample pickers and the MCP list. */
+export const BUILTIN_SAMPLES: BuiltinSample[] = BUILTIN_KITS.flatMap((kit) => kit.samples);
 
 /**
  * The built-in wavetables (INST-36.6): sets of single cycles a `wavetable` block morphs through, dark

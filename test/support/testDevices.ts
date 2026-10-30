@@ -7,7 +7,7 @@
 import type { DeviceDefinition } from "../../src/audio/definitions/format";
 import { registerInstrument } from "../../src/audio/instruments/catalog";
 import type { ParamSchema, ParamSpec } from "../../src/audio/params/types";
-import { BUILTIN_SAMPLES, builtinRef, wavetableRef } from "../../src/audio/samples/catalog";
+import { DEFAULT_KIT, builtinRef, wavetableRef } from "../../src/audio/samples/catalog";
 import { registerEffect } from "../../src/audio/effects/catalog";
 import { registerEngineDevice } from "../../src/audio/definitions/engineDevices";
 
@@ -227,7 +227,7 @@ const sampler: TestInstrument = {
 };
 
 /** The built-in kit's pads, each on its General MIDI drum note. */
-const PADS = BUILTIN_SAMPLES.filter((sample) => sample.gmNote !== undefined);
+const PADS = DEFAULT_KIT.samples.filter((sample) => sample.gmNote !== undefined);
 
 /**
  * A drum kit as sample zones (INST-36.6): a zone per pad on its General MIDI note, each a sample param
