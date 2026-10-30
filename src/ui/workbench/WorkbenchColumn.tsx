@@ -56,7 +56,7 @@ export function WorkbenchColumn({
   /** Reveal the Samples library view (threaded to an empty Sampler's picker). */
   onRevealSamples?: () => void;
   /** The computer-keyboard panel (DAW-12.1), shown in the piano roll under its velocity lane. */
-  keys?: { panel: ReactNode; height: number };
+  keys?: { panel: ReactNode; height: number; open: boolean };
   /** Touch: the roll's header keeps its fold and drops its tools (MOBILE-1). */
   compact?: boolean;
 }) {
@@ -200,7 +200,9 @@ export function WorkbenchColumn({
       {/* Folded, it is its toolbar and the keys, at their own height. */}
       <div
         ref={rollRef}
-        className="relative flex flex-col border-b border-line"
+        // A rule under whatever is last, unless that's a folded header, whose own rule is the divider (a
+        // second would double it): the keys when the track has them, else the roll.
+        className={`relative flex flex-col ${(keys && track.kind === "instrument" ? keys.open : rollOpen) ? "border-b border-line" : ""}`}
         style={rollOpen ? { height: effRollH + keysH } : undefined}
       >
         <TrackEditor

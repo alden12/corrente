@@ -1180,7 +1180,8 @@ export function PianoRoll({
           </div>
         </div>
       </div>
-      {footer && <div className="shrink-0 border-t border-line">{footer}</div>}
+      {/* Folded, the header's own rule is the divider above it: a second would double it. */}
+      {footer && <div className={`shrink-0 ${fold && !fold.open ? "" : "border-t border-line"}`}>{footer}</div>}
     </div>
   );
 }

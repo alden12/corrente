@@ -185,7 +185,7 @@ export function DesktopShell({
           openExplorePage("samples");
           onSelectView("explore");
         }}
-        keys={{ panel: <KeysPanel {...keys.panel} />, height: keys.height }}
+        keys={{ panel: <KeysPanel {...keys.panel} />, height: keys.height, open: keys.panel.open }}
       />
       <ArrangementTimeline
         projectStore={projectStore}

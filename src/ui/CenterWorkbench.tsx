@@ -37,7 +37,7 @@ export function CenterWorkbench({
   /** Reveal the Samples library view (threaded to an empty Sampler's picker). */
   onRevealSamples?: () => void;
   /** The computer-keyboard panel (DAW-12.1), shown in the piano roll under its velocity lane. */
-  keys?: { panel: ReactNode; height: number };
+  keys?: { panel: ReactNode; height: number; open: boolean };
 }) {
   const tabs = useEditorTabs(projectId, projectStore, selectedTrack?.id ?? null);
   if (!selectedTrack) {
