@@ -6,9 +6,8 @@
  */
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import { SavePatchControl } from "./DeviceRack";
-import { catalogEntry, EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
-import { effectCatalogEntry } from "../../audio/effects/catalog";
-import { midiDeviceCatalogEntry } from "../../audio/midi/device/catalog";
+import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
+import { DEVICE_CATALOGS, soundChain } from "../../audio/definitions/chainGraph";
 import { deviceAccent } from "../deviceColor";
 import { instrumentFold, useDeviceFolds } from "../devices/deviceFolds";
 import { Menu, type MenuItem } from "../Menu";
@@ -25,24 +24,19 @@ interface Jump {
   bypassed: boolean;
 }
 
-/** The track's devices in chain order, as jump targets. */
-function jumpsFor(track: Track): Jump[] {
-  const effects = track.effects.map((effect) => {
-    const info = effectCatalogEntry(effect.type);
-    return { key: effect.id, label: info.label, color: deviceAccent(info), bypassed: effect.bypassed };
-  });
-  if (track.kind !== "instrument") return effects;
-  const midi = track.midiDevices.map((device) => {
-    const info = midiDeviceCatalogEntry(device.type);
-    return { key: device.id, label: info.label, color: deviceAccent(info), bypassed: device.bypassed };
-  });
-  const instrument = catalogEntry(track.instrumentType);
-  const instruments =
-    track.instrumentType === EMPTY_INSTRUMENT
-      ? []
-      : [{ key: instrumentFold(track.id), label: instrument.label, color: deviceAccent(instrument), bypassed: false }];
-  return [...midi, ...instruments, ...effects];
-}
+/** The track's devices in chain order, as jump targets: an instrument by its fold, the rest by their ids. */
+const jumpsFor = (track: Track): Jump[] =>
+  soundChain(track.kind === "instrument" ? track : { effects: track.effects })
+    .filter((device) => device.type !== EMPTY_INSTRUMENT)
+    .map((device) => {
+      const info = DEVICE_CATALOGS[device.kind](device.type);
+      return {
+        key: device.id ?? instrumentFold(track.id),
+        label: info.label,
+        color: deviceAccent(info),
+        bypassed: !!device.bypassed,
+      };
+    });
 
 export function DevicesBar({
   track,

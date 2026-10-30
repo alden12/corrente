@@ -7,19 +7,34 @@
  * voices, an effect's input) and its **exit** (its output), which the chain's links join.
  */
 import { engineMidiDefinition } from "../midi/engine";
-import { midiDeviceSchema } from "../midi/device/catalog";
+import { midiDeviceCatalogEntry, midiDeviceSchema } from "../midi/device/catalog";
+import { effectCatalogEntry } from "../effects/catalog";
+import { catalogEntry } from "../instruments/catalog";
+import type { DeviceColor } from "../deviceColors";
 import { midiDeviceGraph } from "../midi/graph";
 import { engineDevice } from "./engineDevices";
 import { deviceGraph, type DeviceGraph } from "./graph";
 
 export type DeviceKind = "midi" | "instrument" | "effect";
 
-/** One device in a chain: what it is, and whether it's switched off. */
+/** One device in a chain: what it is, whether it's switched off, and its id on a track. */
 export interface ChainEntry {
   kind: DeviceKind;
   type: string;
   bypassed?: boolean;
+  /** A track's MIDI device's or effect's id; a patch's devices and an instrument have none. */
+  id?: string;
 }
+
+/** Each kind of device's catalog entry: its label and colour. */
+export const DEVICE_CATALOGS: Record<
+  DeviceKind,
+  (type: string) => { type: string; label: string; color?: DeviceColor }
+> = {
+  midi: midiDeviceCatalogEntry,
+  instrument: catalogEntry,
+  effect: effectCatalogEntry,
+};
 
 /** A device in a chain, named as the caller names it. */
 export interface ChainDevice extends ChainEntry {
@@ -30,25 +45,29 @@ export interface ChainDevice extends ChainEntry {
 interface SoundDevice {
   type: string;
   bypassed?: boolean;
+  id?: string;
 }
 
 /**
  * A sound's devices in the order notes and sound pass through them: MIDI devices, the instrument,
- * effects. A track and a patch both hold a sound this way.
+ * effects. A track and a patch both hold a sound this way; an audio track, only effects.
  */
 export const soundChain = (sound: {
-  instrumentType: string;
+  instrumentType?: string;
   midiDevices?: readonly SoundDevice[];
   effects: readonly SoundDevice[];
 }): ChainEntry[] => {
-  const entry = (kind: DeviceKind) => (device: SoundDevice) => ({
-    kind,
-    type: device.type,
-    bypassed: !!device.bypassed,
-  });
+  const entry =
+    (kind: DeviceKind) =>
+    (device: SoundDevice): ChainEntry => ({
+      kind,
+      type: device.type,
+      bypassed: !!device.bypassed,
+      ...(device.id ? { id: device.id } : {}),
+    });
   return [
     ...(sound.midiDevices ?? []).map(entry("midi")),
-    { kind: "instrument", type: sound.instrumentType },
+    ...(sound.instrumentType ? [{ kind: "instrument" as const, type: sound.instrumentType }] : []),
     ...sound.effects.map(entry("effect")),
   ];
 };
