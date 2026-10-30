@@ -19,7 +19,7 @@ import { Menu } from "./Menu";
 const SHOWN = 4;
 /** A circle's size, and how far each sits down and right of the one before: a diagonal stack. */
 const CIRCLE = 13;
-const STEP = { x: 5, y: 4 };
+const STEP = { x: 5, y: 3 };
 
 export function ProjectEditors({
   projectStore,
