@@ -19,9 +19,10 @@ test("a track's row shows its chain and mutes it", async ({ page }) => {
   await openGroupCard(page, "main");
 
   await expect(tracks(page).getByTestId("tree-track")).toHaveCount(1);
-  await expect(tracks(page).getByText("Micro VA", { exact: true })).toBeVisible();
-  await tracks(page).getByRole("button", { name: "Mute Micro VA 1" }).click();
-  await expect(tracks(page).getByRole("button", { name: "Unmute Micro VA 1" })).toHaveAttribute("aria-pressed", "true");
+  // The track is named for its instrument, so the name comes first and its chain says it again.
+  await expect(tracks(page).getByText("Micro VA", { exact: true }).first()).toBeVisible();
+  await tracks(page).getByRole("button", { name: "Mute Micro VA" }).click();
+  await expect(tracks(page).getByRole("button", { name: "Unmute Micro VA" })).toHaveAttribute("aria-pressed", "true");
   // The group mutes as a whole from its card.
   await tracks(page).getByRole("button", { name: "Mute main" }).click();
   await expect(tracks(page).getByRole("button", { name: "Unmute main" })).toBeVisible();

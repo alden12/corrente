@@ -1249,7 +1249,8 @@ test.describe("phone", () => {
     await openGroupCard(page, "main");
     const tracks = page.getByRole("region", { name: "main" });
     await expect(tracks.getByTestId("tree-track")).toHaveCount(1);
-    await expect(tracks.getByText("Micro VA", { exact: true })).toBeVisible();
+    // The track is named for its instrument, so the name comes first and its chain says it again.
+    await expect(tracks.getByText("Micro VA", { exact: true }).first()).toBeVisible();
 
     await page.getByRole("button", { name: /Add a track to main/i }).tap();
     await page.getByRole("menuitem", { name: "New MIDI track" }).tap();

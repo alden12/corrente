@@ -28,6 +28,7 @@ import {
 } from "./projectSerialization";
 import { buildStructure } from "./projectStructure";
 import { FIRST_CLIP_NAME, nextClipName, seedClipId, starterPlacementId } from "./seedClip";
+import { freeName } from "./naming";
 import { addStarterTrack } from "./starter";
 import {
   hasInstrument,
@@ -355,12 +356,15 @@ export class ProjectStore {
   }
 
   // --- groups ---------------------------------------------------------------
-  /** Create a group (no emit). Reuses an existing group if `id` already exists. */
-  /** The name a new group would take. Counted, so a dispatch pins it (DAW-36). */
+  /** The name a new group would take. It depends on the names taken, so a dispatch pins it (DAW-36). */
   defaultGroupName(): string {
-    return `Group ${this.groups.length + 1}`;
+    return freeName(
+      "Group",
+      this.groups.map((group) => group.name),
+    );
   }
 
+  /** Create a group (no emit). Reuses an existing group if `id` already exists. */
   private createGroup(opts: { id?: string; name?: string; parentId?: string | null } = {}): Group {
     if (opts.id) {
       const existing = this.getGroup(opts.id);
@@ -486,17 +490,21 @@ export class ProjectStore {
   // --- tracks ---------------------------------------------------------------
   /**
    * The name `addTrack` would choose for a new track of this type. Public because a dispatch pins it
-   * into the command (DAW-36): the default counts the tracks that exist, so leaving it to apply time
-   * means a replayed `createTrack` can name itself differently than it did the first time.
+   * into the command (DAW-36): the default depends on the names already taken, so leaving it to apply
+   * time means a replayed `createTrack` can name itself differently than it did the first time.
    */
   defaultTrackName(instrumentType: string): string {
     const type = hasInstrument(instrumentType) ? instrumentType : DEFAULT_INSTRUMENT;
-    return `${type === EMPTY_INSTRUMENT ? "Track" : catalogEntry(type).label} ${this.tracks.length + 1}`;
+    return freeName(type === EMPTY_INSTRUMENT ? "Track" : catalogEntry(type).label, this.trackNames());
   }
 
-  /** The name a new audio track would take. Same counting problem as `defaultTrackName`. */
+  /** The name a new audio track would take. Pinned at dispatch for the same reason as `defaultTrackName`. */
   defaultAudioTrackName(): string {
-    return `Audio ${this.tracks.length + 1}`;
+    return freeName("Audio", this.trackNames());
+  }
+
+  private trackNames(): string[] {
+    return this.tracks.map((track) => track.name);
   }
 
   addTrack(
