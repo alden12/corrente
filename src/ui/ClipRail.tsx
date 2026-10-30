@@ -2,8 +2,8 @@
  * The clip pool for the selected track: a chip per clip (a note pattern), plus
  * "+ Clip" to add a new empty one. Clicking a chip makes it the active clip
  * (shown/edited in the roll); double-click renames; drag a chip onto this track's
- * lane in the arrangement to place that clip there. Each chip shows the clip's colour (DAW-47: its
- * own, else its track's), and a dot in its maker's colour when that wasn't you. Selecting is navigation
+ * lane in the arrangement to place that clip there. Each chip is in the clip's colour (DAW-47: its
+ * own, else its track's), with a dot in its maker's colour. Selecting is navigation
  * (direct on the store); add / remove / rename go through dispatch, so undo/redo +
  * the activity feed cover them.
  */
@@ -20,10 +20,9 @@ import { beatsPerBar as beatsPerBarOf } from "../audio/project/schema";
 import { clipContentOf as clipContentOfTrack } from "./clipContent";
 import { CLIP_DND_TYPE, clipDndKindType, clearDraggedClip, setDraggedClip } from "./clipDnd";
 import { copiedClip, copyClip as copyToClipboard } from "./clipboard";
-import { authorLabel } from "./authorStyle";
+import { authorDotStyle, authorLabel } from "./authorStyle";
 import { paletteAccent } from "./deviceColor";
 import { clipColorMenu } from "./clipColorMenu";
-import { CreatorDot } from "./CreatorDot";
 import { useAuthorPresence } from "./authorColorsContext";
 import { PagedStrip } from "./controls/PagedStrip";
 import type { MenuItem } from "./Menu";
@@ -219,8 +218,13 @@ export function ClipRail({
             className={`group ${chipClass} ${
               stacked ? "relative flex flex-col gap-1 rounded-lg" : "inline-flex items-center gap-1.5 rounded-full"
             } font-mono text-[11px] pl-1.5 pr-1.5 border cursor-grab active:cursor-grabbing ${
-              active ? "border-you/60 bg-you/15 text-strong" : "border-line bg-card text-muted hover:bg-ground"
+              active ? "text-strong" : "text-muted hover:text-ink"
             }`}
+            // In the clip's colour (DAW-47: its own, else its track's), stronger when it's the open one.
+            style={{
+              borderColor: paletteAccent(clip.color ?? track.color, active ? 0.9 : 0.4),
+              background: paletteAccent(clip.color ?? track.color, active ? 0.26 : 0.1),
+            }}
             onClick={() => projectStore.selectClip(trackId, clip.id)}
             onContextMenu={(e) => {
               projectStore.selectClip(trackId, clip.id);
@@ -250,13 +254,12 @@ export function ClipRail({
                     same nudge visibly knocked it off centre in a 16px circle. */}
                 {launchedClipId === clip.id ? "■" : <span className="pl-px pb-px">▶</span>}
               </button>
-              {/* Its colour (its own, else its track's), and who made it when that wasn't you. */}
+              {/* Who made it, in their colour. */}
               <span
                 aria-hidden="true"
-                className="w-2 h-2 shrink-0 rounded-sm"
-                style={{ background: paletteAccent(clip.color ?? track.color) }}
+                className="w-1.5 h-1.5 shrink-0 rounded-full"
+                style={authorDotStyle(clip.author, presence)}
               />
-              <CreatorDot author={clip.author} />
               <InlineRename
                 value={clip.name}
                 onCommit={(name) => dispatch({ type: "renameClip", trackId, clipId: clip.id, name })}

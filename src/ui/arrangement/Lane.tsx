@@ -6,7 +6,10 @@
  * rendering, kept here since nothing else uses them.
  */
 import { useRef, useState, type RefObject } from "react";
-import type { Track } from "../../audio/project/projectStore";
+import type { ProjectStore, Track } from "../../audio/project/projectStore";
+import { noteKey } from "../../audio/commands/authorship";
+import { authorHex } from "../authorStyle";
+import { useAuthorPresence } from "../authorColorsContext";
 import type { ClipStore } from "../../audio/sequencer/clipStore";
 import type { Placement } from "../../audio/project/types";
 import type { Dispatch } from "../../audio/commands/types";
@@ -107,15 +110,18 @@ function NoteMinis({
   store,
   placement,
   pxPerBeat,
-  color,
+  projectStore,
+  fallbackAuthor,
 }: {
   store: ClipStore;
   placement: Placement;
   pxPerBeat: number;
-  /** The block's colour, which its notes are drawn in. */
-  color: DeviceColor;
+  projectStore: ProjectStore;
+  /** Who drew a note with no recorded editor yet: the clip's maker. */
+  fallbackAuthor: string;
 }) {
   const clip = useClip(store);
+  const presence = useAuthorPresence();
   const clipLen = clip.lengthBeats;
   if (clipLen <= 0) return null;
   const body = clip.notes.filter((note) => note.start >= 0 && note.start < clipLen);
@@ -154,7 +160,9 @@ function NoteMinis({
           key={key}
           className="absolute h-0.5 rounded-[1px] pointer-events-none"
           style={{
-            background: paletteAccent(color, 0.9),
+            // Each note in its last editor's colour, as in the roll, over the block's clip colour.
+            background: authorHex(projectStore.authorOf(noteKey(note.id)) ?? fallbackAuthor, presence),
+            opacity: 0.9,
             left: beatToX(tau, pxPerBeat),
             width: Math.max(2, beatToX(note.length, pxPerBeat)),
             bottom: `${((note.pitch - lo) / span) * 60 + 18}%`,
@@ -191,6 +199,7 @@ export function Lane({
   onPaste,
   onHover,
   dispatch,
+  projectStore,
 }: {
   track: Track;
   width: number;
@@ -217,6 +226,7 @@ export function Lane({
   onPaste: (beat: number) => void;
   onHover: (beat: number | null) => void;
   dispatch: Dispatch;
+  projectStore: ProjectStore;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<{ left: number; width: number } | null>(null);
@@ -509,7 +519,13 @@ export function Lane({
             }}
           >
             {clip && "store" in clip ? (
-              <NoteMinis store={clip.store} placement={placement} pxPerBeat={pxPerBeat} color={color} />
+              <NoteMinis
+                store={clip.store}
+                placement={placement}
+                pxPerBeat={pxPerBeat}
+                projectStore={projectStore}
+                fallbackAuthor={clip.author}
+              />
             ) : clip && "fileId" in clip ? (
               <Waveform fileId={clip.fileId} gain={clip.gain} className="absolute inset-0 w-full h-full opacity-80" />
             ) : null}

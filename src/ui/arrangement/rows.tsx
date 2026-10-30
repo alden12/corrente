@@ -260,6 +260,7 @@ export function TrackRow({
           onPaste={onPaste}
           onHover={onHover}
           dispatch={dispatch}
+          projectStore={projectStore}
         />
       ) : (
         <div className={`${ROW} border-b border-line-soft`} style={{ width: laneWidth }} />
