@@ -12,7 +12,7 @@ import type { Dispatch } from "../audio/commands/types";
 import { midiDeviceParamKey } from "../audio/commands/authorship";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { DeviceSections } from "./devices/DeviceSections";
-import { ChainActions } from "./devices/ChainActions";
+import { useChainDrag } from "./devices/useChainDrag";
 
 export function MidiDeviceChain({
   projectStore,
@@ -25,12 +25,16 @@ export function MidiDeviceChain({
 }) {
   const project = useProject(projectStore);
   const track = project.tracks.find((track) => track.id === trackId);
+  const devices = track?.kind === "instrument" ? track.midiDevices : [];
+  const dragOf = useChainDrag(
+    devices.map((device) => device.id),
+    (deviceId, toIndex) => dispatch({ type: "moveMidiDevice", trackId, deviceId, toIndex }),
+  );
   if (!track || track.kind !== "instrument") return null;
-  const devices = track.midiDevices;
 
   return (
     <>
-      {devices.map((device, i) => {
+      {devices.map((device) => {
         const store = projectStore.getMidiDevice(trackId, device.id)?.params;
         if (!store) return null;
         const info = midiDeviceCatalogEntry(device.type);
@@ -48,15 +52,11 @@ export function MidiDeviceChain({
               onToggle: () =>
                 dispatch({ type: "bypassMidiDevice", trackId, deviceId: device.id, bypassed: !device.bypassed }),
             }}
-            actions={
-              <ChainActions
-                index={i}
-                count={devices.length}
-                onMove={(toIndex) => dispatch({ type: "moveMidiDevice", trackId, deviceId: device.id, toIndex })}
-                onRemove={() => dispatch({ type: "removeMidiDevice", trackId, deviceId: device.id })}
-                removeTitle="Remove MIDI device"
-              />
-            }
+            remove={{
+              title: "Remove MIDI device",
+              run: () => dispatch({ type: "removeMidiDevice", trackId, deviceId: device.id }),
+            }}
+            drag={dragOf(device.id)}
             schema={schema}
           >
             <DeviceSections

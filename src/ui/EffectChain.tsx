@@ -1,6 +1,6 @@
 /**
  * The selected track's effect chain, rendered inline in the signal-chain strip:
- * one device block per effect (DAW-61.3: bypass / reorder / remove, and its sections). Sits in
+ * one device block per effect (DAW-61.3: bypass, dragged to reorder, remove, and its sections). Sits in
  * CenterWorkbench's horizontal-scrolling row after the instrument card. Every edit
  * goes through the project store, the same model MCP drives. (Adding an effect from
  * the UI is being reworked - removed for now; MCP add_effect still works.)
@@ -12,7 +12,7 @@ import type { Dispatch } from "../audio/commands/types";
 import { effectParamKey } from "../audio/commands/authorship";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { DeviceSections } from "./devices/DeviceSections";
-import { ChainActions } from "./devices/ChainActions";
+import { useChainDrag } from "./devices/useChainDrag";
 import { LibraryUpdate } from "./devices/LibraryUpdate";
 
 export function EffectChain({
@@ -26,12 +26,16 @@ export function EffectChain({
 }) {
   const project = useProject(projectStore);
   const track = project.tracks.find((track) => track.id === trackId);
+  const effects = track?.effects ?? [];
+  const dragOf = useChainDrag(
+    effects.map((effect) => effect.id),
+    (effectId, toIndex) => dispatch({ type: "moveEffect", hostId: trackId, effectId, toIndex }),
+  );
   if (!track) return null;
-  const effects = track.effects;
 
   return (
     <>
-      {effects.map((fx, i) => {
+      {effects.map((fx) => {
         const store = projectStore.getEffect(trackId, fx.id)?.params;
         if (!store) return null;
         const info = effectCatalogEntry(fx.type);
@@ -50,19 +54,15 @@ export function EffectChain({
                 dispatch({ type: "bypassEffect", hostId: trackId, effectId: fx.id, bypassed: !fx.bypassed }),
             }}
             actions={
-              <>
-                {info.custom && (
-                  <LibraryUpdate type={fx.type} kind="effect" projectStore={projectStore} dispatch={dispatch} />
-                )}
-                <ChainActions
-                  index={i}
-                  count={effects.length}
-                  onMove={(toIndex) => dispatch({ type: "moveEffect", hostId: trackId, effectId: fx.id, toIndex })}
-                  onRemove={() => dispatch({ type: "removeEffect", hostId: trackId, effectId: fx.id })}
-                  removeTitle="Remove effect"
-                />
-              </>
+              info.custom && (
+                <LibraryUpdate type={fx.type} kind="effect" projectStore={projectStore} dispatch={dispatch} />
+              )
             }
+            remove={{
+              title: "Remove effect",
+              run: () => dispatch({ type: "removeEffect", hostId: trackId, effectId: fx.id }),
+            }}
+            drag={dragOf(fx.id)}
             schema={schema}
           >
             <DeviceSections

@@ -29,6 +29,16 @@ test("devices and their sections start folded as far as they go, and what you op
   await expect(reverb.getByRole("button", { name: "View Reverb's graph" })).toHaveCount(0);
   const folded = (await reverb.boundingBox())!;
   expect(folded.height).toBeGreaterThan(folded.width);
+  // Every folded device is the same height, however long its name.
+  await page.getByRole("button", { name: 'Add "Ping-Pong Delay" to the selected track' }).click();
+  const longer = (await block(page, "Ping-Pong Delay").boundingBox())!;
+  expect(longer.height).toBe(folded.height);
+
+  // Its bypass is a switch that says what it does.
+  const bypass = reverb.getByRole("button", { name: "Bypass Reverb" });
+  await expect(bypass).toHaveAttribute("aria-pressed", "true");
+  await bypass.click();
+  await expect(reverb.getByRole("button", { name: "Enable Reverb" })).toHaveAttribute("aria-pressed", "false");
 
   // The Micro VA starts open, its sections folded; one opens on its own.
   const instrument = block(page, "Micro VA");

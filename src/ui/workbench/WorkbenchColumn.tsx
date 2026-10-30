@@ -11,7 +11,7 @@
  * The wheel needs no rule of its own: the roll takes it while the pointer is over it, and
  * the browser keeps a scroll that is already moving the column going past the roll.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import type { Scheduler } from "../../audio/sequencer/scheduler";
 import type { Recorder } from "../../audio/recording/recorder";
@@ -23,6 +23,7 @@ import { ResizeHandle } from "../ResizeHandle";
 import { usePersistentBoolean, usePersistentNumber } from "../usePersistent";
 import { TrackEditor } from "./TrackEditor";
 import { DeviceRack } from "./DeviceRack";
+import { RackStacked } from "../devices/rackLayout";
 import { TrackRecordButton } from "./TrackRecordButton";
 import { DevicesBar } from "./DevicesBar";
 import { SectionHeader, SECTION_HEADER_HEIGHT, TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
@@ -32,11 +33,6 @@ import { BinIcon } from "../shellIcons";
 
 /** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
 const DEVICES_PEEK = 56;
-/**
- * How little of the roll is left on screen when the return bar shows: once it's mostly off the top,
- * not the moment its first row leaves.
- */
-const ROLL_LEFT = 0.25;
 
 export function WorkbenchColumn({
   track,
@@ -76,7 +72,6 @@ export function WorkbenchColumn({
   const columnRef = useRef<HTMLDivElement>(null);
   const rollRef = useRef<HTMLDivElement>(null);
   const [columnH, setColumnH] = useState(0);
-  const [rollGone, setRollGone] = useState(false);
   useLayoutEffect(() => {
     const column = columnRef.current;
     if (!column) return;
@@ -84,20 +79,6 @@ export function WorkbenchColumn({
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(column);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    const column = columnRef.current;
-    const roll = rollRef.current;
-    if (!column || !roll) return;
-    setRollGone(false);
-    const observer = new IntersectionObserver(
-      // Gone means scrolled off the top: a roll below the fold (a short window) isn't "gone".
-      ([entry]) =>
-        setRollGone(entry.intersectionRatio < ROLL_LEFT && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0)),
-      { root: column, threshold: [0, ROLL_LEFT, 1] },
-    );
-    observer.observe(roll);
     return () => observer.disconnect();
   }, []);
   const keysH = keys?.height ?? 0;
@@ -111,7 +92,6 @@ export function WorkbenchColumn({
     : compact
       ? Math.max(120, roomForRoll)
       : Math.min(rollH, Math.max(200, roomForRoll));
-  const scrollToRoll = () => columnRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   const scrollToDevice = (key: string) => {
     const scroll = () =>
       columnRef.current
@@ -239,26 +219,27 @@ export function WorkbenchColumn({
       </div>
 
       {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
-          sticks to the top once they reach it, and leads with the way back to the roll. */}
+          sticks to the top once they reach it. */}
       <section aria-label="Devices" className="pb-6">
         <DevicesBar
           track={track}
           projectStore={projectStore}
           open={devicesOpen}
           onToggle={() => setDevicesOpen(!devicesOpen)}
-          rollGone={rollGone}
-          onRoll={scrollToRoll}
           onDevice={scrollToDevice}
         />
         {devicesOpen && (
-          <DeviceRack
-            track={track}
-            samples={project.samples}
-            dispatch={dispatch}
-            projectStore={projectStore}
-            onRevealSamples={onRevealSamples}
-            bare
-          />
+          // On touch the column is a phone's width: the devices stack, everything flowing down it.
+          <RackStacked.Provider value={compact}>
+            <DeviceRack
+              track={track}
+              samples={project.samples}
+              dispatch={dispatch}
+              projectStore={projectStore}
+              onRevealSamples={onRevealSamples}
+              bare
+            />
+          </RackStacked.Provider>
         )}
       </section>
     </div>

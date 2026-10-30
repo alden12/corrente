@@ -19,12 +19,12 @@ async function addEffect(page: Page, name: string) {
     .click();
 }
 
-test("the devices' bar jumps to a device, and back to the roll once it has scrolled away", async ({ page }) => {
+test("the devices' bar jumps to a device", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   for (const name of ["Reverb", "Tape Echo", "Tremolo"]) await addEffect(page, name);
   // Devices start folded as far as they go: open them all, and some of the Micro VA's sections, for a
-  // column long enough to scroll the roll away.
+  // column long enough to scroll.
   await page.getByRole("button", { name: "Device chain actions" }).click();
   await page.getByRole("menuitem", { name: "Open all devices" }).click();
   const microVa = page.locator('[data-device][aria-label="Micro VA"]');
@@ -32,26 +32,11 @@ test("the devices' bar jumps to a device, and back to the roll once it has scrol
     await microVa.getByRole("button", { name: section, exact: true }).click();
   }
 
-  const returnToRoll = page.getByRole("button", { name: /^Roll/ });
-  await expect(returnToRoll).toHaveCount(0); // the roll is on screen
-
-  // The devices' bar jumps to a device from the top, roll and all.
+  // A device's chip scrolls to it, from the top, roll and all.
   await devicesBar(page).getByRole("button", { name: "Tremolo", exact: true }).click();
   await expect(page.locator('[data-device][aria-label="Tremolo"]')).toBeInViewport();
-  await page.getByTestId("roll-scroll").evaluate((element) => element.closest(".overflow-y-auto")?.scrollTo(0, 0));
-
-  // Jumping to the last device scrolls the roll off the top, and the bar takes its place.
-  await page.locator('[data-device][aria-label="Tremolo"]').scrollIntoViewIfNeeded();
-  await expect(returnToRoll).toBeVisible();
-  await expect(returnToRoll).toContainText("Clip 1"); // it names the clip open in the roll
-
-  // A device's chip scrolls to it.
   await devicesBar(page).getByRole("button", { name: "Micro VA", exact: true }).click();
-  await expect(page.locator('[data-device][aria-label="Micro VA"]')).toBeInViewport();
-
-  await returnToRoll.click();
-  await expect(page.getByTestId("roll-scroll")).toBeInViewport();
-  await expect(returnToRoll).toHaveCount(0);
+  await expect(microVa).toBeInViewport();
 });
 
 test("the devices fold away under their bar, and a jump opens them again", async ({ page }) => {
