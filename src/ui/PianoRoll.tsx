@@ -70,8 +70,8 @@ import { isBlackKey, pitchName } from "./noteNames";
 
 /** A note's name shows only on a note wide and tall enough to hold it all (DAW-28), never cut short:
  *  the row at least this tall, and the note as wide as its letters plus the room either side. */
-const NOTE_NAME_MIN_ROW = 9;
-const nameFits = (name: string, noteWidth: number, fontSize: number) => noteWidth >= name.length * fontSize * 0.62 + 10;
+const NOTE_NAME_MIN_ROW = 8;
+const nameFits = (name: string, noteWidth: number, fontSize: number) => noteWidth >= name.length * fontSize * 0.6 + 6;
 const MIN_PITCH = 24; // C1
 const MAX_PITCH = 96; // C7
 const ROWS = MAX_PITCH - MIN_PITCH + 1;
@@ -1061,7 +1061,7 @@ export function PianoRoll({
                 const author = projectStore?.authorOf(noteKey(note.id)) ?? "you";
                 const name = rows.label(note.pitch) ?? pitchName(note.pitch);
                 const noteWidth = Math.max(2, beatToX(note.length, pxPerBeat) - 1);
-                const nameSize = Math.min(10, rowH - 3);
+                const nameSize = Math.min(10, rowH - 2);
                 return (
                   <div
                     key={note.id}
