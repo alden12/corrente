@@ -9,7 +9,11 @@ test("a project the list knows by name opens with that name, not Untitled", asyn
   await page.goto("/");
   await dismissStart(page);
   await openProjectList(page);
+  // The first project is Untitled too, so wait for the address to leave it, not for a name.
+  await expect(page).toHaveURL(/\/p\/untitled~/);
+  const first = page.url();
   await createProjectFromList(page);
+  await expect(page).not.toHaveURL(first);
   await expect(page).toHaveURL(/\/p\/untitled~/);
   const id = decodeURIComponent(page.url().split("~").pop() ?? "");
 
