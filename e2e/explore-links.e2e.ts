@@ -54,3 +54,14 @@ test("with no MCP connected, the rail and Explore both lead to the setup", async
   await expect(card).toBeVisible();
   await expect(card.getByRole("link", { name: "Connect an agent over MCP" })).toHaveAttribute("href", guide);
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("Explore doesn't offer setting up an agent, which takes a computer", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await expect(page.getByRole("navigation", { name: "Your projects" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Make your own" })).toHaveCount(0);
+  });
+});

@@ -56,7 +56,7 @@ const FolderIcon = ({ open = false }: { open?: boolean }) => (
 /**
  * Making your own (COMM-4): devices are what an agent builds over MCP (any MCP client, not only
  * Claude), and Explore is where you would want more than the built-ins. Shown only while nothing is
- * connected; the link is the setup.
+ * connected, and only on a computer, where an agent can be set up; the link is the setup.
  */
 export function MakeYourOwn() {
   return (

@@ -157,7 +157,6 @@ export function MobileShell({
   started,
   syncStatus,
   syncShared,
-  mcpStatus,
   hasApiKey,
   onSelectView,
   onOpenAgentSettings,
@@ -310,8 +309,9 @@ export function MobileShell({
         onOpenShare={onOpenShare}
         onPick={() => setTab("studio")}
         onOpenTiming={onOpenTiming}
+        // No MCP status, so no "make your own" card: an agent connects over MCP from a computer (the
+        // local server runs beside Claude Code), so a phone has no way to set one up (2026-10-30, Alden).
         exploreLinks={{
-          mcpStatus,
           onOpenProject: () => setTab("studio"),
           onOpenProjects: () => {
             setTab("projects");
