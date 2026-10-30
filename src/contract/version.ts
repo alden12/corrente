@@ -16,7 +16,9 @@
 // meets one in a project where someone adds a custom MIDI device, so it's still served.
 // 3: the song's key (DAW-12), `setKey`. The same as 2 for an older client: it only meets the command
 // in a project where someone sets the key.
-export const PROTOCOL_VERSION = 3;
+// 4: track and clip colours (DAW-47), `setTrack`'s `color` and `setClipColor`. An older client only
+// meets them in a project where someone colours a track or a clip; it keeps working, with no colours.
+export const PROTOCOL_VERSION = 4;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

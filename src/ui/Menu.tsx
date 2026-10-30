@@ -78,6 +78,8 @@ export interface MenuItem {
   separator?: boolean;
   /** A fader set inline, in place of a submenu of preset values. */
   fader?: MenuFader;
+  /** A colour shown as a dot before the label: a track's or a clip's (DAW-47). */
+  swatch?: string;
 }
 
 // App-wide: only one (top-level) menu open at a time.
@@ -365,6 +367,9 @@ function Row({
       className={itemClass(item.danger)}
     >
       {check}
+      {item.swatch && (
+        <span aria-hidden="true" className="w-3 h-3 shrink-0 rounded-full" style={{ background: item.swatch }} />
+      )}
       <span className="flex-1">{item.label}</span>
     </button>
   );

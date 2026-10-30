@@ -304,20 +304,27 @@ export function registerCustomDevicesTools({ server, target, trackArg, resolveTr
     "set_track",
     {
       title: "Set track",
-      description: "Set a track's mute, solo, volume (0..1), and/or name.",
+      description: "Set a track's mute, solo, volume (0..1), name, and/or colour.",
       inputSchema: {
         ...trackArg,
         muted: z.boolean().optional(),
         solo: z.boolean().optional(),
         volume: z.number().min(0).max(1).optional(),
         name: z.string().optional(),
+        color: z
+          .enum(DEVICE_COLOR_NAMES)
+          .optional()
+          .describe(
+            "Its colour on the timeline and the project page, which its clips take unless they have their own.",
+          ),
       },
     },
-    async ({ track, muted, solo, volume, name }) => {
+    async ({ track, muted, solo, volume, name, color }) => {
       const r = resolveTrack(track);
       if ("error" in r) return fail(r.error);
-      if (!target.send({ type: "setTrack", trackId: r.id, muted, solo, volume, name }))
+      if (!target.send({ type: "setTrack", trackId: r.id, muted, solo, volume, name, color }))
         return fail(target.whyNotConnected());
+      if (color !== undefined) target.project.setTrackColor(r.id, color);
       if (muted !== undefined) target.project.setMuted(r.id, muted);
       if (solo !== undefined) target.project.setSolo(r.id, solo);
       if (volume !== undefined) target.project.setVolume(r.id, volume);

@@ -1,5 +1,6 @@
 /** MCP tools: Clip pool. */
 import { z } from "zod";
+import { DEVICE_COLOR_NAMES } from "../../../src/audio/deviceColors";
 import { UNATTRIBUTED_AGENT } from "../../../src/audio/commands/authors";
 import { makeClipId, ok, fail } from "../shared";
 import type { ToolContext } from "../context";
@@ -20,7 +21,8 @@ export function registerClipPoolTools({
     "list_clips",
     {
       title: "List clips",
-      description: "Return a track's clip pool (id, name, author) and which is active.",
+      description:
+        "Return a track's clip pool (id, name, author, and colour where a clip has its own over its track's) and which is active.",
       inputSchema: trackArg,
     },
     async ({ track }) => {
@@ -31,7 +33,7 @@ export function registerClipPoolTools({
           {
             track: r.id,
             activeClipId: r.track.activeClipId,
-            clips: r.track.clips.map((c) => ({ id: c.id, name: c.name, author: c.author })),
+            clips: r.track.clips.map((c) => ({ id: c.id, name: c.name, author: c.author, color: c.color })),
           },
           null,
           2,
@@ -133,6 +135,31 @@ export function registerClipPoolTools({
         return fail(target.whyNotConnected());
       target.project.renameClip(r.id, clip_id, name);
       return ok(`Renamed clip ${clip_id} to "${name}" on ${r.id}.`);
+    },
+  );
+
+  server.registerTool(
+    "set_clip_color",
+    {
+      title: "Set clip colour",
+      description:
+        "Give a clip its own colour over its track's (to mark out a chorus, say), or clear it so it takes its track's again.",
+      inputSchema: {
+        ...trackArg,
+        ...clipIdArg,
+        color: z.enum(DEVICE_COLOR_NAMES).nullable().describe("The clip's own colour, or null for its track's."),
+      },
+    },
+    async ({ track, clip_id, color }) => {
+      const r = resolveTrack(track);
+      if ("error" in r) return fail(r.error);
+      if (!r.track.clips.some((c) => c.id === clip_id)) return fail(`Unknown clip "${clip_id}" on ${r.id}.`);
+      if (!target.send({ type: "setClipColor", trackId: r.id, clipId: clip_id, color }))
+        return fail(target.whyNotConnected());
+      target.project.setClipColor(r.id, clip_id, color ?? undefined);
+      return ok(
+        color ? `Coloured clip ${clip_id} ${color} on ${r.id}.` : `Clip ${clip_id} takes ${r.id}'s colour again.`,
+      );
     },
   );
 }

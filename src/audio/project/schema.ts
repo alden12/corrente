@@ -20,6 +20,7 @@
 import { keySchema } from "../theory/key";
 import type { CustomMidiDevice } from "../midi/custom";
 import { z } from "zod";
+import { DEVICE_COLOR_NAMES } from "../deviceColors";
 import type { CustomDevice } from "../definitions/custom";
 import { KEYFRAME_INDEX_PATH } from "../history/keyframes";
 import { issueLines } from "../../util";
@@ -87,10 +88,15 @@ export const placementSchema = z.object({
   length: z.number(),
 });
 
+/** A track's or a clip's colour (DAW-47), from the devices' palette. */
+export const colorSchema = z.enum(DEVICE_COLOR_NAMES);
+
 export const noteClipDataSchema = z.object({
   id: z.string(),
   name: z.string(),
   author: authorSchema,
+  /** Its own colour, over its track's; unset, it takes the track's. */
+  color: colorSchema.optional(),
   notes: z.array(noteEventSchema),
   lengthBeats: z.number(),
 });
@@ -99,6 +105,7 @@ export const audioClipDataSchema = z.object({
   id: z.string(),
   name: z.string(),
   author: authorSchema,
+  color: colorSchema.optional(),
   fileId: z.string(),
   gain: z.number(),
   durationSec: z.number(),
@@ -118,6 +125,9 @@ const baseTrackFields = {
   muted: z.boolean(),
   solo: z.boolean(),
   volume: z.number(),
+  /** Its colour, which its clips take unless they have their own. Unset in a project from before
+   *  DAW-47, where it's picked by the track's place on load. */
+  color: colorSchema.optional(),
 };
 
 // The chain/arrangement fields are optional on the persisted shape (defaulted on load),

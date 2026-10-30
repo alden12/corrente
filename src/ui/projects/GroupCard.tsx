@@ -13,7 +13,7 @@ import { newTrackId } from "../../audio/commands/ids";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { Fader, MuteSolo } from "../MixerControls";
 import { Menu } from "../Menu";
-import { laneColor } from "./laneColor";
+import { paletteAccent } from "../deviceColor";
 import { deviceChain } from "./deviceChain";
 import { groupStrip, groupSummary, STRIP_LANES, type GroupNode } from "./overviewData";
 
@@ -22,7 +22,6 @@ export interface CardContext {
   dispatch: Dispatch;
   selectedId: string | null;
   /** A track's position in the project, which picks its colour (as in the project thumbnail). */
-  laneOf: (track: TrackMeta) => number;
   spanBeats: number;
   /** The cards opened on this device; the rest start, and stay, closed. */
   opened: Set<string>;
@@ -45,7 +44,7 @@ export function TrackRow({ track, context }: { track: TrackMeta; context: CardCo
       <span
         aria-hidden="true"
         className="h-9 rounded-[2px]"
-        style={{ background: track.muted ? "var(--color-faint)" : laneColor(context.laneOf(track)) }}
+        style={{ background: track.muted ? "var(--color-faint)" : paletteAccent(track.color) }}
       />
       <button
         type="button"
@@ -82,11 +81,9 @@ export function TrackRow({ track, context }: { track: TrackMeta; context: CardCo
   );
 }
 
-/** The group's clips across the whole song, one thin lane per track in that track's colour. */
+/** The group's clips across the whole song, one thin lane per track, each clip in its colour. */
 function ClipStrip({ node, context }: { node: GroupNode; context: CardContext }) {
   const lanes = Math.min(STRIP_LANES, Math.max(1, node.tracks.length));
-  const colorOf = (lane: number) =>
-    node.group.muted ? "var(--color-faint)" : laneColor(context.laneOf(node.tracks[lane]));
   return (
     <span aria-hidden="true" className="relative block h-7.5 mx-3 mb-2.5 rounded-[5px] bg-ground overflow-hidden">
       {groupStrip(node, context.spanBeats).map((block, index) => (
@@ -97,7 +94,7 @@ function ClipStrip({ node, context }: { node: GroupNode; context: CardContext })
             left: `${block.left}%`,
             width: `max(2px, ${block.width}%)`,
             top: `${4 + block.lane * (22 / lanes)}px`,
-            background: colorOf(block.lane),
+            background: node.group.muted ? "var(--color-faint)" : paletteAccent(block.color),
           }}
         />
       ))}

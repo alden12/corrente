@@ -7,6 +7,7 @@
  * project-level.
  */
 import type { ScaleName } from "../theory/scales";
+import type { DeviceColor } from "../deviceColors";
 import type { CustomMidiDevice } from "../midi/custom";
 import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
@@ -70,7 +71,16 @@ export type ServerToBrowser =
     }
   | { type: "removeTrack"; trackId: string }
   | { type: "selectTrack"; trackId: string }
-  | { type: "setTrack"; trackId: string; muted?: boolean; solo?: boolean; volume?: number; name?: string }
+  | {
+      type: "setTrack";
+      trackId: string;
+      muted?: boolean;
+      solo?: boolean;
+      volume?: number;
+      name?: string;
+      /** Its colour (DAW-47), which its clips take unless they have their own. */
+      color?: DeviceColor;
+    }
   // Assign (or swap) the instrument on an existing track - e.g. an empty track picks one.
   | { type: "setInstrument"; trackId: string; instrumentType: string }
   // Custom devices: user/AI-authored instruments & effects (engine definitions), stored in the
@@ -137,6 +147,8 @@ export type ServerToBrowser =
   | { type: "selectClip"; trackId: string; clipId: string }
   | { type: "removeClip"; trackId: string; clipId: string }
   | { type: "renameClip"; trackId: string; clipId: string; name: string }
+  /** A clip's own colour over its track's (DAW-47); null takes the track's again. Note or audio clip. */
+  | { type: "setClipColor"; trackId: string; clipId: string; color: DeviceColor | null }
   // Arrangement placements (clip regions along time)
   | {
       type: "addPlacement";

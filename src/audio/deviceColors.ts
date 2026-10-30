@@ -37,5 +37,30 @@ const hashed = (type: string): DeviceColor =>
 export const deviceColor = (device: { type: string; color?: DeviceColor }): DeviceColor =>
   device.color ?? hashed(device.type);
 
+/** The palette in the order tracks take it (DAW-47): each far round the wheel from the one before. */
+const TRACK_ORDER: DeviceColor[] = [
+  "blue",
+  "orange",
+  "green",
+  "pink",
+  "amber",
+  "violet",
+  "cyan",
+  "red",
+  "lime",
+  "indigo",
+];
+
+/**
+ * The colour a new track takes: the first (in `TRACK_ORDER`) no track has yet, so neighbours differ
+ * without anyone picking, and round again once every colour is used. A pure function of the tracks
+ * there are, so replaying the edit that made the track lands on the same colour.
+ */
+export const nextTrackColor = (taken: DeviceColor[]): DeviceColor =>
+  TRACK_ORDER.find((color) => !taken.includes(color)) ?? TRACK_ORDER[taken.length % TRACK_ORDER.length];
+
+/** A track's colour where the project doesn't say one, by its place: what projects before DAW-47 get. */
+export const colorAt = (index: number): DeviceColor => TRACK_ORDER[index % TRACK_ORDER.length];
+
 /** A device's colour as a hue. */
 export const deviceHue = (device: { type: string; color?: DeviceColor }): number => DEVICE_COLORS[deviceColor(device)];

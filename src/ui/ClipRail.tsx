@@ -2,8 +2,8 @@
  * The clip pool for the selected track: a chip per clip (a note pattern), plus
  * "+ Clip" to add a new empty one. Clicking a chip makes it the active clip
  * (shown/edited in the roll); double-click renames; drag a chip onto this track's
- * lane in the arrangement to place that clip there. Voice colour tags who
- * authored each clip - you (teal) or an agent (violet), in-app or over MCP. Selecting is navigation
+ * lane in the arrangement to place that clip there. Each chip shows the clip's colour (DAW-47: its
+ * own, else its track's), and a dot in its maker's colour when that wasn't you. Selecting is navigation
  * (direct on the store); add / remove / rename go through dispatch, so undo/redo +
  * the activity feed cover them.
  */
@@ -20,7 +20,10 @@ import { beatsPerBar as beatsPerBarOf } from "../audio/project/schema";
 import { clipContentOf as clipContentOfTrack } from "./clipContent";
 import { CLIP_DND_TYPE, clipDndKindType, clearDraggedClip, setDraggedClip } from "./clipDnd";
 import { copiedClip, copyClip as copyToClipboard } from "./clipboard";
-import { authorDotStyle, authorLabel } from "./authorStyle";
+import { authorLabel } from "./authorStyle";
+import { paletteAccent } from "./deviceColor";
+import { clipColorMenu } from "./clipColorMenu";
+import { CreatorDot } from "./CreatorDot";
 import { useAuthorPresence } from "./authorColorsContext";
 import { PagedStrip } from "./controls/PagedStrip";
 import type { MenuItem } from "./Menu";
@@ -135,6 +138,11 @@ export function ClipRail({
   };
 
   /** A clip's actions, from a right-click (DAW-74): the keys' copy, cut and paste, and the chip's buttons. */
+  /** Its "Colour" submenu, a colour of its own or its track's (DAW-47). */
+  const clipColor = (clipId: string): MenuItem[] => {
+    const clip = clips.find((each) => each.id === clipId);
+    return clip ? [clipColorMenu(track, clip, dispatch)] : [];
+  };
   const clipItems = (clipId: string): MenuItem[] => {
     const launched = launchedClipId === clipId;
     return [
@@ -147,6 +155,7 @@ export function ClipRail({
       },
       { separator: true },
       { label: launched ? "Stop" : "Launch", onClick: () => toggleLaunch(clipId) },
+      ...clipColor(clipId),
       { separator: true },
       ...(track.kind === "audio" && clips.length <= 1
         ? []
@@ -241,7 +250,13 @@ export function ClipRail({
                     same nudge visibly knocked it off centre in a 16px circle. */}
                 {launchedClipId === clip.id ? "■" : <span className="pl-px pb-px">▶</span>}
               </button>
-              <span className="w-1.5 h-1.5 rounded-full" style={authorDotStyle(clip.author, presence)} />
+              {/* Its colour (its own, else its track's), and who made it when that wasn't you. */}
+              <span
+                aria-hidden="true"
+                className="w-2 h-2 shrink-0 rounded-sm"
+                style={{ background: paletteAccent(clip.color ?? track.color) }}
+              />
+              <CreatorDot author={clip.author} />
               <InlineRename
                 value={clip.name}
                 onCommit={(name) => dispatch({ type: "renameClip", trackId, clipId: clip.id, name })}

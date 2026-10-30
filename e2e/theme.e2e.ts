@@ -103,7 +103,7 @@ test("an author's colour is re-lit for a white ground, on both paths at once", a
   await page.getByRole("radio", { name: "Light" }).click();
   await expect.poll(() => themeAttr(page)).toBe("light");
   const onLight = await token(page, "--color-you");
-  await page.keyboard.press("Escape"); // the settings modal is over the roll
+  await page.getByRole("button", { name: "Close settings" }).click(); // it's over the roll
 
   // The palette is drawn for a near-black ground; on white the same hues drop under the 3:1
   // floor for a UI component, so light mode re-lights them (hue kept, lightness moved).
@@ -113,10 +113,11 @@ test("an author's colour is re-lit for a white ground, on both paths at once", a
   // JS by `colorForAuthor` for everything that tints by author. If the two ever disagree you
   // get two different teals in one window, so compare a real author-tinted surface with the
   // variable. A drawn note is `authorNoteStyle`, i.e. the JS path.
-  // The seeded project always shows one arrangement clip, and a clip block is tinted through
-  // `authorBlockStyle`, so its top accent is the JS path resolving the same author.
-  const placement = page.getByTestId("placement").first();
-  await expect(placement).toBeVisible();
-  const painted = await placement.evaluate((element) => getComputedStyle(element).borderTopColor);
+  const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
+  await page.mouse.click(roll.x + 120, roll.y + 60);
+  await page.mouse.click(roll.x + 400, roll.y + 200); // away from it, so it isn't drawn selected
+  const note = page.getByTestId("note").first();
+  await expect(note).toBeVisible();
+  const painted = await note.evaluate((element) => getComputedStyle(element).backgroundColor);
   expect(painted, "the JS-drawn surface matches the CSS variable").toBe(await asRgb(page, onLight));
 });

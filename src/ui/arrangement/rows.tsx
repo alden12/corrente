@@ -9,9 +9,7 @@ import type { GroupMeta, TrackMeta, Placement } from "../../audio/project/types"
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
 import { newTrackId } from "../../audio/commands/ids";
-import { trackKey } from "../../audio/commands/authorship";
-import { authorHex } from "../authorStyle";
-import { useAuthorPresence } from "../authorColorsContext";
+import { colorMenu, paletteAccent } from "../deviceColor";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { Menu } from "../Menu";
 import { InlineRename } from "../InlineRename";
@@ -109,11 +107,9 @@ function TrackHeader({
   projectStore: ProjectStore;
   dispatch: Dispatch;
 }) {
-  const presence = useAuthorPresence();
-  // Always-on left accent in the track's last-editor colour (resolves any user id to its hue, so a
-  // collaborator's track reads in their colour). Selection is carried by the background tint, so the
-  // two cues don't fight one edge.
-  const accent = authorHex(projectStore.authorOf(trackKey(track.id)) ?? "you", presence);
+  // Always-on left accent in the track's colour (DAW-47), the one its clips take. Selection is carried
+  // by the background tint, so the two cues don't fight one edge.
+  const accent = paletteAccent(track.color);
   return (
     <div
       onClick={() => projectStore.selectTrack(track.id)}
@@ -162,6 +158,8 @@ function TrackHeader({
       <Menu
         label="Track actions"
         items={[
+          colorMenu(track.color, (color) => dispatch({ type: "setTrack", trackId: track.id, color })),
+          { separator: true },
           {
             label: "Delete track",
             danger: true,
@@ -262,7 +260,6 @@ export function TrackRow({
           onPaste={onPaste}
           onHover={onHover}
           dispatch={dispatch}
-          projectStore={projectStore}
         />
       ) : (
         <div className={`${ROW} border-b border-line-soft`} style={{ width: laneWidth }} />

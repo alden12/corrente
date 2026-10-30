@@ -16,6 +16,7 @@ import { ParamStore } from "../params/store";
 import { ClipStore } from "../sequencer/clipStore";
 import { effectSchema } from "../effects/catalog";
 import { authorSchema } from "./schema";
+import type { DeviceColor } from "../deviceColors";
 import type { PatchValues } from "../params/types";
 import type {
   ProjectData,
@@ -90,6 +91,7 @@ export function snapshotTrack(track: Track): TrackData {
     muted: track.muted,
     solo: track.solo,
     volume: track.volume,
+    color: track.color,
   };
   const arrangement = {
     activeClipId: track.activeClipId,
@@ -118,6 +120,7 @@ export function snapshotTrack(track: Track): TrackData {
         id: clip.id,
         name: clip.name,
         author: clip.author,
+        ...(clip.color ? { color: clip.color } : {}),
         notes: data.notes.map((note) => ({ ...note })),
         lengthBeats: data.lengthBeats,
       };
@@ -202,11 +205,12 @@ export function noteClipPool(
     id: string,
     name: string,
     author: ClipAuthor,
-    clip: { notes?: unknown; lengthBeats?: number },
+    clip: { notes?: unknown; lengthBeats?: number; color?: DeviceColor },
   ): NoteClip => ({
     id,
     name,
     author,
+    ...(clip.color ? { color: clip.color } : {}),
     store: new ClipStore({ notes: (clip.notes as never) ?? [], lengthBeats: clip.lengthBeats ?? projLen }),
   });
 

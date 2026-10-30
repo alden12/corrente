@@ -9,6 +9,8 @@
  */
 import { z } from "zod";
 import type { ProjectData } from "../project/types";
+import { colorSchema } from "../project/schema";
+import { colorAt, type DeviceColor } from "../deviceColors";
 
 /** A thumbnail is a few dozen pixels tall: lanes past this would be under a pixel each. */
 export const SUMMARY_MAX_LANES = 12;
@@ -24,6 +26,9 @@ export const projectSummarySchema = z.object({
   spanBeats: z.number(),
   /** One lane per track, top to bottom (the first `SUMMARY_MAX_LANES`): each clip as `[startBeat, lengthBeats]`. */
   lanes: z.array(z.array(z.tuple([z.number(), z.number()]))),
+  /** Each clip's colour (DAW-47), the same shape as `lanes`. Missing from a summary written before
+   *  colours, where a thumbnail colours its lanes by place. */
+  colors: z.array(z.array(colorSchema)).optional(),
 });
 
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
@@ -31,12 +36,19 @@ export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 const round = (beats: number) => Math.round(beats * 100) / 100;
 
 export function summarizeProject(project: ProjectData): ProjectSummary {
-  const lanes = project.tracks.map((track) =>
-    (track.placements ?? [])
+  const placed = project.tracks.map((track, index) => {
+    const trackColor = track.color ?? colorAt(index);
+    const clipColor = (clipId: string): DeviceColor =>
+      (track.clips ?? []).find((clip) => clip.id === clipId)?.color ?? trackColor;
+    return (track.placements ?? [])
       .slice()
       .sort((left, right) => left.startBeat - right.startBeat)
-      .map((placement): [number, number] => [round(placement.startBeat), round(placement.length)]),
-  );
+      .map((placement) => ({
+        span: [round(placement.startBeat), round(placement.length)] as [number, number],
+        color: clipColor(placement.clipId),
+      }));
+  });
+  const lanes = placed.map((lane) => lane.map((clip) => clip.span));
   const lastEnd = Math.max(0, ...lanes.flat().map(([start, length]) => start + length));
   return {
     tempoBpm: project.tempoBpm,
@@ -44,5 +56,8 @@ export function summarizeProject(project: ProjectData): ProjectSummary {
     trackCount: project.tracks.length,
     spanBeats: Math.max(project.lengthBeats, lastEnd),
     lanes: lanes.slice(0, SUMMARY_MAX_LANES).map((lane) => lane.slice(0, SUMMARY_MAX_CLIPS)),
+    colors: placed
+      .slice(0, SUMMARY_MAX_LANES)
+      .map((lane) => lane.slice(0, SUMMARY_MAX_CLIPS).map((clip) => clip.color)),
   };
 }

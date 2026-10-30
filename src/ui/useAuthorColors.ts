@@ -22,8 +22,8 @@ const VOICES: Voice[] = ["you", "agent"];
  *
  * These are written as inline styles on <html>, which outrank any stylesheet, so this is the
  * only place the CSS side of a voice can be themed. It has to apply exactly the same
- * transform as `authorHex` does for the JS side: the two paths meet constantly (a clip block
- * is `authorBlockStyle`, the play button beside it is `text-you`), and any drift shows up as
+ * transform as `authorHex` does for the JS side: the two paths meet constantly (a note in the roll
+ * is `authorNoteStyle`, the play button above it is `text-you`), and any drift shows up as
  * two different teals in one window.
  */
 export function useSyncAuthorColorVars(config: AuthorColorConfig): void {

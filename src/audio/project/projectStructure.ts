@@ -42,6 +42,7 @@ function trackMeta(track: Track): TrackMeta {
     muted: track.muted,
     solo: track.solo,
     volume: track.volume,
+    color: track.color,
     effects: effectMetas(track),
   };
   return track.kind === "audio"
@@ -62,6 +63,7 @@ function trackMeta(track: Track): TrackMeta {
           id: clip.id,
           name: clip.name,
           author: clip.author,
+          ...(clip.color ? { color: clip.color } : {}),
           lengthBeats: clip.store.getLength(),
         })),
         activeClipId: track.activeClipId,

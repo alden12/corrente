@@ -52,6 +52,7 @@ const DESCRIBE: DescribeMap = {
   setTrack: (command, ctx) => {
     const name = on(ctx, command.trackId, "");
     if (command.name !== undefined) return `Renamed track to ${command.name}`;
+    if (command.color !== undefined) return `Coloured track${name} ${command.color}`;
     if (command.muted !== undefined) return `${command.muted ? "Muted" : "Unmuted"} track${name}`;
     if (command.solo !== undefined) return `${command.solo ? "Soloed" : "Unsoloed"} track${name}`;
     return `Set volume${name}`;
@@ -105,6 +106,7 @@ const DESCRIBE: DescribeMap = {
   addClip: (command) => `New clip${command.name ? ` ${command.name}` : ""}`,
   removeClip: () => "Removed clip",
   renameClip: (command) => `Renamed clip to ${command.name}`,
+  setClipColor: (command) => (command.color ? `Coloured clip ${command.color}` : "Clip takes its track's colour"),
   pasteClip: ({ content, recorded }) =>
     recorded
       ? `Recorded "${content.name}"${content.kind === "instrument" ? ` (${plural(content.notes.length)})` : ""}`

@@ -1,5 +1,6 @@
 import type { ProjectSummary } from "../../audio/projects/summary";
-import { laneColor } from "./laneColor";
+import { colorAt } from "../../audio/deviceColors";
+import { paletteAccent } from "../deviceColor";
 
 /**
  * A project's arrangement in miniature (MOBILE-19.3): one lane per track, each clip a block, drawn
@@ -42,7 +43,8 @@ export function ArrangementThumb({
               width: `max(2px, calc(${percent(length)} - 1.5px))`,
               top: margin + lane * laneHeight + 0.5,
               height: Math.max(1, laneHeight - 2),
-              background: laneColor(lane),
+              // Each clip's colour (DAW-47); a summary from before colours has none, so by its lane.
+              background: paletteAccent(summary?.colors?.[lane]?.[index] ?? colorAt(lane)),
             }}
           />
         )),

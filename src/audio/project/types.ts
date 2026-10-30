@@ -16,6 +16,7 @@
  * they route identically; only the source differs.
  */
 import type { NoteEvent } from "../sequencer/types";
+import type { DeviceColor } from "../deviceColors";
 
 // The persisted document types (`ProjectData` and its tree) are inferred from the canonical
 // zod schema in ./schema.ts (the single source of truth shared with the sync server) and
@@ -81,8 +82,9 @@ export type NoteClipMeta = Omit<NoteClipData, "notes">;
 // their element types swapped to the no-payload `*Meta` views. The `params` blob is dropped.
 export type InstrumentTrackMeta = Omit<
   InstrumentTrackData,
-  "params" | "effects" | "midiDevices" | "clips" | "placements" | "activeClipId" | "launchedClipId"
+  "params" | "effects" | "midiDevices" | "clips" | "placements" | "activeClipId" | "launchedClipId" | "color"
 > & {
+  color: DeviceColor;
   effects: EffectMeta[];
   midiDevices: MidiDeviceMeta[];
   clips: NoteClipMeta[];
@@ -93,8 +95,9 @@ export type InstrumentTrackMeta = Omit<
 
 export type AudioTrackMeta = Omit<
   AudioTrackData,
-  "effects" | "clips" | "placements" | "activeClipId" | "launchedClipId"
+  "effects" | "clips" | "placements" | "activeClipId" | "launchedClipId" | "color"
 > & {
+  color: DeviceColor;
   effects: EffectMeta[];
   clips: AudioClipData[];
   activeClipId: string;

@@ -72,24 +72,6 @@ export const authorNoteStyle = (author: string, selected: boolean, presence: Aut
     : { background: hex, borderColor: withAlpha(hex, 0.4) };
 };
 
-/** An arrangement placement block, tinted by its clip's last editor (top-accent when unselected). */
-export const authorBlockStyle = (author: string, selected: boolean, presence: AuthorPresence): CSSProperties => {
-  const hex = authorHex(author, presence);
-  return selected
-    ? { borderColor: hex, background: withAlpha(hex, 0.25), boxShadow: `0 0 0 1px ${hex}` }
-    : { borderTopColor: hex };
-};
-
-/** The faint inner-fill tint of a placement block (was `bg-<voice>/10`). */
-export const authorBlockTintStyle = (author: string, presence: AuthorPresence): CSSProperties => ({
-  background: withAlpha(authorHex(author, presence), 0.1),
-});
-
-/** A note-summary bar inside a placement block (was `bg-<voice>/85`). */
-export const authorMiniStyle = (author: string, presence: AuthorPresence): CSSProperties => ({
-  background: withAlpha(authorHex(author, presence), 0.85),
-});
-
 /**
  * Display label for an author: the reserved voices get a friendly name; a user id shows as-is.
  *

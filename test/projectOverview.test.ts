@@ -63,19 +63,28 @@ describe("groupTree", () => {
 });
 
 describe("groupSummary and groupStrip", () => {
-  const placed = (id: string, placements: { startBeat: number; length: number }[]) =>
-    track(id, "g", { placements } as unknown as Partial<TrackMeta>);
+  // Each track's clips: "a" plain, "b" with a colour of its own.
+  const placed = (id: string, color: string, placements: { clipId: string; startBeat: number; length: number }[]) =>
+    track(id, "g", {
+      color,
+      clips: [{ id: "a" }, { id: "b", color: "pink" }],
+      placements,
+    } as unknown as Partial<TrackMeta>);
   const node: GroupNode = {
     group: group("Rhythm", null),
     tracks: [
-      placed("Drums", [
-        { startBeat: 0, length: 16 },
-        { startBeat: 32, length: 16 },
+      placed("Drums", "red", [
+        { clipId: "a", startBeat: 0, length: 16 },
+        { clipId: "b", startBeat: 32, length: 16 },
       ]),
-      placed("Bass", [{ startBeat: 16, length: 16 }]),
+      placed("Bass", "blue", [{ clipId: "a", startBeat: 16, length: 16 }]),
     ],
     children: [
-      { group: group("Perc", "Rhythm"), tracks: [placed("Shaker", [{ startBeat: 0, length: 8 }])], children: [] },
+      {
+        group: group("Perc", "Rhythm"),
+        tracks: [placed("Shaker", "lime", [{ clipId: "a", startBeat: 0, length: 8 }])],
+        children: [],
+      },
     ],
   };
 
@@ -84,11 +93,11 @@ describe("groupSummary and groupStrip", () => {
     expect(groupSummary({ group: group("Empty", null), tracks: [], children: [] })).toBe("Empty");
   });
 
-  it("lays the group's own clips out across the song, a lane per track", () => {
+  it("lays the group's own clips out across the song, a lane per track, each in its clip's colour", () => {
     expect(groupStrip(node, 64)).toEqual([
-      { lane: 0, left: 0, width: 25 },
-      { lane: 0, left: 50, width: 25 },
-      { lane: 1, left: 25, width: 25 },
+      { lane: 0, left: 0, width: 25, color: "red" },
+      { lane: 0, left: 50, width: 25, color: "pink" },
+      { lane: 1, left: 25, width: 25, color: "blue" },
     ]);
   });
 });

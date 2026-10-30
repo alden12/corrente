@@ -135,6 +135,7 @@ const EFFECTS: EffectMap = {
   pasteClip: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.id)] }),
   removeClip: (command) => ({ touched: [trackKey(command.trackId)], removed: [clipKey(command.clipId)] }),
   renameClip: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.clipId)] }),
+  setClipColor: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.clipId)] }),
   addPlacement: (command) => ({ touched: [trackKey(command.trackId), placementKey(command.id)] }),
   movePlacement: (command) => ({ touched: [trackKey(command.trackId), placementKey(command.placementId)] }),
   resizePlacement: (command) => ({ touched: [trackKey(command.trackId), placementKey(command.placementId)] }),

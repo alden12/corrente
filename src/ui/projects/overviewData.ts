@@ -1,4 +1,5 @@
 /** The pure halves of the project page (`ProjectOverview`, `TrackList`), kept apart for tests. */
+import type { DeviceColor } from "../../audio/deviceColors";
 import type { GroupMeta, TrackMeta } from "../../audio/project/types";
 import { nameMatches } from "./nameMatches";
 
@@ -63,6 +64,8 @@ export interface StripBlock {
   lane: number;
   left: number;
   width: number;
+  /** Its clip's colour (DAW-47): the clip's own, else its track's. */
+  color: DeviceColor;
 }
 
 /** Most lanes a card's strip draws, so a big group stays a strip rather than a block. */
@@ -76,6 +79,7 @@ export function groupStrip(node: GroupNode, spanBeats: number): StripBlock[] {
       lane,
       left: (placement.startBeat / span) * 100,
       width: (placement.length / span) * 100,
+      color: track.clips.find((clip) => clip.id === placement.clipId)?.color ?? track.color,
     })),
   );
 }

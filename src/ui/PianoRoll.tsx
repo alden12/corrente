@@ -68,6 +68,10 @@ import { iconButtonClass } from "./controls/iconButtonStyle";
 import { ToolsIcon } from "./controls/ToolsIcon";
 import { isBlackKey, pitchName } from "./noteNames";
 
+/** A note's name shows only on a note wide and tall enough to hold it all (DAW-28), never cut short:
+ *  the row at least this tall, and the note as wide as its letters plus the room either side. */
+const NOTE_NAME_MIN_ROW = 9;
+const nameFits = (name: string, noteWidth: number, fontSize: number) => noteWidth >= name.length * fontSize * 0.62 + 10;
 const MIN_PITCH = 24; // C1
 const MAX_PITCH = 96; // C7
 const ROWS = MAX_PITCH - MIN_PITCH + 1;
@@ -1055,6 +1059,9 @@ export function PianoRoll({
                 const selected = selection.has(note.id);
                 // Tint the note by its last editor. Falls back to "you" when unstamped.
                 const author = projectStore?.authorOf(noteKey(note.id)) ?? "you";
+                const name = rows.label(note.pitch) ?? pitchName(note.pitch);
+                const noteWidth = Math.max(2, beatToX(note.length, pxPerBeat) - 1);
+                const nameSize = Math.min(10, rowH - 3);
                 return (
                   <div
                     key={note.id}
@@ -1066,13 +1073,24 @@ export function PianoRoll({
                     style={{
                       ...authorNoteStyle(author, selected, presence),
                       left: beatToX(note.start, pxPerBeat),
-                      width: Math.max(2, beatToX(note.length, pxPerBeat) - 1),
+                      width: noteWidth,
                       top: (MAX_PITCH - note.pitch) * rowH,
                       height: rowH - 1,
                       opacity: 0.45 + 0.55 * note.velocity,
                     }}
-                    title={`${rows.label(note.pitch) ?? pitchName(note.pitch)} · ${note.start}+${note.length} beats · vel ${note.velocity.toFixed(2)}`}
+                    title={`${name} · ${note.start}+${note.length} beats · vel ${note.velocity.toFixed(2)}`}
                   >
+                    {/* Its name, always on but quiet, so a dense roll still reads as shapes first
+                        (DAW-28). Left out, not clipped, where the note or its row is too small. */}
+                    {rowH >= NOTE_NAME_MIN_ROW && nameFits(name, noteWidth, nameSize) && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-1 top-0 bottom-0 flex items-center font-mono leading-none text-ground/75 pointer-events-none whitespace-nowrap"
+                        style={{ fontSize: nameSize }}
+                      >
+                        {name}
+                      </span>
+                    )}
                     <div className="absolute top-0 bottom-0 right-0 w-1.5 cursor-ew-resize" />
                   </div>
                 );

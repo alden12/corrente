@@ -10,7 +10,6 @@
 import { useState } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
-import type { TrackMeta } from "../../audio/project/types";
 import { useProject } from "../../audio/project/useProject";
 import { newGroupId } from "../../audio/commands/ids";
 import { summarizeProject } from "../../audio/projects/summary";
@@ -35,7 +34,6 @@ export function TrackList({
   const context: CardContext = {
     dispatch,
     selectedId: project.selectedTrackId,
-    laneOf: (track: TrackMeta) => project.tracks.findIndex((candidate) => candidate.id === track.id),
     spanBeats: summarizeProject(projectStore.snapshot()).spanBeats,
     opened,
     onToggle: toggle,

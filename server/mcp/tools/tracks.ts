@@ -18,7 +18,7 @@ export function registerTracksTools({
     {
       title: "List tracks",
       description:
-        "List all tracks (id, name, instrument, group, mute, volume, note count), the project's name, the tempo, the key, and the available instrument types (with their default group family).",
+        "List all tracks (id, name, colour, instrument, group, mute, volume, note count), the project's name, the tempo, the key, and the available instrument types (with their default group family).",
     },
     async () =>
       ok(
@@ -39,6 +39,7 @@ export function registerTracksTools({
             tracks: target.project.getTracks().map((t) => ({
               id: t.id,
               name: t.name,
+              color: t.color,
               kind: t.kind,
               instrument: t.kind === "instrument" ? t.instrumentType : undefined,
               group: t.parentId,

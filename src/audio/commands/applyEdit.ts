@@ -64,6 +64,7 @@ const APPLY: ApplyMap = {
     if (command.solo !== undefined) project.setSolo(command.trackId, command.solo);
     if (command.volume !== undefined) project.setVolume(command.trackId, command.volume);
     if (command.name !== undefined) project.renameTrack(command.trackId, command.name);
+    if (command.color !== undefined) project.setTrackColor(command.trackId, command.color);
   },
   setInstrument: (project, command) => project.setInstrument(command.trackId, command.instrumentType),
   addCustomInstrument: (project, command) => project.addCustomInstrument(command.def, command.library),
@@ -153,6 +154,7 @@ const APPLY: ApplyMap = {
   pasteClip: (project, command, author) => project.pasteClip(command.trackId, command.id, command.content, author),
   removeClip: (project, command) => project.removeClip(command.trackId, command.clipId),
   renameClip: (project, command) => project.renameClip(command.trackId, command.clipId, command.name),
+  setClipColor: (project, command) => project.setClipColor(command.trackId, command.clipId, command.color ?? undefined),
   // Arrangement placements.
   addPlacement: (project, command) =>
     void project.addPlacement(command.trackId, {

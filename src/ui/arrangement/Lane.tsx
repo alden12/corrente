@@ -6,15 +6,16 @@
  * rendering, kept here since nothing else uses them.
  */
 import { useRef, useState, type RefObject } from "react";
-import type { ProjectStore, Track } from "../../audio/project/projectStore";
+import type { Track } from "../../audio/project/projectStore";
 import type { ClipStore } from "../../audio/sequencer/clipStore";
 import type { Placement } from "../../audio/project/types";
 import type { Dispatch } from "../../audio/commands/types";
 import { GRID } from "../../audio/sequencer/types";
 import { useClip } from "../../audio/sequencer/useClip";
-import { clipKey, noteKey } from "../../audio/commands/authorship";
-import { authorBlockStyle, authorBlockTintStyle, authorMiniStyle } from "../authorStyle";
-import { useAuthorPresence } from "../authorColorsContext";
+import { paletteAccent } from "../deviceColor";
+import { clipColorMenu } from "../clipColorMenu";
+import { CreatorDot } from "../CreatorDot";
+import type { DeviceColor } from "../../audio/deviceColors";
 import { newClipId, newPlacementId } from "../../audio/commands/ids";
 import { beginPointerDrag } from "../pointerDrag";
 import { Waveform } from "../Waveform";
@@ -30,14 +31,15 @@ import { ROW, ROW_PX, RULER_H, RESIZE_PX, DRAG_THRESH, type Selection } from "./
 /** The block's `top-1.5 bottom-1.5` inset, as a number the handles can be placed against. */
 const BLOCK_INSET_Y = 6;
 
-/** A placement block: pixel-positioned region with a label, shared by both kinds. Tinted by the
- *  clip's last editor (its `author` voice). */
+/** A placement block: pixel-positioned region with a label, shared by both kinds. In its clip's
+ *  colour (DAW-47: its own, else its track's), with a dot by its name when someone else made it. */
 /** A soft outline in the block's fill colour around a clip's name, so notes under it don't swallow it. */
 const NAME_HALO = "0 0 2px var(--color-card), 0 0 2px var(--color-card), 0 0 1px var(--color-card)";
 
 function Block({
   name,
-  author,
+  color,
+  creator,
   left,
   width,
   selected,
@@ -47,7 +49,9 @@ function Block({
   children,
 }: {
   name?: string;
-  author: string;
+  color: DeviceColor;
+  /** Who made the clip, for the dot by its name. */
+  creator?: string;
   left: number;
   width: number;
   selected: boolean;
@@ -56,7 +60,7 @@ function Block({
   onContextMenu: (e: React.MouseEvent) => void;
   children?: React.ReactNode;
 }) {
-  const presence = useAuthorPresence();
+  const edge = paletteAccent(color);
   return (
     <div
       data-testid="placement"
@@ -69,17 +73,24 @@ function Block({
       className={`absolute top-1.5 bottom-1.5 rounded border overflow-hidden cursor-grab touch-none ${
         selected ? "" : "border-t-2 border-line bg-card hover:bg-card/70"
       }`}
-      style={{ ...authorBlockStyle(author, selected, presence), left, width: Math.max(3, width) }}
+      style={{
+        ...(selected
+          ? { borderColor: edge, background: paletteAccent(color, 0.3), boxShadow: `0 0 0 1px ${edge}` }
+          : { borderTopColor: edge }),
+        left,
+        width: Math.max(3, width),
+      }}
       title={name}
     >
-      <div className="absolute inset-0" style={authorBlockTintStyle(author, presence)} />
+      <div className="absolute inset-0" style={{ background: paletteAccent(color, 0.16) }} />
       {children}
       {/* Haloed in the block's own colour, so the name reads over the notes drawn under it. */}
       <span
-        className="absolute left-1.5 top-1 font-mono text-[9px] text-muted truncate max-w-full pr-1"
+        className="absolute left-1.5 top-1 flex items-center gap-1 max-w-full pr-1 font-mono text-[9px] text-muted"
         style={{ textShadow: NAME_HALO }}
       >
-        {name}
+        {creator && <CreatorDot author={creator} />}
+        <span className="truncate">{name}</span>
       </span>
       {/* right-edge resize affordance */}
       <div className="absolute top-0 bottom-0 right-0 w-1.5 cursor-ew-resize" />
@@ -96,18 +107,15 @@ function NoteMinis({
   store,
   placement,
   pxPerBeat,
-  projectStore,
-  fallbackAuthor,
+  color,
 }: {
   store: ClipStore;
   placement: Placement;
   pxPerBeat: number;
-  projectStore: ProjectStore;
-  /** Voice for notes with no recorded editor yet (matches the block's clip author). */
-  fallbackAuthor: string;
+  /** The block's colour, which its notes are drawn in. */
+  color: DeviceColor;
 }) {
   const clip = useClip(store);
-  const presence = useAuthorPresence();
   const clipLen = clip.lengthBeats;
   if (clipLen <= 0) return null;
   const body = clip.notes.filter((note) => note.start >= 0 && note.start < clipLen);
@@ -146,7 +154,7 @@ function NoteMinis({
           key={key}
           className="absolute h-0.5 rounded-[1px] pointer-events-none"
           style={{
-            ...authorMiniStyle(projectStore.authorOf(noteKey(note.id)) ?? fallbackAuthor, presence),
+            background: paletteAccent(color, 0.9),
             left: beatToX(tau, pxPerBeat),
             width: Math.max(2, beatToX(note.length, pxPerBeat)),
             bottom: `${((note.pitch - lo) / span) * 60 + 18}%`,
@@ -183,7 +191,6 @@ export function Lane({
   onPaste,
   onHover,
   dispatch,
-  projectStore,
 }: {
   track: Track;
   width: number;
@@ -210,7 +217,6 @@ export function Lane({
   onPaste: (beat: number) => void;
   onHover: (beat: number | null) => void;
   dispatch: Dispatch;
-  projectStore: ProjectStore;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<{ left: number; width: number } | null>(null);
@@ -328,7 +334,9 @@ export function Lane({
   /** A clip's actions: on touch from its ⋮, with a mouse from a right-click (DAW-74). */
   const placementItems = (placement: Placement): MenuItem[] => {
     const remove = () => dispatch({ type: "removePlacement", trackId: track.id, placementId: placement.id });
+    const clip = track.clips.find((candidate) => candidate.id === placement.clipId);
     return [
+      ...(clip ? [clipColorMenu(track, clip, dispatch), { separator: true }] : []),
       { label: "Copy", onClick: () => onCopy(placement) },
       {
         label: "Cut",
@@ -483,14 +491,13 @@ export function Lane({
       {track.placements.map((placement) => {
         const clip = track.clips.find((candidate) => candidate.id === placement.clipId);
         const selected = selection?.trackId === track.id && selection.id === placement.id;
-        // The block follows the clip's last editor (content author): its `clip:<id>` authorship,
-        // falling back to the clip's creation author for clips edited before this was tracked.
-        const clipAuthor = (clip && projectStore.authorOf(clipKey(clip.id))) ?? clip?.author ?? "you";
+        const color = clip?.color ?? track.color;
         return (
           <Block
             key={placement.id}
             name={clip?.name}
-            author={clipAuthor}
+            color={color}
+            creator={clip?.author}
             left={beatToX(placement.startBeat, pxPerBeat)}
             width={beatToX(placement.length, pxPerBeat)}
             selected={selected}
@@ -502,13 +509,7 @@ export function Lane({
             }}
           >
             {clip && "store" in clip ? (
-              <NoteMinis
-                store={clip.store}
-                placement={placement}
-                pxPerBeat={pxPerBeat}
-                projectStore={projectStore}
-                fallbackAuthor={clipAuthor}
-              />
+              <NoteMinis store={clip.store} placement={placement} pxPerBeat={pxPerBeat} color={color} />
             ) : clip && "fileId" in clip ? (
               <Waveform fileId={clip.fileId} gain={clip.gain} className="absolute inset-0 w-full h-full opacity-80" />
             ) : null}

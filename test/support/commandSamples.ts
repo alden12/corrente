@@ -88,6 +88,10 @@ export const SAMPLES = {
     command: { type: "bypassMidiDevice", trackId: "t-1", deviceId: "md-1", bypassed: false },
   },
 
+  setClipColor: {
+    setup: [{ type: "setClipColor", trackId: "t-1", clipId: "c-t-1", color: "red" }],
+    command: { type: "setClipColor", trackId: "t-1", clipId: "c-t-1", color: "lime" },
+  },
   renameClip: {
     setup: [{ type: "renameClip", trackId: "t-1", clipId: "c-t-1", name: "Verse" }],
     command: { type: "renameClip", trackId: "t-1", clipId: "c-t-1", name: "Chorus" },

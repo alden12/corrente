@@ -14,6 +14,7 @@
 import { DEFAULT_KEY, type ProjectKey } from "../theory/key";
 import { SCALE_NAMES, type ScaleName } from "../theory/scales";
 import { ParamStore } from "../params/store";
+import { colorAt, nextTrackColor, type DeviceColor } from "../deviceColors";
 import { ClipStore } from "../sequencer/clipStore";
 import { GRID, type NoteEvent } from "../sequencer/types";
 import { clamp } from "../../util";
@@ -131,6 +132,8 @@ export interface Group extends EffectHost {
 interface BaseTrack extends EffectHost {
   id: string;
   name: string;
+  /** Its colour (DAW-47), which its clips take unless they have their own. */
+  color: DeviceColor;
   parentId: string;
   muted: boolean;
   solo: boolean;
@@ -142,6 +145,8 @@ export interface NoteClip {
   id: string;
   name: string;
   author: ClipAuthor;
+  /** Its own colour, over its track's. */
+  color?: DeviceColor;
   store: ClipStore;
 }
 
@@ -513,6 +518,7 @@ export class ProjectStore {
       kind: "instrument",
       id: trackId,
       name: opts.name ?? this.defaultTrackName(type),
+      color: this.nextTrackColor(),
       instrumentType: type,
       parentId,
       muted: false,
@@ -686,6 +692,7 @@ export class ProjectStore {
       kind: "audio",
       id: trackId,
       name: opts.name ?? this.defaultAudioTrackName(),
+      color: this.nextTrackColor(),
       parentId,
       muted: false,
       solo: false,
@@ -717,6 +724,7 @@ export class ProjectStore {
       kind: "audio",
       id: trackId,
       name,
+      color: this.nextTrackColor(),
       parentId,
       muted: false,
       solo: false,
@@ -908,6 +916,27 @@ export class ProjectStore {
   selectTrack(id: string): void {
     if (!this.getTrack(id) || this.selectedTrackId === id) return;
     this.selectedTrackId = id;
+    this.emit();
+  }
+
+  /** The colour a track made now takes: the first no track has yet. */
+  private nextTrackColor(): DeviceColor {
+    return nextTrackColor(this.tracks.map((track) => track.color));
+  }
+
+  setTrackColor(id: string, color: DeviceColor): void {
+    const t = this.getTrack(id);
+    if (!t || t.color === color) return;
+    t.color = color;
+    this.emit();
+  }
+
+  /** A clip's own colour, or `undefined` to have it take its track's again. */
+  setClipColor(trackId: string, clipId: string, color: DeviceColor | undefined): void {
+    const clip = this.getTrack(trackId)?.clips.find((each) => each.id === clipId);
+    if (!clip || clip.color === color) return;
+    if (color) clip.color = color;
+    else delete clip.color;
     this.emit();
   }
 
@@ -1719,10 +1748,11 @@ export class ProjectStore {
    * instances keeps the engine's per-track bindings live, where replacing them would orphan the
    * bound instrument. Pass nothing when there is no prior track.
    */
-  private hydrateTrack(stored: TrackData, projLen: number, reuse?: Track): Track {
+  private hydrateTrack(stored: TrackData, index: number, projLen: number, reuse?: Track): Track {
     const base = {
       id: stored.id,
       name: stored.name,
+      color: stored.color ?? colorAt(index),
       parentId: stored.parentId,
       muted: stored.muted ?? false,
       solo: stored.solo ?? false,
@@ -1788,7 +1818,9 @@ export class ProjectStore {
     // valid across load (undo/redo) - replacing a ParamStore would orphan the
     // bound instrument. Stores are mutated in place below.
     const prev = new Map(this.tracks.map((track) => [track.id, track] as const));
-    this.tracks = (data.tracks ?? []).map((stored) => this.hydrateTrack(stored, projLen, prev.get(stored.id)));
+    this.tracks = (data.tracks ?? []).map((stored, index) =>
+      this.hydrateTrack(stored, index, projLen, prev.get(stored.id)),
+    );
     // Invariant: every track must belong to a real group; file any orphan into main.
     for (const track of this.tracks) {
       if (!track.parentId || !this.getGroup(track.parentId)) track.parentId = this.ensureMainGroup().id;
