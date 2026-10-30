@@ -58,6 +58,21 @@ const pinFirstPlacement = <Command extends { trackId: string; clipId?: string; p
   return pin(pinned, "placeAt", project.firstPlacement(pinned.trackId, pinned.clipId));
 };
 
+/**
+ * A new track's defaults: its name counts the tracks already there, its clip's length is the project's
+ * at the time, and its clip starts off the timeline (DAW-50), which older entries didn't say.
+ */
+const pinNewTrack = <
+  Command extends { instrumentType: string; name?: string; lengthBeats?: number; unplaced?: boolean },
+>(
+  project: ProjectStore,
+  command: Command,
+): Command => {
+  const named = pin(command, "name", project.defaultTrackName(command.instrumentType));
+  const sized = pin(named, "lengthBeats", project.length);
+  return pin(sized, "unplaced", true);
+};
+
 const NORMALIZE = {
   addNote: pinFirstPlacement,
   addNotes: pinFirstPlacement,
@@ -69,19 +84,8 @@ const NORMALIZE = {
 
   // Creation defaults. A name counts what already exists, and a clip's seed follows the track's
   // active clip and the project length, so all of them move between a dispatch and a replay.
-  // A new track's seed clip starts off the timeline (DAW-50), which older entries didn't say.
-  createTrack: (project, command) =>
-    pin(
-      pin(pin(command, "name", project.defaultTrackName(command.instrumentType)), "lengthBeats", project.length),
-      "unplaced",
-      true,
-    ),
-  createTrackFromPatch: (project, command) =>
-    pin(
-      pin(pin(command, "name", project.defaultTrackName(command.instrumentType)), "lengthBeats", project.length),
-      "unplaced",
-      true,
-    ),
+  createTrack: pinNewTrack,
+  createTrackFromPatch: pinNewTrack,
   createAudioTrack: (project, command) => pin(command, "name", project.defaultAudioTrackName()),
   createGroup: (project, command) => pin(command, "name", project.defaultGroupName()),
   // An audio placement's length is its duration at the tempo of the moment, and audio is not
