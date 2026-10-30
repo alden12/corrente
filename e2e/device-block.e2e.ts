@@ -47,6 +47,8 @@ test("devices and their sections start folded as far as they go, and what you op
   await expect(filterEnv).toHaveAttribute("aria-expanded", "false");
   await filterEnv.click();
   await expect(instrument.getByRole("group", { name: "Filter Env" }).getByText("Filter Attack")).toBeVisible();
+  // Open, it's the same height as the folded ones beside it, so the row lines up.
+  expect((await instrument.boundingBox())!.height).toBe(folded.height);
   await expect(instrument.getByRole("button", { name: "Amp Env", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",

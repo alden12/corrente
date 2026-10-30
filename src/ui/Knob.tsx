@@ -226,11 +226,12 @@ function NumberSlider({
   };
 
   return (
+    // Given a height (a section in the desktop rack), the track runs all of it.
     <div className="flex flex-col items-center gap-1.5 w-12">
       {/* The hit area is the full 24px box; the visible track is a 2px line down the middle.
           Drawing the track *as* the target would leave an 8px-wide thing to hit on touch. */}
       <div
-        className="relative w-6 h-16 cursor-ns-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
+        className="relative w-6 flex-1 min-h-16 cursor-ns-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
         role="slider"
         aria-label={spec.label}
         aria-valuemin={spec.min}

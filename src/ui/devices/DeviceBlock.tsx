@@ -4,9 +4,9 @@
  * actions; open, its body. Folding is view state (`deviceFolds.ts`), never an edit. An instrument or
  * effect on the engine has a button for its graph (INST-44), where there's somewhere to show it.
  *
- * **Folded**, on the desktop a device is a narrow column of one height, its name running down it
- * (cut short with an ellipsis), as a folded section's title does; stacked on a phone (`RackStacked`)
- * it's a row across the screen. A device in a chain has a handle to drag it to another place in it
+ * On the desktop every device is one height (`DEVICE_HEIGHT`), folded or open, so a row of them lines
+ * up. **Folded**, it's a narrow column, its name running down it (cut short with an ellipsis), as a
+ * folded section's title does; stacked on a phone (`RackStacked`) it's a row across the screen. A device in a chain has a handle to drag it to another place in it
  * (`useChainDrag`).
  */
 import { useContext, type ReactNode } from "react";
@@ -20,12 +20,9 @@ import { foldOnHeaderClick } from "../controls/foldOnHeaderClick";
 import { openDeviceGraph, useCanViewGraph } from "../tabs/openGraph";
 import { GraphIcon } from "../graph/GraphIcon";
 import type { DeviceKind } from "../../audio/definitions/chainGraph";
-import { RackStacked } from "./rackLayout";
+import { DEVICE_HEADER_HEIGHT, DEVICE_HEIGHT, RackStacked, SECTION_HEIGHT } from "./rackLayout";
 import type { DeviceDrag } from "./useChainDrag";
 import { GripIcon, PowerIcon } from "./deviceIcons";
-
-/** A folded device's height on the desktop, the same for every one: a long name is cut short. */
-const FOLDED_HEIGHT = 240;
 
 const ICON_BUTTON =
   "flex items-center justify-center w-6 h-6 pointer-coarse:w-9 pointer-coarse:h-9 shrink-0 rounded text-muted hover:text-ink hover:bg-control cursor-pointer";
@@ -106,9 +103,10 @@ export function DeviceBlock({
       )}
       <div
         className={`flex items-center gap-1.5 cursor-pointer ${
-          column ? "flex-col px-1 py-1.5" : `pl-1 pr-2 py-1 ${open ? "border-b border-line" : ""}`
+          column ? "flex-col px-1 py-1.5" : `pl-1 pr-2 ${stacked ? "py-1" : ""} ${open ? "border-b border-line" : ""}`
         }`}
-        style={column ? { height: FOLDED_HEIGHT } : undefined}
+        // Open on the desktop, the header is a set height, so its sections add up to the device's.
+        style={stacked ? undefined : { height: column ? DEVICE_HEIGHT : DEVICE_HEADER_HEIGHT }}
         // A tap anywhere that is not a control folds it, as on the column's section headers.
         onClick={foldOnHeaderClick(toggleFold)}
         title={open ? undefined : `${label} · ${kind} · ${paramCount(schema.length)}`}
@@ -185,7 +183,12 @@ export function DeviceBlock({
           )}
         </span>
       </div>
-      {open && <DeviceHue.Provider value={deviceHue(device)}>{children}</DeviceHue.Provider>}
+      {open && (
+        // At least a section's height, so a body of its own (the drum kit's pads) is never shorter.
+        <div style={stacked ? undefined : { minHeight: SECTION_HEIGHT }}>
+          <DeviceHue.Provider value={deviceHue(device)}>{children}</DeviceHue.Provider>
+        </div>
+      )}
     </div>
   );
 }

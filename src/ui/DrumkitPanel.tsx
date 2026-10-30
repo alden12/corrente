@@ -86,11 +86,12 @@ export function DrumkitPanel({
         {/* Kit-wide controls (envelope, amp) as a horizontal strip above the pads. */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {otherSections.map((section) => (
-            <div key={section.namespace} className="flex items-center gap-3">
+            <div key={section.namespace} className="flex flex-wrap items-center gap-3 min-w-0">
               <span className="font-mono text-[9px] tracking-[0.16em] uppercase text-faint">
                 {sectionTitle(section.namespace)}
               </span>
-              <div className="flex items-center gap-3">
+              {/* Wraps on a phone, where two faders are wider than the screen. */}
+              <div className="flex flex-wrap items-center gap-3 min-w-0">
                 {section.specs.map((spec) => (
                   <div key={spec.id} className="w-40">
                     {rowControl(spec)}
