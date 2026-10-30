@@ -1,11 +1,11 @@
 /**
  * The Projects page (MOBILE-19.3, approved board `ProjectsHome`, trimmed after trying it): the open
- * project as a large card, then all your projects as one list you can filter and switch between. The
+ * project as a card (its name and actions), then all your projects as one list you can filter and switch between. The
  * phone's Projects tab and the desktop's Project view both open on it, and it is where every project
  * action lives: New (and on desktop Import) beside the filter, Rename, Export and Delete on each row.
  *
  * Thumbnails come from each project's summary (`summary.ts`), so the list never loads a project to
- * draw it. The open project's card reads the live store instead, so it is current as you edit.
+ * draw it. The open project's card reads the live store instead, so its details are current as you edit.
  */
 import { useRef, useState, useSyncExternalStore } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
@@ -197,15 +197,9 @@ export function ProjectsHome({
         />
       )}
 
+      {/* No large thumbnail: a project opens on its own page, so its arrangement is a tap away (and in
+          its row below), and the card is its name and actions. */}
       <section aria-label="Open project" className="mx-4 rounded-xl border border-line bg-stage overflow-hidden">
-        <button
-          type="button"
-          onClick={onOpenProject}
-          aria-label={`Open ${openName}`}
-          className="block w-full cursor-pointer"
-        >
-          <ArrangementThumb summary={openSummary} width="100%" height={112} className="rounded-none" />
-        </button>
         <div className="flex items-start gap-2 px-3.5 pt-3 pb-3.5">
           <div className="flex-1 min-w-0">
             <div className="font-mono text-[10.5px] font-semibold tracking-widest text-you">OPEN NOW</div>

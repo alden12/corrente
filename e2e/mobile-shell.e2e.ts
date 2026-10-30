@@ -1207,8 +1207,8 @@ test.describe("phone", () => {
     await page.getByRole("searchbox", { name: "Filter projects" }).fill("");
     await expect(recent.getByRole("listitem")).toHaveCount(2);
 
-    // The card's thumbnail goes inside the project, and back comes out again.
-    await open.getByRole("button", { name: `Open ${firstName}` }).tap();
+    // The open project's row goes inside it, and back comes out again.
+    await recent.getByRole("button", { name: `Open ${firstName}` }).tap();
     await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     await expect(open).toBeVisible();
