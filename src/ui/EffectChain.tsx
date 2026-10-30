@@ -63,7 +63,7 @@ export function EffectChain({
                 />
               </>
             }
-            params={schema.length}
+            schema={schema}
           >
             <DeviceSections
               label={info.label}

@@ -60,7 +60,7 @@ export function DevicesBar({
 }) {
   const clip = track.clips.find((each) => each.id === track.activeClipId);
   const jumps = jumpsFor(track);
-  const [, , putFolds] = useDeviceFolds();
+  const { putAll: putFolds } = useDeviceFolds();
   const keys = jumps.map((jump) => jump.key);
   // The whole chain's graph (INST-44.2), where there's somewhere to show it.
   const chainGraph = useCanOpenGraphs() && track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT;

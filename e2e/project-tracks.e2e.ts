@@ -80,6 +80,8 @@ test("assign the Nimbus synth to a track and see its controls", async ({ page })
 
   // The tab's kind chip becomes the instrument, and its schema-driven controls render.
   await expect(page.getByRole("tablist").getByTitle("Nimbus", { exact: true })).toBeVisible();
+  // Its sections start folded: open the oscillator's.
+  await page.getByRole("button", { name: "Oscillator", exact: true }).click();
   await expect(page.getByText("Pulse Width", { exact: true })).toBeVisible();
 });
 

@@ -2,15 +2,16 @@ import { test, expect, type Page } from "@playwright/test";
 import { dismissStart, openExploreCategory } from "./support/app";
 
 /**
- * Devices in the rack fold (DAW-61.3): a folded device is its header and a count of its params, and
- * a device's sections fold on their own. Folding is how you're looking, so it outlives a reload.
+ * Devices in the rack fold (DAW-61.3). A device with sections starts open with them folded, so a big
+ * instrument shows its section names; one without starts folded, to a narrow column with its name
+ * running down it. Folding is how you're looking, so it outlives a reload.
  */
 
 test.use({ viewport: { width: 1500, height: 1000 } });
 
 const block = (page: Page, name: string) => page.locator(`[role="group"][aria-label="${name}"][data-open]`);
 
-test("a device and its sections fold, and stay folded after a reload", async ({ page }) => {
+test("devices and their sections start folded as far as they go, and what you open is kept", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   await openExploreCategory(page, "Effects");
@@ -20,27 +21,40 @@ test("a device and its sections fold, and stay folded after a reload", async ({ 
     .getByRole("button", { name: /^Add to / })
     .click();
 
+  // The Reverb has no sections to fold to, so it starts folded: a column, its name running down it,
+  // with no graph button (that's for a device you're looking into).
   const reverb = block(page, "Reverb");
-  await expect(reverb.getByText("Decay", { exact: true })).toBeVisible();
-  await reverb.getByRole("button", { name: "Fold Reverb" }).click();
+  await expect(reverb).toHaveAttribute("data-open", "false");
   await expect(reverb.getByText("Decay", { exact: true })).toHaveCount(0);
-  await expect(reverb.getByText("2 params")).toBeVisible(); // folded, it says what it holds
+  await expect(reverb.getByRole("button", { name: "View Reverb's graph" })).toHaveCount(0);
+  const folded = (await reverb.boundingBox())!;
+  expect(folded.height).toBeGreaterThan(folded.width);
 
-  // The Micro VA's filter envelope (eg1) folds on its own, leaving its amp envelope (eg2) open.
+  // The Micro VA starts open, its sections folded; one opens on its own.
   const instrument = block(page, "Micro VA");
-  await instrument.getByRole("button", { name: "Filter Env", exact: true }).click();
-  await expect(instrument.getByRole("group", { name: "Filter Env" }).getByText("Filter Attack")).toHaveCount(0);
-  await expect(instrument.getByRole("group", { name: "Amp Env" }).getByText("Amp Attack")).toBeVisible();
-
-  await page.waitForTimeout(600); // past the project's 300ms save tick, so the reverb is saved
-  await page.reload();
-  await dismissStart(page);
-  await expect(block(page, "Reverb")).toHaveAttribute("data-open", "false");
-  await expect(block(page, "Micro VA").getByRole("button", { name: "Filter Env", exact: true })).toHaveAttribute(
+  await expect(instrument).toHaveAttribute("data-open", "true");
+  const filterEnv = instrument.getByRole("button", { name: "Filter Env", exact: true });
+  await expect(filterEnv).toHaveAttribute("aria-expanded", "false");
+  await filterEnv.click();
+  await expect(instrument.getByRole("group", { name: "Filter Env" }).getByText("Filter Attack")).toBeVisible();
+  await expect(instrument.getByRole("button", { name: "Amp Env", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",
   );
 
-  await block(page, "Reverb").getByRole("button", { name: "Unfold Reverb" }).click();
-  await expect(block(page, "Reverb").getByText("Decay", { exact: true })).toBeVisible();
+  await reverb.getByRole("button", { name: "Unfold Reverb" }).click();
+  await expect(reverb.getByText("Decay", { exact: true })).toBeVisible();
+  await expect(reverb.getByRole("button", { name: "View Reverb's graph" })).toBeVisible();
+
+  await page.waitForTimeout(600); // past the project's 300ms save tick, so the reverb is saved
+  await page.reload();
+  await dismissStart(page);
+  await expect(block(page, "Reverb")).toHaveAttribute("data-open", "true");
+  await expect(block(page, "Micro VA").getByRole("button", { name: "Filter Env", exact: true })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+
+  await block(page, "Reverb").getByRole("button", { name: "Fold Reverb" }).click();
+  await expect(block(page, "Reverb").getByText("Decay", { exact: true })).toHaveCount(0);
 });

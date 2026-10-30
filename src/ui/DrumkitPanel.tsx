@@ -79,7 +79,7 @@ export function DrumkitPanel({
       label={info.label}
       kind="instr"
       foldKey={instrumentFold(trackId)}
-      params={instrumentSchema("drumkit").length}
+      schema={instrumentSchema("drumkit")}
       graph="instrument"
     >
       <div className="flex flex-col gap-3 px-3 py-3">

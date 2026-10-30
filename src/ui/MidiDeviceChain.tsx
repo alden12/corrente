@@ -57,7 +57,7 @@ export function MidiDeviceChain({
                 removeTitle="Remove MIDI device"
               />
             }
-            params={schema.length}
+            schema={schema}
           >
             <DeviceSections
               label={info.label}

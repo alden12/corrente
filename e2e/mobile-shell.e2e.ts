@@ -828,6 +828,9 @@ test.describe("phone", () => {
     await expect(column.getByRole("button", { name: "Add a new empty clip" })).toBeVisible();
     await expect(page.getByTestId("roll-scroll")).toBeVisible();
     // The devices are further down the same column, under a bar that sticks once they reach the top.
+    // Their sections start folded, so open some for a column long enough to scroll the roll away.
+    for (const section of ["Filter Env", "Amp Env"])
+      await column.getByRole("button", { name: section, exact: true }).click();
     await column.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
     await expect(column.getByRole("button", { name: "Device chain actions" })).toBeVisible();
     await expect(column.getByRole("button", { name: /^Roll/ })).toBeVisible();

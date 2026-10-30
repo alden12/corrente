@@ -2,7 +2,7 @@
  * A device's controls as sections (DAW-61.3), for every kind of device: its params grouped by id
  * namespace (`paramSections.ts`), side by side with a hairline between them, wrapping when there is
  * no room; a section wider than its device wraps its controls too. With more than one, each folds to
- * a narrow column, its title running down it. One alone is the whole device, so it has no title to
+ * a narrow column, its title running down it, and starts folded. One alone is the whole device, so it has no title to
  * fold, and nor does one named for the device (a Delay's `delay.` params), which would only repeat
  * its name.
  *
@@ -13,8 +13,8 @@
 import type { ParamSchema, ParamSpec, ParamValue } from "../../audio/params/types";
 import type { ParamStore } from "../../audio/params/store";
 import { Knob, type SampleContext } from "../Knob";
-import { toSections, sectionTitle } from "../paramSections";
-import { sectionFold, useDeviceFolds } from "./deviceFolds";
+import { toSections } from "../paramSections";
+import { sectionFold, sectionHeading, useOpenSections } from "./deviceFolds";
 import { paramCount } from "./paramCount";
 
 const stacks = (spec: ParamSpec) => spec.kind === "boolean" || spec.kind === "enum";
@@ -41,9 +41,8 @@ export function DeviceSections({
   variant?: "knob" | "slider";
   sampleContext?: SampleContext;
 }) {
-  const [folded, toggleFold] = useDeviceFolds();
+  const [opened, toggleFold] = useOpenSections();
   const sections = toSections(schema);
-  const titled = sections.length > 1;
   const control = (spec: ParamSpec) => (
     <Knob
       key={spec.id}
@@ -61,10 +60,9 @@ export function DeviceSections({
     // than each in a box of its own.
     <div className="flex flex-wrap items-start gap-y-3 px-1 py-2.5">
       {sections.map((section, index) => {
-        const named = sectionTitle(section.namespace);
-        const title = titled && named.toLowerCase() !== label.toLowerCase() ? named : "";
+        const title = sectionHeading(label, sections.length, section.namespace);
         const key = sectionFold(foldKey, section.namespace);
-        const open = !title || !folded.has(key);
+        const open = !title || opened.has(key);
         const stacked = section.specs.filter(stacks);
         const rest = section.specs.filter((spec) => !stacks(spec));
         return (
