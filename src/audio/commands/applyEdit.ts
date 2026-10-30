@@ -19,6 +19,12 @@ type ApplyMap = {
   ) => void;
 };
 
+/** A clip's first notes put it on the timeline where the dispatch pinned (DAW-50). */
+const placeFirstNotes = (project: ProjectStore, command: { trackId: string; clipId?: string; placeAt?: number }) => {
+  if (command.placeAt !== undefined && command.clipId)
+    project.placeClip(command.trackId, command.clipId, command.placeAt);
+};
+
 const APPLY: ApplyMap = {
   createTrack: (project, command) =>
     void project.addTrack(command.instrumentType, {
@@ -26,6 +32,7 @@ const APPLY: ApplyMap = {
       id: command.id,
       groupId: command.groupId,
       lengthBeats: command.lengthBeats,
+      unplaced: command.unplaced,
     }),
   createTrackFromPatch: (project, command, author) => void project.addTrackFromPatch(command, author),
   applyPatch: (project, command) =>
@@ -125,10 +132,14 @@ const APPLY: ApplyMap = {
   // by log entries written before that, which replay as they always did. addNotes / editNotes both
   // insert-or-replace by id (putNote): a new id adds, an existing id moves/resizes/re-velocities in
   // place. One call, one edit.
-  addNote: (project, command) => project.getClipStore(command.trackId, command.clipId)?.putNote(command.note),
+  addNote: (project, command) => {
+    project.getClipStore(command.trackId, command.clipId)?.putNote(command.note);
+    placeFirstNotes(project, command);
+  },
   addNotes: (project, command) => {
     const store = project.getClipStore(command.trackId, command.clipId);
     if (store) for (const note of command.notes) store.putNote(note);
+    placeFirstNotes(project, command);
   },
   editNotes: (project, command) => {
     const store = project.getClipStore(command.trackId, command.clipId);
@@ -151,7 +162,8 @@ const APPLY: ApplyMap = {
       lengthBeats: command.lengthBeats,
       author,
     }),
-  pasteClip: (project, command, author) => project.pasteClip(command.trackId, command.id, command.content, author),
+  pasteClip: (project, command, author) =>
+    project.pasteClip(command.trackId, command.id, command.content, author, command.replaces),
   removeClip: (project, command) => project.removeClip(command.trackId, command.clipId),
   renameClip: (project, command) => project.renameClip(command.trackId, command.clipId, command.name),
   setClipColor: (project, command) => project.setClipColor(command.trackId, command.clipId, command.color ?? undefined),

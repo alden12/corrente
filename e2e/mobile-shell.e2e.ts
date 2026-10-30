@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   dismissStart,
+  phoneEditorOpen,
   openStudio,
   openExploreCategory,
   swapFromExplore,
@@ -184,6 +185,7 @@ async function touchDrag(page: Page, from: { x: number; y: number }, to: { x: nu
 
 test.describe("phone", () => {
   test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+  test.beforeEach(({ page }) => phoneEditorOpen(page));
 
   /**
    * MOBILE-2, hit-target floors. Two separate defects, and either one alone was enough to
@@ -666,21 +668,6 @@ test.describe("phone", () => {
     // One transport, above everything, and only one (the clips line's record is a take, not the transport).
     await expect(page.getByRole("button", { name: "Record", exact: true })).toHaveCount(1);
     await expect(page.getByRole("button", { name: /play|stop/i }).first()).toBeVisible();
-  });
-
-  test("opens at Half, showing the track that is already selected", async ({ page }) => {
-    await startInStudio(page);
-
-    // There is always a track and a clip selected, so there is always something to edit and
-    // showing it presumes nothing. Opening parked read as the editor having failed to open.
-    await expect.poll(() => detentOf(page)).toBe("half");
-    await expect(sheet(page).getByTestId("workbench-column")).toBeVisible();
-    await expect(page.getByTestId("roll-scroll")).toBeVisible();
-
-    // Still a sheet over a live arrangement, not a full-screen editor.
-    const box = (await sheet(page).boundingBox())!;
-    expect(box.height, "leaves the arrangement half the screen").toBeLessThan(PHONE.height * 0.7);
-    expect(Math.abs(box.y + box.height - (await keysTop(page))), "and sits on the keys").toBeLessThan(2);
   });
 
   test("minimised is the bar, with the keyboard button while the keys are hidden, and a tap on it opens the sheet (MOBILE-24)", async ({
@@ -1545,8 +1532,38 @@ test.describe("phone", () => {
   });
 });
 
+test.describe("phone, first visit", () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test("the Studio starts quiet: the sheet minimised and its sections folded, and remembers both (MOBILE-34)", async ({
+    page,
+  }) => {
+    await startInStudio(page);
+
+    // Open, the sheet with the roll, clips, devices and keys crowded a first visit.
+    await expect.poll(() => detentOf(page)).toBe("peek");
+    await expect(sheet(page).getByText(/^Micro VA · \d+ devices?$/)).toBeVisible();
+    await expect(pads(page)).toHaveCount(0);
+    await setDetent(page, "half");
+    await expect(page.getByTestId("roll-scroll")).toBeHidden();
+    await expect(
+      page
+        .getByTestId("workbench-column")
+        .getByRole("button", { name: /devices/i })
+        .first(),
+    ).toBeVisible();
+
+    // Kept as you leave it.
+    await page.reload();
+    await dismissStart(page);
+    await openStudio(page);
+    await expect.poll(() => detentOf(page)).toBe("half");
+  });
+});
+
 test.describe("phone, landscape", () => {
   test.use({ viewport: LANDSCAPE, hasTouch: true, isMobile: true });
+  test.beforeEach(({ page }) => phoneEditorOpen(page));
 
   test("gets its own detents, because it is wide but very short", async ({ page }) => {
     await startInStudio(page);

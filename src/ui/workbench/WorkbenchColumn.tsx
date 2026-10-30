@@ -63,9 +63,12 @@ export function WorkbenchColumn({
   // above it and the devices' heading below: a height saved on a big window would otherwise leave a
   // roll you can't see all of. It is the grid's height; the keys add theirs rather than eat into it.
   const [rollH, setRollH] = usePersistentNumber("corrente:roll-height", 300, 200, 1200);
-  const [clipsOpen, setClipsOpen] = usePersistentBoolean("corrente:clips-open", false);
-  const [devicesOpen, setDevicesOpen] = usePersistentBoolean("corrente:devices-open", true);
-  const [rollOpen, setRollOpen] = usePersistentBoolean("corrente:roll-open", true);
+  // Remembered per tier, as the velocity lane is (MOBILE-18). A phone starts with every section
+  // folded: open, the three crowded the sheet on arrival (2026-10-30, Alden).
+  const tier = compact ? ":compact" : "";
+  const [clipsOpen, setClipsOpen] = usePersistentBoolean(`corrente:clips-open${tier}`, false);
+  const [devicesOpen, setDevicesOpen] = usePersistentBoolean(`corrente:devices-open${tier}`, !compact);
+  const [rollOpen, setRollOpen] = usePersistentBoolean(`corrente:roll-open${tier}`, !compact);
   // Deleting clips is a mode of the open clips, not a button on every chip: a chip's × was small
   // enough to hit by accident while picking a clip. Folding the clips ends it.
   const [deletingClips, setDeletingClips] = useState(false);

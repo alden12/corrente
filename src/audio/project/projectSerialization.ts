@@ -194,7 +194,8 @@ export interface PoolIds {
 /**
  * The note-clip pool + active id + placements for an instrument track from its
  * stored `clips`/`activeClipId`/`placements`. A pool with no clips falls back to a
- * single empty clip ("Clip 1") so the track always has something to edit.
+ * single empty clip ("Clip 1") so the track always has something to edit, and a track
+ * with no `placements` at all places its active clip at the start.
  */
 export function noteClipPool(
   track: InstrumentTrackData,
@@ -220,7 +221,9 @@ export function noteClipPool(
 
   const activeClipId =
     track.activeClipId && clips.some((clip) => clip.id === track.activeClipId) ? track.activeClipId : clips[0].id;
-  const placements: Placement[] = track.placements?.length
+  // Only a document from before placements gets one made: an empty list is a lane with nothing on it,
+  // such as a new track's clip waiting for its first notes (DAW-50).
+  const placements: Placement[] = track.placements
     ? track.placements.map((placement) => ({ ...placement }))
     : [
         {

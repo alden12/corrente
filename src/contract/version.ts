@@ -18,7 +18,10 @@
 // in a project where someone sets the key.
 // 4: track and clip colours (DAW-47), `setTrack`'s `color` and `setClipColor`. An older client only
 // meets them in a project where someone colours a track or a clip; it keeps working, with no colours.
-export const PROTOCOL_VERSION = 4;
+// 5: a new track's starter clip off the timeline until its first notes (DAW-50, `createTrack`'s
+// `unplaced`, a note edit's `placeAt`) and a take replacing it (DAW-92, `pasteClip`'s `replaces`). An
+// older client would place what the others don't, so its timeline drifts, but nothing breaks.
+export const PROTOCOL_VERSION = 5;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

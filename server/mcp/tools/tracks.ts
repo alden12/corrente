@@ -92,8 +92,8 @@ export function registerTracksTools({
         }
       }
       const id = makeTrackId();
-      target.send({ type: "createTrack", instrumentType: instrument, name, id, groupId });
-      target.project.addTrack(instrument, { name, id, groupId });
+      target.send({ type: "createTrack", instrumentType: instrument, name, id, groupId, unplaced: true });
+      target.project.addTrack(instrument, { name, id, groupId, unplaced: true });
       return ok(`Created ${instrument} track "${target.project.getTrack(id)?.name}" (id ${id}) in group ${groupId}.`);
     },
   );

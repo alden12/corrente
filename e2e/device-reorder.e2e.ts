@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { dismissStart, openExploreCategory } from "./support/app";
+import { dismissStart, openExploreCategory, phoneEditorOpen } from "./support/app";
 
 /**
  * A chain's devices are reordered by dragging their handle (DAW-61.3), with a mouse or a finger, or
@@ -46,6 +46,7 @@ test("an effect dragged by its handle lands where it's dropped", async ({ page }
 
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test.beforeEach(({ page }) => phoneEditorOpen(page));
 
   test("devices stack across the screen, folded ones as rows, and sections as rows too", async ({ page }) => {
     await page.goto("/");

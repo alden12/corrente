@@ -27,7 +27,7 @@ import {
   audioClipPool,
 } from "./projectSerialization";
 import { buildStructure } from "./projectStructure";
-import { FIRST_CLIP_NAME, nextClipName, seedClipId } from "./seedClip";
+import { FIRST_CLIP_NAME, nextClipName, seedClipId, starterPlacementId } from "./seedClip";
 import { addStarterTrack } from "./starter";
 import {
   hasInstrument,
@@ -501,7 +501,7 @@ export class ProjectStore {
 
   addTrack(
     instrumentType: string,
-    opts: { name?: string; id?: string; groupId?: string; lengthBeats?: number } = {},
+    opts: { name?: string; id?: string; groupId?: string; lengthBeats?: number; unplaced?: boolean } = {},
   ): Track {
     const type = hasInstrument(instrumentType) ? instrumentType : DEFAULT_INSTRUMENT;
     if (opts.id && this.getTrack(opts.id)) return this.getTrack(opts.id)!;
@@ -529,8 +529,11 @@ export class ProjectStore {
       midiDevices: [],
       clips: [{ id: clipId, name: FIRST_CLIP_NAME, author: "you", store: clip }],
       activeClipId: clipId,
-      // One placement of the seed clip at the start, so a new track plays its clip.
-      placements: [{ id: `p-${trackId}`, clipId, startBeat: 0, offset: 0, length: clip.getClip().lengthBeats }],
+      // The seed clip starts off the timeline (DAW-50) and its first notes place it (`placeClip`).
+      // Tracks created before that placed it at the start, and replay as they did.
+      placements: opts.unplaced
+        ? []
+        : [{ id: starterPlacementId(trackId), clipId, startBeat: 0, offset: 0, length: clip.getClip().lengthBeats }],
       launchedClipId: null,
     };
     this.tracks.push(track);
@@ -575,6 +578,7 @@ export class ProjectStore {
       name?: string;
       groupId?: string;
       lengthBeats?: number;
+      unplaced?: boolean;
       instrumentType: string;
       params: PatchValues;
       effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
@@ -598,6 +602,7 @@ export class ProjectStore {
       id: spec.id,
       groupId: spec.groupId,
       lengthBeats: spec.lengthBeats,
+      unplaced: spec.unplaced,
     });
     if (track.kind === "instrument") {
       track.params.load(spec.params);
@@ -736,7 +741,7 @@ export class ProjectStore {
       activeClipId: clipId,
       placements: [
         {
-          id: `p-${trackId}`,
+          id: starterPlacementId(trackId),
           clipId,
           startBeat: clip.startBeat ?? 0,
           offset: 0,
@@ -1218,7 +1223,7 @@ export class ProjectStore {
    * OPFS file is shared, not duplicated). Enables clip copy/paste within and
    * across same-kind tracks.
    */
-  pasteClip(trackId: string, id: string, content: ClipContent, author: ClipAuthor = "you"): void {
+  pasteClip(trackId: string, id: string, content: ClipContent, author: ClipAuthor = "you", replaces?: string): void {
     const t = this.getTrack(trackId);
     if (!t || t.kind !== content.kind) return;
     if (id && t.clips.some((clip) => clip.id === id)) return; // a taken id is refused, not renamed (DAW-36)
@@ -1240,7 +1245,54 @@ export class ProjectStore {
         durationSec: content.durationSec,
       });
     }
+    // A take in place of an untouched starter clip (DAW-92) removes it, unless notes reached it since.
+    if (t.kind === "instrument") {
+      const replaced = t.clips.find((clip) => clip.id === replaces);
+      if (replaced && !replaced.store.getClip().notes.length) {
+        t.clips = t.clips.filter((clip) => clip !== replaced);
+        t.placements = t.placements.filter((placement) => placement.clipId !== replaced.id);
+      }
+    }
     t.activeClipId = clipId;
+    this.emit();
+  }
+
+  /**
+   * The track's starter clip while it is still as `addTrack` made it (DAW-92): the only clip, no
+   * notes, its first name and no colour of its own, and on the timeline nowhere but where it started.
+   * A recorded take replaces it rather than sitting beside an empty clip nobody asked for.
+   */
+  untouchedStarter(trackId: string): string | undefined {
+    const track = this.getTrack(trackId);
+    if (!track || track.kind !== "instrument" || track.clips.length !== 1) return undefined;
+    const [clip] = track.clips;
+    const untouched =
+      clip.id === seedClipId(trackId) &&
+      clip.name === FIRST_CLIP_NAME &&
+      !clip.color &&
+      !clip.store.getClip().notes.length &&
+      track.placements.every((placement) => placement.id === starterPlacementId(trackId) && placement.startBeat === 0);
+    return untouched ? clip.id : undefined;
+  }
+
+  /**
+   * Where notes written into a clip should place it, if anywhere (DAW-50): a new track's clip starts
+   * off the timeline, so its first notes put it on at the loop's start, or the arrangement would play
+   * them silently. Only while the track has nothing placed and nothing launched, so a lane someone
+   * emptied on purpose, or a launched take, is left as it is.
+   */
+  firstPlacement(trackId: string, clipId: string | undefined): number | undefined {
+    const track = this.getTrack(trackId);
+    if (!track || track.kind !== "instrument" || track.placements.length || track.launchedClipId) return undefined;
+    return clipId && track.clips.some((clip) => clip.id === clipId) ? this.loopStart : undefined;
+  }
+
+  /** Place a clip for its first notes (DAW-50), unless the track has had something placed since. */
+  placeClip(trackId: string, clipId: string, startBeat: number): void {
+    const track = this.getTrack(trackId);
+    if (!track || track.placements.length || !track.clips.some((clip) => clip.id === clipId)) return;
+    const length = this.naturalLength(track, clipId);
+    track.placements.push({ id: starterPlacementId(trackId), clipId, startBeat, offset: 0, length });
     this.emit();
   }
 

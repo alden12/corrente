@@ -27,7 +27,7 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
     if ("error" in r) return r;
     const store = target.project.getClipStore(r.id, clip);
     if (!store) return { error: `Unknown clip "${clip}" on ${r.id}.` };
-    return { id: r.id, track: r.track, store };
+    return { id: r.id, track: r.track, store, clipId: clip ?? r.track.activeClipId };
   };
 
   server.registerTool(
@@ -55,8 +55,11 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
       const r = resolveClip(track, clip);
       if ("error" in r) return fail(r.error);
       const note = makeNote({ pitch, start, length, velocity });
-      if (!target.send({ type: "addNote", trackId: r.id, clipId: clip, note })) return fail(target.whyNotConnected());
+      const placeAt = target.project.firstPlacement(r.id, r.clipId);
+      if (!target.send({ type: "addNote", trackId: r.id, clipId: r.clipId, note, placeAt }))
+        return fail(target.whyNotConnected());
       r.store.putNote(note);
+      if (placeAt !== undefined) target.project.placeClip(r.id, r.clipId, placeAt);
       return ok(`Added note ${pitch} at beat ${start} to ${r.id} (id ${note.id}).`);
     },
   );
@@ -73,9 +76,12 @@ export function registerClipNotesTools({ server, target, trackArg, resolveInstru
       if ("error" in r) return fail(r.error);
       // One addNotes message = one feed entry + one undo step (not one per note).
       const made = notes.map(makeNote);
-      if (!target.send({ type: "addNotes", trackId: r.id, clipId: clip, notes: made }))
+      // A new track's clip is off the timeline until its first notes put it on (DAW-50).
+      const placeAt = target.project.firstPlacement(r.id, r.clipId);
+      if (!target.send({ type: "addNotes", trackId: r.id, clipId: r.clipId, notes: made, placeAt }))
         return fail(target.whyNotConnected());
       for (const note of made) r.store.putNote(note);
+      if (placeAt !== undefined) target.project.placeClip(r.id, r.clipId, placeAt);
       return ok(`Added ${made.length} notes to ${r.id}.`);
     },
   );

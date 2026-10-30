@@ -483,7 +483,9 @@ export class Recorder {
       });
       this.preview?.taken();
     } else if (target) {
-      this.dispatch({ type: "pasteClip", trackId: target.id, id, content, recorded: true });
+      // A take on a fresh track replaces its empty starter clip rather than sitting beside it (DAW-92).
+      const replaces = this.project.untouchedStarter(target.id);
+      this.dispatch({ type: "pasteClip", trackId: target.id, id, content, recorded: true, replaces });
       this.dispatch({ type: "launchClip", trackId: target.id, clipId: id });
     }
   }

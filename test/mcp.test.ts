@@ -464,8 +464,10 @@ describe("MCP server (tracks)", () => {
     await connectTab();
     await makeTrack("subtractive");
 
-    // Pool seeds one clip + one placement.
+    // Pool seeds one clip, off the timeline until its first notes (DAW-50).
     expect(parse(await call("list_clips")).clips).toHaveLength(1);
+    expect(parse(await call("list_placements")).placements).toHaveLength(0);
+    await call("add_note", { pitch: 60, start: 0 });
     expect(parse(await call("list_placements")).placements).toHaveLength(1);
 
     // Add a clip -> two; the new one is active.

@@ -113,6 +113,8 @@ export type LocalEdit =
       groupId?: string;
       /** Length of the seed clip, pinned at dispatch. See `createTrack.lengthBeats` (DAW-36). */
       lengthBeats?: number;
+      /** The seed clip starts off the timeline. See `createTrack.unplaced` (DAW-50). */
+      unplaced?: boolean;
       instrumentType: string;
       params: PatchValues;
       effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];

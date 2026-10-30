@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart, openStudio, openExploreCategory, swapFromExplore } from "./support/app";
+import { dismissStart, openStudio, openExploreCategory, phoneEditorOpen, swapFromExplore } from "./support/app";
 
 /**
  * The drum machine: a Drum Kit track can be edited either as a pad x step grid ("Pads")
@@ -63,6 +63,7 @@ test("a Drum Kit track can switch to the piano roll (Keys), editing the same cli
 });
 
 test("on a phone the drum roll gets the touch treatment, like any other roll (MOBILE-18)", async ({ page }) => {
+  await phoneEditorOpen(page);
   await page.goto("/");
   await dismissStart(page);
 

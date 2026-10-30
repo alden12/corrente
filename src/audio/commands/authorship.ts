@@ -10,7 +10,7 @@
  * one spelling of `track:<id>` / `note:<id>` / `param:<trackId>:<id>`, never a duplicated string.
  */
 import type { EditCommand } from "./types";
-import { seedClipId } from "../project/seedClip";
+import { seedClipId, starterPlacementId } from "../project/seedClip";
 
 export const trackKey = (id: string): string => `track:${id}`;
 export const noteKey = (id: string): string => `note:${id}`;
@@ -24,6 +24,10 @@ export const midiDeviceParamKey = (trackId: string, deviceId: string, id: string
 export const clipKey = (id: string): string => `clip:${id}`;
 export const placementKey = (id: string): string => `placement:${id}`;
 export const groupKey = (id: string): string => `group:${id}`;
+
+/** The placement a clip's first notes made (DAW-50), when they made one. */
+const firstPlacement = (command: { trackId: string; placeAt?: number }): string[] =>
+  command.placeAt === undefined ? [] : [placementKey(starterPlacementId(command.trackId))];
 
 /** What a command authored: keys to stamp (`touched`) and keys to forget (`removed`). */
 export interface AuthorshipEffect {
@@ -122,8 +126,12 @@ const EFFECTS: EffectMap = {
       midiDeviceParamKey(command.trackId, command.deviceId, command.id),
     ],
   }),
-  addNote: (command) => ({ touched: [trackKey(command.trackId), noteKey(command.note.id)] }),
-  addNotes: (command) => ({ touched: [trackKey(command.trackId), ...command.notes.map((note) => noteKey(note.id))] }),
+  addNote: (command) => ({
+    touched: [trackKey(command.trackId), noteKey(command.note.id), ...firstPlacement(command)],
+  }),
+  addNotes: (command) => ({
+    touched: [trackKey(command.trackId), ...command.notes.map((note) => noteKey(note.id)), ...firstPlacement(command)],
+  }),
   editNotes: (command) => ({ touched: [trackKey(command.trackId), ...command.notes.map((note) => noteKey(note.id))] }),
   removeNote: (command) => ({ touched: [trackKey(command.trackId)], removed: [noteKey(command.id)] }),
   removeNotes: (command) => ({ touched: [trackKey(command.trackId)], removed: command.ids.map((id) => noteKey(id)) }),
@@ -132,7 +140,10 @@ const EFFECTS: EffectMap = {
     touched: [trackKey(command.trackId), ...(command.clipId ? [clipKey(command.clipId)] : [])],
   }),
   addClip: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.id)] }),
-  pasteClip: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.id)] }),
+  pasteClip: (command) => ({
+    touched: [trackKey(command.trackId), clipKey(command.id)],
+    removed: command.replaces ? [clipKey(command.replaces)] : [],
+  }),
   removeClip: (command) => ({ touched: [trackKey(command.trackId)], removed: [clipKey(command.clipId)] }),
   renameClip: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.clipId)] }),
   setClipColor: (command) => ({ touched: [trackKey(command.trackId), clipKey(command.clipId)] }),

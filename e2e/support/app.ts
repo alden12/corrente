@@ -8,6 +8,24 @@
 import { expect, type Page } from "@playwright/test";
 
 /**
+ * A phone's Studio as it opened before it started quiet (MOBILE-34): the sheet at Half, with the roll,
+ * the devices and the keys unfolded. For tests about the editor rather than about what a first visit sees.
+ * Only where nothing is stored yet, so a test that reloads still sees what it left.
+ */
+export async function phoneEditorOpen(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const opened = {
+      "corrente:sheet-detent": "half",
+      "corrente:roll-open:compact": "true",
+      "corrente:devices-open:compact": "true",
+      "corrente:keys-open": "true",
+    };
+    for (const [key, value] of Object.entries(opened))
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+  });
+}
+
+/**
  * Clear the "Start the audio engine" overlay, which every spec has to do before it can touch
  * anything.
  *

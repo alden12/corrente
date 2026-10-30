@@ -4,6 +4,9 @@
  */
 export const seedClipId = (trackId: string): string => `c-${trackId}`;
 
+/** The id of the seed clip's placement, whether a new track places it at once or its first notes do (DAW-50). */
+export const starterPlacementId = (trackId: string): string => `p-${trackId}`;
+
 /**
  * Clips are named "Clip 1", "Clip 2"... within their track (2026-10-13, Alden), replacing "A", "B".
  * A new clip takes the lowest number the track's clips don't already use; clips named otherwise

@@ -32,7 +32,7 @@ describe("normalizeCommand", () => {
 
   it("leaves a command that already names its clip alone", () => {
     const { project } = seeded();
-    const command: EditCommand = { type: "addNote", trackId: "t-1", clipId: "c-t-1", note: note("n-1") };
+    const command: EditCommand = { type: "addNote", trackId: "t-1", clipId: "c-t-1", note: note("n-1"), placeAt: 0 };
     expect(normalizeCommand(project, command)).toBe(command);
   });
 

@@ -68,6 +68,8 @@ export type ServerToBrowser =
       groupId?: string;
       /** Length of the seed clip. Defaults to the project length, and a dispatch pins it (DAW-36). */
       lengthBeats?: number;
+      /** The seed clip starts off the timeline (DAW-50). A dispatch pins it; older entries placed it. */
+      unplaced?: boolean;
     }
   | { type: "removeTrack"; trackId: string }
   | { type: "selectTrack"; trackId: string }
@@ -125,8 +127,9 @@ export type ServerToBrowser =
   // clip. Plural forms (addNotes / editNotes / removeNotes) are one atomic edit
   // each - one feed entry, one undo step - so writing a part or a multi-note
   // drag/delete don't flood the history.
-  | { type: "addNote"; trackId: string; clipId?: string; note: NoteEvent }
-  | { type: "addNotes"; trackId: string; clipId?: string; notes: NoteEvent[] }
+  // `placeAt`: the clip's first notes put it on the timeline there (DAW-50). Pinned by a dispatch.
+  | { type: "addNote"; trackId: string; clipId?: string; note: NoteEvent; placeAt?: number }
+  | { type: "addNotes"; trackId: string; clipId?: string; notes: NoteEvent[]; placeAt?: number }
   | { type: "editNotes"; trackId: string; clipId?: string; notes: NoteEvent[] }
   | { type: "removeNote"; trackId: string; clipId?: string; id: string }
   | { type: "removeNotes"; trackId: string; clipId?: string; ids: string[] }
@@ -143,7 +146,8 @@ export type ServerToBrowser =
       lengthBeats?: number;
     }
   // `recorded`: the clip is a take just recorded (DAW-79), which the feed says rather than "pasted".
-  | { type: "pasteClip"; trackId: string; id: string; content: ClipContent; recorded?: boolean }
+  // `replaces`: a take in place of the track's untouched starter clip, which goes (DAW-92).
+  | { type: "pasteClip"; trackId: string; id: string; content: ClipContent; recorded?: boolean; replaces?: string }
   | { type: "selectClip"; trackId: string; clipId: string }
   | { type: "removeClip"; trackId: string; clipId: string }
   | { type: "renameClip"; trackId: string; clipId: string; name: string }

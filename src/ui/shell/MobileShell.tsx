@@ -60,7 +60,7 @@ import { useEditLog } from "../../audio/commands/useEditLog";
 import { usePersistentBoolean, usePersistentString } from "../usePersistent";
 import { useElementHeight } from "../useElementHeight";
 import { arrangementAddItems } from "../arrangement/addItems";
-import { detentsFor, type Detent } from "./detents";
+import { DETENT_ORDER, detentsFor, type Detent } from "./detents";
 import { EditorSheet, SHEET_HEADER_HEIGHT } from "./EditorSheet";
 import { Sheet } from "./Sheet";
 import { atLeast, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP } from "./safeArea";
@@ -167,22 +167,18 @@ export function MobileShell({
    * The detent is **shell state, not the sheet's** (ARCH-3): the arrangement above the sheet
    * reads it too. The sheet is handed it and reports changes back.
    *
-   * It opens at **Half**, and that follows from a property of the app rather than a taste:
-   * there is always a track and a clip selected, so there is always something to edit and
-   * showing it is not presuming. Opening parked was tried and reads as the editor having
-   * failed to open - you land on a project, the thing you came to edit is a lip at the
-   * bottom, and the tap that fixes that carries no information.
-   *
-   * **This flips if an empty selection ever becomes possible.** Nothing to edit means the
-   * honest states are parked, or no sheet at all, and Half would then be the panel you did
-   * not ask for. Keep the reasoning attached to the constraint, not to the number.
+   * It opens **minimised**, and is kept across reloads, so you come back to the sheet as you left
+   * it. Opening at Half was the default until 2026-10-30 (Alden): with the roll, clips and devices
+   * all open beneath it, a first visit landed on a crowded screen. The minimised bar names the
+   * selected track, so one tap opens it.
    */
-  const [detent, setDetent] = useState<Detent>("half");
+  const [detent, setDetent] = usePersistentString<Detent>("corrente:sheet-detent", "peek", DETENT_ORDER);
   /**
    * Whether the keys show. Shell state, since two buttons share it: the one at the keys' header,
-   * and the minimised sheet's, which stands in for that header while the keys are hidden.
+   * and the minimised sheet's, which stands in for that header while the keys are hidden. Hidden to
+   * start with, like the sheet's sections (MOBILE-34), under a new key so every phone starts that way.
    */
-  const [keysOpen, setKeysOpen] = usePersistentBoolean("corrente:pads-open", true);
+  const [keysOpen, setKeysOpen] = usePersistentBoolean("corrente:keys-open", false);
   const keysFold = { open: keysOpen, onToggle: () => setKeysOpen(!keysOpen) };
   // Explore's try panel keys fold and grow as the Studio's do, by the same half-the-screen rule, but
   // on their own: hiding them to browse is not hiding them to play.

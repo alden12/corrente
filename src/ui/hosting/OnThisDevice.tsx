@@ -12,7 +12,7 @@
  * When projects have changed enough since their last export (`backupReminder`), both read "Back up?"
  * and the details lead with which ones, each with its Export button: no banner, nothing that pops up.
  */
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { canSignInHere, hosting, SOURCE_URL } from "../../hosting";
 import {
   installApp,
@@ -55,12 +55,18 @@ function useBackupReminder(editLog?: EditLog) {
 const usePlaceLabel = (reminder?: Reminder) =>
   useBackupReminder(reminder?.editLog).due ? "Back up?" : "Saved in browser";
 
-/** What the browser may do with the files, and the way out. */
-const RISK: Record<StorageRisk, string> = {
-  kept: "This browser has agreed to keep them; only clearing this site's data removes them.",
-  "may-clear":
-    "This browser may clear them if the device runs short of space. Installing Corrente asks it to keep them.",
-  week: "Safari deletes them after 7 days without a visit. Add Corrente to your Dock (File menu) or Home Screen (Share menu) to keep them.",
+/**
+ * What the browser may do with the files, and the way out. Where the browser offers to install the
+ * app (Chrome and Edge), "Installing Corrente" is the button that does it; elsewhere no page can
+ * start an install, so it says where the browser keeps the option.
+ */
+const RISK: Record<StorageRisk, (install: ReactNode) => ReactNode> = {
+  kept: () => "This browser has agreed to keep them; only clearing this site's data removes them.",
+  "may-clear": (install) => (
+    <>This browser may clear them if the device runs short of space. {install} asks it to keep them.</>
+  ),
+  week: () =>
+    "Safari deletes them after 7 days without a visit. Add Corrente to your Dock (File menu) or Home Screen (Share menu) to keep them.",
 };
 
 /**
@@ -72,22 +78,20 @@ function PlaceIcon({ large = false }: { large?: boolean }) {
   return <DeviceIcon className={`${large ? "w-5 h-5" : "w-4 h-4"} ${risk === "week" ? "text-warn" : ""}`} />;
 }
 
-/** The browser's storage answer, and an Install button where the browser offers one. */
+/** The browser's storage answer, with an install link where the browser offers one. */
 function StorageLine() {
   const { risk, canInstall } = useStorageRisk();
   if (!risk) return null;
+  const install = canInstall ? (
+    <button type="button" onClick={() => void installApp()} className={`${linkClass} cursor-pointer`}>
+      Installing Corrente
+    </button>
+  ) : (
+    "Installing Corrente (Install app, or Add to Home Screen, in the browser's menu)"
+  );
   return (
     <div className="flex flex-col items-start gap-2">
-      <p className={risk === "kept" ? "text-muted" : "text-ink"}>{RISK[risk]}</p>
-      {canInstall && risk !== "kept" && (
-        <button
-          type="button"
-          onClick={() => void installApp()}
-          className="h-8 pointer-coarse:h-10 px-3 rounded-md border border-line bg-ground text-ink hover:border-you cursor-pointer"
-        >
-          Install Corrente
-        </button>
-      )}
+      <p className={risk === "kept" ? "text-muted" : "text-ink"}>{RISK[risk](install)}</p>
     </div>
   );
 }

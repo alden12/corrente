@@ -49,9 +49,18 @@ const pin = <Command, Field extends keyof Command>(
   value: Command[Field] | undefined,
 ): Command => (command[field] !== undefined || value === undefined ? command : { ...command, [field]: value });
 
+/** Pin the clip, then where its first notes place it on the timeline, if they do (DAW-50). */
+const pinFirstPlacement = <Command extends { trackId: string; clipId?: string; placeAt?: number }>(
+  project: ProjectStore,
+  command: Command,
+): Command => {
+  const pinned = pinActiveClip(project, command);
+  return pin(pinned, "placeAt", project.firstPlacement(pinned.trackId, pinned.clipId));
+};
+
 const NORMALIZE = {
-  addNote: pinActiveClip,
-  addNotes: pinActiveClip,
+  addNote: pinFirstPlacement,
+  addNotes: pinFirstPlacement,
   editNotes: pinActiveClip,
   removeNote: pinActiveClip,
   removeNotes: pinActiveClip,
@@ -60,10 +69,19 @@ const NORMALIZE = {
 
   // Creation defaults. A name counts what already exists, and a clip's seed follows the track's
   // active clip and the project length, so all of them move between a dispatch and a replay.
+  // A new track's seed clip starts off the timeline (DAW-50), which older entries didn't say.
   createTrack: (project, command) =>
-    pin(pin(command, "name", project.defaultTrackName(command.instrumentType)), "lengthBeats", project.length),
+    pin(
+      pin(pin(command, "name", project.defaultTrackName(command.instrumentType)), "lengthBeats", project.length),
+      "unplaced",
+      true,
+    ),
   createTrackFromPatch: (project, command) =>
-    pin(pin(command, "name", project.defaultTrackName(command.instrumentType)), "lengthBeats", project.length),
+    pin(
+      pin(pin(command, "name", project.defaultTrackName(command.instrumentType)), "lengthBeats", project.length),
+      "unplaced",
+      true,
+    ),
   createAudioTrack: (project, command) => pin(command, "name", project.defaultAudioTrackName()),
   createGroup: (project, command) => pin(command, "name", project.defaultGroupName()),
   // An audio placement's length is its duration at the tempo of the moment, and audio is not
