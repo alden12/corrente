@@ -37,8 +37,10 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
+    // Clipped to its row (not a scroller), so what scrolls inside it, like the devices' chips, never
+    // widens the column it heads: in a browser that counted them, the column scrolled sideways.
     <div
-      className={`shrink-0 flex items-center gap-2 pl-1 pr-2.5 border-b border-line bg-panel ${fold ? "cursor-pointer" : ""} ${className}`}
+      className={`shrink-0 flex items-center gap-2 pl-1 pr-2.5 border-b border-line bg-panel overflow-clip ${fold ? "cursor-pointer" : ""} ${className}`}
       // A tap anywhere that is not a control folds it, not just on the arrow.
       onClick={fold && foldOnHeaderClick(fold.onToggle)}
       style={{ height: `var(--section-header, ${SECTION_HEADER_HEIGHT}px)` }}

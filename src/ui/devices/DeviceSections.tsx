@@ -89,10 +89,12 @@ export function DeviceSections({
 
   const laidOut = (
     // Sections sit side by side with a hairline between them, and wrap, rather than each in a box of
-    // its own; stacked, one under another. Side by side, each draws a rule on its left and top, and the
-    // device's edge hides those along it (`-ml-px -mt-px` under `overflow-hidden`), so a row that wraps
-    // starts flush with the one above and a rule runs between them.
-    <div className={rows ? "flex flex-col py-1" : "flex flex-wrap items-start -ml-px -mt-px"}>
+    // its own; stacked, one under another. Side by side, each is boxed in rules that overlap its
+    // neighbours' (`-ml-px -mt-px`), and the device's edge hides those along it (the box's own negative
+    // margins, under `overflow-hidden`): a row that wraps starts flush with the one above, a row shorter
+    // than the device ends in a rule, and the rule under a row runs on to the device's edge. Opaque, as
+    // those runs overlap.
+    <div className={rows ? "flex flex-col py-1" : "flex flex-wrap items-start -mr-px -mb-px"}>
       {sections.map((section, index) => {
         const title = sectionHeading(label, sections.length, section.namespace);
         const key = sectionFold(foldKey, section.namespace);
@@ -108,10 +110,11 @@ export function DeviceSections({
             className={`flex flex-col gap-1.5 min-w-0 max-w-full ${
               rows
                 ? `px-3 py-1 ${index > 0 ? "border-t border-line/60" : ""}`
-                : "px-3.5 py-2 border-l border-t border-line/60"
+                : "relative px-3.5 py-2 -ml-px -mt-px border border-line after:absolute after:left-full after:-bottom-px after:w-[100vw] after:h-px after:bg-line"
             }`}
-            // Its top rule is hidden on the first row, so it takes a pixel more to keep the device's height.
-            style={rows ? undefined : { height: SECTION_HEIGHT + 1 }}
+            // A row's rules above and below are hidden at the device's edges, so it takes two pixels more
+            // to keep the device's height.
+            style={rows ? undefined : { height: SECTION_HEIGHT + 2 }}
           >
             {title && (
               // Folded, the section is a narrow column, its title running down it: a folded section
