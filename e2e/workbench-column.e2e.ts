@@ -23,6 +23,14 @@ test("the devices' bar jumps to a device, and back to the roll once it has scrol
   await page.goto("/");
   await dismissStart(page);
   for (const name of ["Reverb", "Tape Echo", "Tremolo"]) await addEffect(page, name);
+  // Devices start folded as far as they go: open them all, and some of the Micro VA's sections, for a
+  // column long enough to scroll the roll away.
+  await page.getByRole("button", { name: "Device chain actions" }).click();
+  await page.getByRole("menuitem", { name: "Open all devices" }).click();
+  const microVa = page.locator('[data-device][aria-label="Micro VA"]');
+  for (const section of ["Oscillator 1", "Filter", "Filter Env", "Amp Env"]) {
+    await microVa.getByRole("button", { name: section, exact: true }).click();
+  }
 
   const returnToRoll = page.getByRole("button", { name: /^Roll/ });
   await expect(returnToRoll).toHaveCount(0); // the roll is on screen
