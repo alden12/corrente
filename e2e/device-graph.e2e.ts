@@ -55,7 +55,7 @@ test("a track's whole chain opens as one graph, its devices in frames that fold"
   await expect(frames.nth(2)).toContainText("Reverb");
   await expect(page.locator('.react-flow__edge[data-id^="link:"]')).toHaveCount(2);
 
-  // A drag on a frame's background pans the view, rather than moving the frame.
+  // A drag on a frame's background pans the view, rather than moving the frame; so does one on a box.
   const viewport = page.locator(".react-flow__viewport");
   const before = await viewport.getAttribute("style");
   const frame = await frames.nth(0).boundingBox();
@@ -65,6 +65,15 @@ test("a track's whole chain opens as one graph, its devices in frames that fold"
   await page.mouse.move(frame!.x + frame!.width / 2 - 100, frame!.y + 42, { steps: 5 });
   await page.mouse.up();
   await expect(viewport).not.toHaveAttribute("style", before!);
+  await page.getByRole("button", { name: "Fit View" }).click();
+  const fitted = await viewport.getAttribute("style");
+  // The instrument's output, in the middle of the chain, well clear of the panels.
+  const box = await page.locator('.react-flow__node[data-id="device:1/output:out"]').boundingBox();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width / 2 + 80, box!.y + box!.height / 2 + 30, { steps: 5 });
+  await page.mouse.up();
+  await expect(viewport).not.toHaveAttribute("style", fitted!);
   await page.getByRole("button", { name: "Fit View" }).click();
 
   // Folding the instrument leaves one box for it, still linked.

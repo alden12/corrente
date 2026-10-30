@@ -45,6 +45,13 @@ const WIRE = { stroke: "var(--color-muted)", strokeWidth: 1.25 };
 const PARAM_WIRE = { stroke: "var(--color-agent)", strokeWidth: 1, strokeDasharray: "4 3" };
 const CHAIN_LINK = { stroke: "var(--color-you)", strokeWidth: 2.5 };
 
+/**
+ * Nodes stay put, so a drag anywhere pans (React Flow only pans through a node that can't be dragged):
+ * the graph is read-only, and moving boxes can wait for an edit mode. React Flow turns pointer events
+ * off on such a node; back on, for a port's tooltip and a frame's fold button.
+ */
+const INTERACTIVE = { pointerEvents: "all" } as const;
+
 function Legend({ chain }: { chain: boolean }) {
   return (
     <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-md border border-line bg-panel text-[11.5px] text-ink">
@@ -103,7 +110,7 @@ function deviceElements(
           chainOut: !!place?.linkedOut && node.id === group.exit,
         },
         ...(place ? { parentId: place.frame } : {}),
-        draggable: true,
+        style: INTERACTIVE,
       }),
     ),
     edges: graph.edges.map(
@@ -157,12 +164,7 @@ function chainElements(
         chainIn: linkedIn && ends[index].entry === frame,
         chainOut: linkedOut && ends[index].exit === frame,
       },
-      // Fixed, so a drag on a frame's background pans the view (React Flow only pans through a node
-      // that can't be dragged): zoomed into one device, its frame is most of what's under the pointer.
-      // React Flow turns pointer events off on a node that can't be dragged or selected; back on, for
-      // the fold button.
-      draggable: false,
-      style: { pointerEvents: "all" },
+      style: INTERACTIVE,
     };
   });
   const inner = groups.flatMap((group, index) =>
@@ -223,6 +225,7 @@ export default function DeviceGraphView({ devices }: { devices: ChainDevice[] })
         fitView
         fitViewOptions={{ maxZoom: 1, padding: 0.05 }}
         minZoom={0.05}
+        nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
         proOptions={{ hideAttribution: true }}
