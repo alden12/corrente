@@ -8,26 +8,22 @@
  * get a row each.
  */
 import {
+  amountText,
   bindingText,
-  paramText,
+  isBinding,
+  isObject,
   round,
   wireParam,
   type DeviceGraph,
   type GraphBuilder,
   type GraphPort,
 } from "../definitions/graph";
-import type { ParamBinding } from "../definitions/format";
 import type { ParamSchema } from "../params/types";
 import { nodeSpecNamed, type MidiDefinition } from "./format";
 
 /** The notes the device is given, and what it plays on. */
 const NOTES_IN = "signal:notes";
 const NOTES_OUT = "output:out";
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isBinding = (value: unknown): value is ParamBinding => isObject(value) && typeof value.param === "string";
 
 interface Builder extends GraphBuilder {
   definition: MidiDefinition;
@@ -40,10 +36,6 @@ const sourceOf = (builder: Builder, name: string): { from: string; fromPort: str
   if (node.node === "input") return { from: NOTES_IN, fromPort: "notes" };
   return { from: `node:${name}`, fromPort: nodeSpecNamed(node.node)?.output ?? "notes" };
 };
-
-/** A number, a param, or a param read with a scale, in words: a param by its label. */
-const amountText = (builder: Builder, value: unknown): string | undefined =>
-  typeof value === "number" ? round(value) : isBinding(value) ? paramText(builder, value) : undefined;
 
 /**
  * A field's value in words, wiring any param in it into `to`'s `toPort`. A bare param is wired and

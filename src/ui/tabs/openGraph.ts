@@ -5,7 +5,7 @@
  * tabs.
  */
 import { useSyncExternalStore } from "react";
-import { hasGraph, type DeviceKind } from "../../audio/definitions/chainGraph";
+import { hasGraph, soundChain, type DeviceKind } from "../../audio/definitions/chainGraph";
 import type { Patch } from "../../audio/patches/library";
 import { createListeners, createValueStore } from "../../listeners";
 import type { TabTarget } from "./editorTabs";
@@ -27,15 +27,7 @@ export const openPatchGraph = (patch: Patch): void =>
     kind: "patch",
     patchId: patch.id,
     name: patch.name,
-    chain: [
-      ...(patch.midiDevices ?? []).map((device) => ({
-        kind: "midi" as const,
-        type: device.type,
-        bypassed: !!device.bypassed,
-      })),
-      { kind: "instrument" as const, type: patch.instrumentType },
-      ...patch.effects.map((effect) => ({ kind: "effect" as const, type: effect.type, bypassed: !!effect.bypassed })),
-    ],
+    chain: soundChain(patch),
   });
 
 /** Hear the requests, as the editor tabs do; while something hears them, menus offer graphs. */

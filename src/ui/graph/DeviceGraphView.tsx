@@ -157,7 +157,12 @@ function chainElements(
         chainIn: linkedIn && ends[index].entry === frame,
         chainOut: linkedOut && ends[index].exit === frame,
       },
-      draggable: true,
+      // Fixed, so a drag on a frame's background pans the view (React Flow only pans through a node
+      // that can't be dragged): zoomed into one device, its frame is most of what's under the pointer.
+      // React Flow turns pointer events off on a node that can't be dragged or selected; back on, for
+      // the fold button.
+      draggable: false,
+      style: { pointerEvents: "all" },
     };
   });
   const inner = groups.flatMap((group, index) =>

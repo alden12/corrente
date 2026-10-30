@@ -137,9 +137,14 @@ export const paramText = (builder: GraphBuilder, binding: ParamBinding): string 
     .filter(Boolean)
     .join(" ");
 
-/** A scale or offset in words: a number, or the param it reads. */
-const amountText = (builder: Builder, amount: number | ParamBinding | undefined): string | undefined =>
-  amount === undefined ? undefined : typeof amount === "number" ? round(amount) : paramText(builder, amount);
+export const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+export const isBinding = (value: unknown): value is ParamBinding => isObject(value) && typeof value.param === "string";
+
+/** An amount in words (a scale, an offset, what a MIDI field multiplies by): a number, or the param it reads. */
+export const amountText = (builder: GraphBuilder, amount: unknown): string | undefined =>
+  typeof amount === "number" ? round(amount) : isBinding(amount) ? paramText(builder, amount) : undefined;
 
 /** A wire from a param's node into `to`'s `toPort`, labelled with what's done to it on the way. */
 export const wireParam = (
@@ -153,8 +158,6 @@ export const wireParam = (
 };
 
 type Item = unknown;
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * Wire one input item into `to`'s `toPort`: a reference, a param, a scaled reference, a synced length,
@@ -182,14 +185,14 @@ const wire = (builder: Builder, item: Item, to: string, toPort: string, channel?
     return values.some(Boolean) ? values.map((value) => value ?? "·").join(" / ") : undefined;
   }
   if (typeof item.from === "string") {
-    const scale = amountText(builder, item.scale as number | ParamBinding | undefined);
-    const offset = amountText(builder, item.offset as number | ParamBinding | undefined);
+    const scale = amountText(builder, item.scale);
+    const offset = amountText(builder, item.offset);
     connect(item.from, [scale && `× ${scale}`, offset && `+ ${offset}`].filter(Boolean).join(" "));
     return undefined;
   }
   if ("beats" in item) {
     const beats = item.beats;
-    if (isObject(beats) && typeof beats.param === "string") {
+    if (isBinding(beats)) {
       wireParam(builder, beats.param, to, toPort, withChannel(`synced, as ${String(item.as)}`));
       return undefined;
     }

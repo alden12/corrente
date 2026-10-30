@@ -14,13 +14,44 @@ import { deviceGraph, type DeviceGraph } from "./graph";
 
 export type DeviceKind = "midi" | "instrument" | "effect";
 
-/** One device in a chain, as the caller names it. */
-export interface ChainDevice {
+/** One device in a chain: what it is, and whether it's switched off. */
+export interface ChainEntry {
   kind: DeviceKind;
   type: string;
-  label: string;
   bypassed?: boolean;
 }
+
+/** A device in a chain, named as the caller names it. */
+export interface ChainDevice extends ChainEntry {
+  label: string;
+}
+
+/** A device in a sound's chain, as a track or a patch holds it. */
+interface SoundDevice {
+  type: string;
+  bypassed?: boolean;
+}
+
+/**
+ * A sound's devices in the order notes and sound pass through them: MIDI devices, the instrument,
+ * effects. A track and a patch both hold a sound this way.
+ */
+export const soundChain = (sound: {
+  instrumentType: string;
+  midiDevices?: readonly SoundDevice[];
+  effects: readonly SoundDevice[];
+}): ChainEntry[] => {
+  const entry = (kind: DeviceKind) => (device: SoundDevice) => ({
+    kind,
+    type: device.type,
+    bypassed: !!device.bypassed,
+  });
+  return [
+    ...(sound.midiDevices ?? []).map(entry("midi")),
+    { kind: "instrument", type: sound.instrumentType },
+    ...sound.effects.map(entry("effect")),
+  ];
+};
 
 /** A device and its graph; none for a device with no definition to draw (one not on the engine). */
 export interface ChainGroup extends ChainDevice {

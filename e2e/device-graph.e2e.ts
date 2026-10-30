@@ -55,6 +55,18 @@ test("a track's whole chain opens as one graph, its devices in frames that fold"
   await expect(frames.nth(2)).toContainText("Reverb");
   await expect(page.locator('.react-flow__edge[data-id^="link:"]')).toHaveCount(2);
 
+  // A drag on a frame's background pans the view, rather than moving the frame.
+  const viewport = page.locator(".react-flow__viewport");
+  const before = await viewport.getAttribute("style");
+  const frame = await frames.nth(0).boundingBox();
+  // Its header's top edge: clear of the boxes inside.
+  await page.mouse.move(frame!.x + frame!.width / 2, frame!.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(frame!.x + frame!.width / 2 - 100, frame!.y + 42, { steps: 5 });
+  await page.mouse.up();
+  await expect(viewport).not.toHaveAttribute("style", before!);
+  await page.getByRole("button", { name: "Fit View" }).click();
+
   // Folding the instrument leaves one box for it, still linked.
   const boxes = await page.locator(".react-flow__node").count();
   await page.getByRole("button", { name: "Fold Micro VA" }).click();

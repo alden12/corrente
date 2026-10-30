@@ -14,21 +14,14 @@
  * change under it.
  */
 import { z } from "zod";
-import type { DeviceKind } from "../../audio/definitions/chainGraph";
-
-/** A device in a patch's chain, as its tab keeps it. */
-export interface PatchChainDevice {
-  kind: DeviceKind;
-  type: string;
-  bypassed?: boolean;
-}
+import type { ChainEntry, DeviceKind } from "../../audio/definitions/chainGraph";
 
 /** What a tab shows: a track's editor, a device's graph by its type, or a track's or a patch's chain. */
 export type TabTarget =
   | { kind: "track"; trackId: string }
   | { kind: "graph"; device: DeviceKind; type: string }
   | { kind: "chain"; trackId: string }
-  | { kind: "patch"; patchId: string; name: string; chain: PatchChainDevice[] };
+  | { kind: "patch"; patchId: string; name: string; chain: ChainEntry[] };
 
 const KEYS: { [Kind in TabTarget["kind"]]: (target: Extract<TabTarget, { kind: Kind }>) => string } = {
   track: (target) => `track:${target.trackId}`,

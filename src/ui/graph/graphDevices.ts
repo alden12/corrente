@@ -2,7 +2,7 @@
  * The devices a graph tab draws (INST-44, INST-44.2), in chain order and named from the catalogs: one
  * device, a track's chain as it stands now, or the chain a patch's tab carries.
  */
-import type { ChainDevice, DeviceKind } from "../../audio/definitions/chainGraph";
+import { soundChain, type ChainDevice, type ChainEntry, type DeviceKind } from "../../audio/definitions/chainGraph";
 import { effectCatalogEntry } from "../../audio/effects/catalog";
 import { catalogEntry } from "../../audio/instruments/catalog";
 import { midiDeviceCatalogEntry } from "../../audio/midi/device/catalog";
@@ -15,7 +15,7 @@ const LABELS: Record<DeviceKind, (type: string) => string> = {
   effect: (type) => effectCatalogEntry(type).label,
 };
 
-const named = (device: Omit<ChainDevice, "label">): ChainDevice => ({
+const named = (device: ChainEntry): ChainDevice => ({
   ...device,
   label: LABELS[device.kind](device.type),
 });
@@ -24,10 +24,5 @@ export function graphDevices(target: Exclude<TabTarget, { kind: "track" }>, proj
   if (target.kind === "graph") return [named({ kind: target.device, type: target.type })];
   if (target.kind === "patch") return target.chain.map(named);
   const track = project.getTrack(target.trackId);
-  if (track?.kind !== "instrument") return [];
-  return [
-    ...track.midiDevices.map((device) => named({ kind: "midi", type: device.type, bypassed: device.bypassed })),
-    named({ kind: "instrument", type: track.instrumentType }),
-    ...track.effects.map((effect) => named({ kind: "effect", type: effect.type, bypassed: effect.bypassed })),
-  ];
+  return track?.kind === "instrument" ? soundChain(track).map(named) : [];
 }
