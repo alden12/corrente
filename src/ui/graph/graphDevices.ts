@@ -4,14 +4,14 @@
  */
 import { DEVICE_CATALOGS, soundChain, type ChainDevice, type ChainEntry } from "../../audio/definitions/chainGraph";
 import type { ProjectStore } from "../../audio/project/projectStore";
-import type { TabTarget } from "../tabs/editorTabs";
+import type { GraphTarget } from "../tabs/openGraph";
 
 const named = (device: ChainEntry): ChainDevice => ({
   ...device,
   label: DEVICE_CATALOGS[device.kind](device.type).label,
 });
 
-export function graphDevices(target: Exclude<TabTarget, { kind: "track" }>, project: ProjectStore): ChainDevice[] {
+export function graphDevices(target: GraphTarget, project: ProjectStore): ChainDevice[] {
   if (target.kind === "graph") return [named({ kind: target.device, type: target.type })];
   if (target.kind === "patch") return target.chain.map(named);
   const track = project.getTrack(target.trackId);

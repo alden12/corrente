@@ -76,6 +76,7 @@ import type { DeviceShape } from "./useDeviceShape";
 import { AgentIcon, UndoIcon } from "../shellIcons";
 import { ProjectOverview } from "../projects/ProjectOverview";
 import { ActivityView } from "../ActivityView";
+import { GraphPage } from "../graph/GraphPage";
 
 /**
  * A top-bar icon button, sized for a finger rather than a cursor.
@@ -533,6 +534,9 @@ export function MobileShell({
           {agent}
         </Sheet>
       )}
+
+      {/* A graph opened from anywhere (INST-44): a page of its own over everything, with a way back. */}
+      <GraphPage projectStore={projectStore} />
     </div>
   );
 }

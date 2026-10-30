@@ -5,7 +5,7 @@
  * and the menu shows a device's graph on the desktop (INST-44) and removes what is yours to remove.
  */
 import { Menu, type MenuItem } from "../Menu";
-import { openDeviceGraph, openPatchGraph, useCanOpenGraphs, useCanViewGraph } from "../tabs/openGraph";
+import { useItemGraph } from "./itemGraph";
 import { ExploreThumb } from "./ExploreThumb";
 import { CATEGORIES, type ExploreItem } from "./exploreItems";
 import { ADD_HINT, ONE_TRACK_ADD_HINT, PICK_HINT } from "./exploreActions";
@@ -33,18 +33,9 @@ export function ExploreRow({
   trying?: boolean;
 }) {
   const addHint = (useExploreScope().oneTrack ? ONE_TRACK_ADD_HINT : ADD_HINT)[item.source.kind]?.(item.name);
-  const { source } = item;
-  const device =
-    source.kind === "instrument" || source.kind === "effect" || source.kind === "midi" ? source : undefined;
-  const graphable = useCanViewGraph(device);
-  const canOpenGraphs = useCanOpenGraphs();
+  const graph = useItemGraph(item);
   const menu: MenuItem[] = [
-    ...(device && graphable
-      ? [{ label: "View device graph", onClick: () => openDeviceGraph(device.kind, device.type) }]
-      : []),
-    ...(source.kind === "patch" && canOpenGraphs
-      ? [{ label: "View patch graph", onClick: () => openPatchGraph(source.patch) }]
-      : []),
+    ...(graph ? [{ label: graph.label, onClick: graph.open }] : []),
     ...(onRemove ? [{ label: onRemove.label, danger: true, onClick: onRemove.run }] : []),
   ];
   return (

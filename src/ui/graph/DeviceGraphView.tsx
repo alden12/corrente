@@ -52,9 +52,30 @@ const CHAIN_LINK = { stroke: "var(--color-you)", strokeWidth: 2.5 };
  */
 const INTERACTIVE = { pointerEvents: "all" } as const;
 
-function Legend({ chain }: { chain: boolean }) {
+/** What the outlines mean, folding to its heading: folded to start with on a phone, where it would cover the graph. */
+function Legend({ chain, folded: startFolded }: { chain: boolean; folded: boolean }) {
+  const [folded, setFolded] = useState(startFolded);
   return (
-    <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-md border border-line bg-panel text-[11.5px] text-ink">
+    <div className="flex flex-col gap-1.5 px-3 py-2 rounded-md border border-line bg-panel text-[11.5px] text-ink">
+      <button
+        type="button"
+        onClick={() => setFolded(!folded)}
+        aria-expanded={!folded}
+        className="flex items-center justify-between gap-3 min-h-6 font-semibold text-strong cursor-pointer"
+      >
+        Legend
+        <span aria-hidden="true" className="text-[15px] leading-none text-muted">
+          {folded ? "▸" : "▾"}
+        </span>
+      </button>
+      {!folded && <LegendRows chain={chain} />}
+    </div>
+  );
+}
+
+function LegendRows({ chain }: { chain: boolean }) {
+  return (
+    <>
       {LEGEND.map(({ kind, label }) => (
         <p key={kind} className="flex items-center gap-2">
           <span
@@ -78,7 +99,7 @@ function Legend({ chain }: { chain: boolean }) {
         <span className="font-mono text-[9px] uppercase tracking-wider text-muted">stereo</span>
         once per channel
       </p>
-    </div>
+    </>
   );
 }
 
@@ -188,8 +209,8 @@ function chainElements(
   };
 }
 
-/** The graph of `devices`: one drawn bare, more as a chain of frames. */
-export default function DeviceGraphView({ devices }: { devices: ChainDevice[] }) {
+/** The graph of `devices`: one drawn bare, more as a chain of frames. `compact` on a phone: the legend starts folded. */
+export default function DeviceGraphView({ devices, compact = false }: { devices: ChainDevice[]; compact?: boolean }) {
   // Redrawn when the chain itself changes (a device added, switched off), not on every render.
   const chainKey = JSON.stringify(devices);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the chain's contents
@@ -232,13 +253,14 @@ export default function DeviceGraphView({ devices }: { devices: ChainDevice[] })
       >
         <Background color="var(--color-line)" gap={24} />
         <Controls showInteractive={false} />
-        <Panel position="top-left">
+        {/* On a phone the note goes to the foot, out of the folded legend's way. */}
+        <Panel position={compact ? "bottom-right" : "top-left"}>
           <p className="px-2.5 py-1.5 rounded-md border border-line bg-panel text-[11.5px] text-muted">
             Read-only for now: editing graphs is coming soon.
           </p>
         </Panel>
         <Panel position="top-right">
-          <Legend chain={chain} />
+          <Legend chain={chain} folded={compact} />
         </Panel>
       </ReactFlow>
     </div>

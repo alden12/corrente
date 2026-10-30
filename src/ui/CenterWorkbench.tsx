@@ -4,7 +4,7 @@
  * hosts in its editor sheet too. The app's status indicators are at the foot of the activity rail
  * (DAW-87).
  */
-import { lazy, Suspense, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import type { ProjectStore, Track } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { Recorder } from "../audio/recording/recorder";
@@ -15,9 +15,7 @@ import { useEditorTabs } from "./tabs/useEditorTabs";
 
 import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
 import { graphDevices } from "./graph/graphDevices";
-
-/** A device's graph (INST-44), fetched with React Flow the first time one is opened. */
-const DeviceGraphView = lazy(() => import("./graph/DeviceGraphView"));
+import { LazyDeviceGraphView } from "./graph/lazyGraphView";
 
 export function CenterWorkbench({
   projectId,
@@ -71,7 +69,7 @@ export function CenterWorkbench({
         <Suspense
           fallback={<p className="flex-1 flex items-center justify-center text-sm text-muted">Drawing the graph…</p>}
         >
-          <DeviceGraphView key={tabKey(shown!)} devices={graph} />
+          <LazyDeviceGraphView key={tabKey(shown!)} devices={graph} />
         </Suspense>
       ) : (
         <WorkbenchColumn

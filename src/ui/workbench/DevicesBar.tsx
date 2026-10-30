@@ -62,7 +62,7 @@ export function DevicesBar({
   const jumps = jumpsFor(track);
   const [, , putFolds] = useDeviceFolds();
   const keys = jumps.map((jump) => jump.key);
-  // The whole chain's graph (INST-44.2), where there are editor tabs to show it in.
+  // The whole chain's graph (INST-44.2), where there's somewhere to show it.
   const chainGraph = useCanOpenGraphs() && track.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT;
   const foldItems: MenuItem[] = [
     ...(chainGraph ? [{ label: "View chain graph", onClick: () => openChainGraph(track.id) }] : []),

@@ -96,3 +96,37 @@ test("a tab opened past the bar's edge scrolls into view", async ({ page }) => {
   }
   await expect(tabs(page).first()).not.toBeInViewport();
 });
+
+test("a tapped device's panel opens its graph", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Effects");
+  await page.getByRole("button", { name: "Reverb", exact: true }).click();
+  await page.getByRole("button", { name: "View device graph: Reverb" }).click();
+  await expect(tabs(page)).toHaveCount(2);
+  await expect(tabs(page).nth(1)).toContainText("Reverb");
+});
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("a graph opens as a page of its own, its legend folded, with a way back", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await openExploreCategory(page, "MIDI devices");
+    await page.getByRole("button", { name: "Arpeggiator", exact: true }).click();
+    await page.getByRole("button", { name: "View device graph: Arpeggiator" }).click();
+
+    const graph = page.getByRole("dialog", { name: "Arpeggiator graph" });
+    await expect(graph).toBeVisible();
+    await expect(graph.locator(".react-flow__node").first()).toBeVisible();
+    // The legend starts folded, out of the graph's way, and opens on a tap.
+    const legend = graph.getByRole("button", { name: "Legend" });
+    await expect(legend).toHaveAttribute("aria-expanded", "false");
+    await legend.click();
+    await expect(graph.getByText("Param, a control you set")).toBeVisible();
+
+    await graph.getByRole("button", { name: "Back" }).click();
+    await expect(graph).toBeHidden();
+  });
+});

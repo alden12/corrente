@@ -10,7 +10,8 @@ import type { Patch } from "../../audio/patches/library";
 import { createListeners, createValueStore } from "../../listeners";
 import type { TabTarget } from "./editorTabs";
 
-type GraphTarget = Exclude<TabTarget, { kind: "track" }>;
+/** What a graph shows: a device, or a track's or a patch's chain. */
+export type GraphTarget = Exclude<TabTarget, { kind: "track" }>;
 
 const requests = createListeners<[GraphTarget]>();
 
@@ -40,13 +41,13 @@ export const subscribeGraphRequests = (listener: (target: GraphTarget) => void):
   };
 };
 
-/** How many editor tabs are there to open a graph in: none on a phone or in the plugin. */
+/** How many places there are to open a graph in: the desktop's editor tabs, or a phone's graph page; none in the plugin. */
 const hosts = createValueStore(0);
 
-/** Whether there are editor tabs to show a graph in: none on a phone or in the plugin. */
+/** Whether there's somewhere to show a graph: the desktop's tabs, a phone's page; not the plugin. */
 export const useCanOpenGraphs = (): boolean => useSyncExternalStore(hosts.subscribe, hosts.read) > 0;
 
-/** Whether a device has a graph to show here: one on the engine, with tabs to show it in. */
+/** Whether a device has a graph to show here: one on the engine, with somewhere to show it. */
 export function useCanViewGraph(device: { kind: DeviceKind; type: string } | undefined): boolean {
   return useCanOpenGraphs() && device !== undefined && hasGraph(device.kind, device.type);
 }

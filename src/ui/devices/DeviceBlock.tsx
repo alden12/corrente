@@ -3,7 +3,7 @@
  * way. A header in the device's colour (DAW-61.2) with its name, its kind, its on switch and its
  * actions; open, its body; folded, how many controls it holds in place of the body. Folding is
  * view state (`deviceFolds.ts`), never an edit. An instrument or effect on the engine has a button for
- * its graph (INST-44), where there are editor tabs to show it in.
+ * its graph (INST-44), where there's somewhere to show it.
  */
 import type { ReactNode } from "react";
 import { deviceHue, type DeviceColor } from "../../audio/deviceColors";
@@ -13,6 +13,7 @@ import { useDeviceFolds } from "./deviceFolds";
 import { paramCount } from "./paramCount";
 import { foldOnHeaderClick } from "../controls/foldOnHeaderClick";
 import { openDeviceGraph, useCanViewGraph } from "../tabs/openGraph";
+import { GraphIcon } from "../graph/GraphIcon";
 import type { DeviceKind } from "../../audio/definitions/chainGraph";
 
 export interface Bypass {
@@ -114,25 +115,5 @@ export function DeviceBlock({
       </div>
       {open && <DeviceHue.Provider value={deviceHue(device)}>{children}</DeviceHue.Provider>}
     </div>
-  );
-}
-
-/** Three boxes wired left to right: a device's graph. */
-function GraphIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      aria-hidden="true"
-    >
-      <rect x="1.5" y="2.5" width="4" height="4" rx="1" />
-      <rect x="1.5" y="9.5" width="4" height="4" rx="1" />
-      <rect x="10.5" y="6" width="4" height="4" rx="1" />
-      <path d="M5.5 4.5h2.5v3.5h2.5M5.5 11.5h2.5V8" />
-    </svg>
   );
 }

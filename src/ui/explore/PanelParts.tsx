@@ -6,10 +6,12 @@ import type { ReactNode } from "react";
 import type { ExploreItem } from "./exploreItems";
 import { ExploreThumb } from "./ExploreThumb";
 import { FavouriteButton } from "./favourites/FavouriteButton";
+import { GraphIcon } from "../graph/GraphIcon";
+import { useItemGraph } from "./itemGraph";
 
 /**
- * The item's artwork and name, anything that says what mode it is in, its favourite heart (so it
- * can be hearted while trying it), and a close button.
+ * The item's artwork and name, anything that says what mode it is in, its graph (INST-44) where it
+ * has one, its favourite heart (so it can be hearted while trying it), and a close button.
  */
 export function PanelHeader({
   item,
@@ -26,6 +28,7 @@ export function PanelHeader({
   /** A chip after the name, if there is a mode to show. */
   children?: ReactNode;
 }) {
+  const graph = useItemGraph(item);
   return (
     <div className="flex items-center gap-2.5">
       {item && (
@@ -44,6 +47,17 @@ export function PanelHeader({
         <span className="min-w-0 text-[16px] leading-snug font-semibold text-strong break-words">{name}</span>
         {children}
       </div>
+      {graph && (
+        <button
+          type="button"
+          aria-label={`${graph.label}: ${name}`}
+          title={graph.label}
+          onClick={graph.open}
+          className="shrink-0 w-8 h-8 pointer-coarse:w-11 pointer-coarse:h-11 rounded-md flex items-center justify-center text-muted hover:text-ink hover:bg-control cursor-pointer"
+        >
+          <GraphIcon />
+        </button>
+      )}
       {item?.favouritable && (
         <FavouriteButton item={item} className="w-8 h-8 pointer-coarse:w-11 pointer-coarse:h-11" />
       )}
