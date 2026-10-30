@@ -268,9 +268,9 @@ export function wsBaseFromApiUrl(apiUrl: string): string {
  *  opens), `onMessage` delivers validated `ServerMessage`s, and `onOpen` fires on every (re)connect.
  *  It reconnects automatically with capped exponential backoff after an unexpected drop, so a brief
  *  network blip or an API restart self-heals; `onOpen` is the session's cue to re-subscribe and re-send
- *  its unconfirmed edits. Thin transport glue over the contract's message unions. The token rides the
- *  query string because a browser `WebSocket` cannot set an Authorization header (the server reads
- *  `?token=` at the upgrade, mirroring the HTTP bearer gate). */
+ *  its unconfirmed edits. Thin transport glue over the contract's message unions. A browser `WebSocket`
+ *  cannot set an Authorization header, so the token is the first message sent (`auth`), never the URL,
+ *  where consoles and request logs would keep it. */
 /**
  * The live connection state, surfaced to the UI (loading spinner + connection chip + offline warning):
  * - `connecting` - the first connect is in flight (never been open yet).
@@ -404,11 +404,7 @@ export function createWsClient(config: {
 
   const connect = (): void => {
     dropped = false;
-    // Rebuild the URL per (re)connect so a refreshed token is picked up (the reconnect from slice 76
-    // is also what re-applies it after a token rotation).
-    const token = resolveToken(config.token);
     const query = new URLSearchParams({ [PROTOCOL_PARAM]: String(PROTOCOL_VERSION) });
-    if (token) query.set("token", token);
     const url = `${base}?${query}`;
     const ws = new WebSocket(url);
     socket = ws;
@@ -416,6 +412,10 @@ export function createWsClient(config: {
     // after we already reconnected) can't disturb the current connection.
     ws.addEventListener("open", () => {
       if (socket !== ws) return;
+      // The credential first, ahead of the subscribe and anything queued. Read per (re)connect so a
+      // refreshed token is picked up (the reconnect from slice 76 is also what re-applies it after a
+      // token rotation).
+      ws.send(JSON.stringify({ type: "auth", token: resolveToken(config.token) } satisfies ClientMessage));
       retries = 0;
       setStatus("online");
       idle.onOpen(); // fresh idle countdown per connection

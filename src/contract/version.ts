@@ -21,7 +21,9 @@
 // 5: a new track's starter clip off the timeline until its first notes (DAW-50, `createTrack`'s
 // `unplaced`, a note edit's `placeAt`) and a take replacing it (DAW-92, `pasteClip`'s `replaces`). An
 // older client would place what the others don't, so its timeline drifts, but nothing breaks.
-export const PROTOCOL_VERSION = 5;
+// 6: the socket's credential is its first message, `auth`, rather than `?token=` in the URL. The server
+// still reads an older client's query; a version-6 client meeting an older server waits for the deploy.
+export const PROTOCOL_VERSION = 6;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

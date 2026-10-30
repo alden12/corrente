@@ -23,6 +23,9 @@ import { authorSchema, editCommandSchema, editEntrySchema } from "../audio/proje
 
 /** Messages the client sends to the server. Discriminated on `type`. */
 export const clientMessageSchema = z.discriminatedUnion("type", [
+  /** The credential, sent first on every connection (protocol 6): out of the URL, where it would be
+   *  logged. None from a signed-out client, which only a server without sign-in accepts. */
+  z.object({ type: z.literal("auth"), token: z.string().optional() }),
   z.object({ type: z.literal("ping") }),
   /** Join a project's room; the server replies with a `snapshot`. */
   z.object({ type: z.literal("subscribe"), projectId: z.string() }),
