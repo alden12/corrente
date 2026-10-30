@@ -244,10 +244,13 @@ export function ClipRail({
                   toggleLaunch(clip.id);
                 }}
                 className={`font-mono text-[9px] leading-none w-4 h-4 rounded-full border cursor-pointer shrink-0 inline-flex items-center justify-center ${
-                  launchedClipId === clip.id
-                    ? "border-you bg-you text-ground"
-                    : "border-line text-muted hover:text-you hover:border-you"
+                  launchedClipId === clip.id ? "text-ground" : "text-ink hover:text-strong"
                 }`}
+                // Ringed in the clip's colour, so it stands out on a chip of that colour; filled once launched.
+                style={{
+                  borderColor: paletteAccent(clip.color ?? track.color),
+                  ...(launchedClipId === clip.id ? { background: paletteAccent(clip.color ?? track.color) } : {}),
+                }}
               >
                 {/* The optical nudge belongs to the glyph, not the button (DAW-8.4). `▶` is
                     left-weighted and needs pushing right to look centred; `■` is symmetric and the

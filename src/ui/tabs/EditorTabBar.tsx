@@ -134,7 +134,7 @@ export function EditorTabBar({
   const closable = state.tabs.length > 1;
   return (
     <div
-      className="flex items-stretch h-10 border-b border-line bg-frame shrink-0 overflow-x-auto [scrollbar-width:none]"
+      className="flex-1 min-w-0 flex items-stretch h-10 overflow-x-auto [scrollbar-width:none]"
       role="tablist"
       aria-label="Open editors"
       onWheel={scrollSideways}

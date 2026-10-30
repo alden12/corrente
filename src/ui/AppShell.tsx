@@ -493,6 +493,7 @@ export function AppShell() {
     onOpenAgentSettings: () => setSettings({ tab: "agent" }),
     onOpenSettings: () => setSettings({}),
     onOpenTiming: () => setSettings({ tab: "timing" }),
+    onOpenEditorColors: () => setSettings({ tab: "account" }),
     onOpenShare: (id, name) => setShare({ id, name }),
   };
 

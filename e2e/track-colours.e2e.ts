@@ -44,3 +44,12 @@ test("a note in the roll shows its name", async ({ page }) => {
   await expect(note).toHaveCount(1);
   await expect(note).toHaveText(/^[A-G]#?-?\d$/);
 });
+
+test("the editors' circles name who has edited, and lead to their colours", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Who's edited this project" }).click();
+  await expect(page.getByRole("menuitem", { name: "You" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Change colours…" }).click();
+  await expect(page.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
+});

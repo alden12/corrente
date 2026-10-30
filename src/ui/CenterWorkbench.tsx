@@ -14,6 +14,7 @@ import { tabKey } from "./tabs/editorTabs";
 import { useEditorTabs } from "./tabs/useEditorTabs";
 
 import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
+import { ProjectEditors } from "./ProjectEditors";
 import { graphDevices } from "./graph/graphDevices";
 import { LazyDeviceGraphView } from "./graph/lazyGraphView";
 
@@ -26,6 +27,7 @@ export function CenterWorkbench({
   selectedTrack,
   onRevealSamples,
   keys,
+  onOpenEditorColors,
 }: {
   /** The project the store holds: the tabs are kept per project. */
   projectId: string | null;
@@ -38,6 +40,8 @@ export function CenterWorkbench({
   onRevealSamples?: () => void;
   /** The computer-keyboard panel (DAW-12.1), shown in the piano roll under its velocity lane. */
   keys?: { panel: ReactNode; height: number; open: boolean };
+  /** Settings, open where editors' colours are picked. */
+  onOpenEditorColors: () => void;
 }) {
   const tabs = useEditorTabs(projectId, projectStore, selectedTrack?.id ?? null);
   if (!selectedTrack) {
@@ -63,7 +67,10 @@ export function CenterWorkbench({
 
   return (
     <div className="[grid-area:center] bg-ground flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-      <EditorTabBar tabs={tabs} projectStore={projectStore} dispatch={dispatch} />
+      <div className="flex items-stretch shrink-0 border-b border-line bg-frame">
+        <EditorTabBar tabs={tabs} projectStore={projectStore} dispatch={dispatch} />
+        <ProjectEditors projectStore={projectStore} onOpenColors={onOpenEditorColors} />
+      </div>
 
       {graph ? (
         <Suspense

@@ -66,5 +66,7 @@ export interface ShellProps {
   onOpenSettings: () => void;
   /** Settings, open on its Timing page (a project's tempo and meter chips). */
   onOpenTiming: () => void;
+  /** Settings, open where editors' colours are picked (the Account page). */
+  onOpenEditorColors: () => void;
   onOpenShare: (projectId: string, projectName: string) => void;
 }

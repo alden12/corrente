@@ -1537,6 +1537,12 @@ export class ProjectStore {
 
   /** Every stamped key under a `prefix:` (the same prefix form `dropAuthors` accepts). An inverse
    *  captures these before a command clears them, so undo can put the stamps back (DAW-34). */
+  /** Everyone whose edits the project carries: each object's last editor, and each clip's maker. */
+  editors(): ClipAuthor[] {
+    const clipMakers = this.tracks.flatMap((track) => track.clips.map((clip) => clip.author));
+    return [...new Set([...Object.values(this.authorship), ...clipMakers])];
+  }
+
   authorKeysUnder(prefix: string): string[] {
     return Object.keys(this.authorship).filter((key) => key.startsWith(prefix));
   }

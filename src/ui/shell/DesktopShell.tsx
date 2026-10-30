@@ -70,6 +70,7 @@ export function DesktopShell({
   onOpenSettings,
   onOpenShare,
   onOpenTiming,
+  onOpenEditorColors,
 }: ShellProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   // A first open gives the side panel 350px, or less on a small window so the middle keeps
@@ -186,6 +187,7 @@ export function DesktopShell({
           onSelectView("explore");
         }}
         keys={{ panel: <KeysPanel {...keys.panel} />, height: keys.height, open: keys.panel.open }}
+        onOpenEditorColors={onOpenEditorColors}
       />
       <ArrangementTimeline
         projectStore={projectStore}
