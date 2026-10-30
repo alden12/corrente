@@ -24,7 +24,7 @@ import {
   type ExportContents,
 } from "../projectRepository";
 import { getProjectStorage, type ProjectStorage } from "../bundleStore";
-import { listProjects, newProjectId, refreshProjects } from "./library";
+import { listProjects, newProjectId, nextProjectName, refreshProjects } from "./library";
 import { editKeys, relationOf, type ImportRelation } from "./projectVersions";
 import { hosting } from "../../hosting";
 import { restoreProject } from "../persistence";
@@ -106,7 +106,9 @@ export async function initProjects(
     // mount effect in dev), and two random ids would seed two projects. A stable id
     // makes the second pass a harmless re-flush of the same bundle.
     setCurrentProject(currentProjectId());
-    await getRepository().setName("Untitled");
+    const name = nextProjectName([]);
+    await getRepository().setName(name);
+    deps.projectStore.renameProject(name); // carry the name in project.json too, as seedNewProject does
     // The first project anyone sees plays something on the first Play.
     if (exampleMelody) addStarterMelody(deps.projectStore);
     await flush(deps); // persist the live (seeded) project as project one
@@ -145,11 +147,12 @@ export async function switchProject(
 /** Create a new empty project and switch to it. Returns its id. */
 export async function createProject(
   deps: ProjectDeps,
-  name = "Untitled",
+  name?: string,
   storage: ProjectStorage = getProjectStorage(),
 ): Promise<string> {
   await flush(deps);
-  const id = await seedNewProject(deps, name);
+  const named = name ?? nextProjectName((await storage.listProjects()).map((project) => project.name));
+  const id = await seedNewProject(deps, named);
   await refreshProjects(storage);
   return id;
 }
@@ -348,7 +351,7 @@ export async function deleteProject(
       setCurrentProject(remaining[0]);
       await loadCurrentInto(deps);
     } else {
-      await seedNewProject(deps, "Untitled");
+      await seedNewProject(deps, nextProjectName([]));
     }
   }
   await refreshProjects(storage);

@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { dismissStart, openRowAction, openProjectList } from "./support/app";
 
 /** `<name>-<date>-<version>.daw.zip` (HOST-23.2.1.2). */
-const EXPORT_NAME = /^untitled-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
+const EXPORT_NAME = /^project-1-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
 
 /**
  * Portable .daw.zip export/import (from the Projects page): export, on a project's row,

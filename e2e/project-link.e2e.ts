@@ -14,7 +14,7 @@ test("the URL names the open project, and opening that URL opens it again", asyn
   await openProjectList(page); // the view that names the project
 
   // The address bar is pointed at the project once it has loaded.
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
 
   // Renaming carries into the link, because the readable half is built from the name.
   page.once("dialog", (dialog) => void dialog.accept("Deep House Jam"));
@@ -24,7 +24,7 @@ test("the URL names the open project, and opening that URL opens it again", asyn
 
   // Switching away takes the URL with it, so a link is never stale.
   await createProjectFromList(page);
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
 
   // Arriving on the link opens *that* project, not the one we were last in - which is the
   // whole point, and the only part of this a browser is needed to prove.
@@ -56,7 +56,7 @@ test("switching projects never puts one project's name on another's link", async
   await page.goto("/");
   await dismissStart(page);
   await openProjectList(page);
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
 
   page.once("dialog", (dialog) => void dialog.accept("Deep House Jam"));
   await openRowAction(page, "Rename…");
@@ -80,7 +80,7 @@ test("switching projects never puts one project's name on another's link", async
     }
   }, 15);
   await createProjectFromList(page);
-  await expect(page).toHaveURL(/\/p\/untitled~/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/p\/project-\d+~/, { timeout: 30000 });
   clearInterval(sampler);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
 
@@ -103,7 +103,7 @@ test("a sign-in round trip comes back to the project it left", async ({ page }) 
   // (`liveRepository` in persistence.ts): the new project then opened as a copy, and the URL
   // stayed on the old name for good.
   await createProjectFromList(page);
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
 
   // An OAuth return lands on the bare origin with the path in the tab's memory - `redirectTo`
   // is the origin, because Supabase silently falls back to its configured Site URL for any
@@ -122,6 +122,6 @@ test("a link to a project that is not there falls back rather than inventing one
   await page.goto("/p/someone-elses~p-deadbeef");
   await dismissStart(page);
 
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
   await expect(page).not.toHaveURL(/p-deadbeef/);
 });

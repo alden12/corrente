@@ -17,7 +17,7 @@ async function breakTheOpenProject(page: Page): Promise<void> {
   await openRowAction(page, "Rename…");
   await expect(page).toHaveURL(/\/p\/keeper~/);
   await createProjectFromList(page);
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
   const id = decodeURIComponent(page.url().split("~").pop() ?? "");
   // Not JSON at all: the keyframe a boot reads first.
   await page.evaluate(async (projectId) => {
@@ -50,7 +50,7 @@ test("a project that cannot be read offers the others, and opening one stays ope
 test("a new project can be started without trying the rebuild first", async ({ page }) => {
   await breakTheOpenProject(page);
   await page.getByRole("button", { name: "Start a new project" }).click();
-  await expect(page).toHaveURL(/\/p\/untitled-recovered~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+-recovered~/);
   await dismissStart(page);
   await expect(page.getByRole("dialog", { name: /This project/ })).toHaveCount(0);
 });

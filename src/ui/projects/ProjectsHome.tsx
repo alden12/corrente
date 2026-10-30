@@ -13,7 +13,7 @@ import type { EditLog } from "../../audio/commands/editLog";
 import type { VersionStore } from "../../audio/commands/history";
 import { useProject } from "../../audio/project/useProject";
 import { currentProjectId, subscribeCurrentProject } from "../../audio/projectRepository";
-import { listProjects, subscribeProjects, type ProjectMeta } from "../../audio/projects/library";
+import { listProjects, nextProjectName, subscribeProjects, type ProjectMeta } from "../../audio/projects/library";
 import {
   applyImport,
   createProject,
@@ -383,6 +383,7 @@ export function ProjectsHome({
       )}
       {naming && (
         <NewProjectDialog
+          suggested={nextProjectName(projects.map((project) => project.name))}
           onCancel={() => setNaming(false)}
           onCreate={(name) => {
             setNaming(false);

@@ -9,23 +9,27 @@ test("a project the list knows by name opens with that name, not Untitled", asyn
   await page.goto("/");
   await dismissStart(page);
   await openProjectList(page);
-  // The first project is Untitled too, so wait for the address to leave it, not for a name.
-  await expect(page).toHaveURL(/\/p\/untitled~/);
+  await expect(page).toHaveURL(/\/p\/project-\d+~/);
   const first = page.url();
   await createProjectFromList(page);
   await expect(page).not.toHaveURL(first);
-  await expect(page).toHaveURL(/\/p\/untitled~/);
   const id = decodeURIComponent(page.url().split("~").pop() ?? "");
 
-  // The rename that reached only the list: meta.json names it, project.json still says Untitled.
-  // Written from a static page, since the app rewrites meta.json as it unloads.
+  // The rename that reached only the list: meta.json names it, project.json still says Untitled (as
+  // projects made before new ones were numbered did). Written from a static page, since the app
+  // rewrites meta.json as it unloads.
   await page.goto("/favicon.svg");
   await page.evaluate(async (projectId) => {
     const root = await navigator.storage.getDirectory();
     const bundle = await (await root.getDirectoryHandle("projects")).getDirectoryHandle(projectId);
-    const writable = await (await bundle.getFileHandle("meta.json", { create: true })).createWritable();
-    await writable.write(JSON.stringify({ name: "Euclidean", modifiedAt: new Date().toISOString() }));
-    await writable.close();
+    const write = async (path: string, text: string) => {
+      const writable = await (await bundle.getFileHandle(path, { create: true })).createWritable();
+      await writable.write(text);
+      await writable.close();
+    };
+    const project = JSON.parse(await (await (await bundle.getFileHandle("project.json")).getFile()).text());
+    await write("project.json", JSON.stringify({ ...project, name: "Untitled" }));
+    await write("meta.json", JSON.stringify({ name: "Euclidean", modifiedAt: new Date().toISOString() }));
   }, id);
 
   await page.goto("/");

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { dismissStart, openStudio, openSettingsPage } from "./support/app";
 
 /** `<name>-<date>-<version>.daw.zip` (HOST-23.2.1.2). */
-const EXPORT_NAME = /^untitled-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
+const EXPORT_NAME = /^project-1-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}\.daw\.zip$/;
 
 /**
  * With no server configured (as this suite runs), the app says where its files are, calmly
@@ -42,7 +42,7 @@ test("a standalone run says its files are on this device, from the status bar an
   // And the open project's card exports it too.
   const [fromCard] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Export Untitled" }).click(),
+    page.getByRole("button", { name: "Export Project 1" }).click(),
   ]);
   expect(fromCard.suggestedFilename()).toMatch(EXPORT_NAME);
 });

@@ -52,6 +52,19 @@ export async function refreshProjects(storage: ProjectStorage = getProjectStorag
   return cache;
 }
 
+/**
+ * A new project's name when you don't give one: "Project N", one past the highest already in the list,
+ * so new ones can be told apart (a list of Untitleds could not). A gap left by a deleted one isn't
+ * refilled, so a new name never looks like it continues an older project.
+ */
+export function nextProjectName(names: readonly string[]): string {
+  const numbers = names.flatMap((name) => {
+    const match = /^Project (\d+)$/.exec(name.trim());
+    return match ? [Number(match[1])] : [];
+  });
+  return `Project ${Math.max(0, ...numbers) + 1}`;
+}
+
 /** A fresh project id. */
 export function newProjectId(): string {
   return `p-${randomUuid().slice(0, 8)}`;
