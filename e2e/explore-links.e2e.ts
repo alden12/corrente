@@ -12,7 +12,7 @@ test("the rail's shortcuts open Explore's pages", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   const rail = page.getByRole("navigation", { name: "Library views" });
-  for (const label of ["Instruments", "Effects", "MIDI devices", "Patches", "Favourites"]) {
+  for (const label of ["Instruments", "Effects", "MIDI devices", "Patches", "Favourites", "Samples"]) {
     const shortcut = rail.getByRole("button", { name: `Explore ${label}` });
     await shortcut.click();
     await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();

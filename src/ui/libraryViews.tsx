@@ -70,8 +70,8 @@ export const RAIL_ITEMS: RailItem[] = [
 
 /**
  * Shortcuts under Explore on the desktop rail (COMM-3): straight to the page for a kind of device,
- * then patches and favourites, where otherwise it is Explore and then its tile. Devices first, the
- * order Alden picked (2026-10-30). Each is drawn with its tile's glyph, under its label.
+ * then patches, favourites and samples, where otherwise it is Explore and then its tile. Devices
+ * first, the order Alden picked (2026-10-30). Each is drawn with its tile's glyph, under its label.
  */
 export const EXPLORE_SHORTCUTS: readonly ExploreCategory[] = [
   "instruments",
@@ -79,4 +79,5 @@ export const EXPLORE_SHORTCUTS: readonly ExploreCategory[] = [
   "midi",
   "patches",
   "favourites",
+  "samples",
 ];
