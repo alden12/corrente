@@ -15,7 +15,7 @@ import type { ProjectStore } from "../audio/project/projectStore";
 import { useProject } from "../audio/project/useProject";
 import { ActivityRail } from "../ui/ActivityRail";
 import { SectionHeader } from "../ui/controls/SectionHeader";
-import { requestExploreSearch } from "../ui/explore/explorePage";
+import { openExplorePage, requestExploreSearch } from "../ui/explore/explorePage";
 import { RAIL_ITEMS } from "../ui/libraryViews";
 import { KnobExtrasProvider } from "../ui/knobExtras";
 import { KeysPanel } from "../ui/keys/KeysPanel";
@@ -95,8 +95,7 @@ export function PluginApp({
         active="explore"
         collapsed={panelCollapsed}
         items={PLUGIN_RAIL}
-        onSelect={() => setPanelCollapsed(false)}
-        onToggleCollapse={() => setPanelCollapsed(!panelCollapsed)}
+        onSelect={() => (panelCollapsed ? setPanelCollapsed(false) : openExplorePage("home"))}
         onSearch={() => {
           setPanelCollapsed(false);
           requestExploreSearch();
@@ -104,7 +103,12 @@ export function PluginApp({
       />
       {!panelCollapsed && (
         <div className="w-80 shrink-0 flex min-h-0">
-          <PluginExplore project={project} dispatch={dispatch} preview={preview} />
+          <PluginExplore
+            project={project}
+            dispatch={dispatch}
+            preview={preview}
+            onCollapse={() => setPanelCollapsed(true)}
+          />
         </div>
       )}
       <main ref={columnRef} className="relative isolate flex-1 min-w-0 overflow-y-auto">

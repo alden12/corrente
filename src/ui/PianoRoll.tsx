@@ -955,17 +955,20 @@ export function PianoRoll({
           )}
           {/* Quantize keeps a button as well as its menu entry: it is the one action here you repeat,
               and it reads the selection, so its label is worth seeing. On touch too, where without it
-              a whole clip could only be quantized a note at a time. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            title={selection.size ? "Quantize selected notes to the grid" : "Quantize all notes to the grid"}
-            className="font-mono pointer-coarse:h-9 pointer-coarse:px-3"
-            disabled={!targets.length}
-            onClick={quantize}
-          >
-            Quantize{selection.size ? " sel" : ""}
-          </Button>
+              a whole clip could only be quantized a note at a time. Folded, it goes with the notes it
+              acts on (DAW-93). */}
+          {(!fold || fold.open) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              title={selection.size ? "Quantize selected notes to the grid" : "Quantize all notes to the grid"}
+              className="font-mono pointer-coarse:h-9 pointer-coarse:px-3"
+              disabled={!targets.length}
+              onClick={quantize}
+            >
+              Quantize{selection.size ? " sel" : ""}
+            </Button>
+          )}
           {fold && !fold.open && foldedPreview && <div className="flex-1 min-w-0 h-5 ml-2">{foldedPreview}</div>}
         </SectionHeader>
       )}

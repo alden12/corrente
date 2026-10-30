@@ -19,9 +19,19 @@ import { AgentPanel } from "../AgentPanel";
 import { RailIndicators } from "../RailIndicators";
 import { ArrangementTimeline } from "../ArrangementTimeline";
 import { ResizeHandle } from "../ResizeHandle";
-import { usePersistentNumber } from "../usePersistent";
+import { usePersistentNumber, usePersistentString } from "../usePersistent";
 import type { ShellProps } from "./types";
-import { openExplorePage, requestExploreSearch } from "../explore/explorePage";
+import {
+  EXPLORE_PAGE_KEY,
+  EXPLORE_PAGES,
+  openExplorePage,
+  requestExploreSearch,
+  type ExplorePage,
+} from "../explore/explorePage";
+import { CATEGORIES } from "../explore/exploreItems";
+import { CategoryGlyph } from "../explore/ExploreThumb";
+import { setFromExplore } from "../explore/fromExplore";
+import { EXPLORE_SHORTCUTS } from "../libraryViews";
 import { openProjectsPage } from "../projects/projectsPage";
 import { KeysPanel } from "../keys/KeysPanel";
 import { useDesktopKeys } from "../keys/useDesktopKeys";
@@ -111,6 +121,31 @@ export function DesktopShell({
     openProjectsPage("inside");
     onSelectView("project");
   };
+  // Explore's buttons to your projects mark the trip, so Projects offers the way back (`fromExplore`).
+  const exploreLinks = {
+    mcpStatus,
+    onOpenProject: () => {
+      revealProject();
+      setFromExplore(true);
+    },
+    onOpenProjects: () => {
+      onSelectView("project");
+      openProjectsPage("home");
+      setFromExplore(true);
+    },
+    onBackToExplore: () => onSelectView("explore"),
+  };
+  const [explorePage] = usePersistentString<ExplorePage>(EXPLORE_PAGE_KEY, "home", EXPLORE_PAGES);
+  const exploreShortcuts = EXPLORE_SHORTCUTS.map((page) => ({
+    label: CATEGORIES[page].label,
+    icon: <CategoryGlyph category={page} size={16} />,
+    selected: libView === "explore" && !libCollapsed && explorePage === page,
+    // The view first: selecting Explore again resets it to home, which the page then replaces.
+    onSelect: () => {
+      onSelectView("explore");
+      openExplorePage(page);
+    },
+  }));
 
   return (
     <div
@@ -126,8 +161,8 @@ export function DesktopShell({
         active={libView}
         collapsed={libCollapsed}
         onSelect={onSelectView}
-        onToggleCollapse={onToggleLibCollapsed}
         onOpenSettings={onOpenSettings}
+        shortcuts={exploreShortcuts}
         onSearch={() => {
           onSelectView("explore");
           requestExploreSearch();
@@ -171,6 +206,8 @@ export function DesktopShell({
           onOpenTiming={onOpenTiming}
           preview={preview}
           recorder={recorder}
+          exploreLinks={exploreLinks}
+          onCollapse={onToggleLibCollapsed}
         />
       )}
       {/* Remade for another project: its tabs are that project's. */}
@@ -183,8 +220,8 @@ export function DesktopShell({
         dispatch={dispatch}
         selectedTrack={selectedTrack}
         onRevealSamples={() => {
-          openExplorePage("samples");
           onSelectView("explore");
+          openExplorePage("samples");
         }}
         keys={{ panel: <KeysPanel {...keys.panel} />, height: keys.height, open: keys.panel.open }}
         onOpenEditorColors={onOpenEditorColors}

@@ -17,11 +17,44 @@ const VIEW_TITLE: Record<PanelView, string> = {
   activity: "Activity",
 };
 
-export function LibraryHeader({ activeView, editLog }: { activeView: PanelView; editLog: EditLog }) {
+/**
+ * Folds the side panel away to the rail, beside the title it belongs to. The rail's icons used to
+ * do it when clicked again, which left no way back to a view's start (2026-10-30, Alden).
+ */
+export function CollapseButton({ onCollapse }: { onCollapse: () => void }) {
+  return (
+    <IconButton label="Collapse the panel" onClick={onCollapse}>
+      <svg
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="w-4 h-4"
+      >
+        <path d="M8 4 4 8l4 4M12 4 8 8l4 4" />
+      </svg>
+    </IconButton>
+  );
+}
+
+export function LibraryHeader({
+  activeView,
+  editLog,
+  onCollapse,
+}: {
+  activeView: PanelView;
+  editLog: EditLog;
+  /** Where the panel can fold away (the desktop); the phone's places can't. */
+  onCollapse?: () => void;
+}) {
   const { canUndo, canRedo } = useEditLog(editLog);
   return (
     <div className="shrink-0 flex items-center gap-1 h-10 pl-2.5 pr-1 border-b border-line">
       <span className="font-semibold text-[13px] text-strong">{VIEW_TITLE[activeView]}</span>
+      {onCollapse && <CollapseButton onCollapse={onCollapse} />}
       {/* Undo and redo apply from any view, so they stay in the header whatever the panel shows. */}
       <IconButton label="Undo" onClick={() => editLog.undo()} disabled={!canUndo} className="ml-auto">
         <UndoIcon />

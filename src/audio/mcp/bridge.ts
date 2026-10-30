@@ -21,6 +21,10 @@ import type { BrowserToServer, ClientKind, HistoryMethod, PatchMethod, ServerToB
 /** `standby`: connected, but another tab was in front more recently, so the agent drives that one. */
 export type McpStatus = "connecting" | "connected" | "standby" | "disconnected";
 
+/** Whether an MCP client is there. Without a server the bridge cycles connecting and disconnected
+ *  as it retries, so for what the UI shows the two are one state, not connected. */
+export const mcpConnected = (status: McpStatus): boolean => status === "connected" || status === "standby";
+
 /** When this tab last had the user's attention, kept per tab (sessionStorage) so a reload keeps it. */
 const ATTENTION_KEY = "corrente.mcp.attention";
 const lastAttention = (): number => {

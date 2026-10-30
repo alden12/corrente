@@ -9,6 +9,7 @@
  */
 import type { ReactNode } from "react";
 import { AgentIcon } from "./shellIcons";
+import type { ExploreCategory } from "./explore/exploreItems";
 
 /** The one library view on show. Persisted, so it survives a reload. */
 export type LibraryView = "project" | "explore" | "activity" | "agent";
@@ -65,4 +66,17 @@ export const RAIL_ITEMS: RailItem[] = [
   },
   { view: "activity", label: "Activity", icon: svg(<path d="M2 8h3l2-4 2 8 2-6 1.5 2H14" />) },
   { view: "agent", label: "Agent", icon: <AgentIcon className="w-4.5 h-4.5" /> },
+];
+
+/**
+ * Shortcuts under Explore on the desktop rail (COMM-3): straight to the page for a kind of device,
+ * then patches and favourites, where otherwise it is Explore and then its tile. Devices first, the
+ * order Alden picked (2026-10-30). Each is drawn with its tile's glyph, under its label.
+ */
+export const EXPLORE_SHORTCUTS: readonly ExploreCategory[] = [
+  "instruments",
+  "effects",
+  "midi",
+  "patches",
+  "favourites",
 ];

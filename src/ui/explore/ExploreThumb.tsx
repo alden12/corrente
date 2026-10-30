@@ -41,8 +41,8 @@ const GLYPHS: Record<ExploreCategory, ReactNode> = {
   samples: <path d="M2 8h1.5M4.5 5v6M6.5 3v10M8.5 5.5v5M10.5 4v8M12.5 6.5v3M14 8h.5" />,
 };
 
-/** The category's glyph, `size` px square. */
-function Glyph({ category, size }: { category: ExploreCategory; size: number }) {
+/** The category's glyph, `size` px square. The desktop rail's shortcuts draw it too (COMM-3). */
+export function CategoryGlyph({ category, size }: { category: ExploreCategory; size: number }) {
   return (
     <svg
       viewBox="0 0 16 16"
@@ -117,14 +117,14 @@ export function ExploreThumb({
           )}
         </svg>
       ) : (
-        <Glyph category={category} size={size * 0.48} />
+        <CategoryGlyph category={category} size={size * 0.48} />
       )}
       {portrait && badge && (
         <span
           className="absolute top-0.5 left-0.5 flex items-center justify-center rounded-full bg-black/45 text-white"
           style={{ width: size * BADGE, height: size * BADGE }}
         >
-          <Glyph category={category} size={size * BADGE * 0.7} />
+          <CategoryGlyph category={category} size={size * BADGE * 0.7} />
         </span>
       )}
     </span>

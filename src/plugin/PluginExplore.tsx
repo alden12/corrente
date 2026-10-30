@@ -14,6 +14,7 @@ import { panelFor } from "../ui/explore/exploreActions";
 import type { ExploreItem } from "../ui/explore/exploreItems";
 import { ExploreScopeProvider, type ExploreScope } from "../ui/explore/exploreScope";
 import { TryPanel } from "../ui/explore/TryPanel";
+import { CollapseButton } from "../ui/LibraryHeader";
 
 const PLUGIN_SCOPE: ExploreScope = { oneTrack: true, kinds: new Set(["instrument", "patch", "effect"]) };
 
@@ -21,10 +22,13 @@ export function PluginExplore({
   project,
   dispatch,
   preview,
+  onCollapse,
 }: {
   project: ProjectStore;
   dispatch: Dispatch;
   preview: SoundPreview;
+  /** Fold the panel away to the rail, as the app's library panel does from its header. */
+  onCollapse: () => void;
 }) {
   // One panel at a time under the list: trying a sound closes an effect shown.
   const [shown, setShown] = useState<ExploreItem | null>(null);
@@ -41,6 +45,10 @@ export function PluginExplore({
   return (
     <ExploreScopeProvider value={PLUGIN_SCOPE}>
       <div className="flex-1 min-w-0 bg-rail border-r border-line flex flex-col min-h-0">
+        <div className="shrink-0 flex items-center gap-1 h-10 pl-2.5 pr-1 border-b border-line">
+          <span className="font-semibold text-[13px] text-strong">Explore</span>
+          <CollapseButton onCollapse={onCollapse} />
+        </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
           <ExploreView
             projectStore={project}

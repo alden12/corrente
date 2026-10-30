@@ -67,13 +67,18 @@ test("the roll folds away under its toolbar, keeping the keys and a glance at it
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
   await page.mouse.click(roll.x + 120, roll.y + 60);
   await expect(page.getByTestId("note")).toHaveCount(1);
+  const quantize = page.getByRole("button", { name: /^Quantize/ });
+  await expect(quantize).toBeVisible();
   await page.getByRole("button", { name: "Fold the piano roll" }).click();
   await expect(page.getByTestId("roll-scroll")).toBeHidden();
+  // Quantize goes with the notes it acts on (DAW-93).
+  await expect(quantize).toBeHidden();
   // Folded, the header shows a glance at the clip's notes in the room the grid left.
   await expect(page.getByRole("img", { name: "Clip Clip 1, 1 notes" }).last()).toBeVisible();
   await expect(page.getByRole("button", { name: "Fold the keys" })).toBeVisible();
   await page.getByRole("button", { name: "Open the piano roll" }).click();
   await expect(page.getByTestId("roll-scroll")).toBeVisible();
+  await expect(quantize).toBeVisible();
 });
 
 test("the wheel over the keys scrolls the column once the keys have nothing to scroll", async ({ page }) => {

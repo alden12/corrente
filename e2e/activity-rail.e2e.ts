@@ -9,8 +9,8 @@ import {
 
 /**
  * The activity rail + toolbar (the VSCode-style spine). Guards: the rail switches
- * the single library view; clicking the active icon collapses the panel to the
- * rail and it persists across a reload; the toolbar carries undo/redo + MCP; the
+ * the single library view; clicking the active icon goes back to its start, and the
+ * title's arrow collapses the panel to the rail, which persists across a reload; the toolbar carries undo/redo + MCP; the
  * Project view creates a project that survives a reload; and an empty Sampler
  * picker reveals Explore's Samples page.
  */
@@ -34,14 +34,19 @@ test("the rail switches the single library view", async ({ page }) => {
   await expect(page.getByRole("combobox", { name: "Activity view" })).toBeVisible();
 });
 
-test("clicking the active rail icon collapses the panel to the rail, and it persists", async ({ page }) => {
+test("clicking the active rail icon goes back to its start, and the arrow collapses the panel", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   expect(await libWidth(page)).toBeGreaterThan(150);
 
-  // Clicking the active (Explore) icon collapses the panel away (only the rail
-  // remains, which is now its own full-height column).
+  // On a category page, Explore's icon goes back to Explore's home rather than folding the panel.
+  await openExploreCategory(page, "Effects");
   await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await expect(page.getByRole("searchbox", { name: "Search Explore" })).toBeVisible();
+
+  // The arrow beside the title collapses the panel away (only the rail remains, which is now its
+  // own full-height column).
+  await page.getByRole("button", { name: "Collapse the panel" }).click();
   await expect(libPanel(page)).toHaveCount(0);
 
   // Collapse persists across a reload.

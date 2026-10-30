@@ -20,7 +20,7 @@ import type { ExploreItem } from "./explore/exploreItems";
 import type { PanelView } from "./libraryViews";
 import { ActivityView } from "./ActivityView";
 import { LibraryHeader } from "./LibraryHeader";
-import { ExploreView } from "./explore/ExploreView";
+import { ExploreView, type ExploreLinks } from "./explore/ExploreView";
 import { ProjectsHome } from "./projects/ProjectsHome";
 import { ProjectsPlace } from "./projects/ProjectsPlace";
 import { ProjectOverview } from "./projects/ProjectOverview";
@@ -37,6 +37,8 @@ export function LibraryPanel({
   preview,
   recorder,
   tryPads,
+  exploreLinks,
+  onCollapse,
 }: {
   projectStore: ProjectStore;
   editLog: EditLog;
@@ -53,6 +55,10 @@ export function LibraryPanel({
   recorder: Recorder;
   /** What plays it where there is no computer keyboard: the phone's pads. */
   tryPads?: (track: InstrumentTrack) => ReactNode;
+  /** Explore's ways out to your projects, and whether to offer connecting Claude. */
+  exploreLinks?: ExploreLinks;
+  /** Fold the panel away to the rail, from its header (the desktop). */
+  onCollapse?: () => void;
 }) {
   // Trying belongs to Explore: leaving it (another view, or the panel going away) stops trying, so
   // the keys go back to playing the selected track.
@@ -91,6 +97,7 @@ export function LibraryPanel({
     // two pages on its Projects tab, outside this panel.
     project: () => (
       <ProjectsPlace
+        onBackToExplore={exploreLinks?.onBackToExplore}
         home={(openProject) => (
           <ProjectsHome
             projectStore={projectStore}
@@ -122,13 +129,14 @@ export function LibraryPanel({
         preview={preview}
         shown={shown?.key}
         onShow={setShown}
+        links={exploreLinks}
       />
     ),
   };
 
   return (
     <div className="[grid-area:library] min-w-0 bg-rail border-r border-line flex flex-col flex-1 min-h-0">
-      <LibraryHeader activeView={activeView} editLog={editLog} />
+      <LibraryHeader activeView={activeView} editLog={editLog} onCollapse={onCollapse} />
       <div className="flex-1 min-h-0 overflow-y-auto">{views[activeView]()}</div>
       {activeView === "explore" && shown && panelFor(shown) === "add" && (
         <DevicePanel

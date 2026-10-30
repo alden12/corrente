@@ -9,6 +9,8 @@
  * so mobile is another projection of the same stores rather than a fork.
  */
 import { Welcome } from "./hosting/Welcome";
+import { setFromExplore } from "./explore/fromExplore";
+import { openExplorePage } from "./explore/explorePage";
 import { openProjectsPage } from "./projects/projectsPage";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ProjectStore } from "../audio/project/projectStore";
@@ -204,11 +206,15 @@ export function AppShell() {
   // "you" hue while peers get their own colour (perspective-relative; see authorColors.ts).
   const currentUser = useSyncExternalStore(subscribeCurrentUser, readCurrentUser, readCurrentUser);
 
-  // Rail interaction: a non-active icon selects its view (opening the panel if
-  // collapsed); the active icon toggles the panel collapsed.
+  // Rail interaction: an icon selects its view, opening the panel if collapsed. The active one goes
+  // back to its view's start, as the phone's tab bar does (2026-10-30): Explore's home from a category
+  // page. Collapsing is the arrow beside the panel's title.
   const selectView = (view: LibraryView) => {
+    // Any move between views ends a trip from Explore; its own buttons mark one again after this.
+    setFromExplore(false);
     // Projects opens on the project you have open, with the list one step up (2026-10-13).
-    if (view === "project" && view !== libView) openProjectsPage("inside");
+    if (view === "project") openProjectsPage("inside");
+    if (view === "explore" && view === libView && !libCollapsed) openExplorePage("home");
     setLibView(view);
     if (libCollapsed) setLibCollapsed(false);
   };

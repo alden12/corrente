@@ -5,7 +5,8 @@
  * than in the workbench's tab bar, and the plugin's window, which reuses the rail, shows them too.
  * Each is an icon, the rail being 48px; a press opens its details beside it.
  */
-import type { McpStatus } from "../audio/mcp/bridge";
+import { mcpConnected, type McpStatus } from "../audio/mcp/bridge";
+import { MCP_GUIDE_URL } from "../hosting";
 import type { WsStatus } from "../contract/client";
 import { SyncChip, type ChipPopover } from "./ConnectionStatus";
 import { OnThisDeviceChip, onThisDevice, type Reminder } from "./hosting/OnThisDevice";
@@ -13,19 +14,21 @@ import { OnThisDeviceChip, onThisDevice, type Reminder } from "./hosting/OnThisD
 /** Beside the rail, to its right. */
 const BESIDE: ChipPopover = { strategy: "beside", side: "right" };
 
-// The built-in agent does not need MCP, so a missing connection is not a warning: it shows only when
-// connected (green), or connected but driving another tab (grey).
+// The built-in agent does not need MCP, so a missing connection is not a warning: an empty ring, not a
+// red dot. It shows anyway, as the way to the setup (AGENT-37), which it opens whatever its state.
 const MCP_DOT: Record<McpStatus, string> = {
   connected: "bg-good",
-  connecting: "bg-faint",
   standby: "bg-faint",
-  disconnected: "bg-faint",
+  connecting: "border border-faint",
+  disconnected: "border border-faint",
 };
+// Connecting is what a missing server looks like between retries, so it reads as not connected.
+const NOT_CONNECTED = "MCP not connected: how to connect Claude";
 const MCP_TITLE: Record<McpStatus, string> = {
   connected: "MCP connected",
-  connecting: "MCP connecting…",
   standby: "MCP connected, but driving another tab: the one most recently in front",
-  disconnected: "MCP disconnected",
+  connecting: NOT_CONNECTED,
+  disconnected: NOT_CONNECTED,
 };
 
 export function RailIndicators({
@@ -47,17 +50,19 @@ export function RailIndicators({
 }) {
   return (
     <div className="flex flex-col items-center w-full">
-      {(mcpStatus === "connected" || mcpStatus === "standby") && (
-        <span
-          role="status"
-          title={MCP_TITLE[mcpStatus]}
-          aria-label={MCP_TITLE[mcpStatus]}
-          className="flex flex-col items-center gap-1 py-1.5 font-mono text-[9px] text-muted"
-        >
-          <span className={`w-2 h-2 rounded-full ${MCP_DOT[mcpStatus]}`} />
-          MCP
-        </span>
-      )}
+      <a
+        href={MCP_GUIDE_URL}
+        target="_blank"
+        rel="noreferrer"
+        title={MCP_TITLE[mcpStatus]}
+        aria-label={MCP_TITLE[mcpStatus]}
+        className={`flex flex-col items-center gap-1 w-full py-1.5 font-mono text-[9px] hover:text-ink ${
+          mcpConnected(mcpStatus) ? "text-muted" : "text-faint"
+        }`}
+      >
+        <span className={`w-2 h-2 rounded-full ${MCP_DOT[mcpStatus]}`} />
+        MCP
+      </a>
       {onThisDevice && onRevealProject && (
         <OnThisDeviceChip onShowProject={onRevealProject} reminder={backupReminder} icon popover={BESIDE} />
       )}

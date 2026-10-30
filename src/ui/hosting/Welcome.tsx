@@ -6,13 +6,12 @@
  * unread (Alden, 2026-10-21). The details stay in the "Saved in browser" panel and Account settings.
  */
 import { useSyncExternalStore } from "react";
-import { canSignInHere, hosting, SOURCE_URL } from "../../hosting";
+import { canSignInHere, hosting, MCP_GUIDE_URL } from "../../hosting";
 import { readStorageRisk, subscribeStorageRisk } from "../../hosting/storageRisk";
 import { linkClass } from "./OnThisDevice";
 import { SignInHere } from "./SignInHere";
 
 /** The guide to driving the app from Claude Code over MCP. */
-const AGENT_GUIDE_URL = `${SOURCE_URL}/blob/main/MCP.md`;
 
 const External = ({ href, children }: { href: string; children: string }) => (
   <a href={href} target="_blank" rel="noreferrer" className={linkClass}>
@@ -56,8 +55,8 @@ export function Welcome() {
           </li>
         )}
         <li>
-          To run the Corrente MCP with an agent, follow the{" "}
-          <External href={AGENT_GUIDE_URL}>setup instructions</External>.
+          To run the Corrente MCP with an agent, follow the <External href={MCP_GUIDE_URL}>setup instructions</External>
+          .
         </li>
       </ul>
     </div>

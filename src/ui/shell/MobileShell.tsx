@@ -66,7 +66,8 @@ import { Sheet } from "./Sheet";
 import { atLeast, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP } from "./safeArea";
 import { TabBar, ViewRail } from "./MobileTabs";
 import { ProjectsHome } from "../projects/ProjectsHome";
-import { BackToProjects } from "../projects/ProjectsPlace";
+import { BackLinks } from "../projects/ProjectsPlace";
+import { setFromExplore } from "../explore/fromExplore";
 import { PROJECTS_PAGE_DEFAULT, PROJECTS_PAGE_KEY, PROJECTS_PAGES, type ProjectsPage } from "../projects/projectsPage";
 import { openExplorePage } from "../explore/explorePage";
 import { MOBILE_TABS, type BrowseTab, type MobileTab } from "./mobileTabViews";
@@ -156,6 +157,7 @@ export function MobileShell({
   started,
   syncStatus,
   syncShared,
+  mcpStatus,
   hasApiKey,
   onSelectView,
   onOpenAgentSettings,
@@ -206,6 +208,8 @@ export function MobileShell({
     projects: () => setProjectsPage("inside"),
   };
   const selectTab = (next: MobileTab) => {
+    // Any move between tabs ends a trip from Explore; its own buttons mark one again after this.
+    setFromExplore(false);
     if (next === tab || next === "projects") tabStart[next]?.();
     setTab(next);
   };
@@ -306,6 +310,15 @@ export function MobileShell({
         onOpenShare={onOpenShare}
         onPick={() => setTab("studio")}
         onOpenTiming={onOpenTiming}
+        exploreLinks={{
+          mcpStatus,
+          onOpenProject: () => setTab("studio"),
+          onOpenProjects: () => {
+            setTab("projects");
+            setProjectsPage("home");
+            setFromExplore(true);
+          },
+        }}
         preview={preview}
         recorder={recorder}
         // No computer keyboard on a phone: the try panel gets the pads (COMM-1.4.1).
@@ -403,16 +416,19 @@ export function MobileShell({
       <div className="flex-1 min-h-0 flex">
         {tab === "projects" &&
           (projectsPage === "home" ? (
-            <ProjectsHome
-              projectStore={projectStore}
-              editLog={editLog}
-              versionStore={versionStore}
-              onOpenProject={() => setProjectsPage("inside")}
-              onOpenShare={onOpenShare}
-            />
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
+              <BackLinks toExplore={() => selectTab("explore")} />
+              <ProjectsHome
+                projectStore={projectStore}
+                editLog={editLog}
+                versionStore={versionStore}
+                onOpenProject={() => setProjectsPage("inside")}
+                onOpenShare={onOpenShare}
+              />
+            </div>
           ) : (
             <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
-              <BackToProjects onBack={() => setProjectsPage("home")} />
+              <BackLinks toProjects={() => setProjectsPage("home")} toExplore={() => selectTab("explore")} />
               <ProjectOverview
                 projectStore={projectStore}
                 editLog={editLog}

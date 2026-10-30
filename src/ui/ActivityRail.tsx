@@ -1,33 +1,39 @@
 /**
  * The activity rail (far left): a thin icon bar that switches the library panel
  * between one view at a time - Explore / Project / Activity / Agent - under a Search icon that
- * opens Explore's search, with the app's status, the beta chip and your account at its foot. Clicking the active
- * icon collapses the panel to just this rail; clicking any other icon selects
- * that view (expanding first if collapsed). The set of views is data (libraryViews.tsx),
+ * opens Explore's search, with the app's status, the beta chip and your account at its foot. Clicking
+ * an icon selects its view (expanding the panel first if collapsed), and the active one goes back to
+ * its view's start; the panel collapses from the arrow beside its title (`CollapseButton`). The set of views is data (libraryViews.tsx),
  * shared with the touch shell's strip, so adding one is a single entry there.
  */
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { BetaChip } from "./BetaChip";
 import { RAIL_ITEMS, type LibraryView, type RailItem } from "./libraryViews";
 
 export type { LibraryView, RailItem } from "./libraryViews";
 
+/** One of Explore's pages on the rail: what it is called, its glyph, and whether it is the one open. */
+export interface RailShortcut {
+  label: string;
+  icon: ReactNode;
+  selected: boolean;
+  onSelect: () => void;
+}
+
 export function ActivityRail({
   active,
   collapsed,
   onSelect,
-  onToggleCollapse,
   onOpenSettings,
   onSearch,
   indicators,
   items = RAIL_ITEMS,
+  shortcuts = [],
 }: {
   active: LibraryView;
   collapsed: boolean;
   onSelect: (view: LibraryView) => void;
-  /** Fired when the *active* icon is clicked: collapse the panel to the rail (or reopen). */
-  onToggleCollapse: () => void;
   /** Fired by the mark at the bottom: open the settings panel on its Account tab. Without it there's no mark (the plugin's window, PLUGIN-3.12). */
   onOpenSettings?: () => void;
   /** Search: not a view of its own, but a way into Explore's search box (COMM-1.9.3). */
@@ -36,6 +42,8 @@ export function ActivityRail({
   indicators?: ReactNode;
   /** The views it offers: all of them in the app, fewer in the plugin's window. */
   items?: readonly RailItem[];
+  /** Pages of Explore, straight from the rail (COMM-3), listed under its icon. None in the plugin's window. */
+  shortcuts?: readonly RailShortcut[];
 }) {
   return (
     <nav
@@ -47,7 +55,7 @@ export function ActivityRail({
         title="Search"
         aria-label="Search"
         onClick={onSearch}
-        className="flex items-center justify-center w-full h-11 text-faint hover:text-ink cursor-pointer"
+        className="flex items-center justify-center w-full h-9.5 text-faint hover:text-ink cursor-pointer"
       >
         <svg
           viewBox="0 0 16 16"
@@ -65,25 +73,45 @@ export function ActivityRail({
       {items.map((item) => {
         const selected = item.view === active && !collapsed;
         return (
-          <button
-            key={item.view}
-            type="button"
-            title={item.label}
-            aria-label={item.label}
-            aria-current={selected ? "page" : undefined}
-            onClick={() => (item.view === active ? onToggleCollapse() : onSelect(item.view))}
-            className={`relative flex items-center justify-center w-full h-11 cursor-pointer ${
-              selected ? "text-strong" : "text-faint hover:text-ink"
-            }`}
-          >
-            {/* VSCode-style active marker on the near edge. */}
-            <span
-              className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-you transition-opacity ${
-                selected ? "opacity-100" : "opacity-0"
+          <Fragment key={item.view}>
+            <button
+              type="button"
+              title={item.label}
+              aria-label={item.label}
+              aria-current={selected ? "page" : undefined}
+              onClick={() => onSelect(item.view)}
+              className={`relative flex items-center justify-center w-full h-9.5 cursor-pointer ${
+                selected ? "text-strong" : "text-faint hover:text-ink"
               }`}
-            />
-            {item.icon}
-          </button>
+            >
+              {/* VSCode-style active marker on the near edge. */}
+              <span
+                className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-you transition-opacity ${
+                  selected ? "opacity-100" : "opacity-0"
+                }`}
+              />
+              {item.icon}
+            </button>
+            {item.view === "explore" &&
+              shortcuts.map((shortcut) => (
+                <button
+                  key={shortcut.label}
+                  type="button"
+                  title={shortcut.label}
+                  // Named as Explore's, not as the category alone, which its tile on the page is too.
+                  aria-label={`Explore ${shortcut.label}`}
+                  aria-current={shortcut.selected ? "page" : undefined}
+                  onClick={shortcut.onSelect}
+                  // A smaller glyph than a view's, so they read as Explore's, not views of their own. Every
+                  // icon at the top is 38px tall (2026-10-30).
+                  className={`relative flex items-center justify-center w-full h-9.5 cursor-pointer ${
+                    shortcut.selected ? "text-strong" : "text-faint hover:text-ink"
+                  }`}
+                >
+                  {shortcut.icon}
+                </button>
+              ))}
+          </Fragment>
         );
       })}
 

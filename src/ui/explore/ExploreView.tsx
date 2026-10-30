@@ -50,6 +50,10 @@ import {
   type ExplorePage,
 } from "./explorePage";
 import { usePersistentString } from "../usePersistent";
+import { MakeYourOwn, YourWork, type ExploreLinks } from "./ExploreHomeLinks";
+import { mcpConnected } from "../../audio/mcp/bridge";
+
+export type { ExploreLinks } from "./ExploreHomeLinks";
 
 /** What an empty category page says, before any tag filter. */
 const EMPTY_HINT: Record<ExploreCategory, string> = {
@@ -87,6 +91,7 @@ export function ExploreView({
   preview,
   shown,
   onShow,
+  links,
 }: {
   projectStore: ProjectStore;
   dispatch: Dispatch;
@@ -97,6 +102,8 @@ export function ExploreView({
   shown: string | undefined;
   /** Show an effect in its panel, rather than add it at once. */
   onShow: (item: ExploreItem) => void;
+  /** Ways out to your projects, and the MCP state for the "make your own" card. None in the plugin. */
+  links?: ExploreLinks;
 }) {
   const project = useProject(projectStore);
   // The item in the panel under Explore, whichever kind: a sound being tried, or an effect shown.
@@ -265,6 +272,7 @@ export function ExploreView({
             ))}
           </div>
         )}
+        {!filtering && links && <YourWork name={projectStore.name} links={links} />}
       </div>
       {/* Shelves (board FeedHome): what you used lately, then what you hearted. Each hides while empty.
           Favourites also has its tile; the shelf puts them on the home page, artwork and all. */}
@@ -282,6 +290,7 @@ export function ExploreView({
             taps={itemTaps(preview, actions, onPicked, onShow)}
             trying={trying}
           />
+          {links?.mcpStatus && !mcpConnected(links.mcpStatus) && <MakeYourOwn />}
         </div>
       )}
       {filtering &&
