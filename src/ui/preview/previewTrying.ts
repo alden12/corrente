@@ -1,6 +1,6 @@
 /**
- * Trying things from Explore on your preview track (COMM-1.4.5): a sound becomes it, and an effect
- * or MIDI device goes on it, each an ordinary edit of the project, in its history. With nothing
+ * Trying things from Explore on your preview track (COMM-1.4.5): a patch becomes it, an instrument
+ * takes its place under the devices already on it, and an effect or MIDI device goes on it, each an ordinary edit of the project, in its history. With nothing
  * being tried yet, a device goes on the selected track's sound, copied in, else on a plain synth.
  * Trying shows the preview: it is selected, so the keys play it and its editor is what shows.
  *
@@ -43,8 +43,18 @@ export function previewTrying(project: ProjectStore, dispatch: Dispatch) {
     project.selectTrack(id);
   };
   return {
-    /** Make the preview this sound. */
+    /** Make the preview this sound: a patch, with its own chain. */
     sound,
+    /**
+     * Swap the preview's instrument for `tried`, keeping the effects and MIDI devices tried on it so
+     * far (2026-10-31, Alden): trying instruments under a chain you're building. With no preview yet,
+     * it's just the sound.
+     */
+    instrument: (key: string, tried: Sound) => {
+      const current = project.getPreview(owner);
+      const kept = current && trackSound(current, project);
+      sound(key, kept ? { ...tried, effects: kept.effects, midiDevices: kept.midiDevices } : tried);
+    },
     /** Put a device on the preview, starting it from `base` if there isn't one. */
     device: (device: TriedDevice, base: () => { key: string; sound: Sound }) => {
       if (!project.getPreview(owner)) {

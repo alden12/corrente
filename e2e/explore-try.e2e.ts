@@ -242,6 +242,20 @@ test.describe("effects", () => {
     await expect(devices).toHaveCount(withReverb);
   });
 
+  test("trying another instrument keeps the devices tried so far", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await openExploreCategory(page, "Effects");
+    await exploreRow(page, "Reverb").click();
+    const title = previewEditor(page).getByTestId("preview-title");
+    await expect(title).toHaveText(/, Reverb$/);
+
+    await openExploreCategory(page, "Instruments");
+    await exploreRow(page, "FM").click();
+    await expect(title).toHaveText("FM, Reverb");
+    await expect(previewEditor(page).locator('[data-device][aria-label="Reverb"]')).toHaveCount(1);
+  });
+
   test("a MIDI device is tried on the sound too", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);

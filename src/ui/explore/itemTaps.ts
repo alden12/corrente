@@ -44,6 +44,8 @@ export function itemTaps(
       if (tryOn) {
         // Already in it: a second of the same is a rack's job, not a tap's.
         if (tryOn.isIn(item) && (sound || device)) return;
+        // An instrument slots in under the devices tried so far; a patch brings its own chain.
+        if (sound && item.source.kind === "instrument") return tryOn.trying.instrument(item.key, sound);
         if (sound) return tryOn.trying.sound(item.key, sound);
         if (device) return tryOn.trying.device(device, tryOn.base);
         return onShow(item);
