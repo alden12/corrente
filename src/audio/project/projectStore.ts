@@ -92,6 +92,8 @@ const sortedByKey = <Value>(record: Record<string, Value>): Record<string, Value
 const MIN_LENGTH = 1; // beats
 const MAX_LENGTH = 256; // beats (single-loop model; arrangement lifts this later)
 const MIN_LOOP = 1; // beats - smallest loop region (loop end - loop start)
+/** How many bars a new, empty clip starts at, whatever the song's length: drag it out from there. */
+const NEW_CLIP_BARS = 4;
 const MAX_AUDIO_GAIN = 4; // ~+12 dB - lets a quiet recording be boosted
 const MIN_LOOP_SEC = 0.05; // seconds - smallest audio loop region
 /** The single default group every new track is filed into (stable id for delta replay). */
@@ -332,6 +334,10 @@ export class ProjectStore {
   get key(): ProjectKey {
     return this.musicalKey;
   }
+  /** The length a new, empty clip starts at: four bars of the project's meter. */
+  get newClipLength(): number {
+    return NEW_CLIP_BARS * this.beatsPerBar;
+  }
   /** Bar length in beats (a beat = a quarter-note). Integer for x/4, fractional for x/8. The
    *  scheduler, rulers, and grid all project the meter through the shared `beatsPerBar` helper. */
   get beatsPerBar(): number {
@@ -521,7 +527,7 @@ export class ProjectStore {
     // side, and divergent ids would make clip/placement tools address something
     // the other end doesn't have. Forks/new placements get communicated random ids.
     const clipId = seedClipId(trackId);
-    const clip = new ClipStore({ lengthBeats: opts.lengthBeats ?? this.lengthBeats });
+    const clip = new ClipStore({ lengthBeats: opts.lengthBeats ?? this.newClipLength });
     const track: InstrumentTrack = {
       kind: "instrument",
       id: trackId,
@@ -1108,7 +1114,7 @@ export class ProjectStore {
   /**
    * What `addClip` would seed a new clip from: the clip it forks (none when `empty`) and the length
    * it starts at. Both are ambient - the fork follows the track's ACTIVE clip, and an empty clip
-   * takes the PROJECT length - so a dispatch pins them into the command (DAW-36).
+   * takes the new-clip length (four bars) - so a dispatch pins them into the command (DAW-36).
    */
   clipSeed(
     trackId: string,
@@ -1119,7 +1125,7 @@ export class ProjectStore {
     const source = opts.empty
       ? undefined
       : (track.clips.find((clip) => clip.id === (opts.fromClipId ?? track.activeClipId)) ?? track.clips[0]);
-    return { fromClipId: source?.id, lengthBeats: source ? source.store.getClip().lengthBeats : this.lengthBeats };
+    return { fromClipId: source?.id, lengthBeats: source ? source.store.getClip().lengthBeats : this.newClipLength };
   }
 
   /** "Clip 1", "Clip 2"... per track: the lowest number its clips don't already use. */
@@ -1216,7 +1222,7 @@ export class ProjectStore {
       author: opts.author ?? "you",
       store: new ClipStore({
         notes: source ? source.store.snapshot().notes.map((note) => ({ ...note })) : [],
-        lengthBeats: opts.lengthBeats ?? seed?.lengthBeats ?? this.lengthBeats,
+        lengthBeats: opts.lengthBeats ?? seed?.lengthBeats ?? this.newClipLength,
       }),
     };
     t.clips.push(clip);

@@ -59,8 +59,8 @@ const pinFirstPlacement = <Command extends { trackId: string; clipId?: string; p
 };
 
 /**
- * A new track's defaults: its name counts the tracks already there, its clip's length is the project's
- * at the time, and its clip starts off the timeline (DAW-50), which older entries didn't say.
+ * A new track's defaults: its name counts the tracks already there, its clip's length is a new clip's
+ * (four bars of the meter at the time), and its clip starts off the timeline (DAW-50), which older entries didn't say.
  */
 const pinNewTrack = <
   Command extends { instrumentType: string; name?: string; lengthBeats?: number; unplaced?: boolean },
@@ -69,7 +69,7 @@ const pinNewTrack = <
   command: Command,
 ): Command => {
   const named = pin(command, "name", project.defaultTrackName(command.instrumentType));
-  const sized = pin(named, "lengthBeats", project.length);
+  const sized = pin(named, "lengthBeats", project.newClipLength);
   return pin(sized, "unplaced", true);
 };
 

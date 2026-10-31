@@ -129,30 +129,28 @@ describe("normalizeCommand", () => {
   });
 
   // An empty clip seeds its length from the PROJECT length.
-  it("a logged empty clip keeps the length the project had when it was made", () => {
+  it("a logged empty clip keeps the four bars it was made at, in the meter of the time", () => {
     const { log } = seeded();
-    log.dispatch({ type: "setLength", lengthBeats: 32 });
+    log.dispatch({ type: "setTimeSignature", numerator: 3, denominator: 4 });
     log.dispatch({ type: "addClip", trackId: "t-1", id: "c-3", empty: true });
     const logged = log.getEntries().at(-1)!.command;
 
-    const longer = seeded().project;
-    longer.setLength(128);
-    applyEdit(longer, logged, "you");
+    const inFour = seeded().project;
+    applyEdit(inFour, logged, "you");
 
-    expect(longer.getClipStore("t-1", "c-3")?.getClip().lengthBeats).toBe(32);
+    expect(inFour.getClipStore("t-1", "c-3")?.getClip().lengthBeats).toBe(12);
   });
 
-  it("a logged createTrack seeds its clip at the length the project had when it ran", () => {
+  it("a logged createTrack seeds its clip at four bars of the meter it ran in", () => {
     const { log } = seeded();
-    log.dispatch({ type: "setLength", lengthBeats: 32 });
+    log.dispatch({ type: "setTimeSignature", numerator: 3, denominator: 4 });
     log.dispatch({ type: "createTrack", instrumentType: "subtractive", id: "t-2" });
     const logged = log.getEntries().at(-1)!.command;
 
-    const longer = seeded().project;
-    longer.setLength(128);
-    applyEdit(longer, logged, "you");
+    const inFour = seeded().project;
+    applyEdit(inFour, logged, "you");
 
-    expect(longer.getClipStore("t-2")?.getClip().lengthBeats).toBe(32);
+    expect(inFour.getClipStore("t-2")?.getClip().lengthBeats).toBe(12);
   });
 
   // Audio is not time-stretched (DAW-35), so a placement's length is its duration at the tempo of

@@ -66,7 +66,7 @@ export type ServerToBrowser =
       name?: string;
       id: string;
       groupId?: string;
-      /** Length of the seed clip. Defaults to the project length, and a dispatch pins it (DAW-36). */
+      /** Length of the seed clip. Defaults to four bars of the meter, and a dispatch pins it (DAW-36). */
       lengthBeats?: number;
       /** The seed clip starts off the timeline (DAW-50). A dispatch pins it; older entries placed it. */
       unplaced?: boolean;
