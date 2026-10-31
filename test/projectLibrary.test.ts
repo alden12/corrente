@@ -48,6 +48,20 @@ describe("project library operations", () => {
     expect(currentProjectId()).toBe(listProjects()[0].id);
   });
 
+  // DAW-98: the log took its rebuild base when it was made, before the starter song went in, so
+  // undoing the first edit rebuilt the project with the starter track alone.
+  it("undoing the first project's first edit keeps the starter song", async () => {
+    const d = deps();
+    await initProjects(d, { exampleSong: true });
+    const seeded = d.projectStore.getTracks().map((track) => track.id);
+    expect(seeded.length).toBeGreaterThan(1);
+
+    d.editLog.dispatch({ type: "createTrack", instrumentType: "fm", id: "t-extra" });
+    d.editLog.undo();
+
+    expect(d.projectStore.getTracks().map((track) => track.id)).toEqual(seeded);
+  });
+
   it("create switches to a new project; switching back restores each project's tracks", async () => {
     const d = deps();
     await initProjects(d);

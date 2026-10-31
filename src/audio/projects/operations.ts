@@ -111,6 +111,9 @@ export async function initProjects(
     deps.projectStore.renameProject(name); // carry the name in project.json too, as seedNewProject does
     // The first project anyone sees plays something on the first Play.
     if (exampleSong) addStarterSong(deps.projectStore);
+    // The name and the song went in outside the log, after it took its rebuild base from the store, so
+    // undoing a first edit rebuilt from the project before them: the starter track alone (DAW-98).
+    deps.editLog.setRebuildBase(deps.projectStore.snapshot(), -1);
     await flush(deps); // persist the live (seeded) project as project one
     // This branch never loads: the live store was already seeded, so it *is* this project.
     // Marking it anyway is what lets the URL sync at all on a fresh install.
