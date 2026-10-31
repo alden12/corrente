@@ -1,27 +1,61 @@
 import { describe, expect, it } from "vitest";
 import { ProjectStore } from "../src/audio/project/projectStore";
-import { addStarterMelody, STARTER_CLIP_NAME, STARTER_MELODY } from "../src/audio/project/starter";
+import { addStarterSong, STARTER_CLIP_NAME } from "../src/audio/project/starter";
+import {
+  MORNING_BEATS,
+  MORNING_LEAD,
+  MORNING_PAD,
+  MORNING_TEMPO,
+  MORNING_TIMPANI,
+} from "../src/audio/project/morningSong";
 
-describe("the starter project (DAW-76)", () => {
-  it("puts the example melody in the starter track's clip, named as an example", () => {
+const noteCounts = (project: ProjectStore) =>
+  project.getTracks().map((track) => project.getClipStore(track.id)?.getClip().notes.length);
+
+describe("the starter project (DAW-76, DAW-94)", () => {
+  it("plays the Morning Song: the starter track takes the lead, a Sampler and a Pad join it", () => {
     const project = new ProjectStore();
-    addStarterMelody(project);
-    const [track] = project.getTracks();
-    const clip = project.getClipStore(track.id)?.getClip();
-    expect(clip?.notes).toHaveLength(STARTER_MELODY.length);
-    expect(track.kind === "instrument" && track.clips[0].name).toBe(STARTER_CLIP_NAME);
+    addStarterSong(project);
+    const tracks = project.getTracks();
+    expect(tracks.map((track) => track.kind === "instrument" && track.instrumentType)).toEqual([
+      "micro-va",
+      "sampler",
+      "pad",
+    ]);
+    expect(noteCounts(project)).toEqual([MORNING_LEAD.length, MORNING_TIMPANI.length, MORNING_PAD.length]);
+    expect(tracks.every((track) => track.kind === "instrument" && track.clips[0].name === STARTER_CLIP_NAME)).toBe(
+      true,
+    );
+    expect(project.tempo).toBe(MORNING_TEMPO);
+    // The lead is still the track you land on.
+    expect(project.selectedId).toBe(tracks[0].id);
+  });
+
+  it("plays the timpani on the 808 kick through a reverb, and doubles the pad's C with the octavator", () => {
+    const project = new ProjectStore();
+    addStarterSong(project);
+    const [, timpani, pad] = project.getTracks();
+    expect(timpani.kind === "instrument" && timpani.params.get("sampler.sample")).toBe("builtin:808-kick");
+    expect(timpani.effects.map((effect) => effect.type)).toEqual(["reverb"]);
+    expect(pad.kind === "instrument" && pad.midiDevices.map((device) => device.type)).toEqual(["octavator"]);
   });
 
   it("adds it once, as boot can run twice", () => {
     const project = new ProjectStore();
-    addStarterMelody(project);
-    addStarterMelody(project);
-    expect(project.getClipStore(project.getTracks()[0].id)?.getClip().notes).toHaveLength(STARTER_MELODY.length);
+    addStarterSong(project);
+    addStarterSong(project);
+    expect(project.getTracks()).toHaveLength(3);
+    expect(noteCounts(project)[0]).toBe(MORNING_LEAD.length);
   });
 
-  it("fits the starter clip, so all of it plays", () => {
+  it("fits every part in a clip as long as the song, placed whole, so all of it plays", () => {
     const project = new ProjectStore();
-    const lengthBeats = project.getClipStore(project.getTracks()[0].id)!.getClip().lengthBeats;
-    expect(Math.max(...STARTER_MELODY.map((note) => note.start + (note.length ?? 0)))).toBeLessThanOrEqual(lengthBeats);
+    addStarterSong(project);
+    for (const part of [MORNING_LEAD, MORNING_TIMPANI, MORNING_PAD])
+      expect(Math.max(...part.map((note) => note.start + (note.length ?? 0)))).toBeLessThanOrEqual(MORNING_BEATS);
+    for (const track of project.getTracks()) {
+      expect(project.getClipStore(track.id)?.getClip().lengthBeats).toBe(MORNING_BEATS);
+      expect(track.placements).toMatchObject([{ startBeat: 0, length: MORNING_BEATS }]);
+    }
   });
 });

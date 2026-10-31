@@ -1,7 +1,7 @@
 /**
  * What a new project starts with (DAW-76): one track on the Micro VA's Classic Lead, the best first
  * sound the app has, rather than a bare default instrument. The very first project on a device (or
- * in a new account) also gets a few notes in its clip, so the first Play makes music.
+ * in a new account) also plays the Morning Song (DAW-94), so the first Play makes music.
  *
  * DOM-free and deterministic apart from the ids the store makes, so the browser and the local MCP's
  * mirror seed the same way.
@@ -10,6 +10,8 @@ import { FACTORY_PATCHES } from "../patches/factory";
 import { PORTRAIT_KEYS } from "../portraits/keys";
 import type { NoteInput } from "../sequencer/clipStore";
 import { randomUuid } from "../randomUuid";
+import { builtinRef } from "../samples/catalog";
+import { MORNING_BEATS, MORNING_LEAD, MORNING_PAD, MORNING_TEMPO, MORNING_TIMPANI } from "./morningSong";
 import type { ProjectStore, Track } from "./projectStore";
 
 export const STARTER_PATCH_ID = "factory:micro-va:classic-lead";
@@ -34,35 +36,47 @@ export function addStarterTrack(project: ProjectStore): Track {
   return track;
 }
 
-/**
- * The opening of Strauss's *Also sprach Zarathustra* (1896, long out of copyright), the 2001 theme:
- * C, G, C stacked over four bars and held, a build that never resolves, so it asks for more.
- * [pitch, start beat, length in beats, velocity].
- */
-const MELODY: readonly (readonly [number, number, number, number])[] = [
-  [48, 0, 14, 0.8],
-  [55, 4, 10, 0.85],
-  [60, 8, 6, 0.85],
-];
-
-export const STARTER_MELODY: readonly NoteInput[] = MELODY.map(([pitch, start, length, velocity]) => ({
-  pitch,
-  start,
-  length,
-  velocity,
-}));
-
 export const STARTER_CLIP_NAME = "Sunrise";
 
-/**
- * Put the example melody in the first track's clip, named so it reads as an example. Only into an
- * empty clip, so running it twice (boot runs twice under StrictMode) adds it once.
- */
-export function addStarterMelody(project: ProjectStore): void {
-  const track = project.getTracks().find((candidate) => candidate.kind === "instrument");
-  const clip = track && project.getClipStore(track.id);
-  if (track?.kind !== "instrument" || !clip || clip.getClip().notes.length > 0) return;
+/** What each track's clip holds, by the track's role in the song. */
+type SongPart = { track: Track; notes: readonly NoteInput[] };
+
+/** A part's notes into its track's clip, the clip as long as the song and placed whole. */
+function fillPart(project: ProjectStore, { track, notes }: SongPart): void {
+  if (track.kind !== "instrument") return;
+  const clip = project.getClipStore(track.id);
   // In one change, so the roll sees a clip arrive rather than notes drawn one at a time.
-  clip.load({ notes: STARTER_MELODY.map((note) => ({ length: 1, velocity: 0.8, ...note, id: randomUuid() })) });
+  clip?.load({
+    lengthBeats: MORNING_BEATS,
+    notes: notes.map((note) => ({ length: 1, velocity: 0.8, ...note, id: randomUuid() })),
+  });
   project.renameClip(track.id, track.activeClipId, STARTER_CLIP_NAME);
+  track.placements.forEach((placement) => project.resizePlacement(track.id, placement.id, { length: MORNING_BEATS }));
+}
+
+/**
+ * The first project plays the Morning Song (DAW-94), as Alden arranged it: the starter track takes
+ * the lead, a Sampler on the pitched 808 kick plays the timpani, and a Pad holds the low C. Only while
+ * the starter track's clip is empty, so running it twice (boot runs twice under StrictMode) adds it once.
+ */
+export function addStarterSong(project: ProjectStore): void {
+  const lead = project.getTracks().find((candidate) => candidate.kind === "instrument");
+  const clip = lead && project.getClipStore(lead.id);
+  if (lead?.kind !== "instrument" || !clip || clip.getClip().notes.length > 0) return;
+  project.setTempo(MORNING_TEMPO);
+  project.setLength(MORNING_BEATS);
+  // Added after the length is set, so their clips start the song's length.
+  const timpani = project.addTrack("sampler");
+  if (timpani.kind === "instrument") timpani.params.set("sampler.sample", builtinRef("808-kick"));
+  project.addEffect(timpani.id, "reverb")?.params.load({ "reverb.decay": 2, mix: 0.3 });
+  project.setVolume(timpani.id, 0.45);
+  const pad = project.addTrack("pad");
+  project.addMidiDevice(pad.id, "octavator")?.params.load({ octaveUp: true, octaveDown: true, level: 0.41 });
+  [
+    { track: lead, notes: MORNING_LEAD },
+    { track: timpani, notes: MORNING_TIMPANI },
+    { track: pad, notes: MORNING_PAD },
+  ].forEach((part) => fillPart(project, part));
+  // The lead stays the track you land on.
+  project.selectTrack(lead.id);
 }

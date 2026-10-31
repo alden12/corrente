@@ -283,7 +283,7 @@ export function AppShell() {
     const starterExtras = import.meta.env?.MODE !== "test";
     void initProjects(
       { projectStore, editLog, versionStore },
-      { preferId: linkedProjectId.current, exampleMelody: starterExtras },
+      { preferId: linkedProjectId.current, exampleSong: starterExtras },
     )
       .then((seeded) => {
         if (!active) return;
