@@ -3,7 +3,11 @@
  * kinds), so a new kind of item is one entry per map rather than a branch in the row.
  */
 import type { ExploreItem, ItemSource } from "./exploreItems";
-import { instrumentSound, type Sound } from "../../audio/patches/sound";
+import { instrumentSound, trackSound, type Sound } from "../../audio/patches/sound";
+import type { InstrumentTrack, ProjectStore } from "../../audio/project/projectStore";
+import type { TriedDevice } from "../preview/previewTrying";
+import { catalogEntry, DEFAULT_INSTRUMENT, EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
+import { PORTRAIT_KEYS } from "../../audio/portraits/keys";
 import type { LibraryActions } from "./useLibraryActions";
 
 type Handlers<Result> = {
@@ -39,6 +43,39 @@ const SOUND: { [Kind in ItemSource["kind"]]?: (source: Extract<ItemSource, { kin
 export const soundFor = (item: ExploreItem): Sound | undefined =>
   (SOUND[item.source.kind] as ((source: ItemSource, name: string) => Sound) | undefined)?.(item.source, item.name);
 
+/** The device an Explore item tries on the preview (COMM-1.4.5), for an effect or MIDI device. */
+export const deviceToTry = (item: ExploreItem): TriedDevice | undefined =>
+  item.source.kind === "effect" || item.source.kind === "midi"
+    ? { kind: item.source.kind, type: item.source.type }
+    : undefined;
+
+/**
+ * What a device is tried on when nothing is being tried yet: the selected instrument track's sound,
+ * so an effect is heard on what you're working on, else a plain synth.
+ */
+export const previewBase = (project: ProjectStore) => (): { key: string; sound: Sound } => {
+  const track = project.getSelectedTrack();
+  if (track?.kind === "instrument" && track.instrumentType !== EMPTY_INSTRUMENT)
+    return { key: `track:${track.id}`, sound: trackSound(track, project) };
+  return {
+    key: PORTRAIT_KEYS.instrument(DEFAULT_INSTRUMENT),
+    sound: instrumentSound(DEFAULT_INSTRUMENT, catalogEntry(DEFAULT_INSTRUMENT).label),
+  };
+};
+
+/** How a row shows that it's in use: in the preview, or in the panel under Explore. */
+export type TryingMark = "preview" | "panel" | undefined;
+
+/** Whether an item is in your preview: the sound it came from (`tried`), or a device tried on it. */
+export function inPreview(item: ExploreItem, preview: InstrumentTrack | undefined, tried: string | null): boolean {
+  if (!preview) return false;
+  if (item.key === tried) return true;
+  const device = deviceToTry(item);
+  if (!device) return false;
+  const chain = device.kind === "effect" ? preview.effects : preview.midiDevices;
+  return chain.some((each) => each.type === device.type);
+}
+
 /** What the primary tap says it will do, for its tooltip and accessible description. */
 export const PICK_HINT: Record<ItemSource["kind"], (name: string) => string> = {
   instrument: (name) => `Try ${name}: play it before it is in your project`,
@@ -60,6 +97,12 @@ const ADD: Partial<Handlers<void>> = {
 };
 
 type Hints = Partial<Record<ItemSource["kind"], (name: string) => string>>;
+
+/** The tap's tooltip where effects and MIDI devices are tried rather than shown (the app). */
+export const TRY_HINT: Hints = {
+  effect: (name) => `Try ${name} on a sound: hear it before it is in your project`,
+  midi: (name) => `Try ${name} on a sound: hear it before it is in your project`,
+};
 
 /** What the "+" says it will do, for its tooltip and accessible name. */
 export const ADD_HINT: Hints = {

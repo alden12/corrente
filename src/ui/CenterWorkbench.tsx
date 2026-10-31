@@ -17,6 +17,8 @@ import { WorkbenchColumn } from "./workbench/WorkbenchColumn";
 import { ProjectEditors } from "./ProjectEditors";
 import { graphDevices } from "./graph/graphDevices";
 import { LazyDeviceGraphView } from "./graph/lazyGraphView";
+import { PreviewBar } from "./preview/PreviewBar";
+import { isPreviewTrackId } from "../audio/project/previewTrack";
 
 export function CenterWorkbench({
   projectId,
@@ -88,6 +90,12 @@ export function CenterWorkbench({
           dispatch={editing}
           onRevealSamples={onRevealSamples}
           keys={keys}
+          // Your preview (COMM-1.4.5) is a track like any, with the row that takes it on top.
+          preview={
+            isPreviewTrackId(selectedTrack.id) && selectedTrack.kind === "instrument" ? (
+              <PreviewBar preview={selectedTrack} projectStore={projectStore} dispatch={dispatch} layout="desktop" />
+            ) : undefined
+          }
         />
       )}
     </div>

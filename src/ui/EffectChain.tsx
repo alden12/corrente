@@ -7,6 +7,7 @@
  */
 import type { ProjectStore } from "../audio/project/projectStore";
 import { useProject } from "../audio/project/useProject";
+import { trackMetaOf } from "../audio/project/projectStructure";
 import { effectCatalogEntry, effectSchema } from "../audio/effects/catalog";
 import type { Dispatch } from "../audio/commands/types";
 import { effectParamKey } from "../audio/commands/authorship";
@@ -25,7 +26,7 @@ export function EffectChain({
   dispatch: Dispatch;
 }) {
   const project = useProject(projectStore);
-  const track = project.tracks.find((track) => track.id === trackId);
+  const track = trackMetaOf(project, trackId);
   const effects = track?.effects ?? [];
   const dragOf = useChainDrag(
     effects.map((effect) => effect.id),

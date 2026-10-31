@@ -15,11 +15,7 @@ test("devices and their sections start folded as far as they go, and what you op
   await page.goto("/");
   await dismissStart(page);
   await openExploreCategory(page, "Effects");
-  await page.getByRole("button", { name: "Reverb", exact: true }).click();
-  await page
-    .getByRole("region", { name: "Reverb" })
-    .getByRole("button", { name: /^Add to / })
-    .click();
+  await page.getByRole("button", { name: 'Add "Reverb" to the selected track' }).click();
 
   // The Reverb has no sections to fold to, so it starts folded: a column, its name running down it,
   // with no graph button (that's for a device you're looking into).

@@ -9,7 +9,7 @@ import type { EditCommand } from "../commands/types";
 import { newTrackId } from "../commands/ids";
 import type { Author } from "../commands/types";
 import type { InstrumentTrack, ProjectStore } from "../project/projectStore";
-import { soundChains, soundDevicesOf, type DeviceSource } from "./sound";
+import { soundChains, trackSound, type DeviceSource } from "./sound";
 import { newPatchId, type Patch } from "./patch";
 import { pageOf, type PatchListing, type SaveOptions } from "./toolSpec";
 import { allPatches, findPatch } from "./factory";
@@ -30,24 +30,10 @@ export function patchFromTrack(
 ): Patch {
   const over = options.patch ? requirePatch(options.patch, mine) : undefined;
   if (over?.builtin) throw new Error(`"${over.name}" is built in, so it can't be saved over. Save a new patch.`);
-  const devices = soundDevicesOf(track, project);
   return {
-    ...(devices ? { devices } : {}),
+    ...trackSound(track, project, options.name?.trim() || over?.name || track.name),
     id: over?.id ?? newPatchId(),
-    name: options.name?.trim() || over?.name || track.name,
     author,
-    instrumentType: track.instrumentType,
-    params: track.params.snapshot(),
-    midiDevices: track.midiDevices.map((device) => ({
-      type: device.type,
-      bypassed: device.bypassed,
-      params: device.params.snapshot(),
-    })),
-    effects: track.effects.map((effect) => ({
-      type: effect.type,
-      bypassed: effect.bypassed,
-      params: effect.params.snapshot(),
-    })),
     createdAt: Date.now(),
     tags: options.tags ?? over?.tags ?? [],
     description: options.description ?? over?.description,

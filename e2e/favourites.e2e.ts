@@ -45,23 +45,19 @@ test("heart devices, find them in Favourites newest first, and un-heart one", as
   await expect(rows.nth(0)).toContainText("FM");
 });
 
-test("the panel an item opens carries its heart too, in step with its row (DAW-58)", async ({ page }) => {
-  await page.goto("/");
-  await dismissStart(page);
+test.describe("phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  await openExploreCategory(page, "Instruments");
-  await page.getByRole("button", { name: "FM", exact: true }).click();
-  const panel = page.getByRole("region", { name: "Trying FM" });
-  await panel.getByRole("button", { name: 'Add "FM" to favourites' }).click();
-  // The row's heart is the same favourite, so it turns on with the panel's.
-  await expect(page.getByRole("button", { name: 'Remove "FM" from favourites' })).toHaveCount(2);
+  test("the preview an item opens carries its heart too, in step with its row (DAW-58)", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
 
-  await openExploreCategory(page, "Effects");
-  await page.getByRole("button", { name: "Reverb", exact: true }).click();
-  await page
-    .getByRole("region", { name: "Reverb" })
-    .getByRole("button", { name: 'Add "Reverb" to favourites' })
-    .click();
-  await openExploreCategory(page, "Favourites");
-  await expect(page.getByTestId("explore-row")).toHaveCount(2);
+    await openExploreCategory(page, "Instruments");
+    await page.getByRole("button", { name: "FM", exact: true }).tap();
+    const panel = page.getByTestId("preview-sheet");
+    await panel.getByRole("button", { name: 'Add "FM" to favourites' }).tap();
+    // The row's heart is the same favourite, so it turns on with the panel's.
+    await expect(page.getByRole("button", { name: 'Remove "FM" from favourites' })).toHaveCount(2);
+  });
 });

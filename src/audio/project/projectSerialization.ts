@@ -30,7 +30,15 @@ import type {
   TrackData,
   TimeSignature,
 } from "./types";
-import type { Track, Group, NoteClip, EffectInstance, EffectHost, MidiDeviceInstance } from "./projectStore";
+import type {
+  Track,
+  Group,
+  NoteClip,
+  EffectInstance,
+  EffectHost,
+  MidiDeviceInstance,
+  InstrumentTrack,
+} from "./projectStore";
 import type { SampleAsset } from "../samples/catalog";
 import { DEVICE_FORMAT_VERSION, type CustomDevice } from "../definitions/custom";
 import type { DeviceRef } from "../library/backend";
@@ -76,6 +84,8 @@ export interface TransportState {
   customMidiDevices?: CustomMidiDevice[];
   /** Which library version each custom device is (see ProjectData). */
   deviceLibrary?: Record<string, DeviceRef>;
+  /** Each person's preview track (COMM-1.4.5). */
+  previews?: InstrumentTrack[];
 }
 
 /**
@@ -144,6 +154,10 @@ export function snapshotProject(tracks: Track[], groups: Group[], transport: Tra
       effects: snapshotEffects(group),
     })),
     tracks: tracks.map(snapshotTrack),
+    // Only when someone has one, so a project without stays the document it was.
+    ...(transport.previews?.length
+      ? { previews: transport.previews.map((preview) => snapshotTrack(preview) as InstrumentTrackData) }
+      : {}),
     tempoBpm: transport.tempoBpm,
     lengthBeats: transport.lengthBeats,
     loopStart: transport.loopStartBeats,

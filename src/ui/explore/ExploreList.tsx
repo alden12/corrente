@@ -6,10 +6,9 @@
 import type { Dispatch } from "../../audio/commands/types";
 import { removePatch } from "../../audio/patches/library";
 import { ExploreRow } from "./ExploreRow";
-import { itemTaps } from "./itemTaps";
-import type { SoundPreview } from "../../audio/live/preview";
+import type { ItemTaps } from "./itemTaps";
+import type { TryingMark } from "./exploreActions";
 import type { ExploreItem, ItemSource } from "./exploreItems";
-import type { LibraryActions } from "./useLibraryActions";
 
 /**
  * Library management, for what is yours to manage: a saved patch, a project sample. Not a pick,
@@ -30,28 +29,19 @@ const REMOVE: Partial<
 
 export function ExploreList({
   items,
-  actions,
   dispatch,
-  onPicked,
   showKind,
-  preview,
+  taps,
   trying,
-  onShow,
 }: {
   items: ExploreItem[];
-  actions: LibraryActions;
   dispatch: Dispatch;
-  /** Wraps every pick, so the host can get out of the way after it (see `LibraryPanel`). */
-  onPicked: (act: () => void) => void;
   showKind?: boolean;
-  /** Where an instrument or patch opens when tapped: it is tried, not taken (COMM-1.4.1). */
-  preview: SoundPreview;
-  /** The key of the item being tried, so its row shows it. */
-  trying: string | undefined;
-  /** Show an item in its panel under Explore (an effect), rather than take it at once. */
-  onShow: (item: ExploreItem) => void;
+  /** What tapping a row and its "+" do (`itemTaps`). */
+  taps: ItemTaps;
+  /** Whether an item is in the preview or its panel, so its row shows it. */
+  trying: (item: ExploreItem) => TryingMark;
 }) {
-  const taps = itemTaps(preview, actions, onPicked, onShow);
   return (
     <div className="@container py-1">
       {items.map((item, index) => {
@@ -63,7 +53,7 @@ export function ExploreList({
             index={index + 1}
             showKind={showKind}
             onPick={() => taps.tap(item)}
-            trying={item.key === trying}
+            trying={trying(item)}
             onAdd={add}
             onRemove={REMOVE[item.source.kind]?.(item.source, dispatch)}
           />

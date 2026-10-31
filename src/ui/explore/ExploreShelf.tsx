@@ -11,6 +11,7 @@ import { edgeFade, pageRow, useScrollEnds } from "../scrollFade";
 import { PageArrow } from "../controls/PageArrow";
 import type { ExploreItem } from "./exploreItems";
 import type { ItemTaps } from "./itemTaps";
+import type { TryingMark } from "./exploreActions";
 import { ExploreThumb } from "./ExploreThumb";
 
 const CARD = 92;
@@ -24,8 +25,8 @@ export function ExploreShelf({
   title: string;
   items: ExploreItem[];
   taps: ItemTaps;
-  /** The key of the item in the try panel, so its card shows it. */
-  trying: string | undefined;
+  /** Whether an item is in the preview or its panel, so its card shows it. */
+  trying: (item: ExploreItem) => TryingMark;
 }) {
   const row = useRef<HTMLUListElement>(null);
   const ends = useScrollEnds(row, items.length);
@@ -60,11 +61,11 @@ export function ExploreShelf({
                 taps.tap(item);
               }}
               aria-label={item.name}
-              aria-current={item.key === trying ? "true" : undefined}
+              aria-current={trying(item) ? "true" : undefined}
               className="group w-full flex flex-col gap-1 text-left cursor-pointer"
             >
               <span
-                className={`rounded-md ${item.key === trying ? "ring-2 ring-you" : "group-hover:ring-1 group-hover:ring-line"}`}
+                className={`rounded-md ${trying(item) ? "ring-2 ring-you" : "group-hover:ring-1 group-hover:ring-line"}`}
               >
                 <ExploreThumb
                   category={item.category}

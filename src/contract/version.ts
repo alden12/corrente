@@ -23,7 +23,10 @@
 // older client would place what the others don't, so its timeline drifts, but nothing breaks.
 // 6: the socket's credential is its first message, `auth`, rather than `?token=` in the URL. The server
 // still reads an older client's query; a version-6 client meeting an older server waits for the deploy.
-export const PROTOCOL_VERSION = 6;
+// 7: each person's preview as a track of the project (COMM-1.4.5), `setPreview` and `removePreview`,
+// and the document's `previews`. An older client can't apply them, but only meets them in a project
+// where someone tries a sound from Explore.
+export const PROTOCOL_VERSION = 7;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

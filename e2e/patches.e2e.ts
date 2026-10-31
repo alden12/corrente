@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart, openExploreCategory } from "./support/app";
+import { dismissStart, openExploreCategory, previewEditor, pickUseOn } from "./support/app";
 
 /**
  * Patches: save the selected instrument track (its instrument + params + effect
@@ -91,7 +91,7 @@ test("a factory patch adds as a new track from its +", async ({ page }) => {
   await expect(trackHeaders).toHaveCount(before + 1);
 });
 
-test("clicking a patch tries it without touching the project; Swap applies it to the selected track", async ({
+test("clicking a patch tries it without touching the project; Use on applies it to the selected track", async ({
   page,
 }) => {
   await page.goto("/");
@@ -103,18 +103,19 @@ test("clicking a patch tries it without touching the project; Swap applies it to
   const kind = (label: string) => page.getByRole("tablist").getByTitle(label, { exact: true });
   await expect(kind("Micro VA")).toBeVisible();
 
-  // The primary click only tries it (COMM-1.4.1): the try panel opens, the track is unchanged.
+  // The primary click only tries it (COMM-1.4.1): the Preview tab opens, the track is unchanged.
   await openExploreCategory(page, "Patches");
   await page.getByRole("button", { name: "Warm Strings", exact: true }).click();
-  const trying = page.getByRole("region", { name: "Trying Warm Strings" });
-  await expect(trying).toBeVisible();
+  await expect(previewEditor(page)).toBeVisible();
+  await page.getByRole("tablist", { name: "Open editors" }).getByRole("tab").first().click();
   await expect(kind("Micro VA")).toBeVisible();
 
-  // Swap is the edit: the selected track becomes nimbus, no track is added, the panel closes.
-  await trying.getByRole("button", { name: /^Swap onto/ }).click();
+  // Using it is the edit: the selected track becomes nimbus, no track is added, the preview closes.
+  await page.getByRole("tab", { name: /^Preview/ }).click();
+  await pickUseOn(page, "Replace its sound");
   await expect(kind("Nimbus")).toBeVisible();
   await expect(trackHeaders).toHaveCount(before);
-  await expect(trying).toHaveCount(0);
+  await expect(previewEditor(page)).toHaveCount(0);
 });
 
 test("tag chips narrow a category together, and search finds by #tag (COMM-1.9.1)", async ({ page }) => {

@@ -8,7 +8,7 @@ import { Menu, type MenuItem } from "../Menu";
 import { useItemGraph } from "./itemGraph";
 import { ExploreThumb } from "./ExploreThumb";
 import { CATEGORIES, type ExploreItem } from "./exploreItems";
-import { ADD_HINT, ONE_TRACK_ADD_HINT, PICK_HINT } from "./exploreActions";
+import { ADD_HINT, ONE_TRACK_ADD_HINT, PICK_HINT, TRY_HINT, type TryingMark } from "./exploreActions";
 import { useExploreScope } from "./exploreScope";
 import { FavouriteButton } from "./favourites/FavouriteButton";
 
@@ -29,10 +29,13 @@ export function ExploreRow({
   onPick: () => void;
   onAdd?: () => void;
   onRemove?: { label: string; run: () => void };
-  /** It is the sound in the try panel. */
-  trying?: boolean;
+  /** It is in your preview (COMM-1.4.5), or shown in the panel under Explore. */
+  trying?: TryingMark;
 }) {
-  const addHint = (useExploreScope().oneTrack ? ONE_TRACK_ADD_HINT : ADD_HINT)[item.source.kind]?.(item.name);
+  const { oneTrack } = useExploreScope();
+  const addHint = (oneTrack ? ONE_TRACK_ADD_HINT : ADD_HINT)[item.source.kind]?.(item.name);
+  // The app tries effects and MIDI devices on a sound; the plugin's window shows them in a panel.
+  const pickHint = ((!oneTrack && TRY_HINT[item.source.kind]) || PICK_HINT[item.source.kind])(item.name);
   const graph = useItemGraph(item);
   const menu: MenuItem[] = [
     ...(graph ? [{ label: graph.label, onClick: graph.open }] : []),
@@ -54,7 +57,7 @@ export function ExploreRow({
         aria-current={trying ? "true" : undefined}
         // Named for the device alone: the number, badge and tags are for the eye.
         aria-label={item.name}
-        title={PICK_HINT[item.source.kind](item.name)}
+        title={pickHint}
         className="flex-1 min-w-0 flex items-center gap-2.5 pl-2 py-1.5 text-left cursor-pointer"
       >
         {/* The number gives way first in a narrow panel, so the name keeps the room the heart took. */}
@@ -80,6 +83,7 @@ export function ExploreRow({
           </span>
           <span className="truncate text-[11.5px] text-muted">
             {showKind ? `${CATEGORIES[item.category].kind} · ${item.meta}` : item.meta}
+            {trying === "preview" && <span className="text-you"> · in the preview</span>}
           </span>
           {item.tags.length > 0 && (
             <span className="truncate font-mono text-[10px] text-faint">

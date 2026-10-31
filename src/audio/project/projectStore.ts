@@ -11,6 +11,7 @@
  * Effects attach to a "host" - a track or a group - so a group's effect chain
  * reuses the same code path as a track's wholesale (the slice-5 routing).
  */
+import { isPreviewTrackId, previewTrackId } from "./previewTrack";
 import { DEFAULT_KEY, type ProjectKey } from "../theory/key";
 import { SCALE_NAMES, type ScaleName } from "../theory/scales";
 import { ParamStore } from "../params/store";
@@ -193,6 +194,8 @@ export interface ProjectStructure {
   name: string;
   groups: GroupMeta[];
   tracks: TrackMeta[];
+  /** Each person's preview (COMM-1.4.5), apart from the tracks: `trackMetaOf` finds either. */
+  previews: TrackMeta[];
   tempoBpm: number;
   lengthBeats: number;
   /** Loop start in beats; the playback loop region is [loopStart, lengthBeats]. */
@@ -212,6 +215,8 @@ export interface ProjectStructure {
 export class ProjectStore {
   private projectName = "Untitled";
   private tracks: Track[] = [];
+  /** Each person's preview (COMM-1.4.5): found by id, never listed with the tracks (`previewTrack.ts`). */
+  private previews: InstrumentTrack[] = [];
   private groups: Group[] = [];
   private tempoBpm = 120;
   private lengthBeats = 16;
@@ -288,6 +293,7 @@ export class ProjectStore {
       grooveId: this.grooveId,
       grooveAmount: this.grooveAmount,
       samples: this.samples,
+      previews: this.previews,
     });
     return this.cached;
   }
@@ -305,7 +311,20 @@ export class ProjectStore {
     return this.tracks;
   }
   getTrack(id: string): Track | undefined {
-    return this.tracks.find((track) => track.id === id);
+    return this.tracks.find((track) => track.id === id) ?? this.previews.find((preview) => preview.id === id);
+  }
+  /** Everyone's preview tracks (COMM-1.4.5), which `getTracks` leaves out. */
+  getPreviews(): InstrumentTrack[] {
+    return this.previews;
+  }
+  /** `owner`'s preview track, if they have one. */
+  getPreview(owner: string): InstrumentTrack | undefined {
+    const id = previewTrackId(owner);
+    return this.previews.find((preview) => preview.id === id);
+  }
+  /** The tracks and the previews: everything that plays a device, for what must reach them all. */
+  private allTracks(): Track[] {
+    return [...this.tracks, ...this.previews];
   }
   getGroups(): Group[] {
     return this.groups;
@@ -521,7 +540,6 @@ export class ProjectStore {
     if (opts.id && this.getTrack(opts.id)) return this.getTrack(opts.id)!;
     const parentId = opts.groupId && this.getGroup(opts.groupId) ? opts.groupId : this.ensureMainGroup().id;
     const trackId = opts.id ?? this.nextId();
-    const params = new ParamStore(instrumentSchema(type));
     // Derive the seed clip/placement ids from the (agreed) track id so the browser
     // and the MCP mirror seed the SAME ids - addTrack runs independently on each
     // side, and divergent ids would make clip/placement tools address something
@@ -529,18 +547,7 @@ export class ProjectStore {
     const clipId = seedClipId(trackId);
     const clip = new ClipStore({ lengthBeats: opts.lengthBeats ?? this.newClipLength });
     const track: InstrumentTrack = {
-      kind: "instrument",
-      id: trackId,
-      name: opts.name ?? this.defaultTrackName(type),
-      color: this.nextTrackColor(),
-      instrumentType: type,
-      parentId,
-      muted: false,
-      solo: false,
-      volume: 0.8,
-      params,
-      effects: [],
-      midiDevices: [],
+      ...this.bareInstrumentTrack(type, trackId, opts.name ?? this.defaultTrackName(type), parentId),
       clips: [{ id: clipId, name: FIRST_CLIP_NAME, author: "you", store: clip }],
       activeClipId: clipId,
       // The seed clip starts off the timeline (DAW-50) and its first notes place it (`placeClip`).
@@ -586,6 +593,75 @@ export class ProjectStore {
    * replays to the same track exactly. Values are loaded through the same coercing
    * setters as any edit, so an out-of-range stored value is clamped, not trusted blindly.
    */
+  /** An instrument track with nothing on it yet: an empty clip, no devices, its schema's defaults. */
+  private bareInstrumentTrack(type: string, id: string, name: string, parentId: string): InstrumentTrack {
+    return {
+      kind: "instrument",
+      id,
+      name,
+      color: this.nextTrackColor(),
+      instrumentType: type,
+      parentId,
+      muted: false,
+      solo: false,
+      volume: 0.8,
+      params: new ParamStore(instrumentSchema(type)),
+      effects: [],
+      midiDevices: [],
+      // One empty clip off the timeline, as a new track's seed starts (DAW-50): a track always has a
+      // clip to show, and with nothing placed, nothing plays.
+      clips: [
+        {
+          id: seedClipId(id),
+          name: FIRST_CLIP_NAME,
+          author: "you",
+          store: new ClipStore({ lengthBeats: this.newClipLength }),
+        },
+      ],
+      activeClipId: seedClipId(id),
+      placements: [],
+      launchedClipId: null,
+    };
+  }
+
+  /**
+   * Set `owner`'s preview to a sound (COMM-1.4.5): made if they have none, else re-sounded in place
+   * by the same path a patch takes onto a track, so its id, and whatever shows it, carry on. It plays
+   * through the main group and has no clips, so only live notes sound it. Not selected here: an edit
+   * replays on everyone's copy, and choosing what you look at is yours.
+   */
+  setPreview(
+    owner: string,
+    spec: {
+      name: string;
+      instrumentType: string;
+      params: PatchValues;
+      effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      devices?: SoundDevices;
+    },
+  ): InstrumentTrack {
+    const id = previewTrackId(owner);
+    if (!this.getPreview(owner)) {
+      const type = hasInstrument(spec.instrumentType) ? spec.instrumentType : DEFAULT_INSTRUMENT;
+      this.previews.push(this.bareInstrumentTrack(type, id, spec.name, this.ensureMainGroup().id));
+    }
+    this.applyPatchToTrack({ trackId: id, ...spec });
+    const preview = this.getPreview(owner)!;
+    preview.name = spec.name;
+    this.emit();
+    return preview;
+  }
+
+  /** Put `owner`'s preview away. If it was what you were looking at, the first track is instead. */
+  removePreview(owner: string): void {
+    const id = previewTrackId(owner);
+    if (!this.getPreview(owner)) return;
+    this.previews = this.previews.filter((preview) => preview.id !== id);
+    if (this.selectedTrackId === id) this.selectedTrackId = this.tracks[0]?.id ?? null;
+    this.emit();
+  }
+
   addTrackFromPatch(
     spec: {
       id: string;
@@ -1593,6 +1669,7 @@ export class ProjectStore {
       customEffects: [...this.customEffectDefs, ...(this.unreadableDevices.effects as CustomDevice[])],
       customMidiDevices: [...this.customMidiDeviceDefs, ...(this.unreadableMidiDevices as CustomMidiDevice[])],
       deviceLibrary: sortedByKey(this.deviceRefs),
+      previews: this.previews,
     });
   }
 
@@ -1737,7 +1814,7 @@ export class ProjectStore {
     this.customInstrumentDefs = [...this.customInstrumentDefs.filter((existing) => existing.type !== def.type), def];
     this.setDeviceRef(def.type, library);
     this.registerInstrumentDef(def);
-    for (const track of this.tracks) {
+    for (const track of this.allTracks()) {
       if (track.kind === "instrument" && track.instrumentType === def.type) track.params.reschema(def.schema);
     }
     this.emit();
@@ -1753,7 +1830,7 @@ export class ProjectStore {
     this.customEffectDefs = [...this.customEffectDefs.filter((existing) => existing.type !== def.type), def];
     this.setDeviceRef(def.type, library);
     this.registerEffectDef(def);
-    const hosts = [...this.tracks, ...this.groups];
+    const hosts = [...this.allTracks(), ...this.groups];
     for (const effect of hosts.flatMap((host) => host.effects)) {
       if (effect.type === def.type) effect.params.reschema(def.schema);
     }
@@ -1764,7 +1841,7 @@ export class ProjectStore {
   addCustomMidiDevice(def: CustomMidiDevice): void {
     this.customMidiDeviceDefs = [...this.customMidiDeviceDefs.filter((existing) => existing.type !== def.type), def];
     this.registerMidiDef(def);
-    this.tracks
+    this.allTracks()
       .flatMap((track) => (track.kind === "instrument" ? track.midiDevices : []))
       .filter((device) => device.type === def.type)
       .forEach((device) => device.params.reschema(def.schema));
@@ -1795,11 +1872,13 @@ export class ProjectStore {
   /** How many tracks play a custom instrument, or how many slots hold a custom effect or MIDI
    *  device: what removing it would leave without a sound. */
   customDeviceUses(type: string): number {
-    const instruments = this.tracks.filter((track) => track.kind === "instrument" && track.instrumentType === type);
-    const effects = [...this.tracks, ...this.groups]
+    const instruments = this.allTracks().filter(
+      (track) => track.kind === "instrument" && track.instrumentType === type,
+    );
+    const effects = [...this.allTracks(), ...this.groups]
       .flatMap((host) => host.effects)
       .filter((effect) => effect.type === type);
-    const midi = this.tracks
+    const midi = this.allTracks()
       .flatMap((track) => (track.kind === "instrument" ? track.midiDevices : []))
       .filter((device) => device.type === type);
     return instruments.length + effects.length + midi.length;
@@ -1889,10 +1968,15 @@ export class ProjectStore {
     // Reuse existing child stores by id so the engine's per-track bindings stay
     // valid across load (undo/redo) - replacing a ParamStore would orphan the
     // bound instrument. Stores are mutated in place below.
-    const prev = new Map(this.tracks.map((track) => [track.id, track] as const));
+    const prev = new Map(this.allTracks().map((track) => [track.id, track] as const));
     this.tracks = (data.tracks ?? []).map((stored, index) =>
       this.hydrateTrack(stored, index, projLen, prev.get(stored.id)),
     );
+    this.previews = (data.previews ?? [])
+      .filter((stored) => isPreviewTrackId(stored.id))
+      .map((stored, index) => this.hydrateTrack(stored, index, projLen, prev.get(stored.id)))
+      .filter((track): track is InstrumentTrack => track.kind === "instrument");
+    for (const preview of this.previews) preview.parentId = this.ensureMainGroup().id;
     // Invariant: every track must belong to a real group; file any orphan into main.
     for (const track of this.tracks) {
       if (!track.parentId || !this.getGroup(track.parentId)) track.parentId = this.ensureMainGroup().id;

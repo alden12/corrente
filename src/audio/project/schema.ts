@@ -223,6 +223,8 @@ export const projectDataSchema = z.object({
   name: z.string().optional(),
   groups: z.array(groupDataSchema),
   tracks: z.array(trackDataSchema),
+  /** Each person's preview (COMM-1.4.5), keyed by its id (`previewTrackId`). Optional: older docs have none. */
+  previews: z.array(instrumentTrackDataSchema).optional(),
   tempoBpm: z.number(),
   lengthBeats: z.number(),
   loopStart: z.number().optional(),

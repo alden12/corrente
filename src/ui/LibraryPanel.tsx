@@ -9,10 +9,7 @@ import type { ProjectStore } from "../audio/project/projectStore";
 import type { EditLog } from "../audio/commands/editLog";
 import type { VersionStore } from "../audio/commands/history";
 import type { Dispatch } from "../audio/commands/types";
-import type { InstrumentTrack } from "../audio/project/projectStore";
 import type { SoundPreview } from "../audio/live/preview";
-import type { Recorder } from "../audio/recording/recorder";
-import { TryPanel } from "./explore/TryPanel";
 import { DevicePanel } from "./explore/DevicePanel";
 import { SamplePanel } from "./explore/SamplePanel";
 import { panelFor } from "./explore/exploreActions";
@@ -35,8 +32,7 @@ export function LibraryPanel({
   onPick,
   onOpenTiming,
   preview,
-  recorder,
-  tryPads,
+  touch = false,
   exploreLinks,
   onCollapse,
 }: {
@@ -52,9 +48,8 @@ export function LibraryPanel({
   onOpenTiming: () => void;
   /** The sound being tried from Explore, shown in the try panel under it (COMM-1.4.1). */
   preview: SoundPreview;
-  recorder: Recorder;
-  /** What plays it where there is no computer keyboard: the phone's pads. */
-  tryPads?: (track: InstrumentTrack) => ReactNode;
+  /** A phone: the panels under Explore take its roomier layout. */
+  touch?: boolean;
   /** Explore's ways out to your projects, and whether to offer connecting Claude. */
   exploreLinks?: ExploreLinks;
   /** Fold the panel away to the rail, from its header (the desktop). */
@@ -145,7 +140,7 @@ export function LibraryPanel({
           dispatch={dispatch}
           onPicked={picked}
           onClose={() => setShown(null)}
-          layout={tryPads ? "phone" : "desktop"}
+          layout={touch ? "phone" : "desktop"}
         />
       )}
       {activeView === "explore" && shown && panelFor(shown) === "sample" && (
@@ -156,17 +151,7 @@ export function LibraryPanel({
           preview={preview}
           onPicked={picked}
           onClose={() => setShown(null)}
-          layout={tryPads ? "phone" : "desktop"}
-        />
-      )}
-      {activeView === "explore" && (
-        <TryPanel
-          preview={preview}
-          recorder={recorder}
-          projectStore={projectStore}
-          dispatch={dispatch}
-          onPicked={picked}
-          pads={tryPads}
+          layout={touch ? "phone" : "desktop"}
         />
       )}
     </div>

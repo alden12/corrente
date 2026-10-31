@@ -321,7 +321,8 @@ export class AudioEngine {
     this.sendKey(ctx, project);
 
     const groups = project.getGroups();
-    const tracks = project.getTracks();
+    // Everyone's preview plays too (COMM-1.4.5): with nothing placed, only live notes sound one.
+    const tracks = [...project.getTracks(), ...project.getPreviews()];
 
     // Keep the sample registry current before (re)building instruments, so a
     // Sampler can resolve its "asset:<id>" ref to a content hash immediately.
@@ -329,7 +330,8 @@ export class AudioEngine {
 
     // Solo + mute: enforced at the track gain; group buses stay open so a soloed
     // track inside an un-soloed group still routes through (see mix.ts).
-    const mutedTracks = soloMutedTrackIds(groups, tracks);
+    // A preview isn't in the mix, so soloing a track doesn't silence what you're trying.
+    const mutedTracks = soloMutedTrackIds(groups, project.getTracks());
 
     // Dispose nodes for removed groups/tracks (by kind - ids live in one map).
     const liveGroupIds = new Set(groups.map((group) => group.id));

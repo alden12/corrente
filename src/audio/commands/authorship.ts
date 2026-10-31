@@ -9,6 +9,7 @@
  * The key builders are exported so the UI reads authorship with the same keys this writes -
  * one spelling of `track:<id>` / `note:<id>` / `param:<trackId>:<id>`, never a duplicated string.
  */
+import { previewTrackId } from "../project/previewTrack";
 import type { EditCommand } from "./types";
 import { seedClipId, starterPlacementId } from "../project/seedClip";
 
@@ -64,6 +65,12 @@ const EFFECTS: EffectMap = {
     touched: [trackKey(command.trackId), ...command.effects.map((effect) => effectKey(effect.id))],
     removed: [`param:${command.trackId}:`],
   }),
+  // A preview's sound is replaced whole, as a patch replaces a track's.
+  setPreview: (command) => ({
+    touched: [trackKey(previewTrackId(command.owner)), ...command.effects.map((effect) => effectKey(effect.id))],
+    removed: [`param:${previewTrackId(command.owner)}:`],
+  }),
+  removePreview: (command) => ({ removed: [trackKey(previewTrackId(command.owner))] }),
   createAudioTrack: (command) => ({ touched: [trackKey(command.id)] }),
   addAudioTrack: (command) => ({ touched: [trackKey(command.id), clipKey(seedClipId(command.id))] }),
   // The `midiDeviceParam:` prefix was missing, which left stamps behind on a track that no longer

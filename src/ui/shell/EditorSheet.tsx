@@ -35,6 +35,7 @@ export function EditorSheet({
   title,
   subtitle,
   minimisedActions,
+  label = "Editor",
   children,
 }: {
   detent: Detent;
@@ -46,6 +47,8 @@ export function EditorSheet({
   subtitle?: string;
   /** At the bar's right while it is minimised: the keyboard button, when the keys are hidden. */
   minimisedActions?: ReactNode;
+  /** What it is, for its accessible name and its handle's ("Editor height"): the preview's says so. */
+  label?: string;
   children: ReactNode;
 }) {
   const minimised = detent === "peek";
@@ -61,9 +64,9 @@ export function EditorSheet({
   return (
     <div
       ref={sheetRef}
-      data-testid="editor-sheet"
+      data-testid={`${label.toLowerCase()}-sheet`}
       data-detent={detent}
-      aria-label="Editor"
+      aria-label={label}
       className="absolute bottom-0 left-0 right-0 flex flex-col rounded-t-2xl border-t border-line bg-panel shadow-[0_-14px_40px_-12px_var(--sheet-shadow)] will-change-transform"
       // The insets go here rather than as padding on the workspace: an absolutely
       // positioned box resolves against its containing block's *padding box*, so padding
@@ -85,7 +88,7 @@ export function EditorSheet({
           <div
             role="slider"
             tabIndex={0}
-            aria-label="Editor height"
+            aria-label={`${label} height`}
             aria-valuemin={0}
             aria-valuemax={DETENT_ORDER.length - 1}
             aria-valuenow={DETENT_ORDER.indexOf(detent)}

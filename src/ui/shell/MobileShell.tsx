@@ -57,6 +57,9 @@ import { keysRoom } from "../pads/geometry";
 import { KeysToggle } from "../pads/KeysToggle";
 import { useProject } from "../../audio/project/useProject";
 import { useEditLog } from "../../audio/commands/useEditLog";
+import { isPreviewTrackId } from "../../audio/project/previewTrack";
+import { PreviewBar } from "../preview/PreviewBar";
+import { previewTitle } from "../preview/previewTitle";
 import { usePersistentBoolean, usePersistentString } from "../usePersistent";
 import { useElementHeight } from "../useElementHeight";
 import { arrangementAddItems } from "../arrangement/addItems";
@@ -71,7 +74,7 @@ import { setFromExplore } from "../explore/fromExplore";
 import { PROJECTS_PAGE_DEFAULT, PROJECTS_PAGE_KEY, PROJECTS_PAGES, type ProjectsPage } from "../projects/projectsPage";
 import { openExplorePage } from "../explore/explorePage";
 import { MOBILE_TABS, type BrowseTab, type MobileTab } from "./mobileTabViews";
-import type { Track } from "../../audio/project/projectStore";
+import type { InstrumentTrack, Track } from "../../audio/project/projectStore";
 import type { ShellProps } from "./types";
 import type { DeviceShape } from "./useDeviceShape";
 import { AgentIcon, UndoIcon } from "../shellIcons";
@@ -222,6 +225,34 @@ export function MobileShell({
    * the detent you left it, and its minimised bar names the selected track, so a tap there opens it.
    */
   const { canUndo, canRedo } = useEditLog(editLog);
+  // Your preview, while it's the selected track (COMM-1.4.5): the sheets show it in preview mode.
+  const previewShown =
+    selectedTrack?.kind === "instrument" && isPreviewTrackId(selectedTrack.id) ? selectedTrack : undefined;
+  /** The row that takes it into the project: going to the Studio after, as any pick does. */
+  const previewBar = (track: InstrumentTrack) => (
+    <PreviewBar
+      preview={track}
+      projectStore={projectStore}
+      dispatch={dispatch}
+      layout="phone"
+      onPicked={(act) => {
+        act();
+        setTab("studio");
+      }}
+    />
+  );
+  /**
+   * The preview sheet's own detent: the same sheet as the Studio's, but where you leave one isn't
+   * where you want the other. Half to start, so the devices show beside the list.
+   */
+  const [previewDetent, setPreviewDetent] = usePersistentString<Detent>(
+    "corrente:preview-sheet-detent",
+    "half",
+    DETENT_ORDER,
+  );
+  const [previewSpace, setPreviewSpace] = useState<HTMLDivElement | null>(null);
+  const previewSpaceHeight = useElementHeight(useMemo(() => ({ current: previewSpace }), [previewSpace]));
+  const previewDetents = detentsFor(shape, { workspaceHeight: previewSpaceHeight, peekPixels: SHEET_HEADER_HEIGHT });
 
   /**
    * On a tablet the agent **docks** beside the workspace instead of sliding over it: there is
@@ -298,49 +329,93 @@ export function MobileShell({
    * out of it (an instrument, a device, a sample) goes to the Studio, because what it changed is
    * there and a full-screen tab in front of it would show nothing happening (MOBILE-9).
    */
-  const browse = (browseTab: BrowseTab, view: PanelView, onView: (view: LibraryView) => void) => (
-    <div ref={setBrowseElement} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
-      <ViewRail tab={browseTab} current={view} onSelect={onView} />
-      <LibraryPanel
-        projectStore={projectStore}
-        editLog={editLog}
-        versionStore={versionStore}
-        dispatch={dispatch}
-        activeView={view}
-        onOpenShare={onOpenShare}
-        onPick={() => setTab("studio")}
-        onOpenTiming={onOpenTiming}
-        // No MCP status, so no "make your own" card: an agent connects over MCP from a computer (the
-        // local server runs beside Claude Code), so a phone has no way to set one up (2026-10-30, Alden).
-        exploreLinks={{
-          onOpenProject: () => {
-            setTab("projects");
-            setProjectsPage("inside");
-            setFromExplore(true);
-          },
-          onOpenProjects: () => {
-            setTab("projects");
-            setProjectsPage("home");
-            setFromExplore(true);
-          },
-        }}
-        preview={preview}
-        recorder={recorder}
-        // No computer keyboard on a phone: the try panel gets the pads (COMM-1.4.1).
-        tryPads={(track) => (
-          <NotePads
-            track={track}
-            samples={project.samples}
-            notes={liveNotes}
-            octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-            room={keysRoom(browseHeight)}
-            fold={tryKeysFold}
-            songKey={songKey}
-          />
+  const browse = (browseTab: BrowseTab, view: PanelView, onView: (view: LibraryView) => void) => {
+    // On Explore, your preview (COMM-1.4.5) is a sheet over the list while it's the selected track: the
+    // Studio's sheet and track editor, with its keys docked under it as the Studio's are.
+    const sheet = browseTab === "explore" && view === "explore" ? previewShown : undefined;
+    return (
+      <div ref={setBrowseElement} className="flex-1 min-w-0 min-h-0 flex flex-col bg-panel">
+        <ViewRail tab={browseTab} current={view} onSelect={onView} />
+        <div ref={setPreviewSpace} className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+          <div
+            className="min-h-0 flex flex-col"
+            // The band above the sheet, as the Studio leaves the arrangement: committed detents only.
+            style={{ height: sheet ? `${(1 - previewDetents[previewDetent]) * 100}%` : "100%" }}
+          >
+            <LibraryPanel
+              projectStore={projectStore}
+              editLog={editLog}
+              versionStore={versionStore}
+              dispatch={dispatch}
+              activeView={view}
+              onOpenShare={onOpenShare}
+              onPick={() => setTab("studio")}
+              onOpenTiming={onOpenTiming}
+              // No MCP status, so no "make your own" card: an agent connects over MCP from a computer (the
+              // local server runs beside Claude Code), so a phone has no way to set one up (2026-10-30, Alden).
+              exploreLinks={{
+                onOpenProject: () => {
+                  setTab("projects");
+                  setProjectsPage("inside");
+                  setFromExplore(true);
+                },
+                onOpenProjects: () => {
+                  setTab("projects");
+                  setProjectsPage("home");
+                  setFromExplore(true);
+                },
+              }}
+              preview={preview}
+              touch
+            />
+          </div>
+          {sheet && (
+            <EditorSheet
+              detent={previewDetent}
+              detents={previewDetents}
+              onDetentChange={setPreviewDetent}
+              title={previewTitle(sheet)}
+              subtitle="Preview · not in the arrangement"
+              minimisedActions={!tryKeysOpen && <KeysToggle fold={tryKeysFold} />}
+              label="Preview"
+            >
+              <WorkbenchColumn
+                key={sheet.id}
+                track={sheet}
+                projectStore={projectStore}
+                scheduler={scheduler}
+                recorder={recorder}
+                dispatch={dispatch}
+                onRevealSamples={revealSamples}
+                compact
+                preview={previewBar(sheet)}
+              />
+            </EditorSheet>
+          )}
+        </div>
+        {/* The keys dock under the sheet as the Studio's do: hidden, they keep their header, except
+            under a minimised sheet, whose bar has the keyboard button instead. */}
+        {sheet && (tryKeysOpen || previewDetent !== "peek") && (
+          <section
+            aria-label="Keys"
+            data-testid="preview-keys"
+            className={`shrink-0 bg-panel ${previewDetent === "peek" ? "" : "border-t border-line"}`}
+            style={{ paddingLeft: SAFE_LEFT, paddingRight: SAFE_RIGHT }}
+          >
+            <NotePads
+              track={sheet}
+              samples={project.samples}
+              notes={liveNotes}
+              octavesPerRow={shape.tier === "tablet" ? 2 : 1}
+              room={keysRoom(browseHeight)}
+              fold={tryKeysFold}
+              songKey={songKey}
+            />
+          </section>
         )}
-      />
-    </div>
-  );
+      </div>
+    );
+  };
 
   return (
     <div
@@ -503,6 +578,7 @@ export function MobileShell({
                   dispatch={dispatch}
                   onRevealSamples={revealSamples}
                   compact
+                  preview={previewShown && previewBar(previewShown)}
                 />
               </EditorSheet>
             )}

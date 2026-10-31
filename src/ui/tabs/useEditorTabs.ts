@@ -9,6 +9,8 @@
 import { useEffect, useState } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import { hasGraph } from "../../audio/definitions/chainGraph";
+import { isPreviewTrackId } from "../../audio/project/previewTrack";
+import { readCurrentUser } from "../currentUser";
 import { createListeners } from "../../listeners";
 import { readPersistent, writePersistent } from "../persistentStore";
 import { subscribeGraphRequests } from "./openGraph";
@@ -71,10 +73,9 @@ export function useEditorTabs(
   selectedTrackId: string | null,
 ): EditorTabsView {
   const [state, setState] = useState<EditorTabs>(() => parseTabs(projectId ? readPersistent(keyFor(projectId)) : null));
-  const trackIds = store
-    .getTracks()
-    .map((track) => track.id)
-    .join(",");
+  // Previews too: yours coming back (an undo of its discarding) brings its tab back.
+  const trackIds = [...store.getTracks(), ...store.getPreviews()].map((track) => track.id).join(",");
+  const ownPreview = store.getPreview(readCurrentUser())?.id;
 
   // Follow the selection, and drop tabs of tracks that are gone: worked out as the render sees a new
   // selection or track list, as React's "adjusting state when a prop changes" does, not in an effect.
@@ -83,8 +84,17 @@ export function useEditorTabs(
     setSeen({ selectedTrackId, trackIds });
     // Not while the project has no tracks: one still loading would lose every tab.
     setState((current) => {
-      const live = trackIds ? retainTabs(current, (target) => exists(store, target)) : current;
-      return selectedTrackId ? showTab(live, { kind: "track", trackId: selectedTrackId }) : live;
+      const retained = trackIds ? retainTabs(current, (target) => exists(store, target)) : current;
+      // Your preview (COMM-1.4.5) always has its tab: nothing else on screen leads back to it.
+      const live =
+        ownPreview && !retained.tabs.some((tab) => tab.target.kind === "track" && tab.target.trackId === ownPreview)
+          ? openTab(retained, { kind: "track", trackId: ownPreview })
+          : retained;
+      if (!selectedTrackId) return live;
+      // Your preview (COMM-1.4.5) opens as a kept tab: there's no row in the arrangement to get back
+      // to it by, so the next selection mustn't replace it.
+      const target = { kind: "track", trackId: selectedTrackId } as const;
+      return isPreviewTrackId(selectedTrackId) ? openTab(live, target) : showTab(live, target);
     });
   }
 

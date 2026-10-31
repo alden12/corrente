@@ -46,6 +46,8 @@ export function useDeviceFolds() {
   };
   return {
     isOpen,
+    /** Whether `key` has been folded or opened by hand, rather than being as it starts. */
+    isChosen: (key: string) => opened.has(key) || folded.has(key),
     toggle: (key: string, opensAtStart: boolean) => putAll([key], isOpen(key, opensAtStart)),
     putAll,
   };

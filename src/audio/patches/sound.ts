@@ -31,6 +31,27 @@ export function soundDevicesOf(track: InstrumentTrack, project: DeviceSource): S
   return { ...(instruments.length ? { instruments } : {}), ...(effects.length ? { effects } : {}) };
 }
 
+/** A track's sound as it stands, under `name`: its instrument, its chains' values, and its custom devices. */
+export function trackSound(track: InstrumentTrack, project: DeviceSource, name: string = track.name): Sound {
+  const devices = soundDevicesOf(track, project);
+  return {
+    ...(devices ? { devices } : {}),
+    name,
+    instrumentType: track.instrumentType,
+    params: track.params.snapshot(),
+    midiDevices: track.midiDevices.map((device) => ({
+      type: device.type,
+      bypassed: device.bypassed,
+      params: device.params.snapshot(),
+    })),
+    effects: track.effects.map((effect) => ({
+      type: effect.type,
+      bypassed: effect.bypassed,
+      params: effect.params.snapshot(),
+    })),
+  };
+}
+
 /** A bare instrument as a sound: its schema defaults apply, nothing in its chains. */
 export const instrumentSound = (instrumentType: string, name: string): Sound => ({
   name,

@@ -1,19 +1,14 @@
 /**
- * The sound being tried, pinned under Explore (COMM-1.4.1, boards `RecordPhone` / `RecordDesktop`
- * / `TryBare`): its name and the only two ways it reaches the project, Swap onto the selected track
- * or Add as a new track. Each is one undoable edit.
+ * The sound being tried, pinned under Explore in the plugin's one-track window (COMM-1.4.1,
+ * `ExploreScope`): its name and Replace, the one way it reaches the track. The app tries things on
+ * your preview track instead (COMM-1.4.5), in the desktop's Preview tab or a phone's preview sheet.
  *
- * Read-only on purpose: shaping the sound is what the Studio's device rack is for, once it is
- * added. A handful of controls would be an arbitrary few, and the whole rack a second copy of it.
- *
- * Playing it needs nothing here: while it is open, live notes go to it (`LiveNotes`), so the
- * computer keyboard on desktop and the pads the shell passes in on a phone both play it. The
- * toolbar's record button records it onto a new track (`Recorder`), and the panel says so. In the
- * plugin's one-track window (`ExploreScope`) there is no recorder or second track: Replace only.
+ * Read-only on purpose: the plugin's window is the track's rack already. Playing it needs nothing
+ * here: while it is open, live notes go to it (`LiveNotes`).
  */
 import { useSyncExternalStore } from "react";
 import type { Dispatch } from "../../audio/commands/types";
-import type { ProjectStore, InstrumentTrack } from "../../audio/project/projectStore";
+import type { ProjectStore } from "../../audio/project/projectStore";
 import type { SoundPreview } from "../../audio/live/preview";
 import type { Recorder } from "../../audio/recording/recorder";
 import { newTrackId } from "../../audio/commands/ids";
@@ -78,7 +73,6 @@ export function TryPanel({
   projectStore,
   dispatch,
   onPicked,
-  pads,
 }: {
   preview: SoundPreview;
   /** What records it onto a new track; the plugin has none. */
@@ -87,9 +81,6 @@ export function TryPanel({
   dispatch: Dispatch;
   /** Wraps Swap and Add, so the host can get out of the way after them (see `LibraryPanel`). */
   onPicked: (act: () => void) => void;
-  /** Something to play it with, where there is no computer keyboard: the phone's pads, which go
-   *  last, so they sit at the foot of the screen where the Studio's pads are. */
-  pads?: (track: InstrumentTrack) => React.ReactNode;
 }) {
   const trying = useSyncExternalStore(preview.subscribe, preview.getState);
   const project = useProject(projectStore);
@@ -97,8 +88,6 @@ export function TryPanel({
   const recording = (useRecorder(recorder)?.status ?? "idle") !== "idle";
   const savedPatches = useSavedPatches();
   if (!trying) return null;
-  // The phone is the shell that passes pads; it gets the roomier buttons with fuller labels.
-  const layout = pads ? "phone" : "desktop";
   // The row it was tried from, for its artwork: the same thumbnail, so the panel reads as that row.
   const item = exploreItems({ savedPatches, samples: project.samples, project: projectStore }).find(
     (each) => each.key === trying.key,
@@ -124,7 +113,7 @@ export function TryPanel({
       className="@container shrink-0 border-t border-line bg-stage px-3 pt-2.5 pb-3 flex flex-col gap-2.5"
     >
       <PanelHeader item={item} name={trying.name} closeLabel="Stop trying" onClose={() => preview.close()}>
-        <ModeChip recording={recording} keyboard={!pads} name={trying.name} />
+        <ModeChip recording={recording} keyboard name={trying.name} />
       </PanelHeader>
 
       {/* Side by side. Desktop's labels are short to fit the library column; which track "current" is,
@@ -140,30 +129,23 @@ export function TryPanel({
               ? `Replace ${selected.name}'s sound with ${trying.name}`
               : "Select an instrument track to swap onto"
           }
-          className={`${ACTION} ${ACTION_LAYOUT[layout]}`}
+          className={`${ACTION} ${ACTION_LAYOUT.desktop}`}
         >
           <SwapIcon />
-          {/* A phone names the track, since the Studio is out of sight there; on desktop the
-              arrangement beside the panel shows it. */}
-          <span className="min-w-0 leading-tight @[16rem]:whitespace-nowrap">
-            {layout === "desktop" ? "Replace current" : selected ? `Swap onto ${selected.name}` : "Swap onto a track"}
-          </span>
+          <span className="min-w-0 leading-tight @[16rem]:whitespace-nowrap">Replace current</span>
         </Button>
         {!oneTrack && (
           <Button
             variant="solid"
             onClick={add}
             aria-label="Add as a new track"
-            className={`${ACTION} ${ACTION_LAYOUT[layout]}`}
+            className={`${ACTION} ${ACTION_LAYOUT.desktop}`}
           >
             <PlusIcon />
             <span className="min-w-0 leading-tight @[16rem]:whitespace-nowrap">Add new</span>
           </Button>
         )}
       </div>
-
-      {/* Edge to edge, out of the panel's padding, as the Studio's keys dock is. */}
-      {pads && <div className="-mx-3 -mb-3">{pads(trying.track)}</div>}
     </section>
   );
 }

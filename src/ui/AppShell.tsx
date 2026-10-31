@@ -21,6 +21,7 @@ import { Recorder } from "../audio/recording/recorder";
 import { LiveNotes } from "../audio/live/liveNotes";
 import { BufferControl } from "../audio/engine/bufferControl";
 import { SoundPreview } from "../audio/live/preview";
+import { previewRecording } from "./preview/previewTrying";
 import { noteUsed } from "./explore/recent/store";
 import { STARTER_RECENT_KEYS } from "../audio/project/starter";
 import { seedEditorTabs } from "./tabs/useEditorTabs";
@@ -129,11 +130,12 @@ export function AppShell() {
   );
   // Live-note routing (selected instrument + recorder + sustain), shared by the
   // computer keyboard and hardware MIDI so both get velocity and pedal handling.
-  // The sound being tried in Explore (COMM-1.4.1): live notes play it, and a take records it
-  // onto a new track.
+  // What Explore plays samples through. Sounds are tried on your preview track (COMM-1.4.5), which
+  // live notes reach as the selected track; this scratch preview is the plugin's way.
   const [preview] = useState(() => new SoundPreview(engine, noteUsed, projectStore));
+  // A take with your preview in front goes onto a new track with its sound, not onto the preview.
   // In an effect, not the initializer: React may run an initializer twice and keep only one result.
-  useEffect(() => recorder.setPreviewSource(preview), [recorder, preview]);
+  useEffect(() => recorder.setPreviewSource(previewRecording(projectStore)), [recorder, projectStore]);
   const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
   // The output buffer, picked from whether someone is playing live (INST-36.9).
   const [bufferControl] = useState(

@@ -18,6 +18,8 @@ import type { SoundPreview } from "../../audio/live/preview";
 import { ExploreList } from "./ExploreList";
 import { ExploreShelf } from "./ExploreShelf";
 import { itemTaps } from "./itemTaps";
+import { inPreview, previewBase, type TryingMark } from "./exploreActions";
+import { ownPreview, previewTrying, triedItem } from "../preview/previewTrying";
 import { useRecent } from "./recent/useRecent";
 import { ExploreThumb } from "./ExploreThumb";
 import { SampleImport } from "./SampleImport";
@@ -107,7 +109,13 @@ export function ExploreView({
 }) {
   const project = useProject(projectStore);
   // The item in the panel under Explore, whichever kind: a sound being tried, or an effect shown.
-  const trying = useSyncExternalStore(preview.subscribe, preview.getState)?.key ?? shown;
+  // In the app, what's tried is your preview track (COMM-1.4.5); in the plugin, a scratch preview.
+  const { kinds, oneTrack } = useExploreScope();
+  const scratch = useSyncExternalStore(preview.subscribe, preview.getState)?.key;
+  const tried = useSyncExternalStore(triedItem.subscribe, triedItem.read);
+  const isIn = (item: ExploreItem) =>
+    oneTrack ? item.key === scratch : inPreview(item, ownPreview(projectStore), tried);
+  const trying = (item: ExploreItem): TryingMark => (isIn(item) ? "preview" : item.key === shown ? "panel" : undefined);
   const savedPatches = useSavedPatches();
   const favourites = useFavourites();
   const recent = useRecent();
@@ -135,7 +143,13 @@ export function ExploreView({
   );
 
   // What this window takes (`ExploreScope`): the plugin's lists only what it plays.
-  const { kinds } = useExploreScope();
+  const taps = itemTaps(
+    preview,
+    actions,
+    onPicked,
+    onShow,
+    oneTrack ? undefined : { trying: previewTrying(projectStore, dispatch), base: previewBase(projectStore), isIn },
+  );
   const items = exploreItems({ savedPatches, samples: project.samples, project: projectStore }).filter((item) =>
     kinds.has(item.source.kind),
   );
@@ -147,16 +161,7 @@ export function ExploreView({
       ? favouriteItems(items, favourites)
       : items.filter((item) => item.category === key).sort(byName);
   const list = (shown: ExploreItem[], showKind = false) => (
-    <ExploreList
-      items={shown}
-      actions={actions}
-      dispatch={dispatch}
-      onPicked={onPicked}
-      showKind={showKind}
-      preview={preview}
-      trying={trying}
-      onShow={onShow}
-    />
+    <ExploreList items={shown} dispatch={dispatch} showKind={showKind} taps={taps} trying={trying} />
   );
 
   // Tag filters are per page: opening a category or going back home starts unfiltered.
@@ -278,18 +283,8 @@ export function ExploreView({
           Favourites also has its tile; the shelf puts them on the home page, artwork and all. */}
       {!filtering && (
         <div className="flex flex-col gap-3">
-          <ExploreShelf
-            title="Recently used"
-            items={itemsByKey(items, recent)}
-            taps={itemTaps(preview, actions, onPicked, onShow)}
-            trying={trying}
-          />
-          <ExploreShelf
-            title="Favourites"
-            items={favouriteItems(items, favourites)}
-            taps={itemTaps(preview, actions, onPicked, onShow)}
-            trying={trying}
-          />
+          <ExploreShelf title="Recently used" items={itemsByKey(items, recent)} taps={taps} trying={trying} />
+          <ExploreShelf title="Favourites" items={favouriteItems(items, favourites)} taps={taps} trying={trying} />
           {links?.mcpStatus && !mcpConnected(links.mcpStatus) && <MakeYourOwn />}
         </div>
       )}

@@ -151,6 +151,25 @@ export type LocalEdit =
       devices?: SoundDevices;
     }
   | {
+      // Set a person's preview (COMM-1.4.5) to a sound: made if they have none, else re-sounded in
+      // place, keeping its id so the tab and rack showing it carry on. Ids pre-minted, as in applyPatch.
+      type: "setPreview";
+      /** Whose: a user id (`previewTrackId`). */
+      owner: string;
+      name: string;
+      instrumentType: string;
+      params: PatchValues;
+      effects: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      midiDevices?: { id: string; type: string; bypassed?: boolean; params: PatchValues }[];
+      /** The custom devices it plays, taken into the project with it (COMM-1.11.1). */
+      devices?: SoundDevices;
+    }
+  | {
+      // Put a person's preview away: Discard.
+      type: "removePreview";
+      owner: string;
+    }
+  | {
       // Add an imported sample to the project library. The bytes are already in the
       // content-addressed store (contentHash); the id is pre-minted by the caller so
       // replaying reproduces the same library entry. Browser-only (Node can't hash a

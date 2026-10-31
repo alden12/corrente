@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { dismissStart, openExploreCategory } from "./support/app";
+import { dismissStart, openExploreCategory, previewEditor } from "./support/app";
 
 /**
  * Recently used on Explore home (COMM-1.9.7): what you took into the project, newest first. Trying
@@ -26,28 +26,24 @@ test("what you take from Explore lands on the Recently used shelf, newest first"
   await home(page);
   await expect(shelf(page)).toHaveCount(0);
 
-  // ... adding it is.
-  await openExploreCategory(page, "Instruments");
-  await page.getByRole("button", { name: "FM", exact: true }).click();
-  await page.getByRole("region", { name: "Trying FM" }).getByRole("button", { name: "Add as a new track" }).click();
+  // ... adding it is (the Preview tab still has it).
+  await previewEditor(page)
+    .getByRole("button", { name: /^Create new track in / })
+    .click();
   // An added effect counts too, and goes in front.
   await openExploreCategory(page, "Effects");
-  await page.getByRole("button", { name: "Reverb", exact: true }).click();
-  await page
-    .getByRole("region", { name: "Reverb" })
-    .getByRole("button", { name: /^Add to / })
-    .click();
+  await page.getByRole("button", { name: 'Add "Reverb" to the selected track' }).click();
 
   await home(page);
   const cards = shelf(page).getByRole("list").getByRole("button");
   await expect(cards).toHaveText(["Reverb", "FM"].map((name) => new RegExp(name)));
 
-  // It is kept across a reload, and a card does what the row does: FM opens in the try panel.
+  // It is kept across a reload, and a card does what the row does: FM opens in the Preview tab.
   await page.reload();
   await dismissStart(page);
   await home(page);
   await shelf(page).getByRole("button", { name: "FM", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Trying FM" })).toBeVisible();
+  await expect(previewEditor(page).getByTestId("preview-title")).toHaveText("FM");
 });
 
 test("hearted sounds get a Favourites shelf, newest first", async ({ page }) => {

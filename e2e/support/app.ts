@@ -5,7 +5,7 @@
  * survived six separate sightings: each one looked like a different test being flaky rather than
  * one helper being wrong (ARCH-5).
  */
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * A phone's Studio as it opened before it started quiet (MOBILE-34): the sheet at Half, with the roll,
@@ -107,13 +107,33 @@ export async function openExploreCategory(page: Page, label: string): Promise<vo
 }
 
 /**
- * Take an instrument or patch from Explore onto the selected track: tapping its row only tries it
- * (COMM-1.4.1), and the try panel's Swap is what changes the track.
+ * Your preview track's editor (COMM-1.4.5): the desktop's Preview tab, or a phone's preview sheet. The
+ * one on screen: a phone's Studio sheet may hold it too, hidden behind another tab.
+ */
+export const previewEditor = (page: Page) =>
+  page.locator('[data-testid="workbench-column"]:has([data-testid="preview-bar"]):visible');
+
+/** Use the preview on a track from its "Use on…" menu: `onto` (else the first track listed), then `how`. */
+export async function pickUseOn(
+  page: Page,
+  how: "Replace its sound" | "Add just the devices",
+  onto?: string,
+  press: "click" | "tap" = "click",
+): Promise<void> {
+  const go = (locator: Locator) => (press === "tap" ? locator.tap() : locator.click());
+  await go(previewEditor(page).getByRole("button", { name: "Use on a track" }));
+  await go(onto ? page.getByRole("menuitem", { name: onto }) : page.getByRole("menuitem").first());
+  await go(page.getByRole("menuitem", { name: how }));
+}
+
+/**
+ * Take an instrument or patch from Explore onto a track: tapping its row only tries it on your
+ * preview (COMM-1.4.1, COMM-1.4.5), and its "Use on…" is what changes the track.
  */
 export async function swapFromExplore(page: Page, name: string, how: "click" | "tap" = "click"): Promise<void> {
-  const press = (locator: ReturnType<Page["getByRole"]>) => (how === "tap" ? locator.tap() : locator.click());
-  await press(page.getByRole("button", { name, exact: true }));
-  await press(page.getByRole("region", { name: `Trying ${name}` }).getByRole("button", { name: /^Swap onto/ }));
+  const row = page.getByTestId("explore-row").getByRole("button", { name, exact: true });
+  await (how === "tap" ? row.tap() : row.click());
+  await pickUseOn(page, "Replace its sound", undefined, how);
 }
 
 /**

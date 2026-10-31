@@ -12,6 +12,7 @@ import type { ProjectStore } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { ClipStore } from "../audio/sequencer/clipStore";
 import { useProject } from "../audio/project/useProject";
+import { trackMetaOf } from "../audio/project/projectStructure";
 import type { Dispatch } from "../audio/commands/types";
 import { newClipId } from "../audio/commands/ids";
 import { InlineRename } from "./InlineRename";
@@ -68,7 +69,7 @@ export function ClipRail({
   const project = useProject(projectStore);
   const presence = useAuthorPresence();
   const { openAt, menu } = useContextMenu();
-  const track = project.tracks.find((track) => track.id === trackId);
+  const track = trackMetaOf(project, trackId);
   if (!track) return null;
 
   const { clips, activeClipId, launchedClipId } = track;

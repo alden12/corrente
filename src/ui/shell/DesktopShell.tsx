@@ -205,7 +205,6 @@ export function DesktopShell({
           onOpenShare={onOpenShare}
           onOpenTiming={onOpenTiming}
           preview={preview}
-          recorder={recorder}
           exploreLinks={exploreLinks}
           onCollapse={onToggleLibCollapsed}
         />

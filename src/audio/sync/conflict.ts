@@ -25,6 +25,8 @@ const CONTAINER_TARGETS = new Set<EditCommand["type"]>([
   "moveTrack",
   "setInstrument",
   "applyPatch",
+  "setPreview",
+  "removePreview",
   "createGroup",
   "removeGroup",
   "setGroup",

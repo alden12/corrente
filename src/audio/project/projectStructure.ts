@@ -78,6 +78,7 @@ export function buildStructure(tracks: Track[], groups: Group[], transport: Tran
     name: transport.name,
     groups: groups.map(groupMeta),
     tracks: tracks.map(trackMeta),
+    previews: (transport.previews ?? []).map(trackMeta),
     tempoBpm: transport.tempoBpm,
     lengthBeats: transport.lengthBeats,
     loopStart: transport.loopStartBeats,
@@ -89,3 +90,10 @@ export function buildStructure(tracks: Track[], groups: Group[], transport: Tran
     selectedTrackId: transport.selectedTrackId,
   };
 }
+
+/**
+ * A track's structure by id, your preview's too (COMM-1.4.5): for what edits one track whichever it
+ * is (its devices, its clips), where `tracks` alone, the arrangement's list, leaves previews out.
+ */
+export const trackMetaOf = (project: ProjectStructure, id: string): TrackMeta | undefined =>
+  project.tracks.find((track) => track.id === id) ?? project.previews.find((preview) => preview.id === id);

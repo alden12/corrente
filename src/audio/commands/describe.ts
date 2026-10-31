@@ -42,6 +42,8 @@ const DESCRIBE: DescribeMap = {
     command.take
       ? `Recorded ${command.name ? `"${command.name}"` : "a new track"} (${plural(command.take.notes.length)})`
       : `Added ${command.name ? `"${command.name}"` : "a patch"} from the library`,
+  setPreview: (command) => `Tried "${command.name}"`,
+  removePreview: () => "Put the preview away",
   applyPatch: (command, ctx) => `Applied ${command.name ? `"${command.name}"` : "patch"}${on(ctx, command.trackId)}`,
   createAudioTrack: (command, ctx) => `Added audio track${on(ctx, command.id, "")}`,
   addAudioTrack: (command) => `Imported ${command.name ?? "audio"}`,

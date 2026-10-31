@@ -1,51 +1,58 @@
 import { test, expect, type Page } from "@playwright/test";
-import { dismissStart, openExploreCategory, setCountIn } from "./support/app";
+import { dismissStart, openExploreCategory, previewEditor, setCountIn, pickUseOn } from "./support/app";
 
 /**
- * Trying a sound from Explore (COMM-1.4.1): tapping an instrument or patch opens it in the try
- * panel without touching the project; the keys and pads play it; Add or Swap is the edit; and
- * recording while trying puts the take on a new track carrying that sound, in one edit.
+ * Trying things from Explore on your preview track (COMM-1.4.1, COMM-1.4.5): tapping an instrument or
+ * patch makes it your preview, a track of the project that isn't in the arrangement, shown in the
+ * desktop's Preview tab or a phone's preview sheet; an effect or MIDI device is tried on it, or on
+ * the selected track's sound copied in. The keys and pads play it; each change is an ordinary edit;
+ * New track and Use on copy it into the arrangement; recording with it in front puts the take on a
+ * new track carrying that sound.
  */
 
-const trying = (page: Page, name: string) => page.getByRole("region", { name: `Trying ${name}` });
+const previewTab = (page: Page) => page.getByRole("tab", { name: /^Preview/ });
+// The arrangement's lanes: what's on the timeline, which the preview is not.
+const lanes = (page: Page) => page.getByTestId("lane");
+const exploreRow = (page: Page, name: string) =>
+  page.getByTestId("explore-row").getByRole("button", { name, exact: true });
 
 test.describe("desktop", () => {
   test.use({ viewport: { width: 1320, height: 900 } });
 
-  test("trying a sound leaves the project alone, and Add makes it a new track", async ({ page }) => {
+  test("trying a sound makes it your preview, off the timeline; Create new track copies it there", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
-    const trackHeaders = page.getByTitle("Double-click to rename");
-    const before = await trackHeaders.count();
+    const before = await lanes(page).count();
 
     await openExploreCategory(page, "Instruments");
-    await page.getByRole("button", { name: "FM", exact: true }).click();
-    await expect(trying(page, "FM")).toBeVisible();
-    await expect(trying(page, "FM").getByText("LIVE", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "FM", exact: true })).toHaveAttribute("aria-current", "true");
-    await expect(trackHeaders).toHaveCount(before);
+    await exploreRow(page, "FM").click();
+    await expect(previewTab(page)).toHaveAttribute("aria-selected", "true");
+    await expect(previewEditor(page).getByTestId("preview-title")).toHaveText("FM");
+    await expect(exploreRow(page, "FM")).toHaveAttribute("aria-current", "true");
+    await expect(lanes(page)).toHaveCount(before);
 
-    await trying(page, "FM").getByRole("button", { name: "Add as a new track" }).click();
-    await expect(trackHeaders).toHaveCount(before + 1);
+    await previewEditor(page)
+      .getByRole("button", { name: /^Create new track in / })
+      .click();
+    await expect(lanes(page)).toHaveCount(before + 1);
     await expect(page.getByRole("tablist").getByTitle("FM", { exact: true })).toBeVisible();
-    await expect(trying(page, "FM")).toHaveCount(0);
+    // A copy: the preview stays, to keep trying things, behind the new track's tab.
+    await expect(previewTab(page)).toHaveAttribute("aria-selected", "false");
   });
 
-  test("recording while trying puts the take on a new track with that sound", async ({ page }) => {
+  test("recording with the preview in front puts the take on a new track with that sound", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await setCountIn(page, "None");
-    const trackHeaders = page.getByTitle("Double-click to rename");
-    const before = await trackHeaders.count();
+    const before = await lanes(page).count();
 
     await openExploreCategory(page, "Instruments");
-    await page.getByRole("button", { name: "FM", exact: true }).click();
-    await expect(trying(page, "FM")).toBeVisible();
+    await exploreRow(page, "FM").click();
+    await expect(previewEditor(page)).toBeVisible();
 
     const record = page.getByRole("button", { name: "Record", exact: true });
     await record.click();
     await expect(record).toHaveAttribute("aria-pressed", "true");
-    await expect(trying(page, "FM").getByText("REC", { exact: true })).toBeVisible();
     for (const key of ["z", "x"]) {
       await page.keyboard.down(key);
       await page.waitForTimeout(120);
@@ -54,42 +61,60 @@ test.describe("desktop", () => {
     await record.click();
     await expect(record).toHaveAttribute("aria-pressed", "false");
 
-    // One new track, carrying the sound and the take; trying is over, so the keys play it now.
-    await expect(trackHeaders).toHaveCount(before + 1);
+    // One new track, carrying the sound and the take.
+    await expect(lanes(page)).toHaveCount(before + 1);
     await expect(page.getByRole("tablist").getByTitle("FM", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("lane").getByText("Take 1")).toBeVisible();
-    await expect(trying(page, "FM")).toHaveCount(0);
+    await expect(lanes(page).getByText("Take 1")).toBeVisible();
 
     // ... and it was one edit: a single undo takes the track and the take together.
     await page.getByRole("button", { name: "Undo", exact: true }).click();
-    await expect(trackHeaders).toHaveCount(before);
+    await expect(lanes(page)).toHaveCount(before);
   });
 
-  test("leaving Explore stops trying", async ({ page }) => {
+  test("the preview is a tab like a track's: it stays when Explore is left, behind another tab", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "Instruments");
-    await page.getByRole("button", { name: "FM", exact: true }).click();
-    await expect(trying(page, "FM")).toBeVisible();
+    await exploreRow(page, "FM").click();
+    await expect(previewEditor(page)).toBeVisible();
 
     await page.getByRole("button", { name: "Activity", exact: true }).click();
-    await page.getByRole("button", { name: "Explore", exact: true }).click();
-    await expect(trying(page, "FM")).toHaveCount(0);
+    await expect(previewEditor(page)).toBeVisible();
+
+    await page.getByRole("tablist", { name: "Open editors" }).getByRole("tab").first().click();
+    await expect(previewEditor(page)).toHaveCount(0);
+    await previewTab(page).click();
+    await expect(previewEditor(page)).toBeVisible();
+  });
+
+  test("the preview is saved with the project", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await openExploreCategory(page, "Effects");
+    await exploreRow(page, "Reverb").click();
+    await expect(previewEditor(page).locator('[data-device][aria-label="Reverb"]')).toHaveCount(1);
+
+    await page.waitForTimeout(400); // let the debounced autosave flush
+    await page.reload();
+    await dismissStart(page);
+    await previewTab(page).click();
+    await expect(previewEditor(page).locator('[data-device][aria-label="Reverb"]')).toHaveCount(1);
   });
 });
 
 test.describe("phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test("the try panel has pads to play it with, and stays on Explore", async ({ page }) => {
+  test("the preview sheet has pads under it to play it with, and stays on Explore", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
     await openExploreCategory(page, "Instruments");
     await page.getByRole("button", { name: "FM", exact: true }).tap();
 
-    const panel = trying(page, "FM");
-    await expect(panel).toBeVisible();
+    await expect(page.getByTestId("preview-sheet")).toBeVisible();
+    // Docked under the sheet, as the Studio's keys are under its editor.
+    const panel = page.getByTestId("preview-keys");
     await expect(panel.locator("[data-pitches]").first()).toBeVisible();
     await expect(
       page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }),
@@ -114,52 +139,116 @@ test.describe("phone", () => {
   });
 });
 
+test.describe("phone preview rack", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("an effect tried shows as a row in the rack, comes out with its ×, and undo puts it back", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
+    await openExploreCategory(page, "Effects");
+    await page.getByTestId("explore-row").getByRole("button", { name: "Reverb", exact: true }).tap();
+
+    const rack = page.getByTestId("preview-sheet");
+    const reverb = rack.locator('[data-device][aria-label="Reverb"]');
+    await expect(reverb).toHaveCount(1);
+    await reverb.getByRole("button", { name: /^Remove/ }).tap();
+    await expect(reverb).toHaveCount(0);
+    await page.getByRole("button", { name: "Undo", exact: true }).first().tap();
+    await expect(reverb).toHaveCount(1);
+  });
+
+  test("the preview is a sheet over Explore that minimises as the Studio's does", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
+    await openExploreCategory(page, "Effects");
+    await page.getByTestId("explore-row").getByRole("button", { name: "Reverb", exact: true }).tap();
+
+    const sheet = page.getByTestId("preview-sheet");
+    await expect(sheet).toHaveAttribute("data-detent", "half");
+    await sheet.getByRole("slider", { name: "Preview height" }).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(sheet).toHaveAttribute("data-detent", "peek");
+    // Minimised: the name on its bar, and the list has the room. Tapping another effect still tries it.
+    await expect(sheet.getByText("Micro VA, Reverb", { exact: true })).toBeVisible();
+    await page.getByTestId("explore-row").getByRole("button", { name: "Delay", exact: true }).tap();
+    await expect(sheet.getByText("Micro VA, Reverb, Delay", { exact: true })).toBeVisible();
+  });
+
+  test("New track takes the sound and what's tried on it", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
+    await openExploreCategory(page, "Effects");
+    await page.getByTestId("explore-row").getByRole("button", { name: "Reverb", exact: true }).tap();
+    await page.getByRole("button", { name: "New track", exact: true }).tap();
+
+    // The phone goes to the Studio with it, as any pick does, where it's a lane of its own.
+    await expect(page.getByTestId("preview-sheet")).toHaveCount(0);
+    await expect(page.getByTestId("lane")).toHaveCount(2);
+  });
+});
+
 test.describe("effects", () => {
   test.use({ viewport: { width: 1320, height: 900 } });
 
-  test("tapping an effect shows it with its Add, and only Add puts it on the track", async ({ page }) => {
+  test("tapping an effect tries it on the selected track's sound, and Use on adds just it", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "Effects");
-    const inRack = page.locator('[data-device][aria-label="Reverb"]');
+    const inPreview = previewEditor(page).locator('[data-device][aria-label="Reverb"]');
 
-    await page.getByRole("button", { name: "Reverb", exact: true }).click();
-    const panel = page.getByRole("region", { name: "Reverb" });
-    await expect(panel).toBeVisible();
-    await expect(inRack).toHaveCount(0); // trying it adds nothing to the track
+    await exploreRow(page, "Reverb").click();
+    await expect(inPreview).toHaveCount(1);
+    // The track's sound with the effect after it: the row says it's in the preview.
+    await expect(previewEditor(page).getByTestId("preview-title")).toHaveText(/, Reverb$/);
+    await expect(page.getByTestId("explore-row").filter({ hasText: "in the preview" })).toHaveCount(1);
 
-    await panel.getByRole("button", { name: /^Add to / }).click();
-    await expect(panel).toHaveCount(0);
-    await expect(inRack).toHaveCount(1); // the panel went, and the device rack shows it
-
-    // Trying a sound takes the panel's place, one at a time.
-    await page.getByTestId("explore-row").getByRole("button", { name: "Reverb", exact: true }).click();
-    await expect(panel).toBeVisible();
-    await openExploreCategory(page, "Instruments");
-    await page.getByRole("button", { name: "FM", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Trying FM" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Reverb" })).toHaveCount(0);
+    await pickUseOn(page, "Add just the devices");
+    // The track it went on is the one shown now, with the effect on it.
+    await expect(previewTab(page)).toHaveAttribute("aria-selected", "false");
+    await expect(page.locator('[data-device][aria-label="Reverb"]')).toHaveCount(1);
   });
 
-  test("an effect's + adds it to the selected track in one click, no panel", async ({ page }) => {
+  test("an effect's + adds it to the selected track in one click, no preview", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "Effects");
     await page.getByRole("button", { name: 'Add "Reverb" to the selected track' }).click();
-    await expect(page.getByRole("region", { name: "Reverb" })).toHaveCount(0);
+    await expect(previewTab(page)).toHaveCount(0);
     await expect(page.locator('[data-device][aria-label="Reverb"]')).toHaveCount(1); // the device rack shows it
   });
 
-  test("a MIDI device shows its panel too, and adds to the selected instrument track", async ({ page }) => {
+  test("the preview's changes are in the project's history, its discarding too", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await openExploreCategory(page, "Effects");
+    const devices = previewEditor(page).locator("[data-device]");
+
+    await exploreRow(page, "Reverb").click();
+    await expect(previewEditor(page).locator('[data-device][aria-label="Reverb"]')).toHaveCount(1);
+    const withReverb = await devices.count();
+    await exploreRow(page, "Delay").click();
+    await expect(devices).toHaveCount(withReverb + 1);
+
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect(devices).toHaveCount(withReverb);
+
+    await previewEditor(page).getByRole("button", { name: "Discard" }).click();
+    await expect(previewTab(page)).toHaveCount(0);
+    await page.keyboard.press("ControlOrMeta+z");
+    await previewTab(page).click();
+    await expect(devices).toHaveCount(withReverb);
+  });
+
+  test("a MIDI device is tried on the sound too", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "MIDI devices");
     const first = page.getByTestId("explore-row").first().getByRole("button").first();
     const name = (await first.getAttribute("aria-label"))!;
     await first.click();
-    const panel = page.getByRole("region", { name });
-    await expect(panel).toBeVisible();
-    await panel.getByRole("button", { name: /^Add to / }).click();
-    await expect(panel).toHaveCount(0);
+    await expect(previewEditor(page).locator(`[data-device][aria-label="${name}"]`)).toHaveCount(1);
   });
 });

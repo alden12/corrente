@@ -12,10 +12,9 @@ const devicesBar = (page: Page) => page.getByRole("region", { name: "Devices" })
 
 async function addEffect(page: Page, name: string) {
   await openExploreCategory(page, "Effects");
-  await page.getByRole("button", { name, exact: true }).first().click();
   await page
-    .getByRole("region", { name })
-    .getByRole("button", { name: /^Add to / })
+    .getByRole("button", { name: `Add "${name}" to the selected track` })
+    .first()
     .click();
 }
 

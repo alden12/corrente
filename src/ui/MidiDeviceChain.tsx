@@ -7,6 +7,7 @@
  */
 import type { ProjectStore } from "../audio/project/projectStore";
 import { useProject } from "../audio/project/useProject";
+import { trackMetaOf } from "../audio/project/projectStructure";
 import { midiDeviceCatalogEntry, midiDeviceSchema } from "../audio/midi/device/catalog";
 import type { Dispatch } from "../audio/commands/types";
 import { midiDeviceParamKey } from "../audio/commands/authorship";
@@ -24,7 +25,7 @@ export function MidiDeviceChain({
   dispatch: Dispatch;
 }) {
   const project = useProject(projectStore);
-  const track = project.tracks.find((track) => track.id === trackId);
+  const track = trackMetaOf(project, trackId);
   const devices = track?.kind === "instrument" ? track.midiDevices : [];
   const dragOf = useChainDrag(
     devices.map((device) => device.id),

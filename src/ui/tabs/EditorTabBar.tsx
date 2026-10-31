@@ -17,6 +17,7 @@ import { openChainGraph, openDeviceGraph } from "./openGraph";
 import { InlineRename } from "../InlineRename";
 import { useContextMenu } from "../useContextMenu";
 import { tabKey, type Tab } from "./editorTabs";
+import { isPreviewTrackId } from "../../audio/project/previewTrack";
 import type { EditorTabsView } from "./useEditorTabs";
 
 /** A thumb's size in the bar, in px. */
@@ -89,6 +90,16 @@ const faceOf = (tab: Tab, projectStore: ProjectStore, rename: () => void): Face 
   }
   const track = projectStore.getTrack(target.trackId);
   if (!track) return undefined;
+  // Your preview (COMM-1.4.5): a dashed ring, as something tried rather than arranged.
+  if (target.kind === "track" && isPreviewTrackId(track.id)) {
+    return {
+      thumb: <span className="w-5 h-5 rounded-full border-2 border-dashed border-you box-border" />,
+      thumbTitle: "Your preview: not in the arrangement",
+      name: "Preview",
+      suffix: "trying",
+      menu: [],
+    };
+  }
   if (target.kind === "chain") {
     return {
       thumb: <TrackThumb track={track} projectStore={projectStore} />,

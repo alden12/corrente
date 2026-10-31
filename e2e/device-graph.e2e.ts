@@ -97,12 +97,12 @@ test("a tab opened past the bar's edge scrolls into view", async ({ page }) => {
   await expect(tabs(page).first()).not.toBeInViewport();
 });
 
-test("a tapped device's panel opens its graph", async ({ page }) => {
+test("a device's row menu opens its graph", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   await openExploreCategory(page, "Effects");
-  await page.getByRole("button", { name: "Reverb", exact: true }).click();
-  await page.getByRole("button", { name: "View device graph: Reverb" }).click();
+  await page.getByRole("button", { name: "Actions: Reverb" }).click();
+  await page.getByRole("menuitem", { name: "View device graph" }).click();
   await expect(tabs(page)).toHaveCount(2);
   await expect(tabs(page).nth(1)).toContainText("Reverb");
 });
@@ -114,8 +114,8 @@ test.describe("on a phone", () => {
     await page.goto("/");
     await dismissStart(page);
     await openExploreCategory(page, "MIDI devices");
-    await page.getByRole("button", { name: "Arpeggiator", exact: true }).click();
-    await page.getByRole("button", { name: "View device graph: Arpeggiator" }).click();
+    await page.getByRole("button", { name: "Actions: Arpeggiator" }).click();
+    await page.getByRole("menuitem", { name: "View device graph" }).click();
 
     const graph = page.getByRole("dialog", { name: "Arpeggiator graph" });
     await expect(graph).toBeVisible();

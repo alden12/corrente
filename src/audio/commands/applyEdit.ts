@@ -44,6 +44,16 @@ const APPLY: ApplyMap = {
       midiDevices: command.midiDevices,
       devices: command.devices,
     }),
+  setPreview: (project, command) =>
+    void project.setPreview(command.owner, {
+      name: command.name,
+      instrumentType: command.instrumentType,
+      params: command.params,
+      effects: command.effects,
+      midiDevices: command.midiDevices,
+      devices: command.devices,
+    }),
+  removePreview: (project, command) => project.removePreview(command.owner),
   createAudioTrack: (project, command) =>
     void project.addEmptyAudioTrack({ id: command.id, name: command.name, groupId: command.groupId }),
   addAudioTrack: (project, command) =>

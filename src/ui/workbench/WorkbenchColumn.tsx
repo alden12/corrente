@@ -8,6 +8,10 @@
  * where it replaced a switch between the roll, the clips and the rack. Only the keys differ: the
  * desktop's sit in the roll, the phone's pads dock outside the sheet.
  *
+ * **Your preview track** (COMM-1.4.5) shows here too, as any track does, with `preview`: the row that
+ * takes it into the project on top, and no clips or roll, since it has none to show. Its keys sit
+ * above the devices, where the roll would have had them.
+ *
  * The wheel needs no rule of its own: the roll takes it while the pointer is over it, and
  * the browser keeps a scroll that is already moving the column going past the roll.
  */
@@ -43,6 +47,7 @@ export function WorkbenchColumn({
   onRevealSamples,
   keys,
   compact = false,
+  preview,
 }: {
   track: Track;
   projectStore: ProjectStore;
@@ -55,6 +60,8 @@ export function WorkbenchColumn({
   keys?: { panel: ReactNode; height: number; open: boolean };
   /** Touch: the roll's header keeps its fold and drops its tools (MOBILE-1). */
   compact?: boolean;
+  /** The track is your preview: the row that takes it, shown in place of its clips and roll. */
+  preview?: ReactNode;
 }) {
   const project = useProject(projectStore);
   const rec = useRecorder(recorder);
@@ -67,7 +74,11 @@ export function WorkbenchColumn({
   // folded: open, the three crowded the sheet on arrival (2026-10-30, Alden).
   const tier = compact ? ":compact" : "";
   const [clipsOpen, setClipsOpen] = usePersistentBoolean(`corrente:clips-open${tier}`, false);
-  const [devicesOpen, setDevicesOpen] = usePersistentBoolean(`corrente:devices-open${tier}`, !compact);
+  // The preview's devices are all it shows, so they start open there, remembered apart.
+  const [devicesOpen, setDevicesOpen] = usePersistentBoolean(
+    `corrente:devices-open${tier}${preview ? ":preview" : ""}`,
+    !compact || !!preview,
+  );
   const [rollOpen, setRollOpen] = usePersistentBoolean(`corrente:roll-open${tier}`, !compact);
   // Deleting clips is a mode of the open clips, not a button on every chip: a chip's × was small
   // enough to hit by accident while picking a clip. Folding the clips ends it.
@@ -114,112 +125,126 @@ export function WorkbenchColumn({
       data-testid="workbench-column"
       className="relative isolate flex-1 min-h-0 min-w-0 overflow-y-auto"
     >
-      {/* Clips: folded, the chips scroll in the header; open, every clip as a chip below it. The
-          + and record stay at the header's right either way. */}
-      <section aria-label="Clips">
-        <SectionHeader
-          title="Clips"
-          fold={{
-            open: clipsOpen,
-            onToggle: () => {
-              setClipsOpen(!clipsOpen);
-              setDeletingClips(false);
-            },
-          }}
-          actions={
-            <>
-              {clipsOpen && (
-                <IconButton
-                  label={deletingClips ? "Done deleting clips" : "Delete clips"}
-                  size={compact ? "md" : "sm"}
-                  tone="hot"
-                  active={deletingClips}
-                  onClick={() => setDeletingClips(!deletingClips)}
-                >
-                  <BinIcon />
-                </IconButton>
-              )}
-              {track.kind === "instrument" && (
-                <IconButton
-                  label="Add a new empty clip"
-                  size={compact ? "md" : "sm"}
-                  onClick={() => dispatch({ type: "addClip", trackId: track.id, id: newClipId(), empty: true })}
-                >
-                  +
-                </IconButton>
-              )}
-              <TrackRecordButton trackId={track.id} recorder={recorder} recording={recording} round />
-            </>
-          }
-        >
-          {!clipsOpen && (
-            <ClipRail
-              projectStore={projectStore}
-              scheduler={scheduler}
-              trackId={track.id}
-              dispatch={dispatch}
-              orientation="horizontal"
-              chipsOnly
-            />
+      {preview && (
+        <>
+          {preview}
+          {keys && (
+            <div className="border-b border-line" style={{ height: keys.height }}>
+              {keys.panel}
+            </div>
           )}
-        </SectionHeader>
-        {clipsOpen && (
-          <div className="border-b border-line bg-ground">
-            <ClipRail
-              projectStore={projectStore}
-              scheduler={scheduler}
-              trackId={track.id}
-              dispatch={dispatch}
-              orientation="grid"
-              dense
-              chipsOnly
-              deleting={deletingClips}
-            />
-          </div>
-        )}
-      </section>
-
-      {/* The roll (or the audio clip), at a height dragged from its bottom edge. */}
-      {/* Folded, it is its toolbar and the keys, at their own height. */}
-      <div
-        ref={rollRef}
-        // A rule under whatever is last, unless that's a folded header, whose own rule is the divider (a
-        // second would double it): the keys when the track has them, else the roll.
-        className={`relative flex flex-col ${(keys && track.kind === "instrument" ? keys.open : rollOpen) ? "border-b border-line" : ""}`}
-        style={rollOpen ? { height: effRollH + keysH } : undefined}
-      >
-        <TrackEditor
-          track={track}
-          scheduler={scheduler}
-          recorder={recorder}
-          dispatch={dispatch}
-          projectStore={projectStore}
-          compact={compact}
-          // The keys sit in the roll under the velocity lane, as the pads sit under the roll on
-          // mobile (MOBILE-6): play, and watch it land.
-          rollFooter={keys && <div style={{ height: keys.height }}>{keys.panel}</div>}
-          fold={{ open: rollOpen, onToggle: () => setRollOpen(!rollOpen) }}
-        />
-        {rollOpen && !compact && (
-          <>
-            <ResizeHandle
-              ariaLabel="Resize the roll"
-              orientation="horizontal"
-              onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0) - keysH)}
-              style={{ left: 0, right: 0, bottom: 0 }}
-            />
-            {/* The keys' top edge is the roll's bottom too, and the more natural one to grab. */}
-            {keysH > 0 && (
-              <ResizeHandle
-                ariaLabel="Resize the roll from the keys"
-                orientation="horizontal"
-                onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0))}
-                style={{ left: 0, right: 0, bottom: keysH }}
-              />
+        </>
+      )}
+      {!preview && (
+        <>
+          {/* Clips: folded, the chips scroll in the header; open, every clip as a chip below it. The
+          + and record stay at the header's right either way. */}
+          <section aria-label="Clips">
+            <SectionHeader
+              title="Clips"
+              fold={{
+                open: clipsOpen,
+                onToggle: () => {
+                  setClipsOpen(!clipsOpen);
+                  setDeletingClips(false);
+                },
+              }}
+              actions={
+                <>
+                  {clipsOpen && (
+                    <IconButton
+                      label={deletingClips ? "Done deleting clips" : "Delete clips"}
+                      size={compact ? "md" : "sm"}
+                      tone="hot"
+                      active={deletingClips}
+                      onClick={() => setDeletingClips(!deletingClips)}
+                    >
+                      <BinIcon />
+                    </IconButton>
+                  )}
+                  {track.kind === "instrument" && (
+                    <IconButton
+                      label="Add a new empty clip"
+                      size={compact ? "md" : "sm"}
+                      onClick={() => dispatch({ type: "addClip", trackId: track.id, id: newClipId(), empty: true })}
+                    >
+                      +
+                    </IconButton>
+                  )}
+                  <TrackRecordButton trackId={track.id} recorder={recorder} recording={recording} round />
+                </>
+              }
+            >
+              {!clipsOpen && (
+                <ClipRail
+                  projectStore={projectStore}
+                  scheduler={scheduler}
+                  trackId={track.id}
+                  dispatch={dispatch}
+                  orientation="horizontal"
+                  chipsOnly
+                />
+              )}
+            </SectionHeader>
+            {clipsOpen && (
+              <div className="border-b border-line bg-ground">
+                <ClipRail
+                  projectStore={projectStore}
+                  scheduler={scheduler}
+                  trackId={track.id}
+                  dispatch={dispatch}
+                  orientation="grid"
+                  dense
+                  chipsOnly
+                  deleting={deletingClips}
+                />
+              </div>
             )}
-          </>
-        )}
-      </div>
+          </section>
+
+          {/* The roll (or the audio clip), at a height dragged from its bottom edge. */}
+          {/* Folded, it is its toolbar and the keys, at their own height. */}
+          <div
+            ref={rollRef}
+            // A rule under whatever is last, unless that's a folded header, whose own rule is the divider (a
+            // second would double it): the keys when the track has them, else the roll.
+            className={`relative flex flex-col ${(keys && track.kind === "instrument" ? keys.open : rollOpen) ? "border-b border-line" : ""}`}
+            style={rollOpen ? { height: effRollH + keysH } : undefined}
+          >
+            <TrackEditor
+              track={track}
+              scheduler={scheduler}
+              recorder={recorder}
+              dispatch={dispatch}
+              projectStore={projectStore}
+              compact={compact}
+              // The keys sit in the roll under the velocity lane, as the pads sit under the roll on
+              // mobile (MOBILE-6): play, and watch it land.
+              rollFooter={keys && <div style={{ height: keys.height }}>{keys.panel}</div>}
+              fold={{ open: rollOpen, onToggle: () => setRollOpen(!rollOpen) }}
+            />
+            {rollOpen && !compact && (
+              <>
+                <ResizeHandle
+                  ariaLabel="Resize the roll"
+                  orientation="horizontal"
+                  onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0) - keysH)}
+                  style={{ left: 0, right: 0, bottom: 0 }}
+                />
+                {/* The keys' top edge is the roll's bottom too, and the more natural one to grab. */}
+                {keysH > 0 && (
+                  <ResizeHandle
+                    ariaLabel="Resize the roll from the keys"
+                    orientation="horizontal"
+                    onResize={(y) => setRollH(y - (rollRef.current?.getBoundingClientRect().top ?? 0))}
+                    style={{ left: 0, right: 0, bottom: keysH }}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
           sticks to the top once they reach it. */}
