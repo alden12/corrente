@@ -47,3 +47,18 @@ test("a launched clip is saved and survives a reload", async ({ page }) => {
 
   await expect(backToTimeline(page)).toBeVisible(); // launched state restored
 });
+
+test("the lane's button stays in view as the timeline scrolls along", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await launchBtn(page).click();
+  // Zoomed in, so there is timeline to scroll along.
+  for (let step = 0; step < 4; step++) await page.getByTitle("Zoom in", { exact: true }).click();
+  const scroller = page.getByTestId("arr-scroll");
+  await scroller.evaluate((element) => (element.scrollLeft = element.scrollWidth));
+  await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(200);
+  const view = (await scroller.boundingBox())!;
+  const button = (await backToTimeline(page).boundingBox())!;
+  expect(button.x).toBeGreaterThanOrEqual(view.x);
+  expect(button.x + button.width).toBeLessThanOrEqual(view.x + view.width);
+});

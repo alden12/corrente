@@ -22,7 +22,19 @@ function timelineName(track: Track): string {
   return clip?.name ?? "the timeline";
 }
 
-export function LaunchedClip({ track, dispatch }: { track: Track; dispatch: Dispatch }) {
+/** How far in from the timeline's left edge the button stays while the lane scrolls under it. */
+const INSET_PX = 8;
+
+export function LaunchedClip({
+  track,
+  dispatch,
+  leadX,
+}: {
+  track: Track;
+  dispatch: Dispatch;
+  /** What covers the timeline's left edge (the pinned track headers), which the button stays clear of. */
+  leadX: number;
+}) {
   const launched = track.clips.find((clip) => clip.id === track.launchedClipId);
   if (!launched) return null;
   const back = timelineName(track);
@@ -30,7 +42,7 @@ export function LaunchedClip({ track, dispatch }: { track: Track; dispatch: Disp
   const launchedColor = launched.color ?? track.color;
   const color = paletteAccent(launchedColor);
   return (
-    <div className="absolute inset-0 bg-ground/60 pointer-events-none flex items-center px-2 z-10">
+    <div className="absolute inset-0 bg-ground/60 pointer-events-none flex items-center pr-2 z-10">
       <button
         type="button"
         // The lane's own gestures (place, select, drag) start on pointer down underneath.
@@ -38,12 +50,15 @@ export function LaunchedClip({ track, dispatch }: { track: Track; dispatch: Disp
         onClick={() => dispatch({ type: "launchClip", trackId: track.id, clipId: null })}
         title={`Stop ${launched.name} and play ${back} again`}
         style={{
+          // Sticky, so it stays in view however far along the lane is scrolled.
+          left: leadX + INSET_PX,
+          marginLeft: INSET_PX,
           color,
           borderColor: paletteAccent(launchedColor, 0.5),
           // A tint over the ground, so it stays readable over the lane's notes.
           backgroundImage: `linear-gradient(${paletteAccent(launchedColor, 0.14)}, ${paletteAccent(launchedColor, 0.14)})`,
         }}
-        className="pointer-events-auto inline-flex items-center gap-1.5 font-mono text-[10px] bg-ground/80 border rounded px-1.5 py-0.5 cursor-pointer hover:brightness-125"
+        className="sticky pointer-events-auto inline-flex items-center gap-1.5 font-mono text-[10px] bg-ground/80 border rounded px-1.5 py-0.5 cursor-pointer hover:brightness-125"
       >
         <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: color }} />
         Playing {launched.name}

@@ -575,7 +575,7 @@ export function Lane({
       {markerBeat !== null && (
         <MarkerMenu left={beatToX(markerBeat, pxPerBeat)} items={() => markerMenuItems(markerBeat)} />
       )}
-      <LaunchedClip track={track} dispatch={dispatch} />
+      <LaunchedClip track={track} dispatch={dispatch} leadX={stickyHeader ? headerW : 0} />
     </div>
   );
 }
