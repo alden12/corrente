@@ -39,7 +39,7 @@ test("a note in the roll shows its name", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
-  await page.mouse.click(roll.x + 120, roll.y + 60);
+  await page.mouse.dblclick(roll.x + 120, roll.y + 60);
   const note = page.getByTestId("note");
   await expect(note).toHaveCount(1);
   await expect(note).toHaveText(/^[A-G]#?-?\d$/);

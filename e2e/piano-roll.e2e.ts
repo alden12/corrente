@@ -41,9 +41,9 @@ test("add, move and delete notes with the mouse; a note persists across reload",
   await expect(page.getByTestId("piano-grid")).toBeVisible();
   await expect(page.getByTestId("note")).toHaveCount(0);
 
-  // Click an empty cell -> add one note.
+  // Double-click an empty cell -> add one note.
   const p1 = await gridPoint(page, 120, 40);
-  await page.mouse.click(p1.x, p1.y);
+  await page.mouse.dblclick(p1.x, p1.y);
   await expect(page.getByTestId("note")).toHaveCount(1);
   await expect(page.getByText("Added note")).toBeVisible();
 
@@ -63,7 +63,7 @@ test("add, move and delete notes with the mouse; a note persists across reload",
 
   // Add again and confirm it survives a reload (persisted in the snapshot).
   const p2 = await gridPoint(page, 80, 60);
-  await page.mouse.click(p2.x, p2.y);
+  await page.mouse.dblclick(p2.x, p2.y);
   await expect(page.getByTestId("note")).toHaveCount(1);
   await page.waitForTimeout(400); // let the debounced autosave flush
   await page.reload();
@@ -95,7 +95,7 @@ test("Escape and click-outside deselect (then Delete is a no-op)", async ({ page
   await dismissStart(page);
 
   const p = await gridPoint(page, 120, 40);
-  await page.mouse.click(p.x, p.y);
+  await page.mouse.dblclick(p.x, p.y);
   await expect(page.getByTestId("note")).toHaveCount(1);
 
   // Escape clears the selection -> Delete removes nothing.
@@ -189,7 +189,7 @@ test("a selected note grows handles but no touch furniture on a mouse", async ({
   await dismissStart(page);
 
   const point = await gridPoint(page, 120, 40);
-  await page.mouse.click(point.x, point.y);
+  await page.mouse.dblclick(point.x, point.y);
   await expect(page.getByTestId("note")).toHaveCount(1);
 
   // Mounted either way, so `toBeHidden` is the honest check rather than a count of zero: the
@@ -198,4 +198,49 @@ test("a selected note grows handles but no touch furniture on a mouse", async ({
   await expect(page.getByTestId("note-handle-end")).toBeVisible();
   await expect(page.getByTestId("note-actions"), "no kebab over the grid on a mouse").toBeHidden();
   await expect(page.getByTestId("note-move"), "and no move grip either").toBeHidden();
+});
+
+/** DAW-31: the transport's cursor, which a single click puts down and play starts from. */
+test("a click puts the cursor down in the roll and on the timeline, not a note; Escape clears it", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const p = await gridPoint(page, 120, 40);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.getByTestId("roll-cursor")).toBeVisible();
+  await expect(page.getByTestId("arr-cursor")).toBeVisible();
+  await expect(page.getByTestId("note")).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("roll-cursor")).toHaveCount(0);
+  await expect(page.getByTestId("arr-cursor")).toHaveCount(0);
+});
+
+test("pasted notes land at the cursor", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const first = await gridPoint(page, 120, 40);
+  await page.mouse.dblclick(first.x, first.y);
+  await expect(page.getByTestId("note")).toHaveCount(1);
+  await page.keyboard.press("ControlOrMeta+c");
+
+  const later = await gridPoint(page, 360, 40);
+  await page.mouse.click(later.x, later.y);
+  const cursor = (await page.getByTestId("roll-cursor").boundingBox())!;
+  await page.keyboard.press("ControlOrMeta+v");
+  await expect(page.getByTestId("note")).toHaveCount(2);
+  const lefts = await page
+    .getByTestId("note")
+    .evaluateAll((notes) => notes.map((note) => note.getBoundingClientRect().left));
+  expect(Math.abs(Math.max(...lefts) - cursor.x)).toBeLessThan(2);
+});
+
+test("a click on the timeline's ruler puts the cursor there", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const block = (await page.getByTestId("placement").first().boundingBox())!;
+  const scroller = (await page.getByTestId("arr-scroll").boundingBox())!;
+  await page.mouse.click(block.x + 60, scroller.y + 8);
+  const cursor = (await page.getByTestId("arr-cursor").boundingBox())!;
+  expect(Math.abs(cursor.x - (block.x + 60))).toBeLessThan(40);
+  await expect(page.getByTestId("roll-cursor")).toBeVisible();
 });

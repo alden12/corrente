@@ -2,7 +2,8 @@
  * A bar/beat ruler over a beat grid: bar numbers, beat ticks, the loop region
  * shaded between two draggable handles (loop start + loop end), and dimmed grid
  * beyond the loop on either side. Pure geometry from `timeGrid`, so the piano
- * roll and the arrangement timeline can share it. The handles report new values
+ * roll and the arrangement timeline can share it. A click on it (not a handle) puts the cursor
+ * there, which it marks (DAW-31). The handles report new values
  * continuously while dragging, so the caller's edit-log coalescing folds a drag
  * into one undo step.
  */
@@ -42,6 +43,8 @@ export function Ruler({
   onSetLoopEnd,
   timeSignature = DEFAULT_TIME_SIGNATURE,
   minLoop = 1,
+  cursor = null,
+  onSeek,
 }: {
   /** Total beats drawn (loop end + trailing room to expand into). */
   viewBeats: number;
@@ -53,6 +56,10 @@ export function Ruler({
   onSetLoopEnd: (beats: number) => void;
   timeSignature?: TimeSignature;
   minLoop?: number;
+  /** Where the cursor is, in this ruler's beats, or null for none here. */
+  cursor?: number | null;
+  /** A click at a beat (unsnapped): where the cursor goes. */
+  onSeek?: (beat: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const width = beatToX(viewBeats, pxPerBeat);
@@ -71,7 +78,14 @@ export function Ruler({
   return (
     <div
       ref={ref}
-      className="sticky top-0 z-10 bg-panel border-b border-line select-none"
+      // A click rather than a press, so a touch that scrolls doesn't seek, and not one ending a
+      // handle's drag, which the handle's own press began.
+      onClick={(e) => {
+        if (!onSeek || (e.target as HTMLElement).closest('[role="slider"]')) return;
+        onSeek(Math.max(0, (e.clientX - (ref.current?.getBoundingClientRect().left ?? 0)) / pxPerBeat));
+      }}
+      title={onSeek ? "Click to put the cursor here" : undefined}
+      className={`sticky top-0 z-10 bg-panel border-b border-line select-none ${onSeek ? "cursor-pointer" : ""}`}
       style={{ width, height: RULER_H }}
     >
       {/* dim the area outside the loop region */}
@@ -92,6 +106,15 @@ export function Ruler({
           {tick.isBar && <span className="absolute left-1 top-0.5 font-mono text-[9px] text-faint">{tick.bar}</span>}
         </div>
       ))}
+
+      {cursor !== null && (
+        <span
+          data-testid="ruler-cursor"
+          aria-hidden="true"
+          className="absolute bottom-0 -translate-x-1/2 w-0 h-0 border-x-[5px] border-x-transparent border-t-[7px] border-t-strong pointer-events-none"
+          style={{ left: beatToX(cursor, pxPerBeat) }}
+        />
+      )}
 
       {/* loop start handle (only when the caller supports moving it) */}
       {onSetLoopStart && (

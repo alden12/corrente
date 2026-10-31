@@ -4,9 +4,10 @@
  * and zoom.
  *
  * Interaction model (single tool, modifier-driven, like a real DAW):
- * - click empty cell -> add a note; click a note -> select it (shift toggles).
+ * - click empty grid -> put the cursor there (DAW-31), which play starts from and a paste lands
+ *   at; double-click (double-tap) -> add a note; click a note -> select it (shift toggles).
  * - drag a note body -> move; drag its right edge -> resize; drag on empty -> marquee.
- * - Delete removes the selection; Escape / click-outside deselects.
+ * - Delete removes the selection; Escape deselects and clears the cursor; click-outside deselects.
  * - Cmd/Ctrl C/X/V copy / cut / paste; Cmd/Ctrl-A all.
  * - the velocity lane: drag a bar to set velocity (all selected move together); drag
  *   its top edge to resize the lane.
@@ -47,6 +48,7 @@ import { useAnimationFrame } from "./useAnimationFrame";
 import { usePersistentNumber } from "./usePersistent";
 import { Ruler } from "./timeline/Ruler";
 import { beatToX, floorBeat, snapBeat, snapDelta, xToBeat } from "./timeline/timeGrid";
+import { useCursor } from "./useCursor";
 import { anchorZoomX, anchorZoomY } from "./timeline/anchoredZoom";
 import { usePinchZoom, type PinchGesture } from "./usePinchZoom";
 import { GRID_DIVISIONS, quantizeNotes } from "../audio/sequencer/quantize";
@@ -81,6 +83,9 @@ const RESIZE_PX = 6; // grab zone on a note's right edge
 const DRAG_THRESH = 4; // px before an empty-grid press becomes a marquee
 const TRAIL_BEATS = 8; // empty grid drawn past the loop end (room to expand into)
 const VEL_BAR_W = 4; // px - a slim velocity marker per note
+/** A second tap this soon, and this near the first, is a double: it adds a note. */
+const DOUBLE_TAP_MS = 400;
+const DOUBLE_TAP_PX = 8;
 const RULER_H = 22; // px - matches Ruler's height, for the label-gutter corner spacer
 
 const ZOOM_X = { min: 24, max: 240 };
@@ -260,6 +265,11 @@ export function PianoRoll({
   const playheadRef = useRef<HTMLDivElement>(null);
   const heldRef = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
+  /** The last tap on empty grid, so the next can tell whether it makes a double. */
+  const lastTap = useRef<{ time: number; x: number; y: number } | null>(null);
+  // The cursor, where this clip plays it (`cursorInClip`), or null when it isn't in this clip.
+  const cursor = useCursor(scheduler);
+  const cursorBeat = cursor === null ? null : scheduler.cursorInClip(trackId, clipId);
 
   const width = beatToX(viewBeats, pxPerBeat);
   const height = ROWS * rowH;
@@ -484,8 +494,9 @@ export function PianoRoll({
       const mod = e.metaKey || e.ctrlKey;
       const ids = [...selection];
 
-      if (e.key === "Escape" && ids.length) {
+      if (e.key === "Escape") {
         setSelection(new Set());
+        scheduler.setCursor(null);
       } else if ((e.key === "Delete" || e.key === "Backspace") && ids.length) {
         e.preventDefault();
         dispatch({ type: "removeNotes", trackId, clipId, ids });
@@ -511,7 +522,7 @@ export function PianoRoll({
         }
       } else if (mod && e.key === "v" && copiedNotes().length) {
         e.preventDefault();
-        const at = snapB(scheduler.getPositionBeats());
+        const at = snapB(scheduler.cursorInClip(trackId, clipId) ?? 0);
         const notes: NoteEvent[] = copiedNotes().map((entry) => ({
           id: newNoteId(),
           pitch: clampPitch(entry.pitch),
@@ -663,7 +674,7 @@ export function PianoRoll({
     });
   };
 
-  // --- empty-grid press: click -> add, drag -> marquee ----------------------
+  // --- empty-grid press: click -> cursor, double -> add, drag -> marquee -----
   const onGridDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const rect = gridRef.current!.getBoundingClientRect();
@@ -720,8 +731,21 @@ export function PianoRoll({
         setSelection(new Set()); // outside the note range / past the loop end: just deselect
         return;
       }
-      const id = newNoteId();
+      // One tap puts the cursor there; a second soon after, in the same place, adds a note (DAW-31).
+      const previous = lastTap.current;
+      const now = performance.now();
+      const double =
+        previous !== null &&
+        now - previous.time < DOUBLE_TAP_MS &&
+        Math.hypot(downX - previous.x, downY - previous.y) < DOUBLE_TAP_PX;
+      lastTap.current = double ? null : { time: now, x: downX, y: downY };
       const start = clampStart(floorBeat(beat, snapOn ? snapDiv : GRID));
+      if (!double) {
+        setSelection(new Set());
+        scheduler.setCursorInClip(trackId, clipId, start);
+        return;
+      }
+      const id = newNoteId();
       dispatch({
         type: "addNote",
         trackId,
@@ -737,10 +761,8 @@ export function PianoRoll({
   // that is the next slice of this ticket.
   const selectedNote = selection.size === 1 ? (clip.notes.find((note) => selection.has(note.id)) ?? null) : null;
 
-  // Split belongs here too, at the playhead rather than at a tap point - but there is no
-  // playhead to split at. `getPositionBeats()` is 0 whenever the transport is stopped and
-  // `play()` always anchors to 0, so the position is never inside a note and the row could only
-  // ever be disabled. It comes back with DAW-31, which gives the transport a position.
+  // Split belongs here too, at the cursor rather than at a tap point, now that DAW-31 gives the
+  // transport one (`cursorInClip`). It is the follow-up DAW-31 names.
 
   /** A copy directly after the original, which is the only placement that needs no aiming. */
   const duplicateNote = (note: NoteEvent) => {
@@ -1021,6 +1043,8 @@ export function PianoRoll({
               // back to the track's *active* clip, so omitting it here resized whichever clip the
               // rail had selected rather than the one this roll is open on.
               onSetLoopEnd={(beats) => dispatch({ type: "setClipLength", trackId, clipId, lengthBeats: beats })}
+              cursor={cursorBeat}
+              onSeek={(beat) => scheduler.setCursorInClip(trackId, clipId, clampStart(snapB(beat)))}
             />
 
             <div
@@ -1160,6 +1184,13 @@ export function PianoRoll({
                 </>
               )}
 
+              {cursorBeat !== null && (
+                <div
+                  data-testid="roll-cursor"
+                  className="absolute top-0 w-px bg-strong pointer-events-none z-5"
+                  style={{ left: beatToX(cursorBeat, pxPerBeat), height }}
+                />
+              )}
               <div
                 ref={playheadRef}
                 className="absolute top-0 left-0 w-0.5 bg-you pointer-events-none opacity-0 z-5"

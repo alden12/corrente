@@ -15,7 +15,16 @@ import { GRID, type NoteEvent } from "./types";
 import { grooveById } from "../grooves/catalog";
 import { grooveAt } from "./groove";
 import { clamp } from "../../util";
-import { beatsToSeconds, notesStartingInBeatRange, onsetsInBeatRange, tileClipNotes, clipBeatAt } from "./timing";
+import {
+  beatsToSeconds,
+  notesStartingInBeatRange,
+  onsetsInBeatRange,
+  tileClipNotes,
+  clipBeatAt,
+  musicalBeat,
+  arrangementBeatOf,
+} from "./timing";
+import type { Placement } from "../project/types";
 
 export { beatsToSeconds, notesStartingInBeatRange, onsetsInBeatRange, tileClipNotes, clipBeatAt } from "./timing";
 
@@ -52,8 +61,9 @@ const CATCH_UP_GRACE_SEC = 0.02;
 
 /**
  * Pure: metronome clicks (one per shown beat) whose continuous onset lands in [fromBeat, toBeat).
- * Continuous beat 0 = playback start = the loop's start, so a continuous beat `b` maps to the musical
- * beat `loopStart + (b mod loopLen)`; the click is accented on each bar downbeat. `beatUnit` is the
+ * Continuous beat 0 = the loop's start, so a continuous beat `b` maps to the musical beat
+ * `loopStart + (b mod loopLen)`, or `loopStart + b` for a lead-in's negative `b` (`musicalBeat`); the
+ * click is accented on each bar downbeat. `beatUnit` is the
  * shown-beat size in beats (1 for x/4, 0.5 for x/8), so x/8 clicks eighths and the bar accent still
  * lands on the downbeat. Iterating by click *index* keeps the bar test exact for fractional bars.
  * Matches the note scheduler's half-open range so clicks and notes line up tick to tick.
@@ -69,10 +79,11 @@ export function metronomeClicksInBeatRange(
   const out: { atBeat: number; accent: boolean }[] = [];
   if (loopLen <= 0 || beatsPerBar <= 0 || beatUnit <= 0 || toBeat <= fromBeat) return out;
   const unitsPerBar = Math.max(1, Math.round(beatsPerBar / beatUnit)); // shown beats per bar (numerator)
-  for (let index = Math.max(0, Math.ceil(fromBeat / beatUnit - 1e-9)); index * beatUnit < toBeat; index++) {
+  // `|| 0` turns the -0 that `Math.ceil` gives just below 0 into 0.
+  for (let index = Math.ceil(fromBeat / beatUnit - 1e-9) || 0; index * beatUnit < toBeat; index++) {
     const atBeat = index * beatUnit;
     if (atBeat < fromBeat) continue;
-    const musical = loopStart + (((atBeat % loopLen) + loopLen) % loopLen);
+    const musical = musicalBeat(atBeat, loopStart, loopLen);
     out.push({ atBeat, accent: Math.round(musical / beatUnit) % unitsPerBar === 0 });
   }
   return out;
@@ -97,6 +108,17 @@ export class Scheduler implements TransportClock {
 
   private anchorBeat = 0;
   private anchorTime = 0;
+  /**
+   * Where play starts (DAW-31), an arrangement beat, or null for the loop's start. View state: it
+   * isn't saved, and two people in a shared project each have their own.
+   */
+  private cursor: number | null = null;
+  private readonly cursorListeners = new Set<() => void>();
+  /**
+   * Whole bars added to the beat the engine is told during a lead-in, whose count is negative: the
+   * engine's beat is a signal its blocks read (a synced LFO's phase), so it is kept from going below 0.
+   */
+  private engineBeatOffset = 0;
   private lastBps = 2;
   private scheduledUntilBeats = 0;
 
@@ -135,7 +157,7 @@ export class Scheduler implements TransportClock {
     this.toldTempo = this.project.tempo;
     this.engine.setTransport({
       time,
-      beat: this.continuousBeatAtTime(time),
+      beat: this.continuousBeatAtTime(time) + this.engineBeatOffset,
       tempo: this.project.tempo,
       playing: this.timer !== null,
     });
@@ -173,10 +195,69 @@ export class Scheduler implements TransportClock {
       : this.endOfPass(this.isPlaying ? this.continuousBeatAtTime(this.engine.currentTime) : 0);
   }
 
-  /** The end of the loop pass `beat` (continuous) is in: turned off mid-play, it finishes this one. */
+  /**
+   * The end of the loop pass `beat` (continuous) is in: turned off mid-play, it finishes this one. A
+   * lead-in runs on into the first pass, so that is where it ends.
+   */
   private endOfPass(beat: number): number {
     const passLength = this.project.length - this.project.loopStart;
-    return passLength > 0 ? (Math.floor(beat / passLength) + 1) * passLength : 0;
+    return passLength > 0 ? (Math.floor(Math.max(0, beat) / passLength) + 1) * passLength : 0;
+  }
+
+  /** Where play starts, an arrangement beat, or null for the loop's start. */
+  getCursor(): number | null {
+    return this.cursor;
+  }
+
+  /**
+   * Put the cursor at an arrangement beat, or clear it with null. While playing, play jumps there,
+   * except during a take that ends itself (its cue), which a jump would cut short of its pass.
+   */
+  setCursor(beat: number | null): void {
+    if (beat === this.cursor) return;
+    this.cursor = beat;
+    this.cursorListeners.forEach((listener) => listener());
+    if (this.timer !== null && this.cue === null) this.jumpTo(this.startCount());
+  }
+
+  /** Hear the cursor move; returns the unsubscribe. */
+  subscribeCursor(listener: () => void): () => void {
+    this.cursorListeners.add(listener);
+    return () => this.cursorListeners.delete(listener);
+  }
+
+  /**
+   * The continuous count play starts at: the cursor, counted from the loop's start (negative before
+   * it, a lead-in), or 0 for the loop's start. A cursor past the end starts at the loop's start.
+   */
+  private startCount(): number {
+    const { cursor } = this;
+    if (cursor === null || cursor < 0 || cursor >= this.project.length) return 0;
+    return cursor - this.project.loopStart;
+  }
+
+  /** Point the count at `count` from now, and tell the engine, which a lead-in's offset keeps above 0. */
+  private anchorAt(count: number, time: number): void {
+    const beatsPerBar = this.project.beatsPerBar;
+    this.anchorTime = time;
+    this.anchorBeat = count;
+    this.scheduledUntilBeats = count;
+    this.engineBeatOffset = count < 0 && beatsPerBar > 0 ? Math.ceil(-count / beatsPerBar) * beatsPerBar : 0;
+    if (!this.looping) this.endBeat = this.endOfPass(count);
+  }
+
+  /** Cut everything sounding: held notes and playing audio. */
+  private silenceAll(): void {
+    for (const track of this.project.getTracks()) this.engine.getNoteTarget(track.id)?.allNotesOff();
+    this.engine.stopAllAudio();
+  }
+
+  /** Carry on playing from `count`: what was sounding stops, and the engine hears the new beat. */
+  private jumpTo(count: number): void {
+    this.silenceAll();
+    this.anchorAt(count, this.engine.currentTime);
+    this.tellTransport();
+    this.tick();
   }
 
   /** What happens when a play that doesn't loop reaches the end (a take finishes itself, say). */
@@ -235,16 +316,18 @@ export class Scheduler implements TransportClock {
 
   private begin(atTime?: number): void {
     if (this.timer !== null || !this.engine.started) return;
-    this.anchorTime = atTime ?? this.engine.currentTime;
-    this.anchorBeat = 0;
-    this.scheduledUntilBeats = 0;
-    if (!this.looping) this.endBeat = this.endOfPass(0);
+    this.anchorAt(this.startCount(), atTime ?? this.engine.currentTime);
     this.lastBps = this.project.tempo / 60;
     this.unsubscribe = this.project.subscribe(() => this.reanchor());
     this.tick();
     this.timer = setInterval(() => this.tick(), LOOKAHEAD_MS);
     this.toldTempo = this.project.tempo;
-    this.engine.setTransport({ time: this.anchorTime, beat: 0, tempo: this.project.tempo, playing: true });
+    this.engine.setTransport({
+      time: this.anchorTime,
+      beat: this.anchorBeat + this.engineBeatOffset,
+      tempo: this.project.tempo,
+      playing: true,
+    });
     this.onStateChange?.(true);
   }
 
@@ -258,8 +341,7 @@ export class Scheduler implements TransportClock {
     this.timer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
-    for (const track of this.project.getTracks()) this.engine.getNoteTarget(track.id)?.allNotesOff();
-    this.engine.stopAllAudio();
+    this.silenceAll();
     this.tellTransport();
     this.onStateChange?.(false);
   }
@@ -270,7 +352,7 @@ export class Scheduler implements TransportClock {
     const loopStart = this.project.loopStart;
     const loopLen = this.project.length - loopStart;
     const cont = this.anchorBeat + (this.engine.currentTime - this.anchorTime) * this.lastBps;
-    return loopLen > 0 ? loopStart + (cont % loopLen) : 0;
+    return loopLen > 0 ? musicalBeat(cont, loopStart, loopLen) : 0;
   }
 
   /**
@@ -282,14 +364,45 @@ export class Scheduler implements TransportClock {
    */
   clipPositionBeats(trackId: string, clipId: string): number | null {
     if (this.timer === null) return null;
+    const played = this.playedClip(trackId, clipId);
+    return played && clipBeatAt(this.getPositionBeats(), played.placements, clipId, played.length);
+  }
+
+  /** The cursor in one clip's beats, for its editor; null when there is none or it isn't in the clip. */
+  cursorInClip(trackId: string, clipId: string): number | null {
+    const { cursor } = this;
+    const played = cursor === null ? null : this.playedClip(trackId, clipId);
+    return cursor !== null && played ? clipBeatAt(cursor, played.placements, clipId, played.length) : null;
+  }
+
+  /** Put the cursor where a clip first plays its beat `clipBeat`, from its editor. */
+  setCursorInClip(trackId: string, clipId: string, clipBeat: number): void {
+    const played = this.playedClip(trackId, clipId);
+    const beat = played && arrangementBeatOf(clipBeat, played.placements, clipId, played.length);
+    if (beat !== null) this.setCursor(beat);
+  }
+
+  /**
+   * How a track plays one of its clips, resolved the way `tick` resolves what to play: launched, over
+   * the loop from its start; else its placements. A clip placed nowhere is taken as launched, the
+   * way it would be heard, so its editor can still set the cursor in it. Null for no such note clip.
+   */
+  private playedClip(
+    trackId: string,
+    clipId: string,
+  ): { placements: Pick<Placement, "clipId" | "startBeat" | "offset" | "length">[]; length: number } | null {
     const track = this.project.getTrack(trackId);
     const clip = track?.clips.find((candidate) => candidate.id === clipId);
     if (!track || !clip || !("store" in clip)) return null;
     const loopStart = this.project.loopStart;
+    const overLoop = { clipId, startBeat: loopStart, offset: 0, length: this.project.length - loopStart };
+    const placed = track.placements.some((placement) => placement.clipId === clipId);
     const placements = track.launchedClipId
-      ? [{ clipId: track.launchedClipId, startBeat: loopStart, offset: 0, length: this.project.length - loopStart }]
-      : track.placements;
-    return clipBeatAt(this.getPositionBeats(), placements, clipId, clip.store.getClip().lengthBeats);
+      ? [{ ...overLoop, clipId: track.launchedClipId }]
+      : placed
+        ? track.placements
+        : [overLoop];
+    return { placements, length: clip.store.getClip().lengthBeats };
   }
 
   /**
@@ -301,7 +414,7 @@ export class Scheduler implements TransportClock {
     const loopStart = this.project.loopStart;
     const loopLen = this.project.length - loopStart;
     const cont = this.anchorBeat + (time - this.anchorTime) * this.lastBps;
-    return loopLen > 0 ? loopStart + (cont % loopLen) : cont;
+    return loopLen > 0 ? musicalBeat(cont, loopStart, loopLen) : cont;
   }
 
   private reanchor(): void {
@@ -421,7 +534,7 @@ export class Scheduler implements TransportClock {
               // Cut playback at the next loop boundary so a region that overruns the
               // loop (its length doesn't divide loopLen) is truncated instead of
               // overlapping the loop's restart (the double-trigger bug).
-              const maxBeats = (Math.floor(atBeat / loopLen) + 1) * loopLen - atBeat;
+              const maxBeats = (Math.floor(Math.max(0, atBeat) / loopLen) + 1) * loopLen - atBeat;
               this.engine.scheduleAudioClip(track.id, clip, when, maxBeats / bps);
             }
           }

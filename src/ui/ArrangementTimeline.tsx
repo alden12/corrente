@@ -37,7 +37,8 @@ import { beginPointerDrag } from "./pointerDrag";
 import { useAnimationFrame } from "./useAnimationFrame";
 import { TransportBar } from "./TransportBar";
 import { Ruler } from "./timeline/Ruler";
-import { beatToX } from "./timeline/timeGrid";
+import { beatToX, snapBeat } from "./timeline/timeGrid";
+import { useCursor } from "./useCursor";
 import { anchorZoomX } from "./timeline/anchoredZoom";
 import { usePinchZoom, type PinchGesture } from "./usePinchZoom";
 import { beatsPerBar as beatsPerBarOf } from "../audio/project/schema";
@@ -145,10 +146,10 @@ export function ArrangementTimeline({
     recorder.setCountInBars(countInBars);
   }, [recorder, countInBars]);
   const [selection, setSelection] = useState<Selection>(null);
-  const [marker, setMarker] = useState<{
-    trackId: string;
-    beat: number;
-  } | null>(null);
+  // The paste marker is the transport's cursor (DAW-31) on one track: the cursor says where, this
+  // says which track a paste lands on.
+  const cursor = useCursor(scheduler);
+  const [markerTrackId, setMarkerTrackId] = useState<string | null>(null);
   // The single in-flight clip-drag drop target, so only the lane under the cursor
   // shows the drop indicator (not every lane the drag has passed through).
   const [dropTarget, setDropTarget] = useState<{
@@ -178,10 +179,10 @@ export function ArrangementTimeline({
   const contentH = RULER_H + rows.length * ROW_PX;
 
   // Selecting a placement makes its track + clip active, so the roll follows it
-  // (and clears any paste marker - selection and marker are mutually exclusive).
+  // (and takes the paste marker off its track - selection and marker are mutually exclusive).
   const selectPlacement = (trackId: string, p: Placement) => {
     setSelection({ trackId, id: p.id });
-    setMarker(null);
+    setMarkerTrackId(null);
     projectStore.selectTrack(trackId);
     projectStore.selectClip(trackId, p.clipId);
   };
@@ -189,14 +190,15 @@ export function ArrangementTimeline({
   /** Drop both the selected clip and any paste marker: the timeline's "nothing is chosen" state. */
   const clearSelection = () => {
     setSelection(null);
-    setMarker(null);
+    setMarkerTrackId(null);
   };
 
-  // Clicking an empty lane drops a paste marker (track + beat) and clears the
-  // selection - paste then lands at the marker.
+  // Clicking an empty lane puts the cursor there, on that track, and clears the selection: play
+  // starts there and a paste lands there.
   const placeMarker = (trackId: string, beat: number) => {
     setSelection(null);
-    setMarker({ trackId, beat });
+    setMarkerTrackId(trackId);
+    scheduler.setCursor(beat);
     projectStore.selectTrack(trackId);
   };
 
@@ -217,7 +219,8 @@ export function ArrangementTimeline({
       if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[data-clip-rail]"))) return;
       if (e.key === "Escape") {
         setSelection(null);
-        setMarker(null);
+        setMarkerTrackId(null);
+        scheduler.setCursor(null);
         return;
       }
       if (!selection) return;
@@ -233,7 +236,7 @@ export function ArrangementTimeline({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, dispatch]);
+  }, [selection, dispatch, scheduler]);
 
   /** Put a placement's window on the clipboard, with its clip's content for a paste elsewhere. */
   const copyPlacement = (trackId: string, placementId: string): boolean => {
@@ -282,7 +285,7 @@ export function ArrangementTimeline({
       startBeat,
       ...copied.window,
     });
-    setMarker(null);
+    setMarkerTrackId(null);
     setSelection({ trackId: track.id, id });
     projectStore.selectTrack(track.id);
     projectStore.selectClip(track.id, clipId);
@@ -315,9 +318,10 @@ export function ArrangementTimeline({
         return;
       }
 
-      // paste: prefer the marker (track + beat); else after the selection; else the track's end.
-      const targetId = marker?.trackId ?? selection?.trackId ?? projectStore.selectedId ?? undefined;
-      if (!targetId || !pasteTo(targetId, marker ? marker.beat : null, selection?.id)) return;
+      // paste: prefer the marker (its track, at the cursor); else after the selection; else the track's end.
+      const marked = markerTrackId !== null && cursor !== null;
+      const targetId = (marked ? markerTrackId : null) ?? selection?.trackId ?? projectStore.selectedId ?? undefined;
+      if (!targetId || !pasteTo(targetId, marked ? cursor : null, selection?.id)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -524,6 +528,8 @@ export function ArrangementTimeline({
                   timeSignature={project.timeSignature}
                   onSetLoopStart={(beats) => dispatch({ type: "setLoopStart", beats })}
                   onSetLoopEnd={(beats) => dispatch({ type: "setLength", lengthBeats: beats })}
+                  cursor={cursor}
+                  onSeek={(beat) => scheduler.setCursor(snapOn ? snapBeat(beat, snapDiv) : beat)}
                 />
               </div>
 
@@ -557,7 +563,7 @@ export function ArrangementTimeline({
                     snapOn={snapOn}
                     snapDiv={snapDiv}
                     selection={selection}
-                    markerBeat={marker?.trackId === row.track.id ? marker.beat : null}
+                    markerBeat={markerTrackId === row.track.id ? cursor : null}
                     dropBeat={dropTarget?.trackId === row.track.id ? dropTarget.beat : null}
                     onSelect={selectPlacement}
                     onMark={placeMarker}
@@ -571,6 +577,13 @@ export function ArrangementTimeline({
                 ),
               )}
 
+              {cursor !== null && (
+                <div
+                  data-testid="arr-cursor"
+                  className="absolute top-0 bottom-0 w-px bg-strong pointer-events-none z-5"
+                  style={{ left: headerW + beatToX(cursor, pxPerBeat) }}
+                />
+              )}
               <div
                 ref={playheadRef}
                 className="absolute top-0 bottom-0 left-0 w-0.5 bg-you pointer-events-none opacity-0 z-5"

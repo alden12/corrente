@@ -152,7 +152,7 @@ async function settleRollScroll(page: Page) {
 }
 
 /**
- * Tap empty grid to make a note (MOBILE-7). A tap creates *and* selects, so the handles that
+ * Double-tap empty grid to make a note (MOBILE-7, DAW-31). It creates *and* selects, so the handles that
  * appear bracket the new note - which is a more direct grip on its geometry than picking it out
  * from among its neighbours, since each handle sits exactly on one of its ends.
  */
@@ -160,6 +160,7 @@ async function addNote(page: Page, { fromBottom }: { fromBottom?: number } = {})
   const before = await page.getByTestId("note").count();
   const view = (await page.getByTestId("roll-scroll").boundingBox())!;
   const y = fromBottom === undefined ? view.y + view.height / 2 : view.y + view.height - fromBottom;
+  await page.touchscreen.tap(view.x + 120, y);
   await page.touchscreen.tap(view.x + 120, y);
   await expect(page.getByTestId("note")).toHaveCount(before + 1);
   await expect(page.getByTestId("note-handle-end")).toBeVisible();
@@ -431,6 +432,16 @@ test.describe("phone", () => {
    * selected note grows handles, so there are only ever two of them and they can be as big as a
    * finger needs.
    */
+  test("a tap puts the cursor down, and only a double-tap makes a note (DAW-31)", async ({ page }) => {
+    await openRoll(page);
+    const before = await page.getByTestId("note").count();
+    const view = (await page.getByTestId("roll-scroll").boundingBox())!;
+    await page.touchscreen.tap(view.x + 120, view.y + view.height / 2);
+    await expect(page.getByTestId("roll-cursor")).toBeVisible();
+    await expect(page.getByTestId("note")).toHaveCount(before);
+    await addNote(page);
+  });
+
   test("a selected note grows handles a finger can actually hit", async ({ page }) => {
     await openRoll(page);
     await addNote(page);

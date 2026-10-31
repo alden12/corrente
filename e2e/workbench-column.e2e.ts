@@ -65,7 +65,7 @@ test("the roll folds away under its toolbar, keeping the keys and a glance at it
   await page.goto("/");
   await dismissStart(page);
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
-  await page.mouse.click(roll.x + 120, roll.y + 60);
+  await page.mouse.dblclick(roll.x + 120, roll.y + 60);
   await expect(page.getByTestId("note")).toHaveCount(1);
   const quantize = page.getByRole("button", { name: /^Quantize/ });
   await expect(quantize).toBeVisible();

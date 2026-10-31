@@ -114,7 +114,7 @@ test("an author's colour is re-lit for a white ground, on both paths at once", a
   // get two different teals in one window, so compare a real author-tinted surface with the
   // variable. A drawn note is `authorNoteStyle`, i.e. the JS path.
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
-  await page.mouse.click(roll.x + 120, roll.y + 60);
+  await page.mouse.dblclick(roll.x + 120, roll.y + 60);
   await page.mouse.click(roll.x + 400, roll.y + 200); // away from it, so it isn't drawn selected
   const note = page.getByTestId("note").first();
   await expect(note).toBeVisible();

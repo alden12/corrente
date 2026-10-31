@@ -429,7 +429,7 @@ export function Lane({
     pendingMark.current = null;
   };
 
-  // Press on empty lane: a clean click drops a paste marker at that beat; a drag
+  // Press on empty lane: a clean click puts the cursor at that beat, on this track; a drag
   // sketches a new empty clip sized to the drag.
   const onLaneDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -563,14 +563,13 @@ export function Lane({
           style={{ left: beatToX(dropBeat, pxPerBeat) }}
         />
       )}
+      {/* The cursor's line runs down the whole timeline; this marks the track a paste lands on. */}
       {markerBeat !== null && (
-        <div
-          className="absolute top-0 bottom-0 w-0.5 bg-strong pointer-events-none"
-          style={{ left: beatToX(markerBeat, pxPerBeat) }}
-          title="Paste marker"
-        >
-          <span className="absolute -top-0.5 -left-1 w-2 h-2 rotate-45 bg-strong" />
-        </div>
+        <span
+          data-testid="paste-marker"
+          className="absolute top-0.5 -translate-x-1/2 w-2 h-2 rotate-45 bg-strong pointer-events-none"
+          style={{ left: beatToX(markerBeat, pxPerBeat) + 0.5 }}
+        />
       )}
       {markerBeat !== null && (
         <MarkerMenu left={beatToX(markerBeat, pxPerBeat)} items={() => markerMenuItems(markerBeat)} />

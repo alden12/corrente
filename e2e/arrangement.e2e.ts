@@ -339,7 +339,7 @@ test("Delete in the roll removes the selected note, not a placement selected ear
   await placements(page).first().click();
 
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
-  await page.mouse.click(roll.x + 120, roll.y + 60);
+  await page.mouse.dblclick(roll.x + 120, roll.y + 60);
   const note = page.getByTestId("note");
   await expect(note).toHaveCount(1);
   await note.click();

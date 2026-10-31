@@ -35,8 +35,8 @@ test("a clip's chip shows a glance at its notes, and an empty one shows none (DA
   await expect(chipNotes).toHaveCount(0);
 
   const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
-  await page.mouse.click(roll.x + 120, roll.y + 60);
-  await page.mouse.click(roll.x + 200, roll.y + 90);
+  await page.mouse.dblclick(roll.x + 120, roll.y + 60);
+  await page.mouse.dblclick(roll.x + 200, roll.y + 90);
   await expect(chipNotes).toHaveCount(2);
 
   // + makes an empty clip: its chip has no notes to show.
