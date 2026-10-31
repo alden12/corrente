@@ -113,6 +113,7 @@ export function ArrangementTimeline({
 }) {
   const project = useProject(projectStore);
   const rec = useRecorder(recorder);
+  const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
 
@@ -198,6 +199,16 @@ export function ArrangementTimeline({
     setMarker({ trackId, beat });
     projectStore.selectTrack(trackId);
   };
+
+  // A press outside the timeline deselects, as in the roll: both listen for Delete on the window, so
+  // a placement left selected went with the notes Delete was meant for.
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setSelection(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
 
   // Delete removes the selected placement; Escape deselects (unless typing).
   useEffect(() => {
@@ -407,7 +418,7 @@ export function ArrangementTimeline({
   // `flex-1` on the root is for the touch shell, which stacks the panels in a flex
   // column; as a grid item on desktop it is ignored, so the grid row decides the height.
   return (
-    <div className="[grid-area:timeline] bg-ground border-t border-line flex flex-col flex-1 min-h-0">
+    <div ref={rootRef} className="[grid-area:timeline] bg-ground border-t border-line flex flex-col flex-1 min-h-0">
       {/* The whole toolbar row goes when compact - the shell owns the transport, and the tools
           menu sits in the ruler's corner. */}
       <div className={`flex items-center gap-3 px-2.5 border-b border-line bg-rail ${compact ? "hidden" : "py-1.5"}`}>

@@ -5,7 +5,8 @@
  * goes to where those colours are picked.
  *
  * The agent is one entry however many people drove it, as it is one colour; you are one entry
- * whether an edit was stamped with your id or the unattributed "you".
+ * whether an edit was stamped with your id or the unattributed "you". Shown only once there are
+ * two: a project only you have edited has nothing to tell apart.
  */
 import { useProject } from "../audio/project/useProject";
 import type { ProjectStore } from "../audio/project/projectStore";
@@ -44,7 +45,8 @@ export function ProjectEditors({
       label: person === "agent" ? "Agent" : authorLabel(author, presence.self),
       color: authorHex(author, presence),
     }));
-  if (editors.length === 0) return null;
+  // A key to one colour tells nothing, so it waits for a second editor.
+  if (editors.length < 2) return null;
   const stacked = editors.slice(0, SHOWN);
 
   return (

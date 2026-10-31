@@ -64,4 +64,12 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("navigation", { name: "Your projects" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Make your own" })).toHaveCount(0);
   });
+
+  test("Explore's project button opens the project's page, not the Studio", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Your projects" }).getByRole("button").first().click();
+    await expect(page.getByRole("button", { name: "Back to Projects" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back to Explore" })).toBeVisible();
+  });
 });

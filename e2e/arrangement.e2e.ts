@@ -331,3 +331,19 @@ test("a slow drag is one feed entry and one undo step, not one per pause", async
     .poll(async () => Math.round((await placements(page).first().boundingBox())!.width))
     .toBe(Math.round(seed.width));
 });
+
+test("Delete in the roll removes the selected note, not a placement selected earlier", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await expect(placements(page)).toHaveCount(1);
+  await placements(page).first().click();
+
+  const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
+  await page.mouse.click(roll.x + 120, roll.y + 60);
+  const note = page.getByTestId("note");
+  await expect(note).toHaveCount(1);
+  await note.click();
+  await page.keyboard.press("Delete");
+  await expect(note).toHaveCount(0);
+  await expect(placements(page)).toHaveCount(1);
+});
