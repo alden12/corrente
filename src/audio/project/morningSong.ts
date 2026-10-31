@@ -1,72 +1,242 @@
 /**
  * The Morning Song (DAW-94): the opening of Strauss's *Also sprach Zarathustra* (1896; Strauss died in
  * 1949, so it is out of copyright), the sunrise the first project plays. Alden's arrangement, played
- * in on 2026-10-31 (times kept as played, to a thousandth of a beat):
+ * in on 2026-10-31 (times kept as played, to a thousandth of a beat), in three sections of eight bars,
+ * the trumpet's call three times over:
  *
- * - **Lead** (the Micro VA): the call, C, G, C, held under a C major chord on the and of four, then the
- *   orchestra's C minor answer held through the second half.
- * - **Timpani** (a Sampler on the 808 kick, pitched, with a reverb): the answer, F and C in turn.
- * - **Pad** (with the octavator): the low C under it all, quieter for the second half.
+ * - **Sunrise:** C, G, C, a C major chord on the and of four, and the C minor answer.
+ * - **Sunrise II:** the call again, answered in F, and the lead's run up into...
+ * - **Sunrise III:** the climb, E-F-G twice, then A and B to the held C.
  *
- * Each part is [pitch, start beat, length in beats, velocity 0 to 1]. 4/4 at `MORNING_TEMPO`.
+ * Four parts, each a few clips placed by section:
+ *
+ * - **Chords** (the Micro VA): the call and its answers.
+ * - **Drums** (a Sampler on the 808 kick, pitched, with a reverb): the timpani's F and C in turn.
+ * - **Pad** (with the octavator): the low notes under it all.
+ * - **Lead** (the Micro VA again): the run into the climb, and the climb, in octaves.
+ *
+ * Each note is [pitch, start beat, length in beats, velocity 0 to 1]. 4/4 at `MORNING_TEMPO`.
  */
 import type { NoteInput } from "../sequencer/clipStore";
 
 export const MORNING_TEMPO = 110;
-export const MORNING_BEATS = 28;
+/** A section: eight bars, every clip's length. */
+export const MORNING_SECTION = 32;
+export const MORNING_BEATS = 3 * MORNING_SECTION;
 
-type Part = readonly (readonly [number, number, number, number])[];
+type Notes = readonly (readonly [number, number, number, number])[];
 
-/** A chord's pitches, all starting at `start`, each held its own length. */
-const chord = (start: number, notes: readonly (readonly [number, number])[]): Part =>
-  notes.map(([pitch, length]) => [pitch, start, length, 0.85] as const);
+/** A clip of a part: its name, its notes, and the beats it is placed at, a section each. */
+export type SongClip = { name: string; notes: NoteInput[]; at: number[] };
 
-const LEAD: Part = [
-  // The call: C, G, C, each held on into the chord.
-  [48, 0, 15.245, 0.85],
-  [55, 4, 11.228, 0.85],
-  [60, 8, 7.354, 0.85],
-  // C major, short, on the and of four...
-  ...chord(15.5, [
-    [48, 0.341],
-    [55, 0.33],
-    [60, 0.341],
-    [64, 0.25],
-    [67, 0.33],
-    [76, 0.25],
-  ]),
-  // ...and C minor, held to the end.
-  ...chord(16, [
-    [48, 11.462],
-    [55, 11.43],
-    [60, 11.462],
-    [63, 11.526],
-    [67, 11.43],
-    [75, 11.526],
-  ]),
+/** Notes all starting at `start`, each [pitch, length], at one velocity. */
+const together = (start: number, notes: readonly (readonly [number, number])[], velocity = 0.85): Notes =>
+  notes.map(([pitch, length]) => [pitch, start, length, velocity] as const);
+
+const clip = (name: string, at: number[], notes: Notes): SongClip => ({
+  name,
+  at,
+  notes: notes.map(([pitch, start, length, velocity]) => ({ pitch, start, length, velocity })),
+});
+
+const [FIRST, SECOND, THIRD] = [0, MORNING_SECTION, 2 * MORNING_SECTION];
+
+/** The call, C, G, C, each held to the chord on the and of four. */
+const CALL: Notes = [
+  [48, 0, 15, 0.85],
+  [55, 4, 11, 0.85],
+  [60, 8, 7, 0.85],
 ];
 
-/** The timpani's answer on the pitched 808 kick: F and C in turn, a beat apart. */
-const TIMPANI: Part = [
-  [77, 18, 0.756, 0.85],
-  [72, 19, 0.979, 0.85],
-  [77, 20, 0.883, 0.85],
-  [72, 21, 1.011, 0.85],
-  [77, 22, 1.171, 0.85],
-  [72, 23, 1.043, 0.85],
-  [77, 24, 1.203, 0.85],
-  [72, 25, 1.831, 0.85],
+export const MORNING_CHORDS: SongClip[] = [
+  clip(
+    "Sunrise",
+    [FIRST],
+    [
+      ...CALL,
+      ...together(15.5, [
+        [48, 0.341],
+        [55, 0.33],
+        [64, 0.25],
+      ]),
+      // ...and C minor.
+      ...together(16, [
+        [48, 10],
+        [55, 10],
+        [63, 10],
+      ]),
+    ],
+  ),
+  clip(
+    "Sunrise II",
+    [SECOND],
+    [
+      ...CALL,
+      ...together(15.5, [
+        [48, 0.5],
+        [55, 0.5],
+        [64, 0.5],
+      ]),
+      // ...answered in F, and F again under the lead's run.
+      ...together(16, [
+        [53, 6.79],
+        [60, 6.609],
+        [69, 6.5],
+      ]),
+      ...together(
+        27,
+        [
+          [53, 5],
+          [60, 5],
+        ],
+        0.8,
+      ),
+    ],
+  ),
+  clip(
+    "Sunrise III",
+    [THIRD],
+    [
+      ...together(0, [
+        [48, 6.5],
+        [55, 6.5],
+      ]),
+      ...together(7, [
+        [48, 5.045],
+        [55, 5.055],
+      ]),
+      ...together(12, [
+        [53, 3.406],
+        [60, 3.384],
+      ]),
+      ...together(16, [
+        [55, 3.906],
+        [62, 3.799],
+      ]),
+      ...together(20, [
+        [48, 12],
+        [55, 12],
+      ]),
+    ],
+  ),
 ];
 
-/** The low C, the octavator doubling it above and below. */
-const PAD: Part = [
-  [48, 0, 15.75, 0.85],
-  [48, 16, 12, 0.461],
+/** The timpani's answer, F and C in turn, a beat apart: after each of the first two calls. */
+export const MORNING_DRUMS: SongClip[] = [
+  clip(
+    "Sunrise",
+    [FIRST, SECOND],
+    [
+      [77, 18, 0.756, 0.85],
+      [72, 19, 0.979, 0.85],
+      [77, 20, 0.883, 0.85],
+      [72, 21, 1.011, 0.85],
+      [77, 22, 1.171, 0.85],
+      [72, 23, 1.043, 0.85],
+      [77, 24, 1.203, 0.85],
+      [72, 25, 1.25, 0.85],
+      [77, 26, 1.25, 0.8],
+    ],
+  ),
+  // Under the held C, from where the G gives way to it.
+  clip(
+    "Sunrise III",
+    [THIRD],
+    [
+      [77, 20, 0.883, 0.85],
+      [72, 21, 1.011, 0.85],
+      [77, 22, 1.171, 0.85],
+      [72, 23, 1.043, 0.85],
+      [77, 24, 1.203, 0.85],
+      [72, 25, 1.831, 0.85],
+      [77, 26, 2, 0.8],
+    ],
+  ),
 ];
 
-const notes = (part: Part): NoteInput[] =>
-  part.map(([pitch, start, length, velocity]) => ({ pitch, start, length, velocity }));
+/** The bass of each chord, the octavator doubling it above and below. */
+export const MORNING_PAD: SongClip[] = [
+  clip(
+    "Sunrise",
+    [FIRST],
+    [
+      [48, 0, 15.75, 0.85],
+      [51, 16, 10, 0.8],
+    ],
+  ),
+  clip(
+    "Sunrise II",
+    [SECOND],
+    [
+      [48, 0, 15.75, 0.85],
+      [53, 16, 6.5, 0.8],
+      [53, 27, 5, 0.8],
+    ],
+  ),
+  clip(
+    "Sunrise III",
+    [THIRD],
+    [
+      [48, 0, 12, 0.85],
+      [53, 12, 3.5, 0.8],
+      [55, 16, 4, 0.8],
+      [48, 20, 12, 0.8],
+    ],
+  ),
+];
 
-export const MORNING_LEAD = notes(LEAD);
-export const MORNING_TIMPANI = notes(TIMPANI);
-export const MORNING_PAD = notes(PAD);
+/** The run up out of the second section, and the climb, in octaves. */
+export const MORNING_LEAD: SongClip[] = [
+  clip(
+    "Sunrise II",
+    [SECOND],
+    [
+      [69, 27, 0.458, 0.85],
+      [71, 27.5, 0.5, 0.85],
+      [72, 28, 2.25, 0.85],
+      [74, 30, 1.5, 0.85],
+    ],
+  ),
+  clip(
+    "Sunrise III",
+    [THIRD],
+    [
+      ...together(0, [
+        [64, 0.25],
+        [76, 0.266],
+      ]),
+      ...together(0.5, [
+        [65, 0.266],
+        [77, 0.255],
+      ]),
+      ...together(1, [
+        [67, 5.862],
+        [79, 5.843],
+      ]),
+      ...together(7, [
+        [64, 0.25],
+        [76, 0.25],
+      ]),
+      ...together(7.5, [
+        [65, 0.25],
+        [77, 0.25],
+      ]),
+      ...together(8, [
+        [67, 3.75],
+        [79, 3.75],
+      ]),
+      ...together(12, [
+        [69, 3.75],
+        [81, 3.75],
+      ]),
+      ...together(16, [
+        [71, 3.938],
+        [83, 3.895],
+      ]),
+      ...together(20, [
+        [72, 12],
+        [84, 12],
+      ]),
+    ],
+  ),
+];
