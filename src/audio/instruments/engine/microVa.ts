@@ -173,7 +173,9 @@ export const microVa: EngineBuiltin = {
   ],
   definition: {
     format: 1,
-    voices: 4,
+    // 16, not the hardware's 4 (2026-10-31, Alden): with 4, a held chord lost notes to the next ones
+    // and to the tails still fading. LFO 1 is shared to make room (16 is 23.9% of a phone's thread).
+    voices: 16,
     voice: "vca",
     output: "out",
     nodes: {
@@ -201,7 +203,9 @@ export const microVa: EngineBuiltin = {
         voice: true,
         inputs: { frequency: "f1", semitones: [{ param: "o2.semi" }, { param: "o2.tune", scale: 0.01 }] },
       },
-      lfo1: { block: "lfo", voice: true, inputs: { rate: { param: "lfo1.rate" } } },
+      // Shared by every voice, as LFO 2 is: it reads nothing of the note, only its rate, and sharing it
+      // is what lets 16 voices fit a phone. Voices sweep their pulse width and wavetable in step.
+      lfo1: { block: "lfo", inputs: { rate: { param: "lfo1.rate" } } },
       pw: {
         block: "add",
         voice: true,
