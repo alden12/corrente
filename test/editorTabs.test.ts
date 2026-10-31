@@ -10,6 +10,7 @@ import {
   retainTabs,
   showTab,
   tabKey,
+  trackTabs,
   type EditorTabs,
 } from "../src/ui/tabs/editorTabs";
 
@@ -90,5 +91,15 @@ describe("editor tabs", () => {
     expect(parseTabs(null)).toEqual(NO_TABS);
     expect(parseTabs("not json")).toEqual(NO_TABS);
     expect(parseTabs(JSON.stringify({ tabs: [{ target: { kind: "track" } }], active: null }))).toEqual(NO_TABS);
+  });
+});
+
+describe("the starter project's tabs (DAW-94)", () => {
+  it("opens each track in a kept tab, in order, showing the one given", () => {
+    const tabs = trackTabs(["t-1", "t-2", "t-3"], "t-1");
+    expect(shape(tabs)).toEqual(["[t-1]", "t-2", "t-3"]);
+    // Kept, so selecting another track adds a preview tab rather than replacing one of them.
+    expect(shape(showTab(tabs, track("t-4")))).toEqual(["t-1", "t-2", "t-3", "[t-4*]"]);
+    expect(parseTabs(JSON.stringify(tabs))).toEqual(tabs);
   });
 });

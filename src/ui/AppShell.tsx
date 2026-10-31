@@ -23,6 +23,8 @@ import { BufferControl } from "../audio/engine/bufferControl";
 import { SoundPreview } from "../audio/live/preview";
 import { noteUsed } from "./explore/recent/store";
 import { STARTER_RECENT_KEYS } from "../audio/project/starter";
+import { seedEditorTabs } from "./tabs/useEditorTabs";
+import { trackTabs } from "./tabs/editorTabs";
 import { MidiInput } from "../audio/midi/midiInput";
 import { attachAutosave, attachUndoPersistence } from "../audio/persistence";
 import { initProjects, forkProjectFromSnapshot } from "../audio/projects/operations";
@@ -288,7 +290,12 @@ export function AppShell() {
       .then((seeded) => {
         if (!active) return;
         // A new device's Recently used shelf starts with what its first project plays (DAW-76).
-        if (seeded && starterExtras) STARTER_RECENT_KEYS.forEach(noteUsed);
+        if (seeded && starterExtras) {
+          STARTER_RECENT_KEYS.forEach(noteUsed);
+          // And its tracks start open in tabs, the selected one shown.
+          const trackIds = projectStore.getTracks().map((track) => track.id);
+          seedEditorTabs(currentProjectId(), trackTabs(trackIds, projectStore.selectedId));
+        }
         // With a remote backend, edits ride the live WS channel and the authority persists them (the
         // client no longer appends over HTTP): open a shared session and route each dispatched edit to it.
         // Local-only backend keeps the HTTP/OPFS autosave. Version-history checkpoints stay client-side

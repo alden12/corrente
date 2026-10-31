@@ -49,6 +49,12 @@ export const TAB_LIMIT = 10;
 
 export const NO_TABS: EditorTabs = { tabs: [], active: null };
 
+/** Each track open in a kept tab, in order, with `active`'s shown: how the starter project opens (DAW-94). */
+export const trackTabs = (trackIds: readonly string[], active: string | null): EditorTabs => ({
+  tabs: trackIds.map((trackId, index) => ({ target: { kind: "track", trackId }, preview: false, usedAt: index + 1 })),
+  active: active ? tabKey({ kind: "track", trackId: active }) : null,
+});
+
 /** A tab's identity: two tabs on the same target are the same tab. */
 export const tabKey = (target: TabTarget): string => (KEYS[target.kind] as (target: TabTarget) => string)(target);
 

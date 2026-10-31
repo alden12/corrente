@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import { hasGraph } from "../../audio/definitions/chainGraph";
+import { createListeners } from "../../listeners";
 import { readPersistent, writePersistent } from "../persistentStore";
 import { subscribeGraphRequests } from "./openGraph";
 import {
@@ -26,6 +27,17 @@ import {
 } from "./editorTabs";
 
 const keyFor = (projectId: string) => `corrente:editor-tabs:${projectId}`;
+
+const seeds = createListeners<[string, EditorTabs]>();
+
+/**
+ * Open a project with these tabs, as the starter project's first opening does (DAW-94): saved for it,
+ * and told to the editor if it is already showing that project, which it can be by the time boot says.
+ */
+export function seedEditorTabs(projectId: string, tabs: EditorTabs): void {
+  writePersistent(keyFor(projectId), JSON.stringify(tabs));
+  seeds.emit(projectId, tabs);
+}
 
 /** Whether a tab's target is still there: its track in the project, its device registered. A patch's chain is in its tab. */
 const EXISTS: {
@@ -79,6 +91,14 @@ export function useEditorTabs(
   useEffect(() => {
     if (projectId) writePersistent(keyFor(projectId), JSON.stringify(state));
   }, [projectId, state]);
+
+  useEffect(
+    () =>
+      seeds.subscribe((seededId, seeded) => {
+        if (seededId === projectId) setState(seeded);
+      }),
+    [projectId],
+  );
 
   // A graph asked for from a menu anywhere opens as a tab of its own.
   useEffect(() => subscribeGraphRequests((target) => setState((current) => openTab(current, target))), []);
