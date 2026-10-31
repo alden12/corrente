@@ -8,12 +8,13 @@
  * - **Sunrise II:** the call again, answered in F, and the lead's run up into...
  * - **Sunrise III:** the climb, E-F-G twice, then A and B to the held C.
  *
- * Four parts, each a few clips placed by section:
+ * Four parts, each a clip a section:
  *
  * - **Chords** (the Micro VA): the call and its answers.
  * - **Drums** (a Sampler on the 808 kick, pitched, with a reverb): the timpani's F and C in turn.
  * - **Pad** (with the octavator): the low notes under it all.
- * - **Lead** (the Micro VA again): the run into the climb, and the climb, in octaves.
+ * - **Lead** (the Micro VA again): the answers' top notes, the run into the climb, and the climb, in
+ *   octaves.
  *
  * Each note is [pitch, start beat, length in beats, velocity 0 to 1]. 4/4 at `MORNING_TEMPO`.
  */
@@ -32,6 +33,10 @@ export type SongClip = { name: string; notes: NoteInput[]; at: number[] };
 /** Notes all starting at `start`, each [pitch, length], at one velocity. */
 const together = (start: number, notes: readonly (readonly [number, number])[], velocity = 0.85): Notes =>
   notes.map(([pitch, length]) => [pitch, start, length, velocity] as const);
+
+/** Notes a beat apart from `start`, each [pitch, length], at one velocity: the timpani's strokes. */
+const strokes = (start: number, notes: readonly (readonly [number, number])[], velocity: number): Notes =>
+  notes.map(([pitch, length], index) => [pitch, start + index, length, velocity] as const);
 
 const clip = (name: string, at: number[], notes: Notes): SongClip => ({
   name,
@@ -61,9 +66,9 @@ export const MORNING_CHORDS: SongClip[] = [
       ]),
       // ...and C minor.
       ...together(16, [
-        [48, 10],
-        [55, 10],
-        [63, 10],
+        [48, 14],
+        [55, 14],
+        [63, 14],
       ]),
     ],
   ),
@@ -79,15 +84,15 @@ export const MORNING_CHORDS: SongClip[] = [
       ]),
       // ...answered in F, and F again under the lead's run.
       ...together(16, [
-        [53, 6.79],
-        [60, 6.609],
-        [69, 6.5],
+        [53, 7.5],
+        [60, 7.5],
+        [69, 7.5],
       ]),
       ...together(
-        27,
+        24,
         [
-          [53, 5],
-          [60, 5],
+          [53, 7.5],
+          [60, 7.5],
         ],
         0.8,
       ),
@@ -106,50 +111,79 @@ export const MORNING_CHORDS: SongClip[] = [
         [55, 5.055],
       ]),
       ...together(12, [
-        [53, 3.406],
-        [60, 3.384],
+        [53, 3.5],
+        [60, 3.5],
       ]),
       ...together(16, [
         [55, 3.906],
         [62, 3.799],
       ]),
       ...together(20, [
-        [48, 12],
-        [55, 12],
+        [48, 11],
+        [55, 11],
       ]),
     ],
   ),
 ];
 
-/** The timpani's answer, F and C in turn, a beat apart: after each of the first two calls. */
+/** The timpani's answer, F and C in turn, a beat apart: after the first call, and under the held C. */
 export const MORNING_DRUMS: SongClip[] = [
   clip(
     "Sunrise",
-    [FIRST, SECOND],
+    [FIRST],
     [
-      [77, 18, 0.756, 0.85],
-      [72, 19, 0.979, 0.85],
-      [77, 20, 0.883, 0.85],
-      [72, 21, 1.011, 0.85],
-      [77, 22, 1.171, 0.85],
-      [72, 23, 1.043, 0.85],
-      [77, 24, 1.203, 0.85],
-      [72, 25, 1.25, 0.85],
-      [77, 26, 1.25, 0.8],
+      ...strokes(
+        18,
+        [
+          [77, 0.756],
+          [72, 0.979],
+          [77, 0.883],
+          [72, 1.011],
+          [77, 1.171],
+          [72, 1.043],
+          [77, 1.203],
+          [72, 1.25],
+        ],
+        0.85,
+      ),
+      ...strokes(
+        26,
+        [
+          [77, 1],
+          [72, 1],
+          [77, 1],
+          [72, 1],
+          [77, 1],
+        ],
+        0.8,
+      ),
     ],
   ),
-  // Under the held C, from where the G gives way to it.
   clip(
     "Sunrise III",
     [THIRD],
     [
-      [77, 20, 0.883, 0.85],
-      [72, 21, 1.011, 0.85],
-      [77, 22, 1.171, 0.85],
-      [72, 23, 1.043, 0.85],
-      [77, 24, 1.203, 0.85],
-      [72, 25, 1.831, 0.85],
-      [77, 26, 2, 0.8],
+      ...strokes(
+        22,
+        [
+          [77, 1.171],
+          [72, 1.043],
+          [77, 1.203],
+          [72, 1.5],
+        ],
+        0.85,
+      ),
+      ...strokes(
+        26,
+        [
+          [77, 1.5],
+          [72, 1.5],
+          [77, 1.5],
+          [72, 1.5],
+          [77, 1.5],
+        ],
+        0.8,
+      ),
     ],
   ),
 ];
@@ -161,7 +195,7 @@ export const MORNING_PAD: SongClip[] = [
     [FIRST],
     [
       [48, 0, 15.75, 0.85],
-      [51, 16, 10, 0.8],
+      [51, 16, 13, 0.8],
     ],
   ),
   clip(
@@ -169,32 +203,42 @@ export const MORNING_PAD: SongClip[] = [
     [SECOND],
     [
       [48, 0, 15.75, 0.85],
-      [53, 16, 6.5, 0.8],
-      [53, 27, 5, 0.8],
+      [53, 16, 7.25, 0.8],
+      [57, 24, 7.25, 0.8],
     ],
   ),
   clip(
     "Sunrise III",
     [THIRD],
     [
-      [48, 0, 12, 0.85],
-      [53, 12, 3.5, 0.8],
-      [55, 16, 4, 0.8],
-      [48, 20, 12, 0.8],
+      [48, 0, 11, 0.85],
+      [53, 12, 3.25, 0.8],
+      [55, 16, 3.25, 0.8],
+      [48, 20, 10, 0.8],
     ],
   ),
 ];
 
-/** The run up out of the second section, and the climb, in octaves. */
+/** The answers' top notes, the run up out of the second section, and the climb, in octaves. */
 export const MORNING_LEAD: SongClip[] = [
+  clip(
+    "Sunrise",
+    [FIRST],
+    [
+      [64, 15.5, 0.5, 0.8],
+      [63, 16, 14, 0.8],
+    ],
+  ),
   clip(
     "Sunrise II",
     [SECOND],
     [
-      [69, 27, 0.458, 0.85],
-      [71, 27.5, 0.5, 0.85],
-      [72, 28, 2.25, 0.85],
-      [74, 30, 1.5, 0.85],
+      [64, 15.5, 0.5, 0.8],
+      [69, 16, 6.25, 0.8],
+      [69, 23, 0.458, 0.85],
+      [71, 23.5, 0.5, 0.85],
+      [72, 24, 3.75, 0.85],
+      [74, 28, 3.75, 0.85],
     ],
   ),
   clip(
@@ -234,8 +278,8 @@ export const MORNING_LEAD: SongClip[] = [
         [83, 3.895],
       ]),
       ...together(20, [
-        [72, 12],
-        [84, 12],
+        [72, 11],
+        [84, 11],
       ]),
     ],
   ),

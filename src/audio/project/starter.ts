@@ -86,6 +86,7 @@ export function addStarterSong(project: ProjectStore): void {
   const pad = project.addTrack("pad", { name: "Pad", unplaced: true });
   project.addMidiDevice(pad.id, "octavator")?.params.load({ octaveUp: true, octaveDown: true, level: 0.41 });
   const lead = addStarterTrack(project, { name: "Lead", unplaced: true });
+  project.setVolume(lead.id, 0.6);
   (
     [
       [chords, MORNING_CHORDS],
