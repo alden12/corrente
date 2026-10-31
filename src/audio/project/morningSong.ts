@@ -64,12 +64,14 @@ export const MORNING_CHORDS: SongClip[] = [
         [55, 0.33],
         [64, 0.25],
       ]),
-      // ...and C minor.
+      // ...and C minor, sinking through Eb to a low G.
       ...together(16, [
         [48, 14],
-        [55, 14],
-        [63, 14],
+        [55, 10],
+        [63, 8.25],
       ]),
+      [51, 20, 8, 0.85],
+      [43, 22, 10, 0.85],
     ],
   ),
   clip(
@@ -194,8 +196,8 @@ export const MORNING_PAD: SongClip[] = [
     "Sunrise",
     [FIRST],
     [
-      [48, 0, 15.75, 0.85],
-      [51, 16, 13, 0.8],
+      [48, 0, 15, 0.85],
+      [51, 16, 16, 0.8],
     ],
   ),
   clip(
@@ -218,6 +220,18 @@ export const MORNING_PAD: SongClip[] = [
     ],
   ),
 ];
+
+/** E, C, G falling a beat apart under each held G of the climb, from `start`. */
+const FALL = (start: number): Notes =>
+  strokes(
+    start,
+    [
+      [52, 1],
+      [48, 1],
+      [43, 1],
+    ],
+    0.8,
+  );
 
 /** The answers' top notes, the run up out of the second section, and the climb, in octaves. */
 export const MORNING_LEAD: SongClip[] = [
@@ -257,6 +271,7 @@ export const MORNING_LEAD: SongClip[] = [
         [67, 5.862],
         [79, 5.843],
       ]),
+      ...FALL(2),
       ...together(7, [
         [64, 0.25],
         [76, 0.25],
@@ -269,6 +284,7 @@ export const MORNING_LEAD: SongClip[] = [
         [67, 3.75],
         [79, 3.75],
       ]),
+      ...FALL(9),
       ...together(12, [
         [69, 3.75],
         [81, 3.75],
