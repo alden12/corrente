@@ -726,6 +726,20 @@ test.describe("phone", () => {
     await expect(page.locator("[data-track-id]").first()).toBeVisible();
   });
 
+  test("opens another project on its lane headers, wherever the last one was scrolled to", async ({ page }) => {
+    await startInStudio(page);
+    await page.getByTestId("arr-scroll").evaluate((el) => (el.scrollLeft = 400));
+    await expect.poll(() => page.getByTestId("arr-scroll").evaluate((el) => el.scrollLeft)).toBe(400);
+
+    // On a phone the headers are the mixer, so a project opens on them rather than a bar in.
+    await tab(page, "Projects").tap();
+    await page.getByRole("button", { name: "Back to Projects" }).tap();
+    await page.getByRole("button", { name: "+ New" }).tap();
+    await page.getByRole("button", { name: "Create" }).tap();
+    await tab(page, "Studio").tap();
+    await expect.poll(() => page.getByTestId("arr-scroll").evaluate((el) => el.scrollLeft)).toBe(0);
+  });
+
   test("choosing a track leaves a parked sheet where it is", async ({ page }) => {
     await startInStudio(page);
     await setDetent(page, "peek");

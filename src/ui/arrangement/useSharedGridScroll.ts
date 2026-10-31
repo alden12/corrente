@@ -18,27 +18,34 @@
  *
  * `leadPx` is how many pixels of the scrollable content sit *before* beat 0 - the header
  * width where that column scrolls away with the lanes (phone portrait), and zero where it
- * is `position: sticky` and therefore consumes no scroll (everywhere else).
+ * is `position: sticky` and therefore consumes no scroll (everywhere else). **Where the headers
+ * scroll, the surface opens at the far left, showing them,** whatever offset is stored: on a phone
+ * the headers are the mixer, and opening a bar in left them out of sight (2026-10-31, Alden). Once
+ * you've scrolled it, a zoom restores the offset as ever.
  */
-import { useLayoutEffect, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { readGridScrollBeats, writeGridScrollBeats } from "./gridView";
 
 export function useSharedGridScroll(ref: RefObject<HTMLElement | null>, pxPerBeat: number, leadPx = 0): void {
+  const opened = useRef(false);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || pxPerBeat <= 0) return;
+    // Until you scroll it: the first runs can come before the header column is measured.
+    const opening = !opened.current;
 
     // Restore before paint, so the surface never flashes at bar 1 first. With nothing to
     // restore, open at the content's left edge rather than at beat 0: where the header
     // column scrolls, beat 0 has already pushed the track names off screen.
     let restoring = true;
     const stored = readGridScrollBeats();
-    el.scrollLeft = stored === null ? 0 : leadPx + stored * pxPerBeat;
+    el.scrollLeft = stored === null || (opening && leadPx > 0) ? 0 : leadPx + stored * pxPerBeat;
 
     const onScroll = () => {
       // The restore's own scroll event lands before the frame it was applied in ends;
       // anything after that is the user, and only the user gets to move the shared value.
       if (restoring) return;
+      opened.current = true;
       writeGridScrollBeats((el.scrollLeft - leadPx) / pxPerBeat);
     };
     const settle = requestAnimationFrame(() => {

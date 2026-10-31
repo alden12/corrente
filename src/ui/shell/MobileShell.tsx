@@ -152,6 +152,7 @@ export function MobileShell({
   dispatch,
   liveNotes,
   preview,
+  projectId,
   selectedTrack,
   isPlaying,
   started,
@@ -466,7 +467,9 @@ export function MobileShell({
               // the sheet slides over this rather than resizing it every frame.
               style={{ height: selectedTrack ? `${(1 - detents[detent]) * 100}%` : "100%" }}
             >
+              {/* Remade for another project, so it opens on that project's headers (useSharedGridScroll). */}
               <ArrangementTimeline
+                key={projectId ?? "none"}
                 projectStore={projectStore}
                 scheduler={scheduler}
                 recorder={recorder}
