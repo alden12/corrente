@@ -731,7 +731,7 @@ test.describe("phone", () => {
     await expect.poll(() => page.getByTestId("arr-scroll").evaluate((el) => el.scrollLeft)).toBe(400);
 
     // On a phone the headers are the mixer, so a project opens on them rather than a bar in.
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     await page.getByRole("button", { name: "+ New" }).tap();
     await page.getByRole("button", { name: "Create" }).tap();
@@ -1172,7 +1172,7 @@ test.describe("phone", () => {
     await expect(sheet(page)).toBeHidden();
 
     // Projects opens on the project you have open (DAW-58).
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
     await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
 
     // Hidden, not unmounted: the sheet comes back at the detent it was left at.
@@ -1185,7 +1185,7 @@ test.describe("phone", () => {
     page,
   }) => {
     await startInStudio(page);
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     const open = page.getByRole("region", { name: "Open project" });
     const title = open.getByTitle("Double-click to rename");
@@ -1236,17 +1236,17 @@ test.describe("phone", () => {
     await expect(page.getByRole("button", { name: /^Instruments\b/ })).toBeVisible();
 
     // Projects: it opens on the project you have open, and from the list a tap comes back to it.
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
     await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     await expect(page.getByRole("region", { name: "Open project" })).toBeVisible();
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
     await expect(page.getByRole("tablist", { name: "Project" })).toBeVisible();
   });
 
   test("opening another project from the list goes into its page (DAW-58)", async ({ page }) => {
     await startInStudio(page);
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
     await page.getByRole("button", { name: "Back to Projects" }).tap();
     const open = page.getByRole("region", { name: "Open project" });
     const firstName = ((await open.getByTitle("Double-click to rename").textContent()) ?? "").trim();
@@ -1266,7 +1266,7 @@ test.describe("phone", () => {
 
   test("inside a project, choosing a track takes you to it in the Studio (MOBILE-19.3)", async ({ page }) => {
     await startInStudio(page);
-    await tab(page, "Projects").tap();
+    await tab(page, "Project").tap();
 
     // The project's chips, and its tracks with their chains.
     await expect(page.getByRole("button", { name: /BPM$/ })).toBeVisible();

@@ -1,5 +1,6 @@
 /**
- * The touch shell's three places (MOBILE-19): **Explore**, **Studio** and **Projects**.
+ * The touch shell's three places (MOBILE-19): **Explore**, **Studio** and **Project** (the open
+ * project, with the list of projects one step up).
  *
  * Tabs came back after MOBILE-5 removed them, and the difference is what they switch between.
  * MOBILE-5's tabs split the *workspace* (arrange, edit, clips, devices), which the desktop never
@@ -32,7 +33,7 @@ const icon = (children: ReactNode) => (
 
 const TAB_ITEMS: Record<MobileTab, { label: string; icon: ReactNode }> = {
   projects: {
-    label: "Projects",
+    label: "Project",
     icon: icon(
       <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" />,
     ),

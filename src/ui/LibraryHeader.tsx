@@ -10,9 +10,11 @@ import { useEditLog } from "../audio/commands/useEditLog";
 import type { PanelView } from "./libraryViews";
 import { IconButton } from "./controls/IconButton";
 import { UndoIcon } from "./shellIcons";
+import { usePersistentString } from "./usePersistent";
+import { PROJECTS_PAGE_DEFAULT, PROJECTS_PAGE_KEY, PROJECTS_PAGES, type ProjectsPage } from "./projects/projectsPage";
 
 const VIEW_TITLE: Record<PanelView, string> = {
-  project: "Projects",
+  project: "Project",
   explore: "Explore",
   activity: "Activity",
 };
@@ -51,9 +53,12 @@ export function LibraryHeader({
   onCollapse?: () => void;
 }) {
   const { canUndo, canRedo } = useEditLog(editLog);
+  // The project view's list of projects is "Projects"; inside one, its tree, "Project" (2026-11-01).
+  const [projectsPage] = usePersistentString<ProjectsPage>(PROJECTS_PAGE_KEY, PROJECTS_PAGE_DEFAULT, PROJECTS_PAGES);
+  const title = activeView === "project" && projectsPage === "home" ? "Projects" : VIEW_TITLE[activeView];
   return (
     <div className="shrink-0 flex items-center gap-1 h-10 pl-2.5 pr-1 border-b border-line">
-      <span className="font-semibold text-[13px] text-strong">{VIEW_TITLE[activeView]}</span>
+      <span className="font-semibold text-[13px] text-strong">{title}</span>
       {onCollapse && <CollapseButton onCollapse={onCollapse} />}
       {/* Undo and redo apply from any view, so they stay in the header whatever the panel shows. */}
       <IconButton label="Undo" onClick={() => editLog.undo()} disabled={!canUndo} className="ml-auto">
