@@ -7,7 +7,7 @@
  * than lit while they show: in the sheet's bar it is a control of its own, not the sheet's.
  */
 import type { Fold } from "../controls/FoldButton";
-import { KeyboardIcon } from "../shellIcons";
+import { CategoryGlyph } from "../explore/ExploreThumb";
 
 export function KeysToggle({ fold }: { fold: Fold }) {
   return (
@@ -19,7 +19,8 @@ export function KeysToggle({ fold }: { fold: Fold }) {
       onClick={fold.onToggle}
       className="shrink-0 inline-flex items-center gap-0.5 h-9 pl-1.5 pr-1 rounded-lg border border-line text-muted hover:text-ink cursor-pointer"
     >
-      <KeyboardIcon />
+      {/* The Instruments glyph, so the keys look like what they play. */}
+      <CategoryGlyph category="instruments" size={20} />
       <svg
         viewBox="0 0 16 16"
         aria-hidden="true"

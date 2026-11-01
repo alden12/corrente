@@ -91,25 +91,6 @@ export function BinIcon() {
   );
 }
 
-/** A keyboard: show or hide the keys (the touch shell's keys dock, MOBILE-24). */
-export function KeyboardIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="w-5 h-5"
-    >
-      <rect x="1.5" y="3.5" width="13" height="9" rx="1.5" />
-      <path d="M5 3.5v5M8 3.5v5M11 3.5v5M3.5 12.5v-4h9v4" />
-    </svg>
-  );
-}
-
 /**
  * A stack of key rows with a + or − at its corner: add or take away a row of pads (the keys'
  * size buttons), saying *what* grows where a bare + did not.
