@@ -268,22 +268,40 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
         {lead}
         <Strip blocks={row.strip} faded={item.muted} />
         <span className="relative flex items-center justify-end h-full">
+          {/* Both letters when both: a muted, soloed track plays nothing, and the row should say why.
+              With a mouse each sits just where its button comes on hover: the same slots, unbordered. */}
           <span
             aria-hidden="true"
-            className="flex gap-1 font-mono text-[11px] font-semibold pr-1 pointer-fine:group-hover/row:invisible pointer-fine:group-focus-within/row:invisible"
+            className="flex items-center gap-0.5 font-mono text-[10px] font-semibold pointer-coarse:hidden group-hover/row:invisible group-focus-within/row:invisible"
           >
-            {/* Both when both: a muted, soloed track plays nothing, and the row should say why. */}
+            <span className="flex border border-transparent">
+              <span className="w-5 h-5 flex items-center justify-center text-hot">{item.muted ? "M" : ""}</span>
+              <span className="w-5 h-5 flex items-center justify-center text-warn">{item.solo ? "S" : ""}</span>
+            </span>
+            <span className="w-5" />
+          </span>
+          <span
+            aria-hidden="true"
+            className="hidden pointer-coarse:flex gap-1 font-mono text-[11px] font-semibold pr-1"
+          >
             {item.muted && <span className="text-hot">M</span>}
             {item.solo && <span className="text-warn">S</span>}
           </span>
           {/* A mouse's actions, there but unseen until the row is hovered or tabbed into. */}
           <span className="absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:hidden">
-            <MuteSolo name={item.name} muted={item.muted} solo={item.solo} onMute={onMute} onSolo={onSolo} />
+            <MuteSolo
+              size="tree"
+              name={item.name}
+              muted={item.muted}
+              solo={item.solo}
+              onMute={onMute}
+              onSolo={onSolo}
+            />
             <Menu
               label={`Actions for ${item.name}`}
               items={menu}
               trigger="⋯"
-              triggerClassName="w-5 h-6 text-[15px] leading-none text-muted hover:text-ink cursor-pointer"
+              triggerClassName="w-5 h-5 text-[15px] leading-none text-muted hover:text-ink cursor-pointer"
             />
           </span>
         </span>

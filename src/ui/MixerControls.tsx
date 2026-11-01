@@ -93,10 +93,12 @@ export function Fader({
   );
 }
 
-/** `compact` for the arrangement's headers; `row` for the project page, where the pair is a
- *  touch target in a list (and grows with the panel's container width). */
+/** `compact` for the arrangement's headers; `tree` for the project tree's short rows; `row` where
+ *  the pair is a touch target in a list (and grows with the panel's container width). */
 const MUTE_SOLO_SIZE = {
   compact: "font-mono text-[10px] leading-none w-5 h-6",
+  /** The project tree's 26px rows (DAW-83): short enough to clear the row's edges. */
+  tree: "font-mono text-[10px] leading-none w-5 h-5",
   row: "font-mono text-[12px] font-semibold leading-none w-7 h-7 @[17rem]:w-8 @[17rem]:h-8 pointer-coarse:w-9 pointer-coarse:h-9",
 } as const;
 
