@@ -3,19 +3,33 @@
 Corrente can be driven by an AI agent over [MCP](https://modelcontextprotocol.io) (the Model Context
 Protocol). An agent such as Claude can make tracks, write and edit notes, build instruments and
 effects, set parameters, mix, listen back, and save versions, all in the app open in your browser,
-while you watch and play along. The same server drives the [plugin](PLUGIN.md) in your DAW: see
-[In the plugin](#in-the-plugin).
+while you watch and play along.
 
-Today that means running Corrente from its source on your own computer. A package you can run
-without cloning anything is planned, and this page will show it when it lands.
+## In the plugin
 
-## What you need
+Only if you use Corrente as a [plugin](PLUGIN.md) in your DAW: the plugin's window talks to the same
+server as the app, so Claude can build and tweak the device on a track. Set up the server below, and
+skip starting the app (step 2): the plugin's window takes its place. Then open the plugin's window and
+ask away, for example:
+
+- "Make this a warm pad with a slow filter sweep."
+- "Add a delay and a reverb after the synth, and keep the reverb short."
+
+Claude drives the window you used last, so if a browser tab of the app is open too, click into the
+plugin's window to hand it over.
+
+## Set it up
+
+A standalone server you can download and run is on its way. Until then, the server runs from
+Corrente's source, so you clone the repository once.
+
+### What you need
 
 - [Node.js](https://nodejs.org) 24 and [Yarn Classic](https://classic.yarnpkg.com/) (v1)
 - [Claude Code](https://claude.com/claude-code), [Claude Desktop](https://claude.ai/download), or
   another MCP client that can start a local server
 
-## Set it up
+### With Claude Code
 
 1. **Get the source and install it.**
 
@@ -42,7 +56,7 @@ without cloning anything is planned, and this page will show it when it lands.
 ### Claude Desktop
 
 Claude Desktop starts the server itself, from a config file, rather than from the repository's
-`.mcp.json`. Do steps 1 and 2 above, then:
+`.mcp.json`. Do steps 1 and 2 under Claude Code above, then:
 
 1. **Find two paths.** In Terminal, from the repository folder, `pwd` prints where it is (say
    `/Users/you/corrente`), and `which node` prints where Node is (say `/opt/homebrew/bin/node`). On
@@ -81,19 +95,6 @@ npx tsx server/index.ts
 
 (`yarn mcp-server` does the same, but Yarn prints a banner on stdout that an MCP client would read as
 a broken message, so point the client at the command above.)
-
-## In the plugin
-
-The plugin's window talks to the same server, so an agent can build and tweak the device on a track
-in your DAW. Set up the server as above, with Claude Code or Claude Desktop, but skip starting the app
-(`yarn dev`): the plugin's window stands in for the tab. Then open the plugin's window in your DAW and
-ask away. For example:
-
-- "Make this a warm pad with a slow filter sweep."
-- "Add a delay and a reverb after the synth, and keep the reverb short."
-
-It drives the window while it's open, and the one you used last if several are. A browser tab of the
-app counts too, so close it if you want the plugin to be the one driven.
 
 ## How it fits together
 
