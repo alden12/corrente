@@ -1,6 +1,6 @@
 /**
  * Inside a project (MOBILE-19.3, approved board `ProjectOverview`): its name with Share, chips for
- * tempo, meter and length, then its tracks in group cards (`TrackList`). The phone's Projects tab
+ * tempo, meter and length, then its tracks as a file tree (`ProjectTree`, DAW-83). The phone's Projects tab
  * and the desktop's Project view both show it one level in from `ProjectsHome`. The phone adds a
  * **History** tab beside the tracks; the desktop has history on its rail (Activity), so it has none.
  *
@@ -23,7 +23,7 @@ import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
 import { exportProjectFile } from "../projectFile";
 import { usePersistentString } from "../usePersistent";
-import { TrackList } from "./TrackList";
+import { ProjectTree } from "./ProjectTree";
 import { LoopButton, MetronomeButton } from "../TransportToggles";
 import { formatLength } from "./overviewData";
 
@@ -158,7 +158,7 @@ export function ProjectOverview({
       {history && tab === "history" ? (
         history
       ) : (
-        <TrackList projectStore={projectStore} dispatch={dispatch} onOpenTrack={onOpenTrack} />
+        <ProjectTree projectStore={projectStore} dispatch={dispatch} onOpenTrack={onOpenTrack} />
       )}
     </div>
   );

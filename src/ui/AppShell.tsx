@@ -62,6 +62,7 @@ import { RecoveryDialog } from "./RecoveryDialog";
 import { takeAuthReturnPath } from "../auth/session";
 import { VersionStore } from "../audio/commands/history";
 import { useProject } from "../audio/project/useProject";
+import { rememberGroupFolds } from "./groupFolds";
 import { projectIdFromLocation, projectIdFromPath, projectPath, syncProjectUrl } from "./projectUrl";
 import { useRememberedSelection } from "./rememberedSelection";
 import { EditLog } from "../audio/commands/editLog";
@@ -136,6 +137,7 @@ export function AppShell() {
   // A take with your preview in front goes onto a new track with its sound, not onto the preview.
   // In an effect, not the initializer: React may run an initializer twice and keep only one result.
   useEffect(() => recorder.setPreviewSource(previewRecording(projectStore)), [recorder, projectStore]);
+  useEffect(() => rememberGroupFolds(projectStore), [projectStore]);
   const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
   // The output buffer, picked from whether someone is playing live (INST-36.9).
   const [bufferControl] = useState(

@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { dismissStart, openExploreCategory, openGroupCard, openProjectTracks } from "./support/app";
+import { dismissStart, openExploreCategory, openProjectTracks } from "./support/app";
 
 /**
- * Inside a project (MOBILE-19.3): its name, chips for tempo / meter / length, and its groups as
- * cards - each track one row with its device chain, mute / solo and a level fader.
+ * Inside a project (MOBILE-19.3): its name, chips for tempo / meter / length, and its tracks as a
+ * file tree (DAW-83): groups nested to any depth, a track a row, mute / solo and ⋯ on hover.
  * Choosing a track drives the workbench (selection is one shared value).
  */
 
@@ -16,14 +16,13 @@ test("a track's row shows its chain and mutes it", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   await openProjectTracks(page);
-  await openGroupCard(page, "main");
 
   await expect(tracks(page).getByTestId("tree-track")).toHaveCount(1);
-  // The track is named for its instrument, so the name comes first and its chain says it again.
-  await expect(tracks(page).getByText("Micro VA", { exact: true }).first()).toBeVisible();
+  // The track is named for its instrument; its chain is in the row's title.
+  await expect(tracks(page).getByTestId("tree-track")).toHaveAttribute("title", "Micro VA: Micro VA");
   await tracks(page).getByRole("button", { name: "Mute Micro VA" }).click();
   await expect(tracks(page).getByRole("button", { name: "Unmute Micro VA" })).toHaveAttribute("aria-pressed", "true");
-  // The group mutes as a whole from its card.
+  // The group mutes as a whole from its row.
   await tracks(page).getByRole("button", { name: "Mute main" }).click();
   await expect(tracks(page).getByRole("button", { name: "Unmute main" })).toBeVisible();
 });
@@ -41,11 +40,11 @@ test("selecting a track in the list selects it in the workbench", async ({ page 
 
   // In the Tracks list, select the seed (Micro VA) track -> the workbench follows.
   await openProjectTracks(page);
-  await openGroupCard(page, "main");
   await tracks(page).getByTestId("tree-track").filter({ hasText: "Micro VA" }).click();
   await expect(page.getByRole("tablist").getByTitle("Micro VA", { exact: true })).toBeVisible();
 
   // The filter narrows the list by name.
+  await page.getByRole("button", { name: "Filter tracks by name" }).click();
   await page.getByRole("searchbox", { name: "Filter tracks" }).fill("zzz");
   await expect(tracks(page).getByTestId("tree-track")).toHaveCount(0);
 });
@@ -54,14 +53,13 @@ test("add an empty track from a group, then assign it an instrument", async ({ p
   await page.goto("/");
   await dismissStart(page);
   await openProjectTracks(page);
-  await openGroupCard(page, "main");
 
-  // The "main" group's + button opens a menu; "New MIDI track" adds an empty
-  // instrument track (no instrument yet); it is selected.
-  await page.getByRole("button", { name: /Add a track to main/i }).click();
+  // The "main" group's ⋯ menu: "New MIDI track" adds an empty instrument track (no instrument
+  // yet); it is selected.
+  await page.getByRole("button", { name: "Actions for main" }).click();
   await page.getByRole("menuitem", { name: "New MIDI track" }).click();
   await expect(page.getByRole("tablist").getByTitle("Empty", { exact: true })).toBeVisible();
-  await expect(tracks(page).getByText("No instrument")).toBeVisible();
+  await expect(tracks(page).getByTestId("tree-track").last()).toHaveAttribute("title", /No instrument/);
   await expect(page.getByText("This track has no instrument yet. Choose one:")).toBeVisible();
 
   // Picking an instrument assigns it - the tab's kind chip becomes that instrument.
@@ -73,9 +71,8 @@ test("assign the Nimbus synth to a track and see its controls", async ({ page })
   await page.goto("/");
   await dismissStart(page);
   await openProjectTracks(page);
-  await openGroupCard(page, "main");
 
-  await page.getByRole("button", { name: /Add a track to main/i }).click();
+  await page.getByRole("button", { name: "Actions for main" }).click();
   await page.getByRole("menuitem", { name: "New MIDI track" }).click();
   await page.getByRole("button", { name: "Nimbus", exact: true }).click();
 
@@ -86,15 +83,14 @@ test("assign the Nimbus synth to a track and see its controls", async ({ page })
   await expect(page.getByText("Pulse Width", { exact: true })).toBeVisible();
 });
 
-test("add an empty audio track from a group's + menu", async ({ page }) => {
+test("add an empty audio track from a group's ⋯ menu", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   await openProjectTracks(page);
-  await openGroupCard(page, "main");
 
-  // The + menu's "New audio track" adds an empty audio track; it is selected and its
+  // The ⋯ menu's "New audio track" adds an empty audio track; it is selected and its
   // tab kind chip reads "audio", with the empty audio-clip panel in the workbench.
-  await page.getByRole("button", { name: /Add a track to main/i }).click();
+  await page.getByRole("button", { name: "Actions for main" }).click();
   await page.getByRole("menuitem", { name: "New audio track" }).click();
   await expect(page.getByRole("tablist").getByTitle("Audio", { exact: true })).toBeVisible();
   await expect(page.getByText("No audio clip.")).toBeVisible();
@@ -104,33 +100,36 @@ test("the project's chips open the Timing settings", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   await openProjectTracks(page);
-  await openGroupCard(page, "main");
 
   await page.getByRole("button", { name: /BPM$/ }).click();
   await expect(page.getByRole("dialog").getByRole("tab", { name: "Timing" })).toHaveAttribute("aria-selected", "true");
 });
 
-test("group cards start closed, an opened one stays open across a reload, and + Group adds another", async ({
-  page,
-}) => {
+test("a group folds here and in the arrangement, stays folded across a reload, and nests another", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   await openProjectTracks(page);
 
-  const main = tracks(page).getByRole("region", { name: "main" });
-  const toggle = main.getByRole("button", { name: /^main/ });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(main.getByText(/1 track · 1 clip/)).toBeVisible();
-  await expect(main.getByTestId("tree-track")).toHaveCount(0);
-  await toggle.click();
-  await expect(main.getByTestId("tree-track")).toHaveCount(1);
+  const main = tracks(page).getByTestId("tree-group").filter({ hasText: "main" });
+  await expect(main).toHaveAttribute("aria-expanded", "true");
+  await main.click();
+  await expect(main).toHaveAttribute("aria-expanded", "false");
+  await expect(tracks(page).getByTestId("tree-track")).toHaveCount(0);
+  // One fold: the arrangement's group is folded too (DAW-83, DAW-49).
+  await expect(page.getByTitle("Expand group")).toBeVisible();
 
-  // Open is this device's, and outlives a reload. The panel reopens on the project page by itself.
+  // Folds are this device's, and outlive a reload. The panel reopens on the project page by itself.
   await page.reload();
   await dismissStart(page);
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(main.getByTestId("tree-track")).toHaveCount(1);
+  await expect(main).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTitle("Expand group")).toBeVisible();
+  await main.click();
 
-  await page.getByRole("button", { name: "+ Group" }).click();
-  await expect(tracks(page).getByRole("region")).toHaveCount(2);
+  // A group inside a group sits a level deeper, under it.
+  await page.getByRole("button", { name: "Actions for main" }).click();
+  await page.getByRole("menuitem", { name: "New group inside" }).click();
+  await expect(tracks(page).getByTestId("tree-group")).toHaveCount(2);
+  await page.getByRole("button", { name: "Add a track or group" }).click();
+  await page.getByRole("menuitem", { name: "Add group" }).click();
+  await expect(tracks(page).getByTestId("tree-group")).toHaveCount(3);
 });

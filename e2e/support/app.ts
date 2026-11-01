@@ -173,10 +173,3 @@ export async function createProjectFromList(page: Page): Promise<void> {
   await page.getByRole("menuitem", { name: "New project…" }).click();
   await page.getByRole("button", { name: "Create" }).click();
 }
-
-/** Open a group's card on the project page (cards start closed); a no-op if it is already open. */
-export async function openGroupCard(page: Page, name: string): Promise<void> {
-  const toggle = page.getByRole("region", { name }).getByRole("button", { name: new RegExp(`^${name}`) });
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-}

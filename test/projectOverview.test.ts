@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GroupMeta, TrackMeta } from "../src/audio/project/types";
 import { deviceChain } from "../src/ui/projects/deviceChain";
-import { formatLength, groupStrip, groupSummary, groupTree, type GroupNode } from "../src/ui/projects/overviewData";
+import { clipStrip, formatLength, groupTree, treeRows, type GroupNode } from "../src/ui/projects/overviewData";
 
 const device = (id: string, type: string, bypassed = false) => ({ id, type, bypassed });
 
@@ -17,7 +17,8 @@ const track = (id: string, parentId: string, extra: Partial<TrackMeta> = {}) =>
     effects: [],
     ...extra,
   }) as TrackMeta;
-const group = (id: string, parentId: string | null) => ({ id, name: id, parentId }) as GroupMeta;
+const group = (id: string, parentId: string | null, collapsed = false) =>
+  ({ id, name: id, parentId, collapsed }) as GroupMeta;
 
 describe("deviceChain", () => {
   it("reads in signal order: MIDI devices, the instrument, then effects, skipping bypassed ones", () => {
@@ -62,43 +63,68 @@ describe("groupTree", () => {
   });
 });
 
-describe("groupSummary and groupStrip", () => {
+describe("clipStrip and treeRows", () => {
   // Each track's clips: "a" plain, "b" with a colour of its own.
-  const placed = (id: string, color: string, placements: { clipId: string; startBeat: number; length: number }[]) =>
-    track(id, "g", {
+  const placed = (
+    id: string,
+    parentId: string,
+    color: string,
+    placements: { clipId: string; startBeat: number; length: number }[],
+  ) =>
+    track(id, parentId, {
       color,
       clips: [{ id: "a" }, { id: "b", color: "pink" }],
       placements,
     } as unknown as Partial<TrackMeta>);
-  const node: GroupNode = {
-    group: group("Rhythm", null),
-    tracks: [
-      placed("Drums", "red", [
-        { clipId: "a", startBeat: 0, length: 16 },
-        { clipId: "b", startBeat: 32, length: 16 },
-      ]),
-      placed("Bass", "blue", [{ clipId: "a", startBeat: 16, length: 16 }]),
-    ],
-    children: [
-      {
-        group: group("Perc", "Rhythm"),
-        tracks: [placed("Shaker", "lime", [{ clipId: "a", startBeat: 0, length: 8 }])],
-        children: [],
-      },
-    ],
-  };
+  const drums = placed("Drums", "Rhythm", "red", [
+    { clipId: "a", startBeat: 0, length: 16 },
+    { clipId: "b", startBeat: 32, length: 16 },
+  ]);
+  const bass = placed("Bass", "Rhythm", "blue", [{ clipId: "a", startBeat: 16, length: 16 }]);
+  const shaker = placed("Shaker", "Perc", "lime", [{ clipId: "a", startBeat: 0, length: 8 }]);
 
-  it("names the tracks and counts tracks, groups and clips (the inner groups' clips too)", () => {
-    expect(groupSummary(node)).toBe("Drums, Bass · 2 tracks, 1 group · 4 clips");
-    expect(groupSummary({ group: group("Empty", null), tracks: [], children: [] })).toBe("Empty");
+  it("lays clips out across the song, each in its clip's colour", () => {
+    expect(clipStrip([drums, bass], 64)).toEqual([
+      { left: 0, width: 25, color: "red" },
+      { left: 50, width: 25, color: "pink" },
+      { left: 25, width: 25, color: "blue" },
+    ]);
   });
 
-  it("lays the group's own clips out across the song, a lane per track, each in its clip's colour", () => {
-    expect(groupStrip(node, 64)).toEqual([
-      { lane: 0, left: 0, width: 25, color: "red" },
-      { lane: 0, left: 50, width: 25, color: "pink" },
-      { lane: 1, left: 25, width: 25, color: "blue" },
-    ]);
+  const shape = (rows: ReturnType<typeof treeRows>) =>
+    rows.map((row) =>
+      row.kind === "group"
+        ? `${"  ".repeat(row.depth)}${row.group.name}${row.folded ? ` (folded, ${row.trackCount})` : ""}`
+        : `${"  ".repeat(row.depth)}${row.track.name}`,
+    );
+
+  it("lists groups, the groups inside them, then their tracks, each a level deeper", () => {
+    const rows = treeRows([group("Rhythm", null), group("Perc", "Rhythm")], [drums, bass, shaker], "", 64);
+    expect(shape(rows)).toEqual(["Rhythm", "  Perc", "    Shaker", "  Drums", "  Bass"]);
+    expect(rows[2].ancestors).toEqual(["Rhythm", "Perc"]);
+    // An open group leaves its clips to its tracks' rows.
+    expect(rows[0].strip).toEqual([]);
+  });
+
+  it("folds a group down to one row whose strip holds every clip inside it", () => {
+    const rows = treeRows([group("Rhythm", null, true), group("Perc", "Rhythm")], [drums, bass, shaker], "", 64);
+    expect(shape(rows)).toEqual(["Rhythm (folded, 3)"]);
+    expect(rows[0].strip).toHaveLength(4);
+  });
+
+  it("opens every group while filtering, so a match is never folded away", () => {
+    const rows = treeRows(
+      [group("Rhythm", null, true), group("Perc", "Rhythm", true)],
+      [drums, bass, shaker],
+      "shak",
+      64,
+    );
+    expect(shape(rows)).toEqual(["Rhythm", "  Perc", "    Shaker"]);
+  });
+
+  it("puts a track whose group is missing at the top level", () => {
+    const stray = track("Stray", "gone", { placements: [] } as Partial<TrackMeta>);
+    expect(shape(treeRows([], [stray], "", 64))).toEqual(["Stray"]);
   });
 });
 

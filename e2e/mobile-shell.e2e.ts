@@ -5,7 +5,6 @@ import {
   openStudio,
   openExploreCategory,
   swapFromExplore,
-  openGroupCard,
   openSettingsPage,
   openTimingSettings,
   setCountIn,
@@ -1271,14 +1270,13 @@ test.describe("phone", () => {
 
     // The project's chips, and its tracks with their chains.
     await expect(page.getByRole("button", { name: /BPM$/ })).toBeVisible();
-    await openGroupCard(page, "main");
-    const tracks = page.getByRole("region", { name: "main" });
+    const tracks = page.getByRole("list", { name: "Tracks" });
     await expect(tracks.getByTestId("tree-track")).toHaveCount(1);
-    // The track is named for its instrument, so the name comes first and its chain says it again.
-    await expect(tracks.getByText("Micro VA", { exact: true }).first()).toBeVisible();
+    await expect(tracks.getByText("Micro VA", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: /Add a track to main/i }).tap();
-    await page.getByRole("menuitem", { name: "New MIDI track" }).tap();
+    await page.getByRole("button", { name: "Add a track or group" }).tap();
+    await page.getByRole("menuitem", { name: "New MIDI track in" }).tap();
+    await page.getByRole("menuitem", { name: "main" }).tap();
     await expect(tracks.getByTestId("tree-track")).toHaveCount(2);
     await tracks.getByTestId("tree-track").first().tap();
     await expect(tab(page, "Studio")).toHaveAttribute("aria-current", "page");

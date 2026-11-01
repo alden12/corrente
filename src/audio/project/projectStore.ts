@@ -244,6 +244,8 @@ export class ProjectStore {
   private unreadableMidiDevices: unknown[] = [];
   private selectedTrackId: string | null = null;
   private readonly listeners = createListeners();
+  /** Told when a group is folded or unfolded by hand, which a load is not (DAW-49, `groupFolds.ts`). */
+  private readonly folds = createListeners();
   private cached: ProjectStructure | null = null;
 
   /** `seedDefault`: start as a new project does, with the starter track (DAW-76). */
@@ -489,6 +491,8 @@ export class ProjectStore {
     const g = this.getGroup(id);
     if (!g || g.collapsed === collapsed) return;
     g.collapsed = collapsed;
+    // Folds first, so what remembers them has the new one before anything reads the store.
+    this.folds.emit();
     this.emit();
   }
 
@@ -1643,6 +1647,11 @@ export class ProjectStore {
 
   subscribe(listener: () => void): () => void {
     return this.listeners.subscribe(listener);
+  }
+
+  /** Listen for a group folded or unfolded (`setGroupCollapsed`), apart from every other change. */
+  subscribeFolds(listener: () => void): () => void {
+    return this.folds.subscribe(listener);
   }
 
   // --- persistence / sync ---
