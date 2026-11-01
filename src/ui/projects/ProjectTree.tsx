@@ -148,7 +148,7 @@ export function ProjectTree({
       {spanBeats > 0 && (
         <div
           aria-hidden="true"
-          className="shrink-0 grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_16px_40px] gap-2 pr-2 pointer-coarse:pr-0 pb-1 font-mono text-[9px] text-faint"
+          className="shrink-0 grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_28px_40px] gap-2 pr-2 pointer-coarse:pr-0 pb-1 font-mono text-[9px] text-faint"
         >
           <span />
           <span className="relative h-3">

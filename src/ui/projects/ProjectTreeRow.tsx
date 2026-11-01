@@ -253,7 +253,7 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
       <div
         {...swipe.handlers}
         style={{ transform: swipe.offset ? `translateX(${swipe.offset}px)` : undefined, ...indentStyle(row.depth) }}
-        className={`group/row relative grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_16px_40px] gap-2 items-center h-[26px] pointer-coarse:h-12 pr-2 pointer-coarse:pr-0 touch-pan-y ${ground} ${
+        className={`group/row relative grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_28px_40px] gap-2 items-center h-[26px] pointer-coarse:h-12 pr-2 pointer-coarse:pr-0 touch-pan-y ${ground} ${
           swipe.dragging ? "" : "transition-transform"
         }`}
       >
@@ -270,10 +270,11 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
         <span className="relative flex items-center justify-end h-full">
           <span
             aria-hidden="true"
-            className="font-mono text-[11px] font-semibold pr-1 pointer-fine:group-hover/row:invisible pointer-fine:group-focus-within/row:invisible"
+            className="flex gap-1 font-mono text-[11px] font-semibold pr-1 pointer-fine:group-hover/row:invisible pointer-fine:group-focus-within/row:invisible"
           >
+            {/* Both when both: a muted, soloed track plays nothing, and the row should say why. */}
             {item.muted && <span className="text-hot">M</span>}
-            {!item.muted && item.solo && <span className="text-warn">S</span>}
+            {item.solo && <span className="text-warn">S</span>}
           </span>
           {/* A mouse's actions, there but unseen until the row is hovered or tabbed into. */}
           <span className="absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 pointer-coarse:hidden">
