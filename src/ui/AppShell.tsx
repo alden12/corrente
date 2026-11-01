@@ -29,7 +29,7 @@ import { trackTabs } from "./tabs/editorTabs";
 import { MidiInput } from "../audio/midi/midiInput";
 import { attachAutosave, attachUndoPersistence } from "../audio/persistence";
 import { initProjects, forkProjectFromSnapshot } from "../audio/projects/operations";
-import { listProjects, subscribeProjects } from "../audio/projects/library";
+import { listProjects, subscribeProjects, type ProjectMeta } from "../audio/projects/library";
 import {
   currentProjectId,
   getRepository,
@@ -104,6 +104,11 @@ const openInPlace = (id: string, name: string) => window.location.replace(projec
  * one open before, and a reload would quietly open that instead.
  */
 const retryProject = () => openInPlace(currentProjectId(), "");
+/** Open another project instead of one that won't open. */
+const openOther = (meta: ProjectMeta) => {
+  setCurrentProject(meta.id);
+  openInPlace(meta.id, meta.name);
+};
 
 // Computer-keyboard -> MIDI note, one octave from C4 (the classic tracker layout).
 const KEY_MAP: Record<string, number> = {
@@ -199,6 +204,8 @@ export function AppShell() {
   );
   const sessionRef = useRef<SharedSession | null>(null);
   const projectList = useSyncExternalStore(subscribeProjects, listProjects);
+  // The way out of a project that won't open, damaged or out of reach.
+  const otherProjects = projectList.filter((meta) => meta.id !== currentProjectId());
   // Shared = someone shared it with us (role "editor") or we have seen a peer edit this session (so an
   // owner with active collaborators warns too). Owner-with-idle-members isn't caught yet - a cheap
   // server "shared" flag on the listing would close that; deferred to the conflict-flow increment.
@@ -570,7 +577,7 @@ export function AppShell() {
           />
         )}
         {!projectLoaded && <LoadingOverlay />}
-        {unreachable && <UnreachableDialog onRetry={retryProject} />}
+        {unreachable && <UnreachableDialog onRetry={retryProject} others={otherProjects} onOpen={openOther} />}
         {recovery && (
           <RecoveryDialog
             detail={recovery.detail}
@@ -588,11 +595,8 @@ export function AppShell() {
               const name = `${damaged} (recovered)`;
               openInPlace(await startProjectBeside(name), name);
             }}
-            others={projectList.filter((meta) => meta.id !== currentProjectId())}
-            onOpen={(meta) => {
-              setCurrentProject(meta.id);
-              openInPlace(meta.id, meta.name);
-            }}
+            others={otherProjects}
+            onOpen={openOther}
           />
         )}
         {conflict && (

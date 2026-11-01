@@ -1,15 +1,27 @@
 /**
  * The project couldn't be reached (HOST-36): the server didn't answer, and this device's copy of the
  * project couldn't open it on its own. Nothing is damaged, so unlike `RecoveryDialog` there is nothing
- * to rebuild, only to try again: by hand, or by itself when the browser says it's back online.
+ * to rebuild, only to try again: by hand, or by itself when the browser says it's back online. Or to open
+ * another project, as from a damaged one, so the dialog is never a dead end (offline, the ones cached here).
  *
  * A reload is the retry, as after a rebuild: the boot chain runs again from the top, so a connection
  * that's back opens the project as ever. Modal with no dismiss, like `RecoveryDialog`: behind it is a
  * project the app isn't saving.
  */
 import { useEffect } from "react";
+import type { ProjectMeta } from "../audio/projects/library";
+import { OtherProjects } from "./OtherProjects";
 
-export function UnreachableDialog({ onRetry }: { onRetry: () => void }): React.ReactElement {
+export function UnreachableDialog({
+  onRetry,
+  others,
+  onOpen,
+}: {
+  onRetry: () => void;
+  /** The rest of the library, any of which can be opened instead. */
+  others: ProjectMeta[];
+  onOpen: (project: ProjectMeta) => void;
+}): React.ReactElement {
   useEffect(() => {
     window.addEventListener("online", onRetry);
     return () => window.removeEventListener("online", onRetry);
@@ -32,6 +44,7 @@ export function UnreachableDialog({ onRetry }: { onRetry: () => void }): React.R
             nothing has been changed. Check your connection, then try again: it opens by itself once you're back online.
           </p>
         </div>
+        <OtherProjects projects={others} onOpen={onOpen} />
         <div className="flex items-center justify-end mt-1">
           <button
             type="button"

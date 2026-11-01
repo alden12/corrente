@@ -14,6 +14,7 @@
  */
 import { useState } from "react";
 import type { ProjectMeta } from "../audio/projects/library";
+import { OtherProjects } from "./OtherProjects";
 
 /** What the dialog is doing, which is also what it is offering. */
 type Stage = "offer" | "rebuilding" | "failed" | "forking";
@@ -93,25 +94,7 @@ export function RecoveryDialog({
           {forkError && <p className="mt-1.5 text-hot">A new project could not be started: {forkError}</p>}
         </div>
 
-        {others.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] uppercase tracking-wider text-faint">Or open another project</span>
-            <ul className="max-h-40 overflow-y-auto flex flex-col rounded-lg border border-line divide-y divide-line">
-              {others.map((project) => (
-                <li key={project.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(project)}
-                    disabled={busy}
-                    className="w-full text-left px-3.5 py-2 text-sm text-ink truncate hover:bg-control cursor-pointer disabled:opacity-50 disabled:cursor-default"
-                  >
-                    {project.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <OtherProjects projects={others} onOpen={onOpen} disabled={busy} />
 
         <div className="flex items-center justify-end gap-2.5 mt-1">
           {busy && (
