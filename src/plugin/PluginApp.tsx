@@ -26,7 +26,9 @@ import { usePersistentBoolean } from "../ui/usePersistent";
 import { DeviceRack } from "../ui/workbench/DeviceRack";
 import { DevicesBar } from "../ui/workbench/DevicesBar";
 import { UpdateNotice } from "../ui/UpdateNotice";
-import { createValueStore } from "../listeners";
+import { createValueStore, type ValueStore } from "../listeners";
+import type { McpStatus } from "../audio/mcp/bridge";
+import { RailIndicators } from "../ui/RailIndicators";
 import { MacroStrip } from "./MacroStrip";
 import type { PageUpdates } from "./pageUpdates";
 import type { PluginDevice } from "./pluginDevice";
@@ -53,6 +55,8 @@ export function PluginApp({
   macros,
   notes,
   updates = NO_UPDATES,
+  mcpStatus,
+  openLink,
 }: {
   project: ProjectStore;
   preview: SoundPreview;
@@ -62,6 +66,10 @@ export function PluginApp({
   notes: LiveNotes;
   /** A newer build of the page (HOST-23.2.3.1); none in a plain browser. */
   updates?: PageUpdates;
+  /** Whether Claude is connected through the local MCP server, and driving this window (PLUGIN-3.10). */
+  mcpStatus: ValueStore<McpStatus>;
+  /** Open a link in the browser, from a window that can't open one itself; none in a plain browser. */
+  openLink?: (url: string) => void;
 }) {
   useProject(project);
   const macroView = useMacros(device, macros);
@@ -83,6 +91,7 @@ export function PluginApp({
   });
   const updateReady = useSyncExternalStore(updates.ready.subscribe, updates.ready.read);
   const release = useSyncExternalStore(updates.release.subscribe, updates.release.read);
+  const mcp = useSyncExternalStore(mcpStatus.subscribe, mcpStatus.read);
   const keysOpen = keys.panel.open;
   useEffect(() => keyboardTaken.set(keysOpen), [keysOpen]);
   const scrollToDevice = (key: string) =>
@@ -101,6 +110,7 @@ export function PluginApp({
           setPanelCollapsed(false);
           requestExploreSearch();
         }}
+        indicators={<RailIndicators mcpStatus={mcp} syncStatus={null} openLink={openLink} />}
       />
       {!panelCollapsed && (
         <div className="w-80 shrink-0 flex min-h-0">

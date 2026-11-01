@@ -26,7 +26,7 @@ const MCP_DOT: Record<McpStatus, string> = {
 const NOT_CONNECTED = "MCP not connected: how to connect an agent";
 const MCP_TITLE: Record<McpStatus, string> = {
   connected: "MCP connected",
-  standby: "MCP connected, but driving another tab: the one most recently in front",
+  standby: "MCP connected, but driving another window or tab: the one most recently in front",
   connecting: NOT_CONNECTED,
   disconnected: NOT_CONNECTED,
 };
@@ -37,6 +37,7 @@ export function RailIndicators({
   syncShared = false,
   onRevealProject,
   backupReminder,
+  openLink,
 }: {
   mcpStatus: McpStatus;
   /** The sync connection, or null in local (no-sync) mode. */
@@ -47,6 +48,8 @@ export function RailIndicators({
   onRevealProject?: () => void;
   /** The open project's log and export, for the backup reminder. */
   backupReminder?: Reminder;
+  /** Open a link outside the page, where it can't open a tab of its own: the plugin's window. */
+  openLink?: (url: string) => void;
 }) {
   return (
     <div className="flex flex-col items-center w-full">
@@ -56,6 +59,11 @@ export function RailIndicators({
         rel="noreferrer"
         title={MCP_TITLE[mcpStatus]}
         aria-label={MCP_TITLE[mcpStatus]}
+        onClick={(event) => {
+          if (!openLink) return;
+          event.preventDefault();
+          openLink(MCP_GUIDE_URL);
+        }}
         className={`flex flex-col items-center gap-1 w-full py-1.5 font-mono text-[9px] hover:text-ink ${
           mcpConnected(mcpStatus) ? "text-muted" : "text-faint"
         }`}

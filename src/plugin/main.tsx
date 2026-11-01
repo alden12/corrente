@@ -14,7 +14,8 @@ import { DEFAULT_INSTRUMENT } from "../audio/instruments/catalog";
 import { startLibrary } from "../audio/library/account";
 import { applyEdit } from "../audio/commands/applyEdit";
 import { agentAuthor } from "../audio/commands/authors";
-import { connectMcpBridge } from "../audio/mcp/bridge";
+import { connectMcpBridge, localBridgeReachable, type McpStatus } from "../audio/mcp/bridge";
+import { createValueStore } from "../listeners";
 import { SoundPreview } from "../audio/live/preview";
 import { ProjectStore } from "../audio/project/projectStore";
 import { noteUsed } from "../ui/explore/recent/store";
@@ -78,12 +79,13 @@ const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSa
   // Claude through the local MCP server, as a browser tab of the app reaches it (PLUGIN-4): while this
   // window is open, and the one used last if there are several. Its edits apply as the agent's.
   const agent = agentAuthor("you");
+  const mcpStatus = createValueStore<McpStatus>(localBridgeReachable() ? "connecting" : "disconnected");
   connectMcpBridge(
     {
       projectStore: project,
       editLog: { dispatchAsAgent: (command) => applyEdit(project, command, agent), agentAuthor: agent, note: () => {} },
     },
-    { kind: "plugin" },
+    { kind: "plugin", onStatus: mcpStatus.set },
   );
   const preview = new SoundPreview(new PluginPreview(samples, send, () => project.key), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
@@ -95,6 +97,8 @@ const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSa
         macros={macros}
         notes={pluginNotes(send)}
         updates={updates}
+        mcpStatus={mcpStatus}
+        openLink={window.ipc ? (url) => send({ type: "open", url }) : undefined}
       />
     </StrictMode>,
   );

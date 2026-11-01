@@ -3,7 +3,8 @@ import { dismissStart } from "./support/app";
 
 /**
  * Explore's ways out (COMM-2, COMM-3, COMM-4, AGENT-37): the rail's shortcuts to its pages, home's
- * buttons back to your projects, and, with no MCP client connected, the way to set one up.
+ * buttons back to your projects, and, with no MCP client connected, the way to set one up, in the app
+ * and the plugin's window.
  */
 
 test.use({ viewport: { width: 1320, height: 900 } });
@@ -63,6 +64,12 @@ test("with no MCP connected, the rail and Explore both lead to the setup", async
   const card = page.getByRole("region", { name: "Make your own" });
   await expect(card).toBeVisible();
   await expect(card.getByRole("link", { name: "Connect an agent over MCP" })).toHaveAttribute("href", guide);
+});
+
+test("the plugin's window shows whether MCP is connected, and leads to the setup (PLUGIN-3.10)", async ({ page }) => {
+  await page.goto("/plugin.html");
+  // Connected or not: a machine running an MCP server of its own connects it.
+  await expect(page.getByRole("link", { name: /^MCP (not )?connected/ })).toHaveAttribute("href", /\/MCP\.md$/);
 });
 
 test.describe("on a phone", () => {
