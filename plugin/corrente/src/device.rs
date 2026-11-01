@@ -1,5 +1,5 @@
 //! A device ready to play: an engine with a package's plan loaded and bound, its samples in their
-//! slots, and where each of the binding's values comes from. Built off the audio thread (loading
+//! slots, its MIDI devices ahead of it (PLUGIN-3.8), and where each value comes from. Built off the audio thread (loading
 //! allocates), then handed to it whole.
 //!
 //! Rust notes, for reading this file:
@@ -14,7 +14,7 @@ use nice_plug::prelude::*;
 /// The sample slot a sample param with no sample points at (the app's EMPTY_SAMPLE).
 const EMPTY_SAMPLE: usize = 255;
 
-/// Where one of the binding's values comes from.
+/// Where one of the package's values comes from: the binding's, or the MIDI devices' after them.
 pub enum Source {
     /// A number that stays put: a sample's slot, an effect's bypass, a param no macro is mapped to.
     Fixed(f64),
@@ -46,6 +46,22 @@ pub struct Prepared {
     pub sources: Vec<Source>,
     /// What each value was last set to, so only changes are sent.
     pub sent: Vec<f64>,
+    /// How many of the values are the binding's: the rest are the MIDI devices'.
+    pub bound: usize,
+}
+
+impl Prepared {
+    /// Set value `index` in the engine: the binding's, or a MIDI device's past them.
+    // TS: index < this.bound ? track.setValue(index, raw) : track.setMidiValue(index - this.bound, raw);
+    pub fn send(&mut self, index: usize, raw: f64) {
+        let bound = self.bound;
+        if let Some(track) = self.engine.track_mut(0) {
+            match index.checked_sub(bound) {
+                None => track.set_value(index, raw),
+                Some(midi) => track.set_midi_value(midi, raw),
+            }
+        }
+    }
 }
 
 impl Prepared {
@@ -78,14 +94,13 @@ pub fn prepare(package: &Package, rate: f32, macros: Option<(&[FloatParam], &[Op
     engine.init(rate as i32, 1);
     // TS:
     //   let nextSlot = 0;
-    //   const sources = package.values.map((value) => value.kind === "sample" ? fixed(slot it loads into, or EMPTY_SAMPLE) : fixed(value.raw));
+    //   const sources = package.allValues().map((value) => value.kind === "sample" ? fixed(slot it loads into, or EMPTY_SAMPLE) : fixed(value.raw));
     // The closure changes `engine` and `next_slot` as `map` calls it: fine in Rust because nothing
     // else uses them meanwhile. `Value::Fixed { raw } | Value::Param { raw, .. }` matches either case.
     // Each sample takes the next slot; one that won't load plays silence, as in the app.
     let mut next_slot = 0;
     let mut sources: Vec<Source> = package
-        .values
-        .iter()
+        .all_values()
         .map(|value| match value {
             Value::Fixed { raw } | Value::Param { raw, .. } => Source::Fixed(*raw),
             Value::Sample { file, table, .. } => {
@@ -115,12 +130,31 @@ pub fn prepare(package: &Package, rate: f32, macros: Option<(&[FloatParam], &[Op
         nice_error!("the engine refused {}'s plan", package.label);
         return None;
     }
-    // The binding, then each value now, then where each starts: NaN, at its value.
+    // The binding, then each of its values now, then where each starts: NaN, at its value.
     // TS:
-    //   const sent = sources.map((source) => source.now(knobs));
-    //   return engine.bind(0, [...package.binding, ...sent, ...sent.map(() => NaN)]) ? { engine, sources, sent } : undefined;
+    //   const sent = sources.map((source) => source.now(knobs)); const bound = package.values.length;
+    //   if (!engine.bind(0, [...package.binding, ...sent.slice(0, bound), ...Array(bound).fill(NaN)])) return undefined;
     // `[a, b, c].concat()` joins three slices into one new list.
     let sent: Vec<f64> = sources.iter().map(|source| source.now(knobs)).collect();
-    let starts = vec![f64::NAN; sent.len()];
-    engine.bind(0, &[&package.binding[..], &sent, &starts].concat()).then_some(Prepared { engine, sources, sent })
+    let bound = package.values.len();
+    let starts = vec![f64::NAN; bound];
+    if !engine.bind(0, &[&package.binding[..], &sent[..bound], &starts].concat()) {
+        return None;
+    }
+    // The MIDI devices, ahead of the voices, then each of their values now: the chain's words carry the
+    // values it was made with, and a value the window or a macro has moved since is the one to play.
+    // TS:
+    //   if (package.midi.length && !engine.loadMidi(0, package.midi)) { log; return undefined }
+    //   if (package.key) engine.setKey(package.key.tonic, package.key.scale);
+    if !package.midi.is_empty() && !engine.load_midi(0, &package.midi) {
+        nice_error!("the engine refused {}'s MIDI devices", package.label);
+        return None;
+    }
+    if let Some(key) = package.key {
+        engine.set_key(key.tonic, key.scale);
+    }
+    let mut prepared = Prepared { engine, sources, sent, bound };
+    // TS: prepared.sent.slice(bound).forEach((raw, midi) => prepared.send(bound + midi, raw));
+    (bound..prepared.sent.len()).for_each(|index| prepared.send(index, prepared.sent[index]));
+    Some(prepared)
 }

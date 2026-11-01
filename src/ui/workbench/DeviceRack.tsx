@@ -127,7 +127,6 @@ export function DeviceRack({
   projectStore,
   onRevealSamples,
   bare = false,
-  midiDevices = true,
 }: {
   track: Track;
   samples: SampleAsset[];
@@ -137,13 +136,11 @@ export function DeviceRack({
   onRevealSamples?: () => void;
   /** Just the devices: the desktop column draws its own heading and scrolls itself (DAW-61.1). */
   bare?: boolean;
-  /** Whether MIDI devices lead the chain: the plugin's window (PLUGIN-3.2) doesn't play them yet. */
-  midiDevices?: boolean;
 }) {
   const devices = (
     <div className="flex flex-wrap items-start content-start gap-3 p-3">
       {/* MIDI devices transform notes before the instrument, so they lead the chain. */}
-      {midiDevices && <MidiDeviceChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />}
+      <MidiDeviceChain projectStore={projectStore} trackId={track.id} dispatch={dispatch} />
       {track.kind === "instrument" &&
         (track.instrumentType === EMPTY_INSTRUMENT ? (
           <InstrumentPicker trackId={track.id} dispatch={dispatch} />

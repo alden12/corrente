@@ -35,7 +35,8 @@ const PACKAGE_FIELD: &str = "package";
 const RACK_FIELD: &str = "rack";
 const MACROS_FIELD: &str = "macros";
 
-/// A device param a macro is mapped to: which of the binding's values it sets, and how.
+/// A device param a macro is mapped to: which of the package's values it sets (the instrument's or a
+/// MIDI device's), and how.
 pub struct Target {
     pub value: usize,
     /// The param's binding name, which the window knows it by.
@@ -52,12 +53,12 @@ pub type Slots = Vec<Option<String>>;
 /// The macros' targets in `package`, one per macro: what `slots` maps each to, or with no slots (the
 /// window hasn't mapped any), the first MACROS params in order. None where a macro has no target.
 // TS:
-//   const params = package.values.flatMap((kind, value) => kind.kind === "param" ? [{ value, name, title, spec, raw }] : []);
+//   const params = package.allValues().flatMap((kind, value) => kind.kind === "param" ? [{ value, name, title, spec, raw }] : []);
 //   return Array.from({ length: MACROS }, (_, knob) => slots ? params.find((param) => param.name === slots[knob]) : params[knob]);
 // `filter_map` keeps each Some its closure returns; `.nth(knob)` is the knob-th item, if there is one.
 pub fn targets_of(package: &Package, slots: Option<&Slots>) -> Vec<Option<Target>> {
     let params = || {
-        package.values.iter().enumerate().filter_map(|(value, kind)| match kind {
+        package.all_values().enumerate().filter_map(|(value, kind)| match kind {
             Value::Param { name, title, spec, raw } => Some((name, Target { value, name: name.clone(), title: title.clone(), spec: spec.clone(), raw: *raw })),
             _ => None,
         })
@@ -163,7 +164,7 @@ impl Macros {
         let package = Package::parse(json)?;
         // TS:
         //   if (this.package.sameDevice(package)) {
-        //     const moved = package.values.flatMap((value, index) => value.raw !== undefined && value.raw !== this.package.values[index].raw ? [[index, value.raw]] : []);
+        //     const moved = package.allValues().flatMap((value, index) => value.raw !== undefined && value.raw !== this.package.allValues()[index].raw ? [[index, value.raw]] : []);
         //     moved.forEach(([index, raw]) => this.setValue(index, raw));
         //     return moved;
         //   }
@@ -171,7 +172,7 @@ impl Macros {
         let moved: Option<Vec<(usize, f64)>> = {
             let saved = self.package.lock().ok()?;
             saved.same_device(&package).then(|| {
-                let pairs = saved.values.iter().zip(&package.values).enumerate();
+                let pairs = saved.all_values().zip(package.all_values()).enumerate();
                 pairs
                     .filter_map(|(index, (mine, theirs))| theirs.raw().filter(|raw| Some(*raw) != mine.raw()).map(|raw| (index, raw)))
                     .collect()
@@ -319,8 +320,8 @@ impl Macros {
     }
 
     pub fn set_value(&self, index: usize, raw: f64) {
-        // TS: this.package.values[index]?.setRaw(raw);
-        if let Some(value) = self.package.lock().ok().as_deref_mut().and_then(|package| package.values.get_mut(index)) {
+        // TS: this.package.valueAt(index)?.setRaw(raw);
+        if let Some(value) = self.package.lock().ok().as_deref_mut().and_then(|package| package.value_mut(index)) {
             value.set_raw(raw);
         }
         // TS: const waiting = this.changes.find(([number]) => number === index); if (waiting) waiting[1] = raw; else if (this.changes.length < MAX_CHANGES) this.changes.push([index, raw]);

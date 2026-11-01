@@ -13,8 +13,11 @@
  * The page-to-plugin protocol: the messages each sends the other (`ToPlugin`, editor.rs's `Message`,
  * `window.corrente`) and the device package the plugin reads (devicePackage.ts, package.rs). Bump it
  * with any change an installed plugin would misread, so it keeps the build it has instead.
+ *
+ * 2: the package carries the MIDI devices (`midi`, `midiValues`, `key`, PLUGIN-3.8), and `value` numbers
+ * run on into them. An older plugin would show the devices and not play them.
  */
-export const PLUGIN_PROTOCOL = 1;
+export const PLUGIN_PROTOCOL = 2;
 
 /** The manifest's name in `dist/`, and so its path on corrente.cloud. */
 export const PLUGIN_BUILD_FILE = "plugin-build.json";

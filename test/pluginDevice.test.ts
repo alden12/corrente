@@ -50,6 +50,15 @@ describe("PluginDevice", () => {
     expect({ ...made, label: builtIn.label }).toEqual(builtIn);
   });
 
+  it("sends a track with an octavator as the plugin's MIDI test package (export.ts --midi)", async () => {
+    const { project, track, sent, device } = await started();
+    project.addMidiDevice(track.id, "octavator", "midi-1");
+    await device.settled();
+    const tested = JSON.parse(readFileSync("plugin/corrente/midi-device.json", "utf8")) as DevicePackage;
+    const made = loads(sent).at(-1)!;
+    expect({ ...made, label: tested.label }).toEqual(tested);
+  });
+
   it("sends a knob as its value's number and engine value, with no new package", async () => {
     const { track, sent } = await started();
     sent.length = 0;
@@ -90,6 +99,58 @@ describe("PluginDevice", () => {
     restored.load(projectOfRack(racks[0])!);
     const [again] = restored.getTracks() as InstrumentTrack[];
     expect([again.instrumentType, again.params.get("sampler.sample")]).toEqual(["sampler", "builtin:snare"]);
+  });
+
+  it("sends a MIDI device as the package's chain, its values named and numbered on from the instrument's", async () => {
+    const { project, track, sent, device } = await started();
+    const [alone] = loads(sent);
+    expect(alone.midi).toBeUndefined();
+    sent.length = 0;
+    const arp = project.addMidiDevice(track.id, "arpeggiator")!;
+    await device.settled();
+    const [made] = loads(sent);
+    expect(made.midi!.length).toBeGreaterThan(2);
+    expect(made.midiValues![0]).toEqual({ kind: "fixed", name: `midi:${arp.id}:bypass`, raw: 0 });
+    expect(made.midiValues).toContainEqual(
+      expect.objectContaining({ kind: "param", name: `midi:${arp.id}:rate`, title: "Arpeggiator Rate" }),
+    );
+    // C major, as the engine reads a key: its tonic and the scale's 12-bit mask.
+    expect(made.key).toEqual({ tonic: 0, scale: 0b101010110101 });
+
+    // A knob moves its value, numbered after the instrument's; a bypass the same way.
+    const rate = made.values.length + made.midiValues!.findIndex((value) => value.name === `midi:${arp.id}:rate`);
+    sent.length = 0;
+    arp.params.set("rate", "1/16");
+    expect(sent).toEqual([expect.objectContaining({ type: "value", value: rate })]);
+    sent.length = 0;
+    project.setMidiDeviceBypass(track.id, arp.id, true);
+    expect(sent).toEqual([{ type: "value", value: made.values.length, raw: 1 }]);
+  });
+
+  it("lists a MIDI device's params for the macros, and a host's move sets them", async () => {
+    const { project, track, device } = await started();
+    const arp = project.addMidiDevice(track.id, "arpeggiator")!;
+    await device.settled();
+    const name = `midi:${arp.id}:rate`;
+    expect(device.paramNames()).toContain(name);
+    expect(device.nameOf(arp.params, "rate")).toBe(name);
+    device.fromHost(name, 1);
+    const spec = arp.params.spec("rate");
+    expect(arp.params.get("rate")).toBe(spec.kind === "enum" ? spec.options.at(-1) : undefined);
+  });
+
+  it("sends a new package when the key changes under a MIDI device, and not without one", async () => {
+    const { project, track, sent, device } = await started();
+    sent.length = 0;
+    project.setKey(2, "minor");
+    await device.settled();
+    expect(loads(sent)).toHaveLength(0);
+    project.addMidiDevice(track.id, "harmoniser");
+    await device.settled();
+    sent.length = 0;
+    project.setKey(0, "major");
+    await device.settled();
+    expect(loads(sent).map((made) => made.key)).toEqual([{ tonic: 0, scale: 0b101010110101 }]);
   });
 
   it("reads a rack it can't as nothing, so the window starts afresh", () => {

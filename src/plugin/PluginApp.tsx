@@ -3,8 +3,9 @@
  * panel it has open (Explore, PLUGIN-3.5) on the left, and the plugin's one track in a column of
  * sections, as the app's workbench is: the keys (PLUGIN-3.11), its macros (the host's 16 knobs,
  * PLUGIN-3.4, which a knob's right-click menu maps), then its devices. The keys and macros start
- * folded, so the devices open in view. MIDI devices (PLUGIN-3.8) come in as a section above the devices. No transport, timeline or engine here: the
- * plugin makes the sound, and `PluginDevice` tells it what to play.
+ * folded, so the devices open in view, MIDI devices (PLUGIN-3.8) leading them as in the app. No
+ * transport, timeline or engine here: the plugin makes the sound, and `PluginDevice` tells it what to
+ * play.
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { LiveNotes } from "../audio/live/liveNotes";
@@ -148,7 +149,6 @@ export function PluginApp({
                   samples={project.getSamples()}
                   dispatch={dispatch}
                   projectStore={project}
-                  midiDevices={false}
                   bare
                 />
               </KnobExtrasProvider>

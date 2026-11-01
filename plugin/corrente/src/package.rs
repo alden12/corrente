@@ -31,6 +31,25 @@ pub struct Package {
     pub binding: Vec<f64>,
     /// Each value the binding reads, in its order.
     pub values: Vec<Value>,
+    /// The MIDI devices ahead of the instrument (PLUGIN-3.8), as `eng_midi_load` reads them: empty with
+    /// none, and missing from a package saved before the plugin played them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub midi: Vec<f64>,
+    /// Each value the MIDI devices read, in the chain's order: each device's bypass, then its params.
+    /// Numbered on from `values`, so a macro, the window and the saved package reach them as they do the
+    /// instrument's.
+    #[serde(default, rename = "midiValues", skip_serializing_if = "Vec::is_empty")]
+    pub midi_values: Vec<Value>,
+    /// The key the devices play in (DAW-12), which a harmoniser or quantiser reads; C major without.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<Key>,
+}
+
+// TS: type PackageKey = { tonic: number; scale: number }  (scale: the key's 12-bit mask, theory/key.ts)
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq)]
+pub struct Key {
+    pub tonic: i32,
+    pub scale: i32,
 }
 
 // TS: type PackageValue = { kind: "param", ... } | { kind: "sample", ... } | { kind: "fixed", ... }
@@ -176,12 +195,13 @@ impl Package {
         serde_json::from_str::<Package>(json).ok().filter(|package| package.format == FORMAT)
     }
 
-    /// Whether `other` is this device with only its values moved: the same plan, binding, params and
-    /// samples. The window sends the whole package again on any change, so the plugin tells a knob
+    /// Whether `other` is this device with only its values moved: the same plan, binding, params,
+    /// samples, MIDI devices and key. The window sends the whole package again on any change, so the plugin tells a knob
     /// from a new device here, and only rebuilds for the second.
     // TS:
     //   return sameNumbers(this.words, other.words) && sameNumbers(this.binding, other.binding) &&
-    //     this.values.length === other.values.length && this.values.every((value, index) => sameShape(value, other.values[index]));
+    //     sameShapes(this.values, other.values) && sameNumbers(this.midiDevices(), other.midiDevices()) &&
+    //     sameShapes(this.midiValues, other.midiValues) && sameKey(this.key, other.key);
     // `to_bits` compares the doubles' bits, so a NaN in the binding equals itself.
     pub fn same_device(&self, other: &Package) -> bool {
         let same_value = |(mine, theirs): (&Value, &Value)| match (mine, theirs) {
@@ -199,6 +219,33 @@ impl Package {
             && self.binding.iter().zip(&other.binding).all(|(mine, theirs)| mine.to_bits() == theirs.to_bits())
             && self.values.len() == other.values.len()
             && self.values.iter().zip(&other.values).all(same_value)
+            && self.midi_devices().len() == other.midi_devices().len()
+            && self.midi_devices().iter().zip(other.midi_devices()).all(|(mine, theirs)| mine.to_bits() == theirs.to_bits())
+            && self.midi_values.len() == other.midi_values.len()
+            && self.midi_values.iter().zip(&other.midi_values).all(same_value)
+            && self.key == other.key
+    }
+
+    /// The MIDI chain's words up to its values, which a moved knob changes: what says which devices
+    /// these are.
+    // TS: return this.midi.slice(0, Math.max(0, this.midi.length - this.midiValues.length));
+    fn midi_devices(&self) -> &[f64] {
+        &self.midi[..self.midi.len().saturating_sub(self.midi_values.len())]
+    }
+
+    /// Every value, the binding's then the MIDI devices', in the one numbering the plugin uses for both.
+    // TS: return [...this.values, ...this.midiValues];
+    pub fn all_values(&self) -> impl Iterator<Item = &Value> {
+        self.values.iter().chain(&self.midi_values)
+    }
+
+    /// Value `index` in that numbering, writably.
+    // TS: return index < this.values.length ? this.values[index] : this.midiValues[index - this.values.length];
+    pub fn value_mut(&mut self, index: usize) -> Option<&mut Value> {
+        match index.checked_sub(self.values.len()) {
+            None => self.values.get_mut(index),
+            Some(midi) => self.midi_values.get_mut(midi),
+        }
     }
 }
 

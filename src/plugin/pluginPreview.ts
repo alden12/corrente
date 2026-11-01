@@ -7,23 +7,27 @@
 import type { PackageSamples } from "../audio/bank/devicePackage";
 import type { PreviewEngine } from "../audio/live/preview";
 import type { InstrumentTrack } from "../audio/project/projectStore";
+import { DEFAULT_KEY, type ProjectKey } from "../audio/theory/key";
 import { trackPackage, type ToPlugin } from "./pluginDevice";
 
 export class PluginPreview implements PreviewEngine {
   private readonly samples: PackageSamples;
   private readonly send: (message: ToPlugin) => void;
+  /** The key a sound's MIDI devices play in: the window's project's. */
+  private readonly key: () => ProjectKey;
   /** Counts previews started and ended, so a package that finishes after a newer change is dropped. */
   private turn = 0;
 
-  constructor(samples: PackageSamples, send: (message: ToPlugin) => void) {
+  constructor(samples: PackageSamples, send: (message: ToPlugin) => void, key: () => ProjectKey = () => DEFAULT_KEY) {
     this.samples = samples;
     this.send = send;
+    this.key = key;
   }
 
   setPreview(track: InstrumentTrack | null): void {
     const turn = ++this.turn;
     if (!track) return this.send({ type: "preview", package: null });
-    trackPackage(track, this.samples)
+    trackPackage(track, this.key(), this.samples)
       ?.then((made) => {
         if (turn === this.turn) this.send({ type: "preview", package: JSON.stringify(made) });
       })

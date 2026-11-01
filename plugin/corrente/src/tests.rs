@@ -402,3 +402,73 @@ fn a_newer_release_is_news_and_needed_once_the_engine_moves_on() {
     assert_eq!(updates::release_news(&release(200, "engine-1"), &own(100)), Some(updates::ReleaseNews { needed: false }), "a newer one is");
     assert_eq!(updates::release_news(&release(200, "engine-2"), &own(100)), Some(updates::ReleaseNews { needed: true }), "and needed with another engine");
 }
+
+/// export.ts --midi's package: the built-in synth with an octavator ahead of it (PLUGIN-3.8).
+const MIDI_DEVICE: &str = include_str!("../midi-device.json");
+
+/// Press `note` at the start of the next block and play it: the notes the MIDI devices played in it.
+// TS: plugin.events.push([0, on(note)]); plugin.render(0, 120, false); return played on-notes of track 0;
+// `chunks_exact(3)` walks the played triples (offset, note, velocity); a velocity of 0 is a let-go.
+fn press(plugin: &mut Corrente, note: u8) -> Vec<u8> {
+    plugin.events.push((0, Event::On { note, velocity: 0.8 }));
+    plugin.render(0.0, 120.0, false);
+    let track = plugin.device.as_deref_mut().and_then(|device| device.engine.track_mut(0)).expect("a track");
+    track.played().chunks_exact(3).filter(|played| played[2] > 0.0).map(|played| played[1] as u8).collect()
+}
+
+/// Which of the package's values (in the plugin's one numbering) is the octavator's `param`.
+fn midi_value(json: &str, param: &str) -> usize {
+    let package = package::Package::parse(json).expect("a package");
+    let at = package.midi_values.iter().position(|value| matches!(value, package::Value::Param { name, .. } if name.ends_with(param))).expect("the param");
+    package.values.len() + at
+}
+
+/// The MIDI devices play ahead of the instrument: a key the host presses goes through the octavator,
+/// which adds the octave above.
+#[test]
+fn a_midi_device_plays_ahead_of_the_instrument() {
+    let mut played = press(&mut active(MIDI_DEVICE), 60);
+    played.sort_unstable();
+    assert_eq!(played, vec![60, 72]);
+}
+
+/// A MIDI device's knob moved in the window is a value like the instrument's: set between blocks with
+/// no rebuild, and saved.
+#[test]
+fn a_midi_value_moves_without_a_rebuild_and_is_saved() {
+    // TS: turn the octavator's octave up off, as the window would send it.
+    let index = midi_value(MIDI_DEVICE, "octaveUp");
+    let mut plugin = active(MIDI_DEVICE);
+    let mut moved: serde_json::Value = serde_json::from_str(MIDI_DEVICE).expect("a package");
+    let at = index - moved["values"].as_array().expect("values").len();
+    moved["midiValues"][at]["raw"] = 0.0.into();
+    assert_eq!(plugin.params.load(&moved.to_string()), Some(vec![(index, 0.0)]), "just the value that moved");
+    assert!(plugin.params.incoming.lock().expect("incoming").is_none(), "no device rebuilt");
+    assert_eq!(press(&mut plugin, 62), vec![62], "the octave above is off");
+    let saved = package::Package::parse(&plugin.params.serialize_fields()["package"]).expect("saved");
+    assert_eq!(saved.midi_values[at].raw(), Some(0.0), "and saved so");
+}
+
+/// A macro maps to a MIDI device's param by its name, as to an instrument's, and plays it through.
+#[test]
+fn a_macro_maps_to_a_midi_param() {
+    let index = midi_value(MIDI_DEVICE, "octaveUp");
+    let mut slots: params::Slots = vec![None; params::MACROS];
+    slots[0] = Some("midi:midi-1:octaveUp".to_owned());
+    let mut plugin = active(MIDI_DEVICE);
+    assert_eq!(plugin.params.set_macros(slots), vec![(index, 1.0)]);
+    play(&mut plugin, &[], 1);
+    assert!(matches!(plugin.device.as_deref().expect("playing").sources[index], device::Source::Macro { knob: 0, .. }), "the switch plays through macro 1");
+}
+
+/// The MIDI devices are saved with the package, and play again in a fresh plugin with its window closed.
+#[test]
+fn midi_devices_are_saved_and_play_again() {
+    let saved = active(MIDI_DEVICE).params.serialize_fields();
+    let mut fresh = Corrente::default();
+    assert!(fresh.load(RATE));
+    fresh.params.deserialize_fields(&saved);
+    let mut played = press(&mut fresh, 60);
+    played.sort_unstable();
+    assert_eq!(played, vec![60, 72]);
+}

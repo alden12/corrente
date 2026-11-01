@@ -8,6 +8,11 @@
  *
  * With no types, subtractive. With `--out`, every package is written there as `<type>.json`, and
  * device.json is left alone.
+ *
+ *   npx tsx plugin/corrente/export.ts --midi
+ *
+ * writes midi-device.json instead: subtractive with an octavator ahead of it (PLUGIN-3.8), which the
+ * plugin's tests play to check its MIDI devices. The window sends the same package for that track.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -21,6 +26,9 @@ import { sampleAudioFor } from "../../src/audio/render/sampleAudio";
 import { parseRef } from "../../src/audio/samples/catalog";
 import { builtinSampleUrl, loadNodeSample } from "../../server/render/nodeRender";
 import { paramTitle } from "../../src/plugin/paramTitle";
+import { midiFields } from "../../src/plugin/midiPackage";
+import { midiDeviceSchema } from "../../src/audio/midi/device/catalog";
+import { DEFAULT_KEY } from "../../src/audio/theory/key";
 
 const args = process.argv.slice(2);
 const outAt = args.indexOf("--out");
@@ -43,6 +51,23 @@ const packageOf = async (type: string) => {
   const label = ENGINE_INSTRUMENTS.find((instrument) => instrument.type === type)?.label ?? type;
   return devicePackage(chain, label, { file, table }, paramTitle);
 };
+
+/** The id midi-device.json's octavator has, which the window's test gives its own to compare. */
+const MIDI_TEST_DEVICE = "midi-1";
+
+if (args.includes("--midi")) {
+  const octavator = {
+    id: MIDI_TEST_DEVICE,
+    type: "octavator",
+    bypassed: false,
+    params: new ParamStore(midiDeviceSchema("octavator")),
+  };
+  const made = { ...(await packageOf("subtractive")), ...midiFields([octavator], DEFAULT_KEY) };
+  const out = fileURLToPath(new URL("midi-device.json", import.meta.url));
+  writeFileSync(out, `${JSON.stringify(made)}\n`);
+  console.log(`${made.label} with an octavator: ${made.midiValues?.length} MIDI values -> ${out}`);
+  process.exit(0);
+}
 
 if (outDir) mkdirSync(outDir, { recursive: true });
 for (const type of types.length > 0 ? types : ["subtractive"]) {

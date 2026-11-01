@@ -85,7 +85,7 @@ const restore = (rack: string | null, slots: Slots | null, savedSamples: SavedSa
     },
     { kind: "plugin" },
   );
-  const preview = new SoundPreview(new PluginPreview(samples, send), noteUsed, project);
+  const preview = new SoundPreview(new PluginPreview(samples, send, () => project.key), noteUsed, project);
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <PluginApp

@@ -184,15 +184,13 @@ impl Corrente {
         // TS:
         //   device.sources.forEach((source, value) => {
         //     const now = source.now(this.params.knobs);
-        //     if (now !== device.sent[value]) { device.sent[value] = now; device.engine.track(0)?.setValue(value, now); }
+        //     if (now !== device.sent[value]) { device.sent[value] = now; device.send(value, now); }
         //   });
         for value in 0..device.sources.len() {
             let now = device.sources[value].now(&self.params.knobs);
             if now != device.sent[value] {
                 device.sent[value] = now;
-                if let Some(track) = device.engine.track_mut(0) {
-                    track.set_value(value, now);
-                }
+                device.send(value, now);
             }
         }
         // TS: for (const [offset, event] of this.events) event.kind === "on" ? engine.keyOn(...) : track.keyOff(...)

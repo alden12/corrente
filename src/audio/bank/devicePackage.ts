@@ -34,6 +34,12 @@ export interface DevicePackage {
   /** eng_bind's words up to the values (binding.ts). */
   binding: number[];
   values: PackageValue[];
+  /** The MIDI devices ahead of the instrument, as eng_midi_load reads them; absent with none (PLUGIN-3.8). */
+  midi?: number[];
+  /** Each value the MIDI devices read, in the chain's order, numbered on from `values`. */
+  midiValues?: PackageValue[];
+  /** The key the devices play in (DAW-12): its tonic and 12-bit scale mask. */
+  key?: { tonic: number; scale: number };
 }
 
 /** Where a package's samples come from: a sample ref's file bytes, or its wavetable's table. */

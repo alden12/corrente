@@ -16,7 +16,8 @@ import { ExploreScopeProvider, type ExploreScope } from "../ui/explore/exploreSc
 import { TryPanel } from "../ui/explore/TryPanel";
 import { CollapseButton } from "../ui/LibraryHeader";
 
-const PLUGIN_SCOPE: ExploreScope = { oneTrack: true, kinds: new Set(["instrument", "patch", "effect"]) };
+// Everything but samples, which go in by a device's own picker (PLUGIN-3.6).
+const PLUGIN_SCOPE: ExploreScope = { oneTrack: true, kinds: new Set(["instrument", "patch", "effect", "midi"]) };
 
 export function PluginExplore({
   project,

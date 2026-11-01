@@ -5,14 +5,16 @@
  *
  * - **A new device** (another instrument, an effect added or removed, a sample swapped) is a package
  *   (devicePackage.ts), sent as `load`. The plugin builds it off the audio thread and swaps it in.
- * - **A knob** is `value`: the binding value's number and its engine value, set between blocks with
- *   no rebuild, as the worklet's param messages are. So is an effect's bypass.
+ * - **A knob** is `value`: the value's number and its engine value, set between blocks with no
+ *   rebuild, as the worklet's param messages are. So is an effect's bypass. The MIDI devices' values
+ *   (PLUGIN-3.8) are numbered on from the instrument's (`midiPackage.ts`), so they move the same way.
  * - **The project** is sent as `rack`, a moment after the last change, for the plugin to save with the
  *   host's project and hand back when the window opens again.
  * - **A macro the host moves** (`fromHost`) sets the param it's mapped to here, so the knob follows,
  *   and isn't sent back (PLUGIN-3.4).
  *
- * Only what the instrument's plan takes in plays: effects after a non-engine one aren't played yet.
+ * Only what the instrument's plan takes in plays: effects after a non-engine one aren't played yet, nor
+ * a MIDI device the engine doesn't play.
  */
 import { absorbedKey, instrumentChain, type InstrumentChain } from "../audio/bank/chainPlan";
 import { bindingOf } from "../audio/bank/binding";
@@ -26,6 +28,10 @@ import { createListeners } from "../listeners";
 import type { InstrumentTrack, ProjectStore } from "../audio/project/projectStore";
 import { paramTitle } from "./paramTitle";
 import { positionOf, valueAt } from "./pluginMacros";
+import { midiFields, midiSlots, midiSourceOf, midiValueOf, type MidiSlot } from "./midiPackage";
+import { engineMidiPlan } from "../audio/midi/engine";
+import type { MidiDevicePlan } from "../audio/midi/compile";
+import type { ProjectKey } from "../audio/theory/key";
 
 /** What the page sends the plugin (editor.rs's `Message`). */
 export type ToPlugin =
@@ -92,14 +98,25 @@ const fixedOf = (chain: InstrumentChain): Record<string, number> =>
     }),
   );
 
-/** A chain's package, its samples read in, labelled as its instrument. */
-const packageOf = (chain: InstrumentChain, instrumentType: string, samples: PackageSamples): Promise<DevicePackage> =>
-  devicePackage(chain.plan, catalogEntry(instrumentType).label, samples, paramTitle, fixedOf(chain));
+/** A track's package, its samples read in, labelled as its instrument, its MIDI devices ahead of it. */
+const packageOf = async (
+  chain: InstrumentChain,
+  track: InstrumentTrack,
+  key: ProjectKey,
+  samples: PackageSamples,
+): Promise<DevicePackage> => ({
+  ...(await devicePackage(chain.plan, catalogEntry(track.instrumentType).label, samples, paramTitle, fixedOf(chain))),
+  ...midiFields(track.midiDevices, key),
+});
 
-/** What a track plays, as a package; undefined for a track with no instrument to play. */
-export const trackPackage = (track: InstrumentTrack, samples: PackageSamples): Promise<DevicePackage> | undefined => {
+/** What a track plays in `key`, as a package; undefined for a track with no instrument to play. */
+export const trackPackage = (
+  track: InstrumentTrack,
+  key: ProjectKey,
+  samples: PackageSamples,
+): Promise<DevicePackage> | undefined => {
   const chain = instrumentChain(track.instrumentType, track.params, track.effects);
-  return chain && packageOf(chain, track.instrumentType, samples);
+  return chain && packageOf(chain, track, key, samples);
 };
 
 export class PluginDevice {
@@ -108,6 +125,9 @@ export class PluginDevice {
   private readonly send: (message: ToPlugin) => void;
   /** The chain playing, and what makes it this device rather than another. */
   private chain: InstrumentChain | undefined;
+  /** The MIDI devices' values, after the chain's, and the plans they were made from. */
+  private midi: MidiSlot[] = [];
+  private midiPlans: (MidiDevicePlan | undefined)[] = [];
   private key = "";
   /** The engine value each binding value was last sent at; undefined for a sample. */
   private sent: (number | undefined)[] = [];
@@ -148,23 +168,30 @@ export class PluginDevice {
   /** What makes the device this one rather than another; changes as `subscribe` hears. */
   deviceKey = (): string => this.key;
 
-  /** The binding names of the device's params, in its order (a package's param values): what macros map. */
+  /**
+   * The names of the device's params, in its order (a package's param values): the instrument's binding
+   * names, then the MIDI devices'. What macros map.
+   */
   paramNames(): string[] {
     const chain = this.chain;
     if (!chain) return [];
     const binding = bindingOf(chain.plan.plan);
-    return binding.names.filter((name, index) => chain.plan.sources[name] && !binding.samples[index]);
+    const midi = this.midi.filter((slot) => slot.param !== undefined).map((slot) => slot.name);
+    return [...binding.names.filter((name, index) => chain.plan.sources[name] && !binding.samples[index]), ...midi];
   }
 
-  /** The binding name of `store`'s param `id`, if the device plays it as a param. */
+  /** The name of `store`'s param `id`, if the device plays it as a param. */
   nameOf(store: ParamStore, id: string): string | undefined {
-    const sources = this.chain?.plan.sources ?? {};
-    return this.paramNames().find((name) => sources[name]?.store === store && sources[name].id === id);
+    return this.paramNames().find((name) => {
+      const source = this.paramOf(name);
+      return source?.store === store && source.id === id;
+    });
   }
 
   /** Where `name` is, and its spec: to show it, or set it. */
   paramOf(name: string): { store: ParamStore; id: string } | undefined {
-    return this.chain?.plan.sources[name];
+    const slot = this.midi.find((each) => each.name === name);
+    return slot ? midiSourceOf(slot) : this.chain?.plan.sources[name];
   }
 
   /**
@@ -192,47 +219,65 @@ export class PluginDevice {
     const chain = track && instrumentChain(track.instrumentType, track.params, track.effects);
     // An empty track plays nothing new: the plugin keeps what it had until an instrument is picked.
     if (!track || !chain) return;
-    const key = `${track.instrumentType}|${absorbedKey(chain.absorbed)}`;
-    if (key !== this.key) {
+    // The MIDI devices by id and type, and the key they play in (nothing else reads it). A device edited (a project's own,
+    // INST-11.3) keeps its type but gets a new plan, so the plans are compared too.
+    const { tonic, scale } = this.project.key;
+    const midiKey = track.midiDevices.map((device) => `${device.id}:${device.type}`).join(",");
+    const key = `${track.instrumentType}|${absorbedKey(chain.absorbed)}${midiKey ? `|${midiKey}|${tonic}:${scale}` : ""}`;
+    const plans = track.midiDevices.map((device) => engineMidiPlan(device.type));
+    const samePlans =
+      plans.length === this.midiPlans.length && plans.every((plan, index) => plan === this.midiPlans[index]);
+    this.chain = chain;
+    this.midi = midiSlots(track.midiDevices);
+    if (key !== this.key || !samePlans) {
       this.key = key;
-      this.chain = chain;
-      this.listenToStores(chain);
+      this.midiPlans = plans;
+      this.listenToStores(chain, track);
       this.sendPackage();
       this.listeners.emit();
     } else {
-      // Same device: what can change without a store hearing it is an effect's bypass.
-      this.chain = chain;
+      // Same device: what can change without a store hearing it is a bypass, an effect's or a MIDI device's.
       this.sendValues();
     }
   }
 
-  /** Hear each store the plan reads, for knobs (values) and samples (a new package). */
-  private listenToStores({ plan }: InstrumentChain): void {
+  /** Hear each store the plan and the MIDI devices read, for knobs (values) and samples (a new package). */
+  private listenToStores({ plan }: InstrumentChain, track: InstrumentTrack): void {
     this.unsubscribeStores.forEach((stop) => stop());
     const binding = bindingOf(plan.plan);
     const stores = new Set(Object.values(plan.sources).map((source) => source.store));
-    this.unsubscribeStores = [...stores].map((store) =>
-      store.subscribe((id) => {
+    const midiStores = track.midiDevices.map((device) =>
+      device.params.subscribe(() => {
         this.saveRackSoon();
-        const names = binding.names.filter(
-          (name) => plan.sources[name]?.store === store && plan.sources[name].id === id,
-        );
-        if (names.some((name) => binding.samples[binding.numbers.get(name) ?? -1])) this.sendPackage();
-        else if (names.length > 0) this.sendValues();
+        this.sendValues();
       }),
     );
+    this.unsubscribeStores = [
+      ...midiStores,
+      ...[...stores].map((store) =>
+        store.subscribe((id) => {
+          this.saveRackSoon();
+          const names = binding.names.filter(
+            (name) => plan.sources[name]?.store === store && plan.sources[name].id === id,
+          );
+          if (names.some((name) => binding.samples[binding.numbers.get(name) ?? -1])) this.sendPackage();
+          else if (names.length > 0) this.sendValues();
+        }),
+      ),
+    ];
   }
 
-  /** Each binding value's engine value now, undefined for a sample. */
+  /** Each value's engine value now, the binding's then the MIDI devices'; undefined for a sample. */
   private values(chain: InstrumentChain): (number | undefined)[] {
     const { plan, sources } = chain.plan;
     const binding = bindingOf(plan);
     const fixed = fixedOf(chain);
-    return binding.names.map((name, index) => {
+    const bound = binding.names.map((name, index) => {
       if (binding.samples[index]) return undefined;
       const source = sources[name];
       return source ? engineValueOf(source.store.spec(source.id), source.store.get(source.id)) : (fixed[name] ?? 0);
     });
+    return [...bound, ...this.midi.map(midiValueOf)];
   }
 
   /** Send each value that moved since it was last sent. Waits while a package is being built. */
@@ -251,10 +296,14 @@ export class PluginDevice {
     const chain = this.chain;
     if (!chain) return;
     const build = ++this.building;
-    this.pending = packageOf(chain, trackOf(this.project)?.instrumentType ?? "", this.samples)
+    const track = trackOf(this.project);
+    if (!track) return;
+    this.pending = packageOf(chain, track, this.project.key, this.samples)
       .then((made: DevicePackage) => {
         if (build !== this.building) return;
-        this.sent = made.values.map((value) => (value.kind === "sample" ? undefined : value.raw));
+        this.sent = [...made.values, ...(made.midiValues ?? [])].map((value) =>
+          value.kind === "sample" ? undefined : value.raw,
+        );
         this.send({ type: "load", package: JSON.stringify(made) });
       })
       .catch((error: unknown) => this.send({ type: "log", text: `the device didn't package: ${String(error)}` }))
