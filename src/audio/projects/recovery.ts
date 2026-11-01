@@ -16,7 +16,13 @@
  */
 import { createListeners } from "../../listeners";
 import { ProjectStore } from "../project/projectStore";
-import { getRepository, setCurrentProject, UnreadableProjectError, type ProjectRepository } from "../projectRepository";
+import {
+  getRepository,
+  setCurrentProject,
+  UnreachableProjectError,
+  UnreadableProjectError,
+  type ProjectRepository,
+} from "../projectRepository";
 import { forkProjectFromSnapshot } from "./operations";
 
 export type RecoveryOutcome =
@@ -62,18 +68,22 @@ export async function startProjectBeside(name: string): Promise<string> {
   return id;
 }
 
+/** Why a project wouldn't open: damaged (with which part), or out of reach (HOST-36). */
+export type OpenFailure = { kind: "unreadable"; detail: string } | { kind: "unreachable" };
+
 /**
- * Where a damaged project is announced from, because it is found in two places - boot and a project
- * switch - and only one of them is a promise the shell is already holding. The shell subscribes; both
- * callers report. Returns whether `error` was the unreadable-project one, so a caller can fall
+ * Where a project that won't open is announced from, because it is found in two places - boot and a
+ * project switch - and only one of them is a promise the shell is already holding. The shell
+ * subscribes; both callers report. Returns whether `error` was one of these, so a caller can fall
  * through to its ordinary logging for anything else.
  */
-const listeners = createListeners<[string]>();
+const listeners = createListeners<[OpenFailure]>();
 
-export const subscribeUnreadableProject = listeners.subscribe;
+export const subscribeOpenFailure = listeners.subscribe;
 
-export function reportUnreadableProject(error: unknown): boolean {
-  if (!(error instanceof UnreadableProjectError)) return false;
-  listeners.emit(error.detail);
+export function reportOpenFailure(error: unknown): boolean {
+  if (error instanceof UnreachableProjectError) listeners.emit({ kind: "unreachable" });
+  else if (error instanceof UnreadableProjectError) listeners.emit({ kind: "unreadable", detail: error.detail });
+  else return false;
   return true;
 }

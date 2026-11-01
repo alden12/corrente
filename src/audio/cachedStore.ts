@@ -14,6 +14,9 @@
  * project, its edit tail, and its samples) without yet changing write semantics. Making offline *writes*
  * durable - queue them locally and flush on reconnect - is the next increment (the durable write-queue);
  * this cache is the local store that queue will build on.
+ *
+ * A read the cache answered is noted (`unreachable`): the local copy holds only what was read before,
+ * so a project that won't open from it is out of reach, not damaged (HOST-36).
  */
 import type { BundleStore, ProjectListing, ProjectStorage } from "./bundleStore";
 import type { EditEntry } from "./commands/types";
@@ -22,30 +25,50 @@ import type { EditEntry } from "./commands/types";
 export class CachedBundleStore implements BundleStore {
   private readonly remote: BundleStore;
   private readonly cache: BundleStore;
+  /** Whether the last read fell back to the cache. */
+  private offline = false;
 
   constructor(remote: BundleStore, cache: BundleStore) {
     this.remote = remote;
     this.cache = cache;
   }
 
-  async readText(path: string): Promise<string | null> {
+  unreachable(): boolean {
+    return this.offline;
+  }
+
+  /** Read from the remote, noting whether it answered; the cache answers when it can't. */
+  private async readThrough<T>(remote: () => Promise<T>, cached: () => Promise<T>): Promise<T> {
     try {
-      const value = await this.remote.readText(path);
-      if (value !== null) await this.cache.writeText(path, value);
+      const value = await remote();
+      this.offline = false;
       return value;
     } catch {
-      return this.cache.readText(path);
+      this.offline = true;
+      return cached();
     }
   }
 
-  async readBlob(path: string): Promise<ArrayBuffer | null> {
-    try {
-      const value = await this.remote.readBlob(path);
-      if (value !== null) await this.cache.writeBlob(path, new Blob([value]));
-      return value;
-    } catch {
-      return this.cache.readBlob(path);
-    }
+  readText(path: string): Promise<string | null> {
+    return this.readThrough(
+      async () => {
+        const value = await this.remote.readText(path);
+        if (value !== null) await this.cache.writeText(path, value);
+        return value;
+      },
+      () => this.cache.readText(path),
+    );
+  }
+
+  readBlob(path: string): Promise<ArrayBuffer | null> {
+    return this.readThrough(
+      async () => {
+        const value = await this.remote.readBlob(path);
+        if (value !== null) await this.cache.writeBlob(path, new Blob([value]));
+        return value;
+      },
+      () => this.cache.readBlob(path),
+    );
   }
 
   async writeText(path: string, text: string): Promise<void> {
@@ -58,12 +81,11 @@ export class CachedBundleStore implements BundleStore {
     await this.remote.writeBlob(path, blob);
   }
 
-  async exists(path: string): Promise<boolean> {
-    try {
-      return await this.remote.exists(path);
-    } catch {
-      return this.cache.exists(path);
-    }
+  exists(path: string): Promise<boolean> {
+    return this.readThrough(
+      () => this.remote.exists(path),
+      () => this.cache.exists(path),
+    );
   }
 
   async appendEdits(entries: EditEntry[]): Promise<void> {
@@ -71,16 +93,17 @@ export class CachedBundleStore implements BundleStore {
     await this.remote.appendEdits(entries);
   }
 
-  async readEdits(sinceSeq: number, limit?: number): Promise<EditEntry[]> {
-    try {
-      const entries = await this.remote.readEdits(sinceSeq, limit);
-      // Mirror the fetched window into the local log (idempotent by seq), so an offline reload can
-      // reconstruct HEAD from the cached keyframe + this tail.
-      if (entries.length > 0) await this.cache.appendEdits(entries);
-      return entries;
-    } catch {
-      return this.cache.readEdits(sinceSeq, limit);
-    }
+  readEdits(sinceSeq: number, limit?: number): Promise<EditEntry[]> {
+    return this.readThrough(
+      async () => {
+        const entries = await this.remote.readEdits(sinceSeq, limit);
+        // Mirror the fetched window into the local log (idempotent by seq), so an offline reload can
+        // reconstruct HEAD from the cached keyframe + this tail.
+        if (entries.length > 0) await this.cache.appendEdits(entries);
+        return entries;
+      },
+      () => this.cache.readEdits(sinceSeq, limit),
+    );
   }
 }
 

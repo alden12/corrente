@@ -28,6 +28,12 @@ export interface BundleStore {
   /** Read the edit log entries with `seq > sinceSeq` (all if `sinceSeq < 0`), oldest first. `limit`
    *  caps to the most recent N (a bounded feed window); omit for the full tail. */
   readEdits(sinceSeq: number, limit?: number): Promise<EditEntry[]>;
+  /**
+   * Whether the server couldn't be reached on the last read, so it was answered from a local copy
+   * (`CachedBundleStore`): what tells a project that won't open offline from a damaged one (HOST-36).
+   * Absent on a store with no server behind it.
+   */
+  unreachable?(): boolean;
 }
 
 /** The parent directory (under the OPFS root) that holds every project bundle. */

@@ -40,10 +40,10 @@ import {
 import { followOpenProject } from "../audio/sync/followProject";
 import { healProjectName } from "../audio/projects/healName";
 import {
-  reportUnreadableProject,
+  reportOpenFailure,
   rebuildProjectState,
   startProjectBeside,
-  subscribeUnreadableProject,
+  subscribeOpenFailure,
 } from "../audio/projects/recovery";
 import { readCurrentUser, subscribeCurrentUser } from "./currentUser";
 import type { SharedSession } from "../audio/sync/sharedSession";
@@ -59,6 +59,7 @@ import { applyUpdate, reloadOntoLatest, useUpdateWaiting } from "../pwa/serviceW
 import { isOutdated, subscribeOutdated } from "../contract/outdated";
 import { ConflictDialog } from "./ConflictDialog";
 import { RecoveryDialog } from "./RecoveryDialog";
+import { UnreachableDialog } from "./UnreachableDialog";
 import { takeAuthReturnPath } from "../auth/session";
 import { VersionStore } from "../audio/commands/history";
 import { useProject } from "../audio/project/useProject";
@@ -97,6 +98,8 @@ const LIBRARY_VIEWS = ["project", "explore", "activity", "agent"] as const;
  * out is DAW-68.
  */
 const openInPlace = (id: string, name: string) => window.location.replace(projectPath(id, name));
+/** Try opening the project again from the top: the retry when it couldn't be reached (HOST-36). */
+const reloadPage = () => window.location.reload();
 
 // Computer-keyboard -> MIDI note, one octave from C4 (the classic tracker layout).
 const KEY_MAP: Record<string, number> = {
@@ -181,7 +184,15 @@ export function AppShell() {
   // set - the boot chain stopped before attaching it - so the damaged bundle stays as it was found
   // until the dialog resolves.
   const [recovery, setRecovery] = useState<{ detail: string } | null>(null);
-  useEffect(() => subscribeUnreadableProject((detail) => setRecovery({ detail })), []);
+  // Or one that couldn't be reached (HOST-36): nothing to rebuild, only to try again.
+  const [unreachable, setUnreachable] = useState(false);
+  useEffect(
+    () =>
+      subscribeOpenFailure((failure) =>
+        failure.kind === "unreachable" ? setUnreachable(true) : setRecovery({ detail: failure.detail }),
+      ),
+    [],
+  );
   const sessionRef = useRef<SharedSession | null>(null);
   const projectList = useSyncExternalStore(subscribeProjects, listProjects);
   // Shared = someone shared it with us (role "editor") or we have seen a peer edit this session (so an
@@ -360,7 +371,7 @@ export function AppShell() {
         // log is still here and can rebuild it, and the one thing that must not happen meanwhile is
         // an autosave writing the empty live store over it. Reported rather than set directly, so the
         // switch path (`ProjectsHome`) raises the same dialog.
-        if (!reportUnreadableProject(error)) console.warn("[corrente] project load failed:", error);
+        if (!reportOpenFailure(error)) console.warn("[corrente] project load failed:", error);
       })
       .finally(() => {
         if (active) setProjectLoaded(true);
@@ -555,6 +566,7 @@ export function AppShell() {
           />
         )}
         {!projectLoaded && <LoadingOverlay />}
+        {unreachable && <UnreachableDialog onRetry={reloadPage} />}
         {recovery && (
           <RecoveryDialog
             detail={recovery.detail}

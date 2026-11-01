@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { MemoryProjectStorage, type BundleStore, type ProjectStorage } from "../src/audio/bundleStore";
 import { CachedProjectStorage } from "../src/audio/cachedStore";
 import type { EditEntry } from "../src/audio/commands/types";
+import { ProjectStore } from "../src/audio/project/projectStore";
+import { ProjectRepository, UnreachableProjectError, UnreadableProjectError } from "../src/audio/projectRepository";
 
 /** Flips the fake remote between reachable and offline (every op rejects). */
 class Gate {
@@ -154,5 +156,62 @@ describe("CachedProjectStorage listing", () => {
     gate.offline = true;
     const offline = await cached.listProjects();
     expect(offline.find((entry) => entry.id === "p1")?.name).toBe("My Beat");
+  });
+});
+
+describe("a project out of reach is not a damaged one (HOST-36)", () => {
+  /** A project with a track saved on the server, as another device left it. */
+  const saved = async (server: MemoryProjectStorage) => {
+    const project = new ProjectStore(false);
+    project.addTrack("subtractive");
+    await new ProjectRepository(server.bundle("p1"), "p1").save(project.snapshot(), [], []);
+  };
+
+  it("notes whether the last read had to come from the cache", async () => {
+    const { gate, cached } = makeCached();
+    const bundle = cached.bundle("p1");
+    await bundle.readText("project.json");
+    expect(bundle.unreachable?.()).toBe(false);
+    gate.offline = true;
+    await bundle.readText("project.json");
+    expect(bundle.unreachable?.()).toBe(true);
+    gate.offline = false;
+    await bundle.readEdits(-1);
+    expect(bundle.unreachable?.()).toBe(false);
+  });
+
+  it("opens a project this device read before, offline, from its copy", async () => {
+    const { gate, server, cached } = makeCached();
+    await saved(server);
+    await new ProjectRepository(cached.bundle("p1"), "p1").load();
+    gate.offline = true;
+    const loaded = await new ProjectRepository(cached.bundle("p1"), "p1").load();
+    expect(loaded?.project.tracks).toHaveLength(1);
+  });
+
+  it("calls a project this device never read out of reach offline, not empty", async () => {
+    const { gate, server, cached } = makeCached();
+    await saved(server);
+    gate.offline = true;
+    await expect(new ProjectRepository(cached.bundle("p1"), "p1").load()).rejects.toBeInstanceOf(
+      UnreachableProjectError,
+    );
+  });
+
+  it("calls a copy that won't open out of reach offline, and damage only when the server says so", async () => {
+    const { gate, server, cache, cached } = makeCached();
+    await saved(server);
+    await new ProjectRepository(cached.bundle("p1"), "p1").load();
+    await cache.bundle("p1").writeText("project.json", "{ half a file");
+    gate.offline = true;
+    await expect(new ProjectRepository(cached.bundle("p1"), "p1").load()).rejects.toBeInstanceOf(
+      UnreachableProjectError,
+    );
+    // Back online, the server's copy is read, and a damaged one there is damage.
+    gate.offline = false;
+    await server.bundle("p1").writeText("project.json", "{ half a file");
+    await expect(new ProjectRepository(cached.bundle("p1"), "p1").load()).rejects.toBeInstanceOf(
+      UnreadableProjectError,
+    );
   });
 });

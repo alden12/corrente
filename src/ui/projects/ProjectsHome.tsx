@@ -23,7 +23,7 @@ import {
   switchProject,
   type ImportPlan,
 } from "../../audio/projects/operations";
-import { reportUnreadableProject } from "../../audio/projects/recovery";
+import { reportOpenFailure } from "../../audio/projects/recovery";
 import { summarizeProject, type ProjectSummary } from "../../audio/projects/summary";
 import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
@@ -123,7 +123,7 @@ export function ProjectsHome({
     void switchProject(deps, meta.id)
       .then(onOpenProject)
       .catch((error: unknown) => {
-        if (!reportUnreadableProject(error)) console.warn("[corrente] project switch failed:", error);
+        if (!reportOpenFailure(error)) console.warn("[corrente] project switch failed:", error);
       });
   };
   const exportProject = (id: string, name: string) => {

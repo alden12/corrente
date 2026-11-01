@@ -159,6 +159,19 @@ export class UnreadableProjectError extends Error {
   }
 }
 
+/**
+ * The server couldn't be reached and the local copy couldn't open the project either (HOST-36). Not
+ * damage: the copy holds only what was read before, and the project on the server is as it was. So the
+ * app says it can't connect and tries again, and never offers to rebuild, which would replay the
+ * partial copy and write it back as the project.
+ */
+export class UnreachableProjectError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super("the project's server could not be reached", options);
+    this.name = "UnreachableProjectError";
+  }
+}
+
 /** A bundle as a flat path -> bytes map (what gets zipped into a `.daw.zip`). */
 export type BundleFiles = Record<string, Uint8Array>;
 
@@ -352,9 +365,27 @@ export class ProjectRepository {
    *
    * Throws `UnreadableProjectError` when there IS a project here and it cannot be read - see that
    * type. A bundle with no keyframe is only "nothing saved yet" if it has no log either; with a log
-   * it is a project whose state file is gone, and `rebuildFromLog` is how it comes back.
+   * it is a project whose state file is gone, and `rebuildFromLog` is how it comes back. Throws
+   * `UnreachableProjectError` instead when the server couldn't be reached and the local copy couldn't
+   * open it: then nothing here is damaged (HOST-36).
    */
   async load(): Promise<StoredProject | null> {
+    try {
+      const loaded = await this.loadStored();
+      // Nothing here, as the local copy has it: a project this device never opened, not an empty one.
+      // Read as empty, the app would start it afresh and save that over the project on the server.
+      if (!loaded && this.store.unreachable?.()) throw new UnreachableProjectError();
+      return loaded;
+    } catch (error) {
+      if (error instanceof UnreadableProjectError && this.store.unreachable?.()) {
+        throw new UnreachableProjectError({ cause: error });
+      }
+      throw error;
+    }
+  }
+
+  /** `load`'s reading, with a project the local copy can't open reported as damage, as if it were. */
+  private async loadStored(): Promise<StoredProject | null> {
     const head = await this.readHeadKeyframe();
     if (!head) {
       // `readStream`, not a swallowed read: a log that will not parse next to a missing keyframe is

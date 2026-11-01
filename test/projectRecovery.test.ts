@@ -11,8 +11,8 @@ import { describe, expect, it } from "vitest";
 import { ProjectStore } from "../src/audio/project/projectStore";
 import { EditLog } from "../src/audio/commands/editLog";
 import { MemoryBundleStore } from "../src/audio/bundleStore";
-import { ProjectRepository, UnreadableProjectError } from "../src/audio/projectRepository";
-import { rebuildProjectState, reportUnreadableProject } from "../src/audio/projects/recovery";
+import { ProjectRepository, UnreachableProjectError, UnreadableProjectError } from "../src/audio/projectRepository";
+import { rebuildProjectState, reportOpenFailure } from "../src/audio/projects/recovery";
 import type { EditCommand } from "../src/audio/commands/types";
 
 const track = (id: string): EditCommand => ({ type: "createTrack", instrumentType: "subtractive", id });
@@ -172,8 +172,9 @@ describe("the recovery action", () => {
 });
 
 describe("reporting it to the shell", () => {
-  it("passes on the unreadable-project error and nothing else", () => {
-    expect(reportUnreadableProject(new UnreadableProjectError("project.json is missing"))).toBe(true);
-    expect(reportUnreadableProject(new Error("the network went away"))).toBe(false);
+  it("passes on a project that won't open, damaged or out of reach, and nothing else", () => {
+    expect(reportOpenFailure(new UnreadableProjectError("project.json is missing"))).toBe(true);
+    expect(reportOpenFailure(new UnreachableProjectError())).toBe(true);
+    expect(reportOpenFailure(new Error("the network went away"))).toBe(false);
   });
 });
