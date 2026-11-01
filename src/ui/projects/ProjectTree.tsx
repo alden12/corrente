@@ -32,11 +32,14 @@ export function ProjectTree({
   projectStore,
   dispatch,
   onOpenTrack,
+  scrolls = false,
 }: {
   projectStore: ProjectStore;
   dispatch: Dispatch;
   /** After a track is chosen: the phone goes to the Studio; the desktop already shows it. */
   onOpenTrack?: () => void;
+  /** Fill the space left and scroll its rows there, the toolbar and ruler staying put (the desktop). */
+  scrolls?: boolean;
 }) {
   const project = useProject(projectStore);
   const [filter, setFilter] = useState("");
@@ -66,8 +69,10 @@ export function ProjectTree({
 
   return (
     // The indent widens on a phone, where a row is a finger's height too.
-    <div className="flex flex-col [--tree-indent:14px] pointer-coarse:[--tree-indent:16px]">
-      <div className="flex items-center gap-0.5 h-8 pointer-coarse:h-12 pl-4 pr-1.5">
+    <div
+      className={`flex flex-col [--tree-indent:14px] pointer-coarse:[--tree-indent:16px] ${scrolls ? "flex-1 min-h-0" : ""}`}
+    >
+      <div className="shrink-0 flex items-center gap-0.5 h-8 pointer-coarse:h-12 pl-4 pr-1.5">
         <span className="flex-1 font-mono text-[10px] tracking-[0.14em] text-muted">TRACKS</span>
         <Menu
           label="Add a track or group"
@@ -127,7 +132,7 @@ export function ProjectTree({
       </div>
 
       {(filterShown || filtering) && (
-        <div className="px-3 pb-1.5">
+        <div className="shrink-0 px-3 pb-1.5">
           <input
             type="search"
             autoFocus={!filtering}
@@ -143,7 +148,7 @@ export function ProjectTree({
       {spanBeats > 0 && (
         <div
           aria-hidden="true"
-          className="grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_24px] gap-2 pr-2 pb-1 font-mono text-[9px] text-faint"
+          className="shrink-0 grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_16px_40px] gap-2 pr-2 pointer-coarse:pr-0 pb-1 font-mono text-[9px] text-faint"
         >
           <span />
           <span className="relative h-3">
@@ -157,9 +162,9 @@ export function ProjectTree({
       )}
 
       {filtering && rows.length === 0 && (
-        <p className="px-4 py-2 text-[12.5px] text-faint">{`No tracks match “${filter.trim()}”.`}</p>
+        <p className="shrink-0 px-4 py-2 text-[12.5px] text-faint">{`No tracks match “${filter.trim()}”.`}</p>
       )}
-      <ul aria-label="Tracks">
+      <ul aria-label="Tracks" className={scrolls ? "flex-1 min-h-0 overflow-y-auto pb-4" : ""}>
         {rows.map((row) => (
           <ProjectTreeRow
             key={row.kind === "group" ? `group:${row.group.id}` : `track:${row.track.id}`}

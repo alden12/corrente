@@ -10,6 +10,8 @@ import { Fragment, type ReactNode } from "react";
 import { AccountAvatar } from "./AccountAvatar";
 import { BetaChip } from "./BetaChip";
 import { RAIL_ITEMS, type LibraryView, type RailItem } from "./libraryViews";
+import { usePersistentString } from "./usePersistent";
+import { PROJECTS_PAGE_DEFAULT, PROJECTS_PAGE_KEY, PROJECTS_PAGES, type ProjectsPage } from "./projects/projectsPage";
 
 export type { LibraryView, RailItem } from "./libraryViews";
 
@@ -33,7 +35,8 @@ export function ActivityRail({
 }: {
   active: LibraryView;
   collapsed: boolean;
-  onSelect: (view: LibraryView) => void;
+  /** `page`: which of Projects' pages, for the two icons that share its view. */
+  onSelect: (view: LibraryView, page?: ProjectsPage) => void;
   /** Fired by the mark at the bottom: open the settings panel on its Account tab. Without it there's no mark (the plugin's window, PLUGIN-3.12). */
   onOpenSettings?: () => void;
   /** Search: not a view of its own, but a way into Explore's search box (COMM-1.9.3). */
@@ -45,6 +48,7 @@ export function ActivityRail({
   /** Pages of Explore, straight from the rail (COMM-3), listed under its icon. None in the plugin's window. */
   shortcuts?: readonly RailShortcut[];
 }) {
+  const [projectsPage] = usePersistentString<ProjectsPage>(PROJECTS_PAGE_KEY, PROJECTS_PAGE_DEFAULT, PROJECTS_PAGES);
   return (
     <nav
       aria-label="Library views"
@@ -71,15 +75,15 @@ export function ActivityRail({
         </svg>
       </button>
       {items.map((item) => {
-        const selected = item.view === active && !collapsed;
+        const selected = item.view === active && !collapsed && (item.page === undefined || item.page === projectsPage);
         return (
-          <Fragment key={item.view}>
+          <Fragment key={item.label}>
             <button
               type="button"
               title={item.label}
               aria-label={item.label}
               aria-current={selected ? "page" : undefined}
-              onClick={() => onSelect(item.view)}
+              onClick={() => onSelect(item.view, item.page)}
               className={`relative flex items-center justify-center w-full h-9.5 cursor-pointer ${
                 selected ? "text-strong" : "text-faint hover:text-ink"
               }`}

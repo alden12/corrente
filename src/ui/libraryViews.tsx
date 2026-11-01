@@ -10,6 +10,7 @@
 import type { ReactNode } from "react";
 import { AgentIcon } from "./shellIcons";
 import type { ExploreCategory } from "./explore/exploreItems";
+import type { ProjectsPage } from "./projects/projectsPage";
 
 /** The one library view on show. Persisted, so it survives a reload. */
 export type LibraryView = "project" | "explore" | "activity" | "agent";
@@ -22,6 +23,8 @@ export type PanelView = Exclude<LibraryView, "agent">;
 
 export interface RailItem {
   view: LibraryView;
+  /** Projects' page it opens, where the view has two: the list, or the open project's tree. */
+  page?: ProjectsPage;
   label: string;
   icon: ReactNode;
 }
@@ -57,11 +60,30 @@ export const RAIL_ITEMS: RailItem[] = [
       </>,
     ),
   },
+  // Projects and the open project are one view, two pages, but each its own icon on the desktop rail
+  // (2026-11-01): a stack of folders for the list, and the tree the project page now is.
   {
     view: "project",
+    page: "home",
+    label: "Projects",
+    icon: svg(
+      <>
+        <path d="M4.5 4V3.5a1 1 0 0 1 1-1h2.2l1.2 1.2h3.6a1 1 0 0 1 1 1v6" />
+        <path d="M2 6.5a1 1 0 0 1 1-1h2.2l1.2 1.2h3.6a1 1 0 0 1 1 1v4.8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
+      </>,
+    ),
+  },
+  {
+    view: "project",
+    page: "inside",
     label: "Project",
     icon: svg(
-      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" />,
+      <>
+        <rect x="2" y="2" width="5" height="3.5" rx="1" />
+        <path d="M4.5 5.5v7h4M4.5 8h4" />
+        <rect x="8.5" y="6.5" width="5.5" height="3" rx="1" />
+        <rect x="8.5" y="11" width="5.5" height="3" rx="1" />
+      </>,
     ),
   },
   { view: "activity", label: "Activity", icon: svg(<path d="M2 8h3l2-4 2 8 2-6 1.5 2H14" />) },

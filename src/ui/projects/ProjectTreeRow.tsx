@@ -5,7 +5,7 @@
  *
  * Kept clean until it's needed: with a mouse, hovering a row (or tabbing into it) swaps the letter
  * for its mute, solo and ⋯ buttons. A touch has no hover, so on a phone the row swipes left to show
- * Mute, Solo and More behind it (`useSwipeActions`).
+ * Mute and Solo behind it (`useSwipeActions`), and its ⋮ menu is always there at the end.
  */
 import type { Dispatch } from "../../audio/commands/types";
 import type { GroupMeta, TrackMeta } from "../../audio/project/types";
@@ -34,8 +34,8 @@ export interface TreeContext {
   onChoose: (track: TrackMeta) => void;
 }
 
-/** The actions behind a swiped row: three 64px buttons. */
-const SWIPE_WIDTH = 192;
+/** The actions behind a swiped row: two 64px buttons. */
+const SWIPE_WIDTH = 128;
 
 /** The indent per level and where its guide falls, through CSS variables so a phone can widen it. */
 const indentStyle = (depth: number) => ({ paddingLeft: `calc(6px + ${depth} * var(--tree-indent))` });
@@ -113,21 +113,19 @@ function TrackIcon({ track }: { track: TrackMeta }) {
   );
 }
 
-/** The swiped row's actions: Mute, Solo, and More for the ⋯ menu. */
+/** The swiped row's actions: Mute and Solo. */
 function SwipedActions({
   name,
   muted,
   solo,
   onMute,
   onSolo,
-  menu,
 }: {
   name: string;
   muted: boolean;
   solo: boolean;
   onMute: () => void;
   onSolo: () => void;
-  menu: () => ReturnType<typeof trackMenu>;
 }) {
   const action = "w-16 h-full flex items-center justify-center text-[13px] font-semibold text-strong cursor-pointer";
   return (
@@ -150,9 +148,6 @@ function SwipedActions({
       >
         {solo ? "Unsolo" : "Solo"}
       </button>
-      <span className="w-16 h-full flex bg-control">
-        <Menu label={`More for ${name}`} items={menu} trigger="More" triggerClassName={action} />
-      </span>
     </div>
   );
 }
@@ -246,19 +241,12 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
   return (
     <li className="relative overflow-hidden" aria-label={item.name}>
       {swipe.offset < 0 && (
-        <SwipedActions
-          name={item.name}
-          muted={item.muted}
-          solo={item.solo}
-          onMute={onMute}
-          onSolo={onSolo}
-          menu={menu}
-        />
+        <SwipedActions name={item.name} muted={item.muted} solo={item.solo} onMute={onMute} onSolo={onSolo} />
       )}
       <div
         {...swipe.handlers}
         style={{ transform: swipe.offset ? `translateX(${swipe.offset}px)` : undefined, ...indentStyle(row.depth) }}
-        className={`group/row relative grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_24px] gap-2 items-center h-[26px] pointer-coarse:h-12 pr-2 touch-pan-y ${ground} ${
+        className={`group/row relative grid grid-cols-[minmax(0,1fr)_84px_64px] pointer-coarse:grid-cols-[minmax(0,1fr)_72px_16px_40px] gap-2 items-center h-[26px] pointer-coarse:h-12 pr-2 pointer-coarse:pr-0 touch-pan-y ${ground} ${
           swipe.dragging ? "" : "transition-transform"
         }`}
       >
@@ -290,6 +278,14 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
               triggerClassName="w-5 h-6 text-[15px] leading-none text-muted hover:text-ink cursor-pointer"
             />
           </span>
+        </span>
+        {/* A touch's menu, always at hand: no hover to bring it up. */}
+        <span className="hidden pointer-coarse:flex justify-end">
+          <Menu
+            label={`Actions for ${item.name}`}
+            items={menu}
+            triggerClassName="w-10 h-12 flex items-center justify-center text-[20px] leading-none text-muted cursor-pointer"
+          />
         </span>
       </div>
     </li>

@@ -132,7 +132,8 @@ export function LibraryPanel({
   return (
     <div className="[grid-area:library] min-w-0 bg-rail border-r border-line flex flex-col flex-1 min-h-0">
       <LibraryHeader activeView={activeView} editLog={editLog} onCollapse={onCollapse} />
-      <div className="flex-1 min-h-0 overflow-y-auto">{views[activeView]()}</div>
+      {/* A column, so a view that fills it can scroll part of itself (the project tree under its header). */}
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{views[activeView]()}</div>
       {activeView === "explore" && shown && panelFor(shown) === "add" && (
         <DevicePanel
           item={shown}

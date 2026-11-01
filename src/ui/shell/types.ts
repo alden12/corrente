@@ -10,6 +10,7 @@
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import type { Scheduler } from "../../audio/sequencer/scheduler";
 import type { Recorder } from "../../audio/recording/recorder";
+import type { ProjectsPage } from "../projects/projectsPage";
 import type { LiveNotes } from "../../audio/live/liveNotes";
 import type { SoundPreview } from "../../audio/live/preview";
 import type { EditLog } from "../../audio/commands/editLog";
@@ -51,7 +52,8 @@ export interface ShellProps {
 
   /** The single library view on show. */
   libView: LibraryView;
-  onSelectView: (view: LibraryView) => void;
+  /** `page`: which of Projects' pages, for the desktop rail's two icons onto its one view. */
+  onSelectView: (view: LibraryView, page?: ProjectsPage) => void;
 
   /**
    * Panel collapse lives here rather than in the desktop shell because `onSelectView`

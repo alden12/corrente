@@ -104,7 +104,8 @@ export function ViewRail({
   current: LibraryView;
   onSelect: (view: LibraryView) => void;
 }) {
-  const items = RAIL_ITEMS.filter((item) => isViewOf(tab, item.view));
+  // The list of projects is a page of the Projects tab here, behind its back link, not a view of its own.
+  const items = RAIL_ITEMS.filter((item) => isViewOf(tab, item.view) && item.page !== "home");
   // A tab with one view has nothing to switch between.
   if (items.length < 2) return null;
   return (

@@ -26,10 +26,17 @@ test("Explore home leads back to the open project and to the list of projects", 
   const links = page.getByRole("navigation", { name: "Your projects" });
   await links.getByRole("button", { name: "All projects" }).click();
   await expect(page.getByRole("list", { name: "Projects" })).toBeVisible();
+  // The list has its own icon on the rail, apart from the open project's.
+  await expect(
+    page.getByRole("navigation", { name: "Library views" }).getByRole("button", { name: "Projects", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   // Reached from Explore, so it offers the way back, and only then.
   await page.getByRole("button", { name: "Back to Explore" }).click();
   await expect(links).toBeVisible();
-  await page.getByRole("navigation", { name: "Library views" }).getByRole("button", { name: "Project" }).click();
+  await page
+    .getByRole("navigation", { name: "Library views" })
+    .getByRole("button", { name: "Project", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Back to Explore" })).toHaveCount(0);
 
   await page
@@ -38,7 +45,7 @@ test("Explore home leads back to the open project and to the list of projects", 
     .click();
   await links.getByRole("button").first().click();
   await expect(
-    page.getByRole("navigation", { name: "Library views" }).getByRole("button", { name: "Project" }),
+    page.getByRole("navigation", { name: "Library views" }).getByRole("button", { name: "Project", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 });
 

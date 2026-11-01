@@ -84,8 +84,9 @@ export function ProjectOverview({
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-      <header>
+    // The phone scrolls the whole page; the desktop keeps the header put and scrolls the tree under it.
+    <div className={history ? "flex-1 min-h-0 overflow-y-auto pb-4" : "flex-1 min-h-0 flex flex-col"}>
+      <header className="shrink-0">
         <div className="flex items-center gap-2 px-4">
           <InlineRename
             value={name}
@@ -152,13 +153,13 @@ export function ProjectOverview({
           ))}
         </div>
       ) : (
-        <div className="h-4" />
+        <div className="h-4 shrink-0" />
       )}
 
       {history && tab === "history" ? (
         history
       ) : (
-        <ProjectTree projectStore={projectStore} dispatch={dispatch} onOpenTrack={onOpenTrack} />
+        <ProjectTree projectStore={projectStore} dispatch={dispatch} onOpenTrack={onOpenTrack} scrolls={!history} />
       )}
     </div>
   );
