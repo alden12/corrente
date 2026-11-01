@@ -109,8 +109,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # Only the plugin's: the run also holds the engine's sources and the record the Docker build
+      # uploads by itself, which fails to download.
       - uses: actions/download-artifact@v4
         with:
+          pattern: plugin-*
           path: assets
           merge-multiple: true
       - name: Release
