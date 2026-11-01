@@ -160,6 +160,44 @@ test.describe("phone preview rack", () => {
     await expect(reverb).toHaveCount(1);
   });
 
+  test("tapping a tried effect's row again takes it off the preview", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
+    await openExploreCategory(page, "Effects");
+    const row = page.getByTestId("explore-row").getByRole("button", { name: "Reverb", exact: true });
+    await row.tap();
+
+    const sheet = page.getByTestId("preview-sheet");
+    const reverb = sheet.locator('[data-device][aria-label="Reverb"]');
+    await expect(reverb).toHaveCount(1);
+    await row.tap();
+    await expect(reverb).toHaveCount(0);
+    // Off the preview, not the preview put away: the sound it was tried on stays.
+    await expect(sheet).toBeVisible();
+    await row.tap();
+    await expect(reverb).toHaveCount(1);
+  });
+
+  test("a new preview opens its keys, even if they were hidden last time", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("navigation", { name: "Places" }).getByRole("button", { name: "Explore", exact: true }).tap();
+    await openExploreCategory(page, "Instruments");
+    await page.getByRole("button", { name: "FM", exact: true }).tap();
+
+    const keys = page.getByTestId("preview-keys");
+    const sheet = page.getByTestId("preview-sheet");
+    await expect(keys.locator("[data-pitches]").first()).toBeVisible();
+    await sheet.getByRole("button", { name: "Hide the keys" }).tap();
+    await expect(keys).toHaveCount(0);
+    await sheet.getByRole("button", { name: "Discard the preview" }).tap();
+    await expect(sheet).toHaveCount(0);
+
+    await page.getByRole("button", { name: "FM", exact: true }).tap();
+    await expect(keys.locator("[data-pitches]").first()).toBeVisible();
+  });
+
   test("the preview is a sheet over Explore that minimises as the Studio's does", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);

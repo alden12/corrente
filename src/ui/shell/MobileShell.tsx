@@ -39,7 +39,7 @@ import { currentProjectId } from "../../audio/projectRepository";
 import { OnThisDeviceChip, onThisDevice } from "../hosting/OnThisDevice";
 import { SyncChip } from "../ConnectionStatus";
 import { exportProjectFile } from "../projectFile";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LibraryPanel } from "../LibraryPanel";
 import { AgentPanel } from "../AgentPanel";
 import { ArrangementTimeline } from "../ArrangementTimeline";
@@ -228,6 +228,15 @@ export function MobileShell({
   // Your preview, while it's the selected track (COMM-1.4.5): the sheets show it in preview mode.
   const previewShown =
     selectedTrack?.kind === "instrument" && isPreviewTrackId(selectedTrack.id) ? selectedTrack : undefined;
+  /**
+   * A preview starting opens its keys, even if they were hidden last time: the keys are how you hear
+   * it, and a first try that showed no way to play it would read as nothing happening. Hidden during
+   * a preview, they stay hidden until the next one.
+   */
+  const previewing = previewShown !== undefined;
+  useEffect(() => {
+    if (previewing) setTryKeysOpen(true);
+  }, [previewing, setTryKeysOpen]);
   /** The row that takes it into the project: going to the Studio after, as any pick does. */
   const previewBar = (track: InstrumentTrack) => (
     <PreviewBar

@@ -19,6 +19,12 @@ import { readCurrentUser } from "../currentUser";
 /** A device tried on the preview: an effect, or a MIDI device. */
 export type TriedDevice = { kind: "effect" | "midi"; type: string };
 
+/** The command that takes a tried device off a track again. */
+const REMOVE_DEVICE: Record<TriedDevice["kind"], (trackId: string, deviceId: string) => EditCommand> = {
+  effect: (trackId, deviceId) => ({ type: "removeEffect", hostId: trackId, effectId: deviceId }),
+  midi: (trackId, deviceId) => ({ type: "removeMidiDevice", trackId, deviceId }),
+};
+
 /** The command that puts a tried device on a track. */
 const ADD_DEVICE: Record<TriedDevice["kind"], (trackId: string, type: string) => EditCommand> = {
   effect: (trackId, type) => ({ type: "addEffect", hostId: trackId, effectType: type, id: newEffectId() }),
@@ -63,6 +69,13 @@ export function previewTrying(project: ProjectStore, dispatch: Dispatch) {
       }
       dispatch(ADD_DEVICE[device.kind](id, device.type));
       project.selectTrack(id);
+    },
+    /** Take a tried device off the preview again: the last of its type, the one tried most recently. */
+    removeDevice: (device: TriedDevice) => {
+      const preview = project.getPreview(owner);
+      const chain = device.kind === "effect" ? preview?.effects : preview?.midiDevices;
+      const tried = chain?.findLast((each) => each.type === device.type);
+      if (tried) dispatch(REMOVE_DEVICE[device.kind](id, tried.id));
     },
     /** Put it away. */
     discard: () => {

@@ -1,8 +1,8 @@
 /**
  * What tapping an Explore item does, wherever it is shown (a list row, a shelf card), so the two
  * never drift: an instrument or patch is tried (COMM-1.4.1), in the app an effect or MIDI device is
- * tried on it (`tryOn`, COMM-1.4.5), and anything else is shown in its panel (`panelFor`), so nothing
- * goes into the project from a plain tap. The "+" counts as using it (COMM-1.9.7), and so does
+ * tried on it (`tryOn`, COMM-1.4.5) and taken off by a second tap, and anything else is shown in its
+ * panel (`panelFor`), so nothing goes into the project from a plain tap. The "+" counts as using it (COMM-1.9.7), and so does
  * taking it from a panel or the preview.
  */
 import type { SoundPreview } from "../../audio/live/preview";
@@ -17,7 +17,7 @@ import { noteUsed } from "./recent/store";
 export interface TryOn {
   trying: PreviewTrying;
   base: () => { key: string; sound: Sound };
-  /** Whether an item is in the preview already: a tap on it then does nothing more. */
+  /** Whether an item is in the preview already: a tap then takes a device off, and does nothing to a sound. */
   isIn: (item: ExploreItem) => boolean;
 }
 
@@ -42,7 +42,9 @@ export function itemTaps(
       const sound = soundFor(item);
       const device = deviceToTry(item);
       if (tryOn) {
-        // Already in it: a second of the same is a rack's job, not a tap's.
+        // Already in it: a tap on a device takes it off again, so a row toggles what it tried (a
+        // second of the same is a rack's job, not a tap's). A sound stays: it is the preview.
+        if (tryOn.isIn(item) && device && !sound) return tryOn.trying.removeDevice(device);
         if (tryOn.isIn(item) && (sound || device)) return;
         // An instrument slots in under the devices tried so far; a patch brings its own chain.
         if (sound && item.source.kind === "instrument") return tryOn.trying.instrument(item.key, sound);
