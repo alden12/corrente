@@ -12,14 +12,12 @@
  * **Editing** (`settings.editingChords`) lays out hidden chords too, dimmed, and turns a tap into
  * a selection for `ChordEditBar`; the pads stop sounding and wear a dashed edge so that is plain.
  */
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { chordRows, type ChordPad } from "../../audio/theory/chords";
 import { rowGap } from "./geometry";
 import type { PadSettings } from "./padSettings";
 import { PadButton } from "./PadButton";
 import type { PadTouch } from "./usePadTouch";
-import { ScrollRail } from "./ScrollRail";
-import { useScrollThumb } from "./useScrollThumb";
 
 /**
  * The strip down each row's right edge that scrolls rather than plays: wide enough for a thumb to
@@ -109,20 +107,50 @@ export function ChordPads({
  * stack reads upwards. Snapping to whole rows so a scroll never leaves one cut in half.
  */
 function ScrollingRows({ height, children }: { height: number; children: ReactNode }) {
-  const { ref: scrollerRef, scroller, thumb } = useScrollThumb();
+  const scroller = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ top: number; size: number } | null>(null);
+
+  const measure = () => {
+    const element = scroller.current;
+    if (!element) return;
+    const { scrollHeight, clientHeight, scrollTop } = element;
+    const next =
+      scrollHeight <= clientHeight + 1
+        ? null
+        : // Column-reverse scrolls with a scrollTop of 0 at the bottom and negative above it.
+          {
+            size: clientHeight / scrollHeight,
+            top:
+              ((scrollHeight - clientHeight + scrollTop) / (scrollHeight - clientHeight)) *
+              (1 - clientHeight / scrollHeight),
+          };
+    // Measured after every render, so only a real change may set state - or it renders forever.
+    setThumb((previous) => (previous?.top === next?.top && previous?.size === next?.size ? previous : next));
+  };
+  useLayoutEffect(measure);
 
   return (
     <div className="relative shrink-0" style={{ height }}>
       <div
-        ref={scrollerRef}
+        ref={scroller}
         data-chord-scroll
+        onScroll={measure}
         className="h-full overflow-y-auto overscroll-contain snap-y snap-mandatory flex flex-col-reverse [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ gap: GAP }}
       >
         {children}
       </div>
-      {scroller && thumb && (
-        <ScrollRail scroller={scroller} thumb={thumb} width={RAIL_WIDTH} right={(SCROLL_STRIP - RAIL_WIDTH) / 2} />
+      {thumb && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 bottom-0 rounded-full bg-control"
+          style={{ width: RAIL_WIDTH, right: (SCROLL_STRIP - RAIL_WIDTH) / 2 }}
+        >
+          <div
+            className="absolute left-0 right-0 rounded-full bg-muted"
+            style={{ top: `${thumb.top * 100}%`, height: `${thumb.size * 100}%` }}
+          />
+        </div>
       )}
     </div>
   );

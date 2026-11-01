@@ -23,12 +23,16 @@ import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardP
 import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "../pads/KeysPreview";
-import { ScrollRail } from "../pads/ScrollRail";
-import { useScrollThumb } from "../pads/useScrollThumb";
 
-/** The strip the chord rows' scroll rail takes down the keys' right edge, and the rail drawn in it. */
-const RAIL_STRIP = 16;
-const RAIL_WIDTH = 6;
+/**
+ * The chord rows' scrollbar, styled so it shows: a styled WebKit scrollbar is a classic one, always
+ * there and taking its room, even on a Mac that hides scrollbars until you scroll (Chromium, Safari,
+ * and both plugin webviews; Firefox keeps its own). Drawn like the phone's chord rail. No
+ * `scrollbar-width` with it: Chromium ignores these styles once that is set.
+ */
+const STYLED_SCROLLBAR =
+  "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-control " +
+  "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted";
 
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
@@ -80,7 +84,6 @@ export function KeysPanel({
   onVelocity: (velocity: number) => void;
 }) {
   const keycap = useKeycapLabels();
-  const { ref: scrollerRef, scroller, thumb } = useScrollThumb();
   const held = useHeldKeys(keyboard);
   const hint = !settings.chords && rowMode === "octaves" ? "Shift sharps · [ ] octave" : "[ ] octave";
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
@@ -110,36 +113,24 @@ export function KeysPanel({
               the ones past the keyboard's four to click; column-reverse, so it opens at the bottom with
               the keys in view. Not contained: with nothing left to scroll here, the wheel moves the
               workbench column on (DAW-61.1). */}
-          <div className="relative flex-1 min-w-0 flex" style={{ paddingRight: thumb ? RAIL_STRIP : 0 }}>
-            <div
-              ref={scrollerRef}
-              data-keys-scroll
-              className="flex-1 min-w-0 overflow-y-auto flex flex-col-reverse [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              <div className="flex flex-col-reverse" style={{ gap: KEY_GAP }}>
-                {(settings.chords || settings.editingChords ? rows : rows.slice(0, shownRows)).map((row, rowIndex) => (
-                  <KeyRow
-                    key={rowIndex}
-                    row={row}
-                    offset={offset(rowIndex)}
-                    units={rowUnits(rowMode === "accidentals" && !settings.chords)}
-                    settings={settings}
-                    touch={lit}
-                    heldAt={held.heldAt}
-                    keycap={keycap}
-                  />
-                ))}
-              </div>
+          <div
+            data-keys-scroll
+            className={`flex-1 min-w-0 overflow-y-auto flex flex-col-reverse ${settings.chords ? `pr-2 ${STYLED_SCROLLBAR}` : ""}`}
+          >
+            <div className="flex flex-col-reverse" style={{ gap: KEY_GAP }}>
+              {(settings.chords || settings.editingChords ? rows : rows.slice(0, shownRows)).map((row, rowIndex) => (
+                <KeyRow
+                  key={rowIndex}
+                  row={row}
+                  offset={offset(rowIndex)}
+                  units={rowUnits(rowMode === "accidentals" && !settings.chords)}
+                  settings={settings}
+                  touch={lit}
+                  heldAt={held.heldAt}
+                  keycap={keycap}
+                />
+              ))}
             </div>
-            {scroller && thumb && (
-              <ScrollRail
-                scroller={scroller}
-                thumb={thumb}
-                width={RAIL_WIDTH}
-                right={(RAIL_STRIP - RAIL_WIDTH) / 2}
-                draggable
-              />
-            )}
           </div>
         </div>
       )}
