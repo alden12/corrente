@@ -2,6 +2,7 @@
 engine/catalogue.json
 **/target
 plugin/corrente/device.json
+plugin/corrente/midi-device.json
 dist
 coverage
 playwright-report
