@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CHORD_PREFS } from "../src/audio/theory/chordPrefs";
+import { DEFAULT_CHORD_PREFS, setHidden } from "../src/audio/theory/chordPrefs";
 import { isAccidentalRow, keyboardRows, padsByCode, qwertyLabel } from "../src/ui/keys/keyLayout";
 
 type Options = Parameters<typeof keyboardRows>[0];
@@ -91,19 +91,26 @@ describe("keyboardRows, chords", () => {
     ]);
     expect(pitchesOf("KeyZ", { chords: true })).toEqual([48, 52, 55]);
     // Past the closing tonic, the row carries on an octave up.
-    expect(rows).toHaveLength(4);
     expect(pitchesOf("Period", { chords: true })).toEqual([62, 65, 69]);
     expect(rows[1][0].pad?.name).toBe("Cmaj7");
+  });
+
+  it("lays out the rows past the keyboard's four too, to scroll to and click, on cells no key plays", () => {
+    const rows = layout({ chords: true });
+    expect(rows.length).toBeGreaterThan(4);
+    expect(rows[3][0].code).toBe("Digit1");
+    expect(rows[4][0].code).toBe("off-keys-4-0");
+    expect(rows[4][0].pad).not.toBeNull();
   });
 });
 
 describe("keyboardRows, arranging chords", () => {
-  it("lays out every row the key offers, past the keyboard's four, on cells no key plays", () => {
-    const rows = layout({ chords: true, editing: true });
-    expect(rows.length).toBeGreaterThan(4);
-    expect(rows[3][0].code).toBe("Digit1");
-    expect(rows[4][0].code).toBe("arrange-4-0");
-    expect(rows[4][0].pad).not.toBeNull();
+  it("lays out the hidden chords too", () => {
+    const hidden = setHidden(DEFAULT_CHORD_PREFS, 0, "seventh", true, "all");
+    const shown = layout({ chords: true, prefs: hidden }).flat();
+    const editing = layout({ chords: true, prefs: hidden, editing: true }).flat();
+    expect(editing.filter((cell) => cell.pad?.chord?.hidden)).not.toHaveLength(0);
+    expect(shown.filter((cell) => cell.pad?.chord?.hidden)).toHaveLength(0);
   });
 });
 
