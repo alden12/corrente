@@ -680,7 +680,7 @@ test.describe("phone", () => {
     await expect(page.getByRole("button", { name: /play|stop/i }).first()).toBeVisible();
   });
 
-  test("minimised is the bar, with the keyboard button while the keys are hidden, and a tap on it opens the sheet (MOBILE-24)", async ({
+  test("minimised is the bar, with the keyboard button, and a tap on it opens the sheet (MOBILE-24)", async ({
     page,
   }) => {
     await startInStudio(page);
@@ -693,8 +693,8 @@ test.describe("phone", () => {
     await expect(sheet(page).getByText(/^Micro VA · \d+ devices?$/)).toBeVisible();
     expect(Math.abs(box.y + box.height - (await keysTop(page))), "and it sits on the keys").toBeLessThan(2);
 
-    // Hidden, the keys give up their header row too, and the bar's keyboard button stands in for it.
-    await pads(page).getByRole("button", { name: "Hide the keys" }).tap();
+    // Hidden from the bar's keyboard button, the keys give up their header row too.
+    await sheet(page).getByRole("button", { name: "Hide the keys" }).tap();
     await expect(pads(page)).toHaveCount(0);
     const tabsTop = (await tabBar(page).boundingBox())!.y;
     // Polled: the workspace grows into the keys' room, and the bar follows it down once laid out.
@@ -709,7 +709,7 @@ test.describe("phone", () => {
       .toBeLessThan(2);
     await sheet(page).getByRole("button", { name: "Show the keys" }).tap();
     await expect(pads(page).locator("[data-pad-row]")).toHaveCount(1);
-    await expect(sheet(page).getByRole("button", { name: "Show the keys" })).toHaveCount(0);
+    await expect(sheet(page).getByRole("button", { name: "Hide the keys" })).toBeVisible();
 
     await grabber(page).tap();
     await expect.poll(() => detentOf(page)).toBe("half");
@@ -1344,8 +1344,10 @@ test.describe("phone", () => {
   test("chords mode turns each pad into its chord, with the variations stacked above", async ({ page }) => {
     await startInStudio(page);
 
-    await page.getByRole("button", { name: "Key and scale" }).tap();
-    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+    // The button in the keys' header, lit while it is on.
+    const chords = pads(page).getByRole("button", { name: "Chords", exact: true });
+    await chords.tap();
+    await expect(chords).toHaveAttribute("aria-pressed", "true");
 
     // The base row is each degree's triad, closing on the tonic, as the note row does.
     const base = await pads(page)
@@ -1373,8 +1375,7 @@ test.describe("phone", () => {
 
   test("arranging the chords: move one in its column, star it, hide it, and scroll to the rest", async ({ page }) => {
     await startInStudio(page);
-    await page.getByRole("button", { name: "Key and scale" }).tap();
-    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+    await pads(page).getByRole("button", { name: "Chords", exact: true }).tap();
     await setDetent(page, "full");
 
     // Every variation is reachable by scrolling, however few rows are on show.
@@ -1438,8 +1439,7 @@ test.describe("phone", () => {
   });
   test("a long chord name shrinks to fit its pad rather than overflowing it", async ({ page }) => {
     await startInStudio(page);
-    await page.getByRole("button", { name: "Key and scale" }).tap();
-    await page.getByRole("menuitemradio", { name: "Chords" }).click();
+    await pads(page).getByRole("button", { name: "Chords", exact: true }).tap();
     // F# minor: sharp roots, and a half-diminished seventh on the second degree (G#m7♭5).
     await page.getByRole("button", { name: "Key and scale" }).tap();
     await page.getByRole("menuitem", { name: "Key" }).click();
@@ -1615,10 +1615,9 @@ test.describe("phone, landscape", () => {
     await setDetent(page, "full");
     const before = (await sheet(page).boundingBox())!.height;
 
-    await pads(page).getByRole("button", { name: "Hide the keys" }).tap();
-    await expect(pads(page).locator("[data-pad-row]")).toHaveCount(0);
-    // Folded, their header still says what they would play in.
-    await expect(pads(page)).toContainText("C major");
+    // From the sheet's bar, which keeps the button at every detent.
+    await sheet(page).getByRole("button", { name: "Hide the keys" }).tap();
+    await expect(pads(page)).toHaveCount(0);
     await expect.poll(async () => (await sheet(page).boundingBox())!.height).toBeGreaterThan(before);
     const roll = (await page.getByTestId("roll-scroll").boundingBox())!;
     expect(roll.width, "the roll has the full width").toBeGreaterThan(700);

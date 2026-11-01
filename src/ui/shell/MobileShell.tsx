@@ -376,7 +376,7 @@ export function MobileShell({
               onDetentChange={setPreviewDetent}
               title={previewTitle(sheet)}
               subtitle="Preview · not in the arrangement"
-              minimisedActions={!tryKeysOpen && <KeysToggle fold={tryKeysFold} />}
+              actions={<KeysToggle fold={tryKeysFold} />}
               label="Preview"
             >
               <WorkbenchColumn
@@ -393,9 +393,8 @@ export function MobileShell({
             </EditorSheet>
           )}
         </div>
-        {/* The keys dock under the sheet as the Studio's do: hidden, they keep their header, except
-            under a minimised sheet, whose bar has the keyboard button instead. */}
-        {sheet && (tryKeysOpen || previewDetent !== "peek") && (
+        {/* The keys dock under the sheet as the Studio's do, shown and hidden from its bar. */}
+        {sheet && tryKeysOpen && (
           <section
             aria-label="Keys"
             data-testid="preview-keys"
@@ -567,7 +566,7 @@ export function MobileShell({
                 onDetentChange={setDetent}
                 title={selectedTrack.name}
                 subtitle={sheetSubtitle(selectedTrack)}
-                minimisedActions={selectedTrack.kind === "instrument" && !keysOpen && <KeysToggle fold={keysFold} />}
+                actions={selectedTrack.kind === "instrument" && <KeysToggle fold={keysFold} />}
               >
                 <WorkbenchColumn
                   key={selectedTrack.id}
@@ -585,9 +584,8 @@ export function MobileShell({
           </div>
           {/* The keys dock under the Studio as a phone's keyboard does, pushing it up rather than
               covering it: they play whatever the sheet is showing, and at any detent. */}
-          {/* Hidden, the keys keep their header, except under a minimised sheet, whose bar has the
-              keyboard button instead and saves the row. */}
-          {selectedTrack?.kind === "instrument" && (keysOpen || detent !== "peek") && (
+          {/* Shown and hidden from the sheet's bar, whose keyboard button is there at every detent. */}
+          {selectedTrack?.kind === "instrument" && keysOpen && (
             <section
               aria-label="Keys"
               data-testid="keys-dock"

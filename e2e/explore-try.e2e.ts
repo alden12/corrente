@@ -132,9 +132,11 @@ test.describe("phone", () => {
     await expect(rows).toHaveCount(1);
     await panel.getByRole("button", { name: "More octaves" }).tap();
     await expect(rows).toHaveCount(2);
-    await panel.getByRole("button", { name: "Hide the keys" }).tap();
+    // The keyboard button is in the sheet's bar, so the keys' header has room for chords.
+    const bar = page.getByTestId("preview-sheet");
+    await bar.getByRole("button", { name: "Hide the keys" }).tap();
     await expect(panel.locator("[data-pitches]")).toHaveCount(0);
-    await panel.getByRole("button", { name: "Show the keys" }).tap();
+    await bar.getByRole("button", { name: "Show the keys" }).tap();
     await expect(rows).toHaveCount(2);
   });
 });

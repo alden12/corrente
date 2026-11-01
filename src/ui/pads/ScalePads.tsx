@@ -25,7 +25,7 @@ import type { PadSettings } from "./padSettings";
 import type { ChordArrangeMode } from "../../audio/theory/chordPrefs";
 import { PadButton } from "./PadButton";
 import { IconButton } from "../controls/IconButton";
-import { CONTROL_BASE } from "../controls/tone";
+import { CONTROL_BASE, TONE_ACTIVE } from "../controls/tone";
 import type { PadTouch } from "./usePadTouch";
 import { ChordPads } from "./ChordPads";
 import { ChordEditBar } from "./ChordEditBar";
@@ -39,7 +39,7 @@ const ARRANGE_MODES: { mode: ChordArrangeMode; label: string }[] = [
 
 /**
  * The key and the octave range, in the keys' section header: a row of their own cost a row of
- * pads on a phone (MOBILE-24). Sized to fit a 390px header with the keyboard toggle beside them.
+ * pads on a phone (MOBILE-24). Sized to fit a 390px header with the chords button beside them.
  */
 export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSettings; octavesPerRow: number }) {
   const { scale, tonic, accidentals, chords } = settings;
@@ -64,11 +64,11 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
         onClick: () => settings.setScale(name),
       })),
     },
-    { separator: true },
-    { label: "Chords", checked: chords, onClick: () => settings.setChords(!chords) },
-    // Only with chords on: it arranges them, and there is nothing to arrange otherwise.
+    // Only with chords on: it arranges them, and there is nothing to arrange otherwise. Chords
+    // themselves are the button beside the menu, where they are found.
     ...(chords
       ? [
+          { separator: true },
           { label: "Edit chords…", onClick: () => settings.setEditingChords(true) },
           {
             label: "Arrange by",
@@ -80,6 +80,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           },
         ]
       : []),
+    { separator: true },
     // Chords are all in the key, so there is nothing for the band above them to hold.
     {
       label: "Accidentals",
@@ -106,6 +107,17 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           </>
         }
       />
+      {/* Out of the menu, so it is found (and switched mid-phrase) without opening it. */}
+      <button
+        type="button"
+        aria-pressed={chords}
+        onClick={() => settings.setChords(!chords)}
+        className={`${CONTROL_BASE} shrink-0 h-6 px-2.5 rounded-full font-mono text-[11px] ${
+          chords ? TONE_ACTIVE.you : "bg-control text-ink hover:bg-control-hover"
+        }`}
+      >
+        Chords
+      </button>
       <div className="ml-auto shrink-0 flex items-center">
         <IconButton
           label="Lower octave"

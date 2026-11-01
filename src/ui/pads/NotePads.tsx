@@ -25,7 +25,6 @@ import { ScalePadControls, ScalePads } from "./ScalePads";
 import { PAD_HEIGHT, fitPads } from "./geometry";
 import { CHORDS_KEY, usePadSettings, type SongKey } from "./padSettings";
 import { usePadTouch, type PadNoteTarget } from "./usePadTouch";
-import { KeysToggle } from "./KeysToggle";
 
 export function NotePads({
   track,
@@ -43,7 +42,7 @@ export function NotePads({
   octavesPerRow: number;
   /** The most height the keys may take, their header included (`keysRoom`). */
   room: number;
-  /** Shows and hides the pads, from the keyboard button at the header's right. Without it they always show. */
+  /** Shows and hides the pads, from the keyboard button in the sheet's bar. Without it they always show. */
   fold?: Fold;
   /** The song's key, which the pads play in (DAW-12). */
   songKey: SongKey;
@@ -67,9 +66,9 @@ export function NotePads({
   useEffect(() => touch.releaseAll, [touch.releaseAll, track.id, open]);
 
   // Open, the header is the key and range controls, which say what these are better than a title.
-  // The keyboard button sits at its right, where the minimised sheet's own one is.
+  // The keyboard button is in the sheet's bar, so the row has room for the chords button.
   const header = (
-    <SectionHeader title="Keys" hideTitle={open && !isKit} fold={fold} actions={fold && <KeysToggle fold={fold} />}>
+    <SectionHeader title="Keys" hideTitle={open && !isKit} fold={fold}>
       {open && !isKit && rows > 0 && <ScalePadControls settings={settings} octavesPerRow={octavesPerRow} />}
       {!open && !isKit && <KeysPreview settings={settings} />}
     </SectionHeader>

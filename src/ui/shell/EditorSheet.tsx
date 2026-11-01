@@ -34,7 +34,7 @@ export function EditorSheet({
   onDetentChange,
   title,
   subtitle,
-  minimisedActions,
+  actions,
   label = "Editor",
   children,
 }: {
@@ -45,8 +45,8 @@ export function EditorSheet({
   title: string;
   /** Its kind, in the slot the desktop editor tab uses for the same thing. */
   subtitle?: string;
-  /** At the bar's right while it is minimised: the keyboard button, when the keys are hidden. */
-  minimisedActions?: ReactNode;
+  /** At the bar's right, at every detent: the keyboard button, which shows and hides the keys. */
+  actions?: ReactNode;
   /** What it is, for its accessible name and its handle's ("Editor height"): the preview's says so. */
   label?: string;
   children: ReactNode;
@@ -104,11 +104,9 @@ export function EditorSheet({
             <span className="truncate text-[13px] font-semibold text-strong">{title}</span>
             {subtitle && <span className="font-mono text-[9px] tracking-wider uppercase text-faint">{subtitle}</span>}
           </div>
-          {/* Minimised, the bar's own buttons (the keys' toggle). The drag skips buttons, and a tap
+          {/* The bar's own buttons (the keys' toggle). The drag skips buttons, and minimised, a tap
               anywhere else on the bar opens the editor (`onTap` above). */}
-          {minimised && minimisedActions && (
-            <div className="ml-auto shrink-0 flex items-center">{minimisedActions}</div>
-          )}
+          {actions && <div className="ml-auto shrink-0 flex items-center">{actions}</div>}
         </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">{children}</div>

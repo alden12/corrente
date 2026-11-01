@@ -1,7 +1,7 @@
 /**
  * The keyboard button that shows and hides the keys on touch (MOBILE-24). It sits at the right of
- * the keys' header, and of the minimised sheet's bar when there is no keys header to hold it, so
- * it is in the same place either way.
+ * the sheet's bar at every detent, so it is in one place whether the keys show or not, and the keys'
+ * own header keeps its room for the chords button.
  *
  * Outlined, and with a chevron saying which way the keys will go (up to show, down to hide), rather
  * than lit while they show: in the sheet's bar it is a control of its own, not the sheet's.
