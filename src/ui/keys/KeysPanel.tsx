@@ -104,8 +104,12 @@ export function KeysPanel({
               the keys in view. Not contained: with nothing left to scroll here, the wheel moves the
               workbench column on (DAW-61.1). Its scrollbar is the app's (index.css), always shown while
               there is something to scroll; a `scrollbar-width` here would hand it back to a Mac's
-              auto-hiding one. */}
-          <div data-keys-scroll className="flex-1 min-w-0 overflow-y-auto flex flex-col-reverse">
+              auto-hiding one. Clipped otherwise: the notes' rows fit to within a pixel or two, which
+              would show a scrollbar with nothing to scroll. */}
+          <div
+            data-keys-scroll
+            className={`flex-1 min-w-0 flex flex-col-reverse ${settings.chords || settings.editingChords ? "overflow-y-auto" : "overflow-hidden"}`}
+          >
             <div className="flex flex-col-reverse" style={{ gap: KEY_GAP }}>
               {(settings.chords || settings.editingChords ? rows : rows.slice(0, shownRows)).map((row, rowIndex) => (
                 <KeyRow
