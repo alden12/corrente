@@ -122,6 +122,14 @@ test("tag chips narrow a category together, and search finds by #tag (COMM-1.9.1
   await page.goto("/");
   await dismissStart(page);
 
+  // Home keeps its tag row away until a search is typed (DAW-8.21).
+  const search = page.getByRole("searchbox", { name: "Search Explore" });
+  await expect(search).toHaveAttribute("placeholder", "Search sounds");
+  await expect(page.getByRole("group", { name: "Filter by tag" })).toHaveCount(0);
+  await search.fill("pad");
+  await expect(page.getByRole("group", { name: "Filter by tag" })).toBeVisible();
+  await search.fill("");
+
   await openExploreCategory(page, "Patches");
   await page.getByRole("group", { name: "Filter by tag" }).getByRole("button", { name: "#pad", exact: true }).click();
   await expect(page.getByRole("button", { name: "Glass Pad", exact: true })).toBeVisible();

@@ -98,7 +98,9 @@ export function PadButton({
       } ${latched ? "ring-1 ring-inset ring-you" : ""} ${editClass} ${className}`}
       style={style}
     >
-      <span className="font-mono text-[12px] font-semibold whitespace-nowrap" style={{ fontSize: labelSize(label) }}>
+      {/* Capped at the pad's width, so a label too long even shrunk (a kit pad's sample name) ellipsises
+          inside its pad rather than spilling over the next one (DAW-8.19). */}
+      <span className="max-w-full truncate font-mono text-[12px] font-semibold" style={{ fontSize: labelSize(label) }}>
         {label}
       </span>
       {sublabel && <span className="mt-0.5 font-mono text-[9px] text-faint">{sublabel}</span>}

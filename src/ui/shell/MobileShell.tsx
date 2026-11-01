@@ -407,7 +407,7 @@ export function MobileShell({
               samples={project.samples}
               notes={liveNotes}
               octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-              room={keysRoom(browseHeight)}
+              room={keysRoom(browseHeight, previewDetent)}
               fold={tryKeysFold}
               songKey={songKey}
             />
@@ -602,7 +602,7 @@ export function MobileShell({
                 // A tablet has the width for two octaves in a row; a phone does not, and
                 // below ~44px per pad the layout is wrong rather than merely tight.
                 octavesPerRow={shape.tier === "tablet" ? 2 : 1}
-                room={keysRoom(studioHeight)}
+                room={keysRoom(studioHeight, detent)}
                 fold={keysFold}
                 songKey={songKey}
               />

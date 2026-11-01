@@ -163,9 +163,9 @@ function KeyRow({
             label={<OneLine keycap={keycap(code)} what={`${pad.label} ${pad.sublabel}`} />}
             tone={pad.tone}
             touch={touch}
-            // The label is capped at the key's width (`[&>span]`, PadButton's label wrapper), so a long
-            // chord name ellipsises rather than spilling over the keycap.
-            className="shrink-0 overflow-hidden px-1.5 [&>span]:max-w-full"
+            // PadButton caps the label at the key's width, so a long chord name ellipsises rather than
+            // spilling over the keycap.
+            className="shrink-0 overflow-hidden px-1.5"
             style={{ ...style, ...edge }}
             editing={editingFor(pad, settings)}
           />

@@ -9,6 +9,7 @@ import {
   fitPads,
   keysHeight,
   keysRoom,
+  KEYS_SHARE_FULL,
   padRowHeight,
   PAD_GAP,
 } from "../src/ui/pads/geometry";
@@ -72,5 +73,13 @@ describe("keysRoom", () => {
 
   it("still gives a phone on its side one row", () => {
     expect(fitPads(keysRoom(STUDIO.landscape), true)).toBe(1);
+  });
+
+  it("gives more rows with the sheet up at Full, where the arrangement is out of sight (DAW-8.20)", () => {
+    expect(fitPads(keysRoom(STUDIO.phone, "full"), true)).toBeGreaterThan(fitPads(keysRoom(STUDIO.phone), true));
+    Object.values(STUDIO).forEach((studio) => {
+      const rows = fitPads(keysRoom(studio, "full"), true);
+      expect(keysHeight(rows, true)).toBeLessThanOrEqual(Math.max(studio * KEYS_SHARE_FULL, keysHeight(1, true)));
+    });
   });
 });

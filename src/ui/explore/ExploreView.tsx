@@ -252,7 +252,7 @@ export function ExploreView({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search sounds, or #tags"
+            placeholder="Search sounds"
             aria-label="Search Explore"
             className="flex-1 min-w-0 bg-transparent text-ink text-[12.5px] pointer-coarse:text-[15px] placeholder:text-faint outline-none"
           />
@@ -260,7 +260,9 @@ export function ExploreView({
       </div>
       {/* A container, so the tiles fit the panel they are in rather than the window. */}
       <div className="@container px-3 pb-3 flex flex-col gap-2.5">
-        {chips(searched, results)}
+        {/* Home keeps the tags out of the way until a search is under way (DAW-8.21), and while a
+            picked tag still filters, so it can be cleared. */}
+        {filtering && chips(searched, results)}
         {!filtering && (
           <div className="grid grid-cols-1 @[17rem]:grid-cols-2 gap-1.5 mt-0.5">
             {categories.map((key) => (

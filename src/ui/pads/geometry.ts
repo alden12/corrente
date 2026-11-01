@@ -10,6 +10,7 @@
  * layout's own, and `fitPads` is the only place they are turned into a decision.
  */
 import { TOUCH_SECTION_HEADER_HEIGHT } from "../controls/SectionHeader";
+import type { Detent } from "../shell/detents";
 
 /** An in-scale pad. Comfortably over the 44px hit-target floor (MOBILE-2). */
 export const PAD_HEIGHT = 52;
@@ -59,6 +60,13 @@ export const PADS_PADDING = 8;
 export const KEYS_SHARE = 0.5;
 
 /**
+ * The keys' share with the sheet thrown up to Full (DAW-8.20): the arrangement is out of sight
+ * then, so the keys may take more, up to three quarters, the editor keeping the rest. Back at Half
+ * the rows that no longer fit go away again, the octave count kept as asked for (`padSettings`).
+ */
+export const KEYS_SHARE_FULL = 0.75;
+
+/**
  * How much one more row of pads costs: the row (its accidental band and the gap under that
  * included, when the accidentals are on) and the gap before the next.
  */
@@ -92,10 +100,12 @@ export function fitPads(room: number, accidentals: boolean): number {
 }
 
 /**
- * The room the keys may have in a Studio `studio` pixels tall: their share, and never less than
- * one row of pads while the Studio has room for two, so a phone on its side can still play.
+ * The room the keys may have in a Studio `studio` pixels tall, with the sheet at `detent`: their
+ * share, and never less than one row of pads while the Studio has room for two, so a phone on its
+ * side can still play.
  */
-export function keysRoom(studio: number): number {
+export function keysRoom(studio: number, detent: Detent = "half"): number {
   const oneRow = keysHeight(1, true);
-  return Math.max(studio * KEYS_SHARE, studio >= 2 * oneRow ? oneRow : 0);
+  const share = detent === "full" ? KEYS_SHARE_FULL : KEYS_SHARE;
+  return Math.max(studio * share, studio >= 2 * oneRow ? oneRow : 0);
 }
