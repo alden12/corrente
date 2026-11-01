@@ -24,16 +24,6 @@ import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "../pads/KeysPreview";
 
-/**
- * The chord rows' scrollbar, styled so it shows: a styled WebKit scrollbar is a classic one, always
- * there and taking its room, even on a Mac that hides scrollbars until you scroll (Chromium, Safari,
- * and both plugin webviews; Firefox keeps its own). Drawn like the phone's chord rail. No
- * `scrollbar-width` with it: Chromium ignores these styles once that is set.
- */
-const STYLED_SCROLLBAR =
-  "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-control " +
-  "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted";
-
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
 const keyboardApi = () =>
@@ -112,10 +102,12 @@ export function KeysPanel({
           {/* Scrolls only in chords mode, when every row the key offers is laid out above the keys,
               the ones past the keyboard's four to click; column-reverse, so it opens at the bottom with
               the keys in view. Not contained: with nothing left to scroll here, the wheel moves the
-              workbench column on (DAW-61.1). */}
+              workbench column on (DAW-61.1). Its scrollbar is the app's (index.css), always shown while
+              there is something to scroll; a `scrollbar-width` here would hand it back to a Mac's
+              auto-hiding one. */}
           <div
             data-keys-scroll
-            className={`flex-1 min-w-0 overflow-y-auto flex flex-col-reverse ${settings.chords ? `pr-2 ${STYLED_SCROLLBAR}` : ""}`}
+            className="flex-1 min-w-0 overflow-y-auto flex flex-col-reverse"
           >
             <div className="flex flex-col-reverse" style={{ gap: KEY_GAP }}>
               {(settings.chords || settings.editingChords ? rows : rows.slice(0, shownRows)).map((row, rowIndex) => (
