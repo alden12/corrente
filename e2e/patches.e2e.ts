@@ -122,13 +122,20 @@ test("tag chips narrow a category together, and search finds by #tag (COMM-1.9.1
   await page.goto("/");
   await dismissStart(page);
 
-  // Home keeps its tag row away until a search is typed (DAW-8.21).
+  // Home keeps its tag row away until the search box has focus (DAW-8.21), and a chip pressed there
+  // doesn't take the focus, and with it the row, away before its tap lands.
   const search = page.getByRole("searchbox", { name: "Search Explore" });
+  const homeTags = page.getByRole("group", { name: "Filter by tag" });
   await expect(search).toHaveAttribute("placeholder", "Search sounds");
-  await expect(page.getByRole("group", { name: "Filter by tag" })).toHaveCount(0);
-  await search.fill("pad");
-  await expect(page.getByRole("group", { name: "Filter by tag" })).toBeVisible();
-  await search.fill("");
+  await expect(homeTags).toHaveCount(0);
+  await search.focus();
+  await expect(homeTags).toBeVisible();
+  await homeTags.getByRole("button").first().click();
+  await expect(search).toBeFocused();
+  await expect(homeTags.getByRole("button").first()).toHaveAttribute("aria-pressed", "true");
+  await homeTags.getByRole("button").first().click();
+  await search.blur();
+  await expect(homeTags).toHaveCount(0);
 
   await openExploreCategory(page, "Patches");
   await page.getByRole("group", { name: "Filter by tag" }).getByRole("button", { name: "#pad", exact: true }).click();

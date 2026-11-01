@@ -125,6 +125,8 @@ export function ExploreView({
   const [page, setPage] = usePersistentString<ExplorePage>(EXPLORE_PAGE_KEY, "home", EXPLORE_PAGES);
   const category = page === "home" ? null : page;
   const [query, setQuery] = useState("");
+  // The box has focus: home's tag row shows from then, not only once something is typed.
+  const [searching, setSearching] = useState(false);
   const searchBox = useRef<HTMLInputElement>(null);
   // Focus the box when asked to (the desktop rail's Search). Re-checked as the page changes, since
   // the box only exists on the home page and a request can arrive while a category is open.
@@ -252,6 +254,8 @@ export function ExploreView({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => setSearching(true)}
+            onBlur={() => setSearching(false)}
             placeholder="Search sounds"
             aria-label="Search Explore"
             className="flex-1 min-w-0 bg-transparent text-ink text-[12.5px] pointer-coarse:text-[15px] placeholder:text-faint outline-none"
@@ -260,9 +264,12 @@ export function ExploreView({
       </div>
       {/* A container, so the tiles fit the panel they are in rather than the window. */}
       <div className="@container px-3 pb-3 flex flex-col gap-2.5">
-        {/* Home keeps the tags out of the way until a search is under way (DAW-8.21), and while a
-            picked tag still filters, so it can be cleared. */}
-        {filtering && chips(searched, results)}
+        {/* Home keeps the tags out of the way until a search is under way (DAW-8.21): from when the box
+            has focus, and while a picked tag still filters, so it can be cleared. Pressing a chip keeps
+            the focus in the box, or the row would go as the press began, before its tap landed. */}
+        {(filtering || searching) && (
+          <div onMouseDown={(event) => event.preventDefault()}>{chips(searched, results)}</div>
+        )}
         {!filtering && (
           <div className="grid grid-cols-1 @[17rem]:grid-cols-2 gap-1.5 mt-0.5">
             {categories.map((key) => (

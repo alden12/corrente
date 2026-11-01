@@ -19,8 +19,13 @@ import type { PadSettings } from "./padSettings";
 import { PadButton } from "./PadButton";
 import type { PadTouch } from "./usePadTouch";
 
-/** The strip down each row's right edge that scrolls rather than plays. Wide enough for a thumb. */
-export const SCROLL_STRIP = 20;
+/**
+ * The strip down each row's right edge that scrolls rather than plays: wide enough for a thumb to
+ * land on (2026-11-01, Alden: at 20px it was hard to hit on a phone), with the rail drawn down its
+ * middle as wide as a finger can see.
+ */
+export const SCROLL_STRIP = 32;
+const RAIL_WIDTH = 8;
 /** Chord rows abut the way note rows do with the accidentals off, so they take the same wide gap. */
 const GAP = rowGap(false);
 
@@ -136,7 +141,11 @@ function ScrollingRows({ height, children }: { height: number; children: ReactNo
         {children}
       </div>
       {thumb && (
-        <div aria-hidden className="pointer-events-none absolute top-0 bottom-0 right-1.5 w-1 rounded-full bg-control">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 bottom-0 rounded-full bg-control"
+          style={{ width: RAIL_WIDTH, right: (SCROLL_STRIP - RAIL_WIDTH) / 2 }}
+        >
           <div
             className="absolute left-0 right-0 rounded-full bg-muted"
             style={{ top: `${thumb.top * 100}%`, height: `${thumb.size * 100}%` }}
