@@ -57,6 +57,8 @@ Everything in this repo also runs on its own.
 - **History:** undo that survives a reload, and named versions to go back to.
 - **On a phone or tablet:** a touch layout with playable scale and chord pads. Installable, and it
   works offline.
+- **In your DAW:** the instruments and effects as a VST3 plugin, in beta. [PLUGIN.md](PLUGIN.md) says
+  how to install it.
 - **Projects** live in your browser, and export and import as `.daw.zip` files.
 
 ## Working with an AI assistant
