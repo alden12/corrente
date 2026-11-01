@@ -13,14 +13,27 @@ export function encodeWavBuffer(samples: Float32Array, sampleRate: number): Arra
   return encodeWavChannels([samples], sampleRate);
 }
 
+/** Writes one -1..1 sample as PCM at a bit depth, full scale asymmetric (negative reaches the minimum). */
+const PCM_WRITERS: Record<16 | 24, (view: DataView, offset: number, sample: number) => void> = {
+  16: (view, offset, sample) => view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true),
+  24: (view, offset, sample) => {
+    const value = Math.round(sample < 0 ? sample * 0x800000 : sample * 0x7fffff);
+    view.setUint8(offset, value & 0xff);
+    view.setUint8(offset + 1, (value >> 8) & 0xff);
+    view.setInt8(offset + 2, value >> 16);
+  },
+};
+
 /**
- * Encode float32 channels (of equal length) as a 16-bit PCM WAV, interleaved, returning the raw bytes.
- * The plugin's window turns a file the plugin can't decode faithfully into one (PLUGIN-3.6).
+ * Encode float32 channels (of equal length) as a PCM WAV, interleaved, returning the raw bytes: 16-bit
+ * unless asked, or 24-bit, as a mixdown is (DAW-13). The plugin's window turns a file the plugin can't
+ * decode faithfully into one (PLUGIN-3.6).
  */
-export function encodeWavChannels(channels: Float32Array[], sampleRate: number): ArrayBuffer {
+export function encodeWavChannels(channels: Float32Array[], sampleRate: number, bits: 16 | 24 = 16): ArrayBuffer {
   const numChannels = channels.length;
   const frames = channels[0]?.length ?? 0;
-  const bytesPerSample = 2;
+  const bytesPerSample = bits / 8;
+  const write = PCM_WRITERS[bits];
   const blockAlign = numChannels * bytesPerSample;
   const byteRate = sampleRate * blockAlign;
   const dataSize = frames * blockAlign;
@@ -48,10 +61,8 @@ export function encodeWavChannels(channels: Float32Array[], sampleRate: number):
   let offset = WAV_HEADER_BYTES;
   for (let i = 0; i < frames; i++) {
     for (const samples of channels) {
-      const clamped = Math.max(-1, Math.min(1, samples[i]));
-      // Asymmetric full-scale: negative reaches -32768, positive +32767.
-      view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
-      offset += 2;
+      write(view, offset, Math.max(-1, Math.min(1, samples[i])));
+      offset += bytesPerSample;
     }
   }
   return buffer;

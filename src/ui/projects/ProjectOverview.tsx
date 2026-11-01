@@ -22,6 +22,8 @@ import { summarizeProject } from "../../audio/projects/summary";
 import { authEnabled } from "../../auth/session";
 import { InlineRename } from "../InlineRename";
 import { exportProjectFile } from "../projectFile";
+import { exportMixdown } from "../mixdown";
+import { Menu } from "../Menu";
 import { usePersistentString } from "../usePersistent";
 import { ProjectTree } from "./ProjectTree";
 import { LoopButton, MetronomeButton } from "../TransportToggles";
@@ -67,11 +69,29 @@ export function ProjectOverview({
     ...(spanBeats > 0 ? [{ label: formatLength(spanBeats, project.tempoBpm), title: "Length" }] : []),
   ];
 
-  const [exportError, setExportError] = useState<string | null>(null);
+  // What the last export has to say: under way, how it went, or that it failed.
+  const [exportNote, setExportNote] = useState<{ text: string; failed?: boolean } | null>(null);
   const exportProject = () => {
-    setExportError(null);
+    setExportNote(null);
     exportProjectFile(openId, name, { projectStore, editLog }).catch(() =>
-      setExportError(`Could not export “${name}”.`),
+      setExportNote({ text: `Could not export “${name}”.`, failed: true }),
+    );
+  };
+  const exportMix = () => {
+    setExportNote({ text: "Rendering the loop region…" });
+    exportMixdown(projectStore, name).then(
+      ({ omitted, clipped }) =>
+        setExportNote(
+          omitted.length > 0 || clipped
+            ? {
+                text: [
+                  ...(clipped ? ["The mix clips in places: turn something down for a cleaner file."] : []),
+                  ...omitted.map((line) => `Not in the mix: ${line}.`),
+                ].join(" "),
+              }
+            : null,
+        ),
+      () => setExportNote({ text: "Could not render the mix.", failed: true }),
     );
   };
 
@@ -105,16 +125,23 @@ export function ProjectOverview({
               Share
             </HostedOnlyButton>
           )}
-          {/* A copy of the whole project as a .daw.zip: the way to keep one when it's only in this browser. */}
-          <button
-            type="button"
-            onClick={exportProject}
-            className="shrink-0 h-9 px-3 rounded-lg border border-line text-[13px] text-ink cursor-pointer hover:border-you"
-          >
-            Export
-          </button>
+          {/* The mix as a WAV (DAW-13), or a copy of the whole project as a .daw.zip: the way to keep one
+              when it's only in this browser. */}
+          <Menu
+            label="Export"
+            trigger="Export ▾"
+            triggerClassName="shrink-0 h-9 px-3 rounded-lg border border-line text-[13px] text-ink cursor-pointer hover:border-you"
+            items={[
+              { label: "Mix of the loop region (WAV)", onClick: exportMix },
+              { label: "Project file (.daw.zip)", onClick: exportProject },
+            ]}
+          />
         </div>
-        {exportError && <p className="px-4 pt-1 text-[12px] text-hot">{exportError}</p>}
+        {exportNote && (
+          <p role="status" className={`px-4 pt-1 text-[12px] ${exportNote.failed ? "text-hot" : "text-muted"}`}>
+            {exportNote.text}
+          </p>
+        )}
         <div className="flex flex-wrap gap-1.5 px-4 pt-3">
           {chips.map((chip) => (
             <button

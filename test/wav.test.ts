@@ -59,4 +59,15 @@ describe("encodeWavChannels", () => {
       [left, right][index].forEach((sample, at) => expect(channel[at]).toBeCloseTo(sample, 3)),
     );
   });
+
+  it("writes 24-bit too, finer than 16, reading back as it went in", () => {
+    const left = Float32Array.from([0, 0.123456, -1, 1]);
+    const right = Float32Array.from([-0.5, 0.000123, 0.75, -0.25]);
+    const bytes = new Uint8Array(encodeWavChannels([left, right], 48000, 24));
+    expect(bytes.length).toBe(44 + 4 * 2 * 3);
+    const audio = decodeWav(bytes);
+    audio.channels.forEach((channel, index) =>
+      [left, right][index].forEach((sample, at) => expect(channel[at]).toBeCloseTo(sample, 6)),
+    );
+  });
 });

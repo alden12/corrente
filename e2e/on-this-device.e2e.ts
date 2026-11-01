@@ -24,13 +24,16 @@ test("a standalone run says its files are on this device, from the status bar an
   await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
 
-  // Its export line opens the project's page, whose Export button downloads it.
+  // Its export line opens the project's page, whose Export menu downloads it.
   await page.getByRole("button", { name: "Saved in browser" }).click();
   await details.getByRole("button", { name: "Export from the project page" }).click();
   await expect(details).toBeHidden();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Export", exact: true }).click(),
+    (async () => {
+      await page.getByRole("button", { name: "Export", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Project file (.daw.zip)" }).click();
+    })(),
   ]);
   expect(download.suggestedFilename()).toMatch(EXPORT_NAME);
 
