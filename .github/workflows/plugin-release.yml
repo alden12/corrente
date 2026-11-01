@@ -1,0 +1,143 @@
+name: Plugin release
+
+# The plugin as a GitHub release (PLUGIN-5): VST3 for macOS (universal: Apple silicon and Intel) and
+# Windows (x64). The build makes a CLAP too, left out until one has been tried in a CLAP host. Run by
+# hand from the Actions tab with the version to release; it tags the commit it ran on
+# `plugin-v<version>`. The release also carries the build's `plugin-build.json`,
+# which an installed plugin reads to tell its user a newer one is out (HOST-23.2.3.1).
+#
+# Unsigned for now: the release notes say how to let each system open it. A pre-release until the
+# Windows build has been tried in a Windows DAW (PLUGIN-5.2).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to release, such as 0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # The engine's blocks as Rust (engine/gen), which the plugin compiles in. Made by the pinned
+  # toolchain, which runs only on Linux.
+  gen:
+    name: Engine blocks as Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # The same cached image as CI's engine check.
+      - name: Toolchain image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: engine/toolchain
+          load: true
+          platforms: linux/amd64
+          tags: corrente-engine-toolchain:ci
+          cache-from: type=gha,scope=engine-toolchain
+          cache-to: type=gha,mode=max,scope=engine-toolchain
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Write engine/gen
+        env:
+          ENGINE_TOOLCHAIN_IMAGE: corrente-engine-toolchain:ci
+        run: node engine/compile.ts --gen
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-gen
+          path: engine/gen
+
+  # Each system's bundles, zipped: the app's page first (with its plugin-build.json), which the plugin
+  # builds in.
+  build:
+    name: Build for ${{ matrix.system }}
+    needs: gen
+    strategy:
+      matrix:
+        include:
+          - system: macOS
+            runner: macos-latest
+            targets: aarch64-apple-darwin, x86_64-apple-darwin
+            bundle: bundle-universal
+          - system: Windows
+            runner: windows-latest
+            targets: x86_64-pc-windows-msvc
+            bundle: bundle
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-gen
+          path: engine/gen
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - name: Build the app
+        run: yarn build
+      - name: Bundle the plugin
+        working-directory: plugin
+        run: cargo xtask ${{ matrix.bundle }} corrente --release
+      # `ditto` on macOS, which keeps what a bundle needs (the binary's permissions, its signature).
+      - name: Zip the bundles (macOS)
+        if: matrix.system == 'macOS'
+        working-directory: plugin/target/bundled
+        run: |
+          ditto -c -k --keepParent Corrente.vst3 "$GITHUB_WORKSPACE/Corrente-${{ inputs.version }}-macOS-VST3.zip"
+      - name: Zip the bundles (Windows)
+        if: matrix.system == 'Windows'
+        shell: bash
+        working-directory: plugin/target/bundled
+        run: |
+          7z a "$GITHUB_WORKSPACE/Corrente-${{ inputs.version }}-Windows-VST3.zip" Corrente.vst3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.system }}
+          path: Corrente-*.zip
+      # One system's manifest is the release's: both are the same page, built from the same commit.
+      - if: matrix.system == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build
+          path: dist/plugin-build.json
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'EOF'
+          Corrente's devices as a VST3 plugin for your DAW. Beta: things move, and some will break.
+
+          **macOS** (Apple silicon and Intel)
+          1. Unzip, and move `Corrente.vst3` into `~/Library/Audio/Plug-Ins/VST3/`.
+          2. The plugin isn't signed yet, so macOS blocks it until you allow it. In Terminal:
+             `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Corrente.vst3`
+             Or open System Settings, Privacy & Security, and choose "Open Anyway" after your DAW has tried to load it.
+          3. Restart your DAW, or rescan its plugins.
+
+          **Windows** (64-bit, Windows 10 or 11)
+          1. Unzip, and move `Corrente.vst3` into `C:\Program Files\Common Files\VST3\`.
+          2. If Windows marks the download as blocked, open the zip's Properties and tick "Unblock" before unzipping.
+          3. Restart your DAW, or rescan its plugins.
+
+          The plugin's window updates itself from corrente.cloud. When an update needs a new version of the plugin itself, its window says so.
+          EOF
+          gh release create "plugin-v${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Corrente plugin ${{ inputs.version }}" \
+            --prerelease \
+            --notes-file notes.md \
+            assets/*.zip assets/plugin-build.json
