@@ -120,17 +120,7 @@ jobs:
           cat > notes.md <<'EOF'
           Corrente's devices as a VST3 plugin for your DAW. Beta: things move, and some will break.
 
-          **macOS** (Apple silicon and Intel)
-          1. Unzip, and move `Corrente.vst3` into `~/Library/Audio/Plug-Ins/VST3/`.
-          2. The plugin isn't signed yet, so macOS blocks it until you allow it. In Terminal:
-             `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Corrente.vst3`
-             Or open System Settings, Privacy & Security, and choose "Open Anyway" after your DAW has tried to load it.
-          3. Restart your DAW, or rescan its plugins.
-
-          **Windows** (64-bit, Windows 10 or 11)
-          1. Unzip, and move `Corrente.vst3` into `C:\Program Files\Common Files\VST3\`.
-          2. If Windows marks the download as blocked, open the zip's Properties and tick "Unblock" before unzipping.
-          3. Restart your DAW, or rescan its plugins.
+          Download the zip for your computer below: `macOS` for any Mac (Apple silicon and Intel), `Windows` for 64-bit Windows 10 or 11. [PLUGIN.md](https://github.com/alden12/corrente/blob/main/PLUGIN.md) says how to install it: the plugin isn't signed yet, so macOS needs one Terminal line to let it open.
 
           The plugin's window updates itself from corrente.cloud. When an update needs a new version of the plugin itself, its window says so.
           EOF
