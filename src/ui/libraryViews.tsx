@@ -45,8 +45,22 @@ const svg = (children: ReactNode) => (
   </svg>
 );
 
-/** In rail order, top to bottom: Explore first, as the place you start from (and the default view). */
+/** In rail order, top to bottom. Explore is still the default view, the place you start from. */
 export const RAIL_ITEMS: RailItem[] = [
+  // The open project first (2026-11-01, Alden), as its tree: the thing you are working in.
+  {
+    view: "project",
+    page: "inside",
+    label: "Project",
+    icon: svg(
+      <>
+        <rect x="2" y="2" width="5" height="3.5" rx="1" />
+        <path d="M4.5 5.5v7h4M4.5 8h4" />
+        <rect x="8.5" y="6.5" width="5.5" height="3" rx="1" />
+        <rect x="8.5" y="11" width="5.5" height="3" rx="1" />
+      </>,
+    ),
+  },
   // Cards and tiles, not a compass: it says what is in there rather than that you may wander.
   {
     view: "explore",
@@ -60,8 +74,8 @@ export const RAIL_ITEMS: RailItem[] = [
       </>,
     ),
   },
-  // Projects and the open project are one view, two pages, but each its own icon on the desktop rail
-  // (2026-11-01): a stack of folders for the list, and the tree the project page now is.
+  // The list of projects: one view with the open project (two pages), but its own icon on the
+  // desktop rail (2026-11-01), a stack of folders.
   {
     view: "project",
     page: "home",
@@ -70,19 +84,6 @@ export const RAIL_ITEMS: RailItem[] = [
       <>
         <path d="M4.5 4V3.5a1 1 0 0 1 1-1h2.2l1.2 1.2h3.6a1 1 0 0 1 1 1v6" />
         <path d="M2 6.5a1 1 0 0 1 1-1h2.2l1.2 1.2h3.6a1 1 0 0 1 1 1v4.8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
-      </>,
-    ),
-  },
-  {
-    view: "project",
-    page: "inside",
-    label: "Project",
-    icon: svg(
-      <>
-        <rect x="2" y="2" width="5" height="3.5" rx="1" />
-        <path d="M4.5 5.5v7h4M4.5 8h4" />
-        <rect x="8.5" y="6.5" width="5.5" height="3" rx="1" />
-        <rect x="8.5" y="11" width="5.5" height="3" rx="1" />
       </>,
     ),
   },
