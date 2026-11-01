@@ -38,7 +38,7 @@ Get the zip for your computer from the [releases page](https://github.com/alden1
 ## With Claude
 
 An AI agent such as Claude can build and tweak the plugin's devices for you, over the same local MCP
-server the app uses. [MCP.md](MCP.md#in-the-plugin) sets it up.
+server the app uses. [MCP.md](MCP.md) sets it up.
 
 ## Updating
 

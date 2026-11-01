@@ -5,23 +5,12 @@ Protocol). An agent such as Claude can make tracks, write and edit notes, build 
 effects, set parameters, mix, listen back, and save versions, all in the app open in your browser,
 while you watch and play along.
 
-## In the plugin
+## Coming soon, and for now
 
-Only if you use Corrente as a [plugin](PLUGIN.md) in your DAW: the plugin's window talks to the same
-server as the app, so Claude can build and tweak the device on a track. Set up the server below, and
-skip starting the app (step 2): the plugin's window takes its place. Then open the plugin's window and
-ask away, for example:
-
-- "Make this a warm pad with a slow filter sweep."
-- "Add a delay and a reverb after the synth, and keep the reverb short."
-
-Claude drives the window you used last, so if a browser tab of the app is open too, click into the
-plugin's window to hand it over.
+A server you can download and add to Claude in one step is on its way. For now, it runs from
+Corrente's source, so setting up means cloning the repository once, as below.
 
 ## Set it up
-
-A standalone server you can download and run is on its way. Until then, the server runs from
-Corrente's source, so you clone the repository once.
 
 ### What you need
 
@@ -40,7 +29,8 @@ Corrente's source, so you clone the repository once.
    ```
 
 2. **Start the app** with `yarn dev`, open [http://localhost:5155](http://localhost:5155), and press
-   **Start audio**.
+   **Start audio**. Using the [plugin](PLUGIN.md)? Skip this, and open the plugin's window in your DAW
+   instead.
 
 3. **Start Claude Code in the same folder** (`claude`). The repository's `.mcp.json` names the
    `corrente` MCP server, so Claude Code offers to start it: allow it. `/mcp` should then list
