@@ -35,6 +35,11 @@ Get the zip for your computer from the [releases page](https://github.com/alden1
    for permission to put it there.
 3. **Restart your DAW**, or rescan its plugins.
 
+## With Claude
+
+An AI agent such as Claude can build and tweak the plugin's devices for you, over the same local MCP
+server the app uses. [MCP.md](MCP.md#in-the-plugin) sets it up.
+
 ## Updating
 
 The plugin's window updates itself from corrente.cloud, so most changes reach you without doing
