@@ -171,6 +171,13 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
     isGroup
       ? groupMenu(row.group, context.groups, context.dispatch, startRename)
       : trackMenu(row.track, context.groups, context.dispatch, startRename);
+  // A touch's menu leads with mute and solo too, for whoever hasn't found the swipe (2026-11-01).
+  const touchMenu = () => [
+    { label: item.muted ? "Unmute" : "Mute", onClick: onMute },
+    { label: item.solo ? "Unsolo" : "Solo", onClick: onSolo },
+    { separator: true },
+    ...menu(),
+  ];
 
   const name = renaming ? (
     <InlineRename
@@ -283,7 +290,7 @@ export function ProjectTreeRow({ row, context }: { row: TreeRow; context: TreeCo
         <span className="hidden pointer-coarse:flex justify-end">
           <Menu
             label={`Actions for ${item.name}`}
-            items={menu}
+            items={touchMenu}
             triggerClassName="w-10 h-12 flex items-center justify-center text-[20px] leading-none text-muted cursor-pointer"
           />
         </span>

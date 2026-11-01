@@ -1264,6 +1264,15 @@ test.describe("phone", () => {
     await expect(open.getByTitle("Double-click to rename")).toHaveText(firstName);
   });
 
+  test("a track row's ⋮ menu mutes it, for whoever hasn't found the swipe (DAW-83)", async ({ page }) => {
+    await startInStudio(page);
+    await tab(page, "Project").tap();
+    await page.getByRole("button", { name: "Actions for Micro VA" }).tap();
+    await page.getByRole("menuitem", { name: "Mute", exact: true }).tap();
+    await page.getByRole("button", { name: "Actions for Micro VA" }).tap();
+    await expect(page.getByRole("menuitem", { name: "Unmute" })).toBeVisible();
+  });
+
   test("inside a project, choosing a track takes you to it in the Studio (MOBILE-19.3)", async ({ page }) => {
     await startInStudio(page);
     await tab(page, "Project").tap();
