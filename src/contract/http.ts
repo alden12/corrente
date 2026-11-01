@@ -147,6 +147,15 @@ export const routes = {
     response: favouriteList,
   },
   /**
+   * The most hearted built-in devices and factory patches across everyone (COMM-1.9.11): public, so
+   * signed out too, and cached at the edge (`deploy/cloudflare/worker.js`), so it rarely wakes the server.
+   */
+  mostFavourited: {
+    method: "GET",
+    path: "/shelves/most-favourited",
+    response: z.object({ refs: z.array(z.string()) }),
+  },
+  /**
    * The account library (COMM-1.11.2): send the saves made on this device since it last synced, then
    * get back every item changed since `since` (all of them without it), each with its current version,
    * and the cursor to send next time. Write-once: a version already there unchanged is skipped, and one

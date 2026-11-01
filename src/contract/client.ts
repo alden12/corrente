@@ -68,6 +68,11 @@ export interface ApiClient {
   /** Apply hearts and un-hearts (either may be empty), then return all the caller's favourites. */
   syncFavourites(changes: { add: string[]; remove: string[] }): Promise<FavouriteEntry[]>;
   /**
+   * The most hearted built-ins across everyone (COMM-1.9.11): public, so asked without a credential.
+   * `signedIn` tells the edge the server is awake anyway, so its copy may be refreshed sooner.
+   */
+  mostFavourited(signedIn?: boolean): Promise<string[]>;
+  /**
    * Send this device's library saves, and get back what changed since `since`, with the next cursor;
    * or why the saves were refused (a bad document, an id held as another kind, too large).
    */
@@ -237,6 +242,14 @@ export function createApiClient(config: {
       if (!res.ok) throw new Error(`sync: favourites failed (${res.status})`);
       const body = (await res.json()) as z.infer<(typeof routes.syncFavourites)["response"]>;
       return body.favourites;
+    },
+
+    async mostFavourited(signedIn = false) {
+      // Plain, with no credential: the same answer for everyone, which is what lets the edge cache it.
+      const res = await fetch(`${baseUrl}${routes.mostFavourited.path}${signedIn ? "?signed-in" : ""}`);
+      if (!res.ok) throw new Error(`shelves: most favourited failed (${res.status})`);
+      const body = (await res.json()) as z.infer<(typeof routes.mostFavourited)["response"]>;
+      return body.refs;
     },
 
     async syncLibrary(sync) {

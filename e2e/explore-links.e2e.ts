@@ -18,6 +18,9 @@ test("the rail's shortcuts open Explore's pages", async ({ page }) => {
     await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
     await expect(shortcut).toHaveAttribute("aria-current", "page");
   }
+  // Explore's own icon goes home from any of them, not back to the last page (COMM-1.9.11).
+  await rail.getByRole("button", { name: "Explore", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Your projects" })).toBeVisible();
 });
 
 test("Explore home leads back to the open project and to the list of projects", async ({ page }) => {

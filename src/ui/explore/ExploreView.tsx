@@ -44,6 +44,7 @@ import { useLibraryActions } from "./useLibraryActions";
 import { useExploreScope } from "./exploreScope";
 import { useSavedPatches } from "./useSavedPatches";
 import { useFavourites } from "./favourites/useFavourites";
+import { useMostFavourited } from "./mostFavourited";
 import {
   EXPLORE_PAGE_KEY,
   EXPLORE_PAGES,
@@ -119,6 +120,7 @@ export function ExploreView({
   const savedPatches = useSavedPatches();
   const favourites = useFavourites();
   const recent = useRecent();
+  const mostFavourited = useMostFavourited();
   const actions = useLibraryActions(projectStore, dispatch);
   const [page, setPage] = usePersistentString<ExplorePage>(EXPLORE_PAGE_KEY, "home", EXPLORE_PAGES);
   const category = page === "home" ? null : page;
@@ -279,10 +281,17 @@ export function ExploreView({
         )}
         {!filtering && links && <YourWork name={projectStore.name} links={links} />}
       </div>
-      {/* Shelves (board FeedHome): what you used lately, then what you hearted. Each hides while empty.
-          Favourites also has its tile; the shelf puts them on the home page, artwork and all. */}
+      {/* Shelves (board FeedHome): what everyone hearts most (COMM-1.9.11), what you used lately, then what
+          you hearted. Each hides while empty. Favourites also has its tile; the shelf puts them on the
+          home page, artwork and all. */}
       {!filtering && (
         <div className="flex flex-col gap-3">
+          <ExploreShelf
+            title="Most favourited"
+            items={favouriteItems(items, mostFavourited)}
+            taps={taps}
+            trying={trying}
+          />
           <ExploreShelf title="Recently used" items={itemsByKey(items, recent)} taps={taps} trying={trying} />
           <ExploreShelf title="Favourites" items={favouriteItems(items, favourites)} taps={taps} trying={trying} />
           {links?.mcpStatus && !mcpConnected(links.mcpStatus) && <MakeYourOwn />}

@@ -212,16 +212,16 @@ export function AppShell() {
   // "you" hue while peers get their own colour (perspective-relative; see authorColors.ts).
   const currentUser = useSyncExternalStore(subscribeCurrentUser, readCurrentUser, readCurrentUser);
 
-  // Rail interaction: an icon selects its view, opening the panel if collapsed. The active one goes
-  // back to its view's start, as the phone's tab bar does (2026-10-30): Explore's home from a category
-  // page. Collapsing is the arrow beside the panel's title.
+  // Rail interaction: an icon selects its view, opening the panel if collapsed: Explore's always at its
+  // home, the open project's on its page. Collapsing is the arrow beside the panel's title.
   const selectView = (view: LibraryView, page?: ProjectsPage) => {
     // Any move between views ends a trip from Explore; its own buttons mark one again after this.
     setFromExplore(false);
     // Projects opens on the project you have open, with the list one step up (2026-10-13), unless
     // the list's own rail icon asked for it.
     if (view === "project") openProjectsPage(page ?? "inside");
-    if (view === "explore" && view === libView && !libCollapsed) openExplorePage("home");
+    // Explore's icon always goes home (2026-11-01): each of its pages has a shortcut of its own now.
+    if (view === "explore") openExplorePage("home");
     setLibView(view);
     if (libCollapsed) setLibCollapsed(false);
   };
