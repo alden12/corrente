@@ -248,6 +248,8 @@ export interface ProjectStorage {
   /** The caller's projects with display metadata + role (owned + shared on the remote backend). */
   listProjects(): Promise<ProjectListing[]>;
   deleteProject(projectId: string): Promise<void>;
+  /** Whether the last listing came from a local copy because the server couldn't be reached (HOST-36). */
+  unreachable?(): boolean;
 }
 
 /** Read a bundle's `meta.json` into a listing (role "owner" - local backends have no sharing). Falls

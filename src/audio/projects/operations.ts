@@ -79,7 +79,7 @@ type InitProjectsOptions = {
    * The project a link asked for (`null` when the URL named none). It wins over the persisted
    * current, but **only if it is really there**: opening a link to a project you cannot see
    * (signed out, or never shared with you) must fall back to your own, not seed a local
-   * project under someone else's id.
+   * project under someone else's id. Offline the list can't say, so the link is opened as asked.
    */
   preferId?: string | null;
   /**
@@ -128,7 +128,10 @@ export async function initProjects(
     // persisted current, else the newest. Both of the first two can name something gone (see
     // `preferId`, and a stale `localStorage` pointing at a deleted project), so both are checked.
     const ifPresent = (id: string | null | undefined): string | null => (id && ids.includes(id) ? id : null);
-    setCurrentProject(ifPresent(preferId) ?? ifPresent(currentProjectId()) ?? ids[0]);
+    // Offline, the list is only what this device has cached, so a link to a project missing from it may
+    // still be there: open it, and it says it can't be reached rather than opening another (HOST-36).
+    const linked = storage.unreachable?.() && preferId ? preferId : ifPresent(preferId);
+    setCurrentProject(linked ?? ifPresent(currentProjectId()) ?? ids[0]);
     await loadCurrentInto(deps);
     return false;
   }

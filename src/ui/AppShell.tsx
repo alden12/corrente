@@ -98,8 +98,12 @@ const LIBRARY_VIEWS = ["project", "explore", "activity", "agent"] as const;
  * out is DAW-68.
  */
 const openInPlace = (id: string, name: string) => window.location.replace(projectPath(id, name));
-/** Try opening the project again from the top: the retry when it couldn't be reached (HOST-36). */
-const reloadPage = () => window.location.reload();
+/**
+ * Try opening the project again from the top: the retry when it couldn't be reached (HOST-36). By its
+ * address, not a reload: the address follows a project only once it has loaded, so it still names the
+ * one open before, and a reload would quietly open that instead.
+ */
+const retryProject = () => openInPlace(currentProjectId(), "");
 
 // Computer-keyboard -> MIDI note, one octave from C4 (the classic tracker layout).
 const KEY_MAP: Record<string, number> = {
@@ -566,7 +570,7 @@ export function AppShell() {
           />
         )}
         {!projectLoaded && <LoadingOverlay />}
-        {unreachable && <UnreachableDialog onRetry={reloadPage} />}
+        {unreachable && <UnreachableDialog onRetry={retryProject} />}
         {recovery && (
           <RecoveryDialog
             detail={recovery.detail}

@@ -5,11 +5,24 @@
  * "remote" is a MemoryProjectStorage behind a gate that throws on every op when flipped offline.
  */
 import { describe, expect, it } from "vitest";
-import { MemoryProjectStorage, type BundleStore, type ProjectStorage } from "../src/audio/bundleStore";
+import {
+  MemoryProjectStorage,
+  setProjectStorage,
+  type BundleStore,
+  type ProjectStorage,
+} from "../src/audio/bundleStore";
 import { CachedProjectStorage } from "../src/audio/cachedStore";
+import { EditLog } from "../src/audio/commands/editLog";
+import { VersionStore } from "../src/audio/commands/history";
 import type { EditEntry } from "../src/audio/commands/types";
 import { ProjectStore } from "../src/audio/project/projectStore";
-import { ProjectRepository, UnreachableProjectError, UnreadableProjectError } from "../src/audio/projectRepository";
+import {
+  currentProjectId,
+  ProjectRepository,
+  UnreachableProjectError,
+  UnreadableProjectError,
+} from "../src/audio/projectRepository";
+import { initProjects } from "../src/audio/projects/operations";
 
 /** Flips the fake remote between reachable and offline (every op rejects). */
 class Gate {
@@ -161,10 +174,10 @@ describe("CachedProjectStorage listing", () => {
 
 describe("a project out of reach is not a damaged one (HOST-36)", () => {
   /** A project with a track saved on the server, as another device left it. */
-  const saved = async (server: MemoryProjectStorage) => {
+  const saved = async (server: MemoryProjectStorage, id = "p1") => {
     const project = new ProjectStore(false);
     project.addTrack("subtractive");
-    await new ProjectRepository(server.bundle("p1"), "p1").save(project.snapshot(), [], []);
+    await new ProjectRepository(server.bundle(id), id).save(project.snapshot(), [], []);
   };
 
   it("notes whether the last read had to come from the cache", async () => {
@@ -178,6 +191,32 @@ describe("a project out of reach is not a damaged one (HOST-36)", () => {
     gate.offline = false;
     await bundle.readEdits(-1);
     expect(bundle.unreachable?.()).toBe(false);
+  });
+
+  it("notes whether the last listing had to come from the cache", async () => {
+    const { gate, cached } = makeCached();
+    await cached.listProjects();
+    expect(cached.unreachable()).toBe(false);
+    gate.offline = true;
+    await cached.listProjects();
+    expect(cached.unreachable()).toBe(true);
+  });
+
+  it("opens a link to a project this device never read offline, rather than another", async () => {
+    const { gate, server, cache, cached } = makeCached();
+    await saved(server, "p1");
+    await saved(server, "p2");
+    await new ProjectRepository(cached.bundle("p1"), "p1").load();
+    await cache.bundle("p1").writeText("meta.json", JSON.stringify({ name: "Seen" }));
+    setProjectStorage(cached);
+    gate.offline = true;
+    const projectStore = new ProjectStore();
+    const editLog = new EditLog(projectStore);
+    const deps = { projectStore, editLog, versionStore: new VersionStore(projectStore, editLog) };
+    await expect(initProjects(deps, { storage: cached, preferId: "p2" })).rejects.toBeInstanceOf(
+      UnreachableProjectError,
+    );
+    expect(currentProjectId()).toBe("p2");
   });
 
   it("opens a project this device read before, offline, from its copy", async () => {

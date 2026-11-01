@@ -111,10 +111,16 @@ export class CachedBundleStore implements BundleStore {
 export class CachedProjectStorage implements ProjectStorage {
   private readonly remote: ProjectStorage;
   private readonly cache: ProjectStorage;
+  /** Whether the last listing fell back to the cache. */
+  private offline = false;
 
   constructor(remote: ProjectStorage, cache: ProjectStorage) {
     this.remote = remote;
     this.cache = cache;
+  }
+
+  unreachable(): boolean {
+    return this.offline;
   }
 
   bundle(projectId: string): BundleStore {
@@ -124,6 +130,7 @@ export class CachedProjectStorage implements ProjectStorage {
   async listProjects(): Promise<ProjectListing[]> {
     try {
       const listings = await this.remote.listProjects();
+      this.offline = false;
       // Mirror each title into the cache bundle's meta.json so an offline library still shows real
       // names (the remote backend does not itself write meta.json). Best-effort per project.
       await Promise.allSettled(
@@ -140,6 +147,7 @@ export class CachedProjectStorage implements ProjectStorage {
     } catch {
       // Offline: list whatever the mirror holds. Role reads back as "owner" (sharing is server-enforced;
       // offline you only have your cached copy) - an accepted offline-listing limitation.
+      this.offline = true;
       return this.cache.listProjects();
     }
   }
