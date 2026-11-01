@@ -35,7 +35,8 @@ const GLYPHS: Record<ExploreCategory, ReactNode> = {
   midi: (
     <>
       <circle cx="8" cy="8" r="5.5" />
-      <path d="M5 8h.01M6 5.6h.01M8 4.8h.01M10 5.6h.01M11 8h.01" strokeWidth="1.8" />
+      {/* A DIN socket's five pins, 45° apart on an arc around the middle. */}
+      <path d="M5 8.5h.01M5.88 6.38h.01M8 5.5h.01M10.12 6.38h.01M11 8.5h.01" strokeWidth="1.8" />
     </>
   ),
   samples: <path d="M2 8h1.5M4.5 5v6M6.5 3v10M8.5 5.5v5M10.5 4v8M12.5 6.5v3M14 8h.5" />,

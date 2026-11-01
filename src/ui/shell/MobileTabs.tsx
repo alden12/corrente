@@ -55,9 +55,10 @@ const TAB_ITEMS: Record<MobileTab, { label: string; icon: ReactNode }> = {
     icon: icon(
       <>
         <path d="M2 4h12M2 8h12M2 12h12" />
-        <rect x="3.5" y="2.5" width="5" height="3" rx=".8" fill="currentColor" stroke="none" />
-        <rect x="6" y="6.5" width="6" height="3" rx=".8" fill="currentColor" stroke="none" />
-        <rect x="2.5" y="10.5" width="4" height="3" rx=".8" fill="currentColor" stroke="none" />
+        {/* Fader heads all one size, at different levels. */}
+        <rect x="3.75" y="2.5" width="4.5" height="3" rx=".8" fill="currentColor" stroke="none" />
+        <rect x="8" y="6.5" width="4.5" height="3" rx=".8" fill="currentColor" stroke="none" />
+        <rect x="2.25" y="10.5" width="4.5" height="3" rx=".8" fill="currentColor" stroke="none" />
       </>,
     ),
   },
