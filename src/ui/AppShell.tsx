@@ -576,7 +576,7 @@ export function AppShell() {
             intro={hosting.mode === "standalone" ? <Welcome /> : undefined}
           />
         )}
-        {!projectLoaded && <LoadingOverlay />}
+        {!projectLoaded && <LoadingOverlay waking={hosting.mode === "hosted"} />}
         {unreachable && <UnreachableDialog onRetry={retryProject} others={otherProjects} onOpen={openOther} />}
         {recovery && (
           <RecoveryDialog

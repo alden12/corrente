@@ -46,8 +46,12 @@ export function patchProjectName(id: string, name: string): void {
 
 /** Ask the storage for its listings, sort newest-first, update + notify the cache. */
 export async function refreshProjects(storage: ProjectStorage = getProjectStorage()): Promise<ProjectMeta[]> {
-  const metas = await storage.listProjects();
-  cache = [...metas].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+  return showProjects(await storage.listProjects());
+}
+
+/** Make these listings the library, newest-first, and notify. */
+export function showProjects(listings: ProjectListing[]): ProjectMeta[] {
+  cache = [...listings].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
   listeners.emit();
   return cache;
 }

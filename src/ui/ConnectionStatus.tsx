@@ -10,7 +10,7 @@
  * whether the project is shared: a solo project offline is benign (edits are saved locally and go up
  * on reconnect), while a shared one can meet a teammate's edits to the same thing.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WsStatus } from "../contract/client";
 import { Popover } from "./Menu";
 import { useDismiss } from "./useDismiss";
@@ -117,16 +117,28 @@ export function SyncChip({
   );
 }
 
-/** A full-screen load veil shown until the project bundle is ready (fast from the local cache, or a
- *  round-trip to the server on a first open). Matches the StartDialog overlay treatment. */
-export function LoadingOverlay(): React.ReactElement {
+/** How long a load runs before the veil says the server is waking. */
+const WAKING_AFTER_MS = 1500;
+
+/**
+ * A full-screen load veil shown until the project bundle is ready: a project this device holds opens
+ * from its copy at once (HOST-25), so this is mostly a first open, waiting on the server. That can be
+ * asleep, so after a moment `waking` says so. Matches the StartDialog overlay treatment.
+ */
+export function LoadingOverlay({ waking = false }: { waking?: boolean }): React.ReactElement {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!waking) return;
+    const timer = setTimeout(() => setSlow(true), WAKING_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [waking]);
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-ground/90">
       <span
         className="w-8 h-8 rounded-full border-2 border-faint border-t-transparent animate-spin"
         aria-hidden="true"
       />
-      <span className="font-mono text-[12px] text-muted">Loading project…</span>
+      <span className="font-mono text-[12px] text-muted">{slow ? "Waking the server…" : "Loading project…"}</span>
     </div>
   );
 }

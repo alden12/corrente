@@ -4,7 +4,7 @@
  * write-error semantics (offline writes still throw here - durability is the next increment). The
  * "remote" is a MemoryProjectStorage behind a gate that throws on every op when flipped offline.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   MemoryProjectStorage,
   setProjectStorage,
@@ -19,16 +19,29 @@ import { ProjectStore } from "../src/audio/project/projectStore";
 import {
   currentProjectId,
   ProjectRepository,
+  setCurrentProject,
   UnreachableProjectError,
   UnreadableProjectError,
 } from "../src/audio/projectRepository";
 import { initProjects } from "../src/audio/projects/operations";
+import { listProjects } from "../src/audio/projects/library";
 
-/** Flips the fake remote between reachable and offline (every op rejects). */
+/** Flips the fake remote between reachable and offline (every op rejects), or asleep (every op waits). */
 class Gate {
   offline = false;
+  private sleeping: { woken: Promise<void>; wake: () => void } | null = null;
+  sleep(): void {
+    let wake = () => {};
+    const woken = new Promise<void>((resolve) => (wake = resolve));
+    this.sleeping = { woken, wake };
+  }
+  wake(): void {
+    this.sleeping?.wake();
+    this.sleeping = null;
+  }
   run<T>(op: () => Promise<T>): Promise<T> {
-    return this.offline ? Promise.reject(new Error("offline")) : op();
+    if (this.offline) return Promise.reject(new Error("offline"));
+    return this.sleeping ? this.sleeping.woken.then(op) : op();
   }
 }
 
@@ -81,8 +94,23 @@ function makeCached() {
   const gate = new Gate();
   const server = new MemoryProjectStorage();
   const cache = new MemoryProjectStorage();
-  const cached = new CachedProjectStorage(new GatedStorage(server, gate), cache);
-  return { gate, server, cache, cached };
+  const account = { current: "alden" };
+  const cached = new CachedProjectStorage(new GatedStorage(server, gate), cache, () => account.current);
+  return { gate, server, cache, cached, account };
+}
+
+/** A project with a track saved on the server, as another device left it. */
+const saved = async (server: MemoryProjectStorage, id = "p1") => {
+  const project = new ProjectStore(false);
+  project.addTrack("subtractive");
+  await new ProjectRepository(server.bundle(id), id).save(project.snapshot(), [], []);
+};
+
+/** The live objects boot opens a project into. */
+function liveDeps() {
+  const projectStore = new ProjectStore();
+  const editLog = new EditLog(projectStore);
+  return { projectStore, editLog, versionStore: new VersionStore(projectStore, editLog) };
 }
 
 const edit = (seq: number): EditEntry => ({
@@ -173,13 +201,6 @@ describe("CachedProjectStorage listing", () => {
 });
 
 describe("a project out of reach is not a damaged one (HOST-36)", () => {
-  /** A project with a track saved on the server, as another device left it. */
-  const saved = async (server: MemoryProjectStorage, id = "p1") => {
-    const project = new ProjectStore(false);
-    project.addTrack("subtractive");
-    await new ProjectRepository(server.bundle(id), id).save(project.snapshot(), [], []);
-  };
-
   it("notes whether the last read had to come from the cache", async () => {
     const { gate, cached } = makeCached();
     const bundle = cached.bundle("p1");
@@ -210,10 +231,7 @@ describe("a project out of reach is not a damaged one (HOST-36)", () => {
     await cache.bundle("p1").writeText("meta.json", JSON.stringify({ name: "Seen" }));
     setProjectStorage(cached);
     gate.offline = true;
-    const projectStore = new ProjectStore();
-    const editLog = new EditLog(projectStore);
-    const deps = { projectStore, editLog, versionStore: new VersionStore(projectStore, editLog) };
-    await expect(initProjects(deps, { storage: cached, preferId: "p2" })).rejects.toBeInstanceOf(
+    await expect(initProjects(liveDeps(), { storage: cached, preferId: "p2" })).rejects.toBeInstanceOf(
       UnreachableProjectError,
     );
     expect(currentProjectId()).toBe("p2");
@@ -252,5 +270,65 @@ describe("a project out of reach is not a damaged one (HOST-36)", () => {
     await expect(new ProjectRepository(cached.bundle("p1"), "p1").load()).rejects.toBeInstanceOf(
       UnreadableProjectError,
     );
+  });
+});
+
+describe("a project this device holds opens while the server wakes (HOST-25)", () => {
+  /** Two projects on the server, listed for this account, with p1 opened here before; then it sleeps. */
+  async function heldThenAsleep() {
+    const made = makeCached();
+    await saved(made.server, "p1");
+    await saved(made.server, "p2");
+    await made.cached.listProjects();
+    await new ProjectRepository(made.cached.bundle("p1"), "p1").load();
+    setProjectStorage(made.cached);
+    setCurrentProject("p1");
+    made.gate.sleep();
+    return made;
+  }
+
+  /** Whether boot is still waiting a moment after it starts. */
+  const stillWaiting = async (boot: Promise<unknown>) => {
+    let done = false;
+    void boot.then(() => (done = true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return !done;
+  };
+
+  it("opens from the copy here without waiting for the server", async () => {
+    const { cached } = await heldThenAsleep();
+    const deps = liveDeps();
+    await initProjects(deps, { storage: cached });
+    expect(currentProjectId()).toBe("p1");
+    expect(deps.projectStore.getTracks()).toHaveLength(1);
+    expect(listProjects().map((meta) => meta.id)).toEqual(expect.arrayContaining(["p1", "p2"]));
+  });
+
+  it("waits for the server for a link to a project not held here", async () => {
+    const { gate, cached } = await heldThenAsleep();
+    const boot = initProjects(liveDeps(), { storage: cached, preferId: "p2" });
+    expect(await stillWaiting(boot)).toBe(true);
+    gate.wake();
+    await boot;
+    expect(currentProjectId()).toBe("p2");
+  });
+
+  it("doesn't open another account's copy", async () => {
+    const { gate, cached, account } = await heldThenAsleep();
+    account.current = "someone else";
+    const boot = initProjects(liveDeps(), { storage: cached });
+    expect(await stillWaiting(boot)).toBe(true);
+    gate.wake();
+    await boot;
+  });
+
+  it("leaves a project the server no longer lists once it answers", async () => {
+    const { gate, server, cached } = await heldThenAsleep();
+    await server.deleteProject("p1");
+    await initProjects(liveDeps(), { storage: cached });
+    expect(currentProjectId()).toBe("p1");
+    gate.wake();
+    await vi.waitFor(() => expect(currentProjectId()).toBe("p2"));
+    expect(listProjects().map((meta) => meta.id)).toEqual(["p2"]);
   });
 });

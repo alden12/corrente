@@ -13,7 +13,7 @@
 import { projectSummarySchema, type ProjectSummary } from "./projects/summary";
 import { RemoteProjectStorage } from "./remoteStore";
 import { CachedProjectStorage } from "./cachedStore";
-import { getAccessToken, onUnauthorized } from "../auth/session";
+import { accountOwner, getAccessToken, onUnauthorized } from "../auth/session";
 import { hosting } from "../hosting";
 import type { EditEntry } from "./commands/types";
 
@@ -250,6 +250,10 @@ export interface ProjectStorage {
   deleteProject(projectId: string): Promise<void>;
   /** Whether the last listing came from a local copy because the server couldn't be reached (HOST-36). */
   unreachable?(): boolean;
+  /** Where there is a server: this account's projects as this device last heard them, asking no one (HOST-25). */
+  listLocal?(): Promise<ProjectListing[]>;
+  /** Run `open` with `projectId` read from this device's copy alone, if it has one. Resolves whether it did. */
+  openLocally?(projectId: string, open: () => Promise<void>): Promise<boolean>;
 }
 
 /** Read a bundle's `meta.json` into a listing (role "owner" - local backends have no sharing). Falls
@@ -387,7 +391,9 @@ export function getProjectStorage(): ProjectStorage {
       const remote = new RemoteProjectStorage(hosting.apiUrl, getAccessToken, onUnauthorized);
       // Front the remote with an OPFS read-through cache so a seen project loads / renders offline. With
       // no OPFS (old browser) fall back to remote-only, exactly as before.
-      storageSingleton = hasOpfs ? new CachedProjectStorage(remote, new OpfsProjectStorage(REMOTE_CACHE_DIR)) : remote;
+      storageSingleton = hasOpfs
+        ? new CachedProjectStorage(remote, new OpfsProjectStorage(REMOTE_CACHE_DIR), accountOwner)
+        : remote;
     } else if (hasOpfs) {
       storageSingleton = new OpfsProjectStorage();
     } else {

@@ -23,8 +23,8 @@ import {
   type BundleFiles,
   type ExportContents,
 } from "../projectRepository";
-import { getProjectStorage, type ProjectStorage } from "../bundleStore";
-import { listProjects, newProjectId, nextProjectName, refreshProjects } from "./library";
+import { getProjectStorage, type ProjectListing, type ProjectStorage } from "../bundleStore";
+import { listProjects, newProjectId, nextProjectName, refreshProjects, showProjects } from "./library";
 import { editKeys, relationOf, type ImportRelation } from "./projectVersions";
 import { hosting } from "../../hosting";
 import { restoreProject } from "../persistence";
@@ -68,6 +68,16 @@ async function seedNewProject(deps: ProjectDeps, name: string): Promise<string> 
   return id;
 }
 
+/** Open the first of `ids`, or a new project if there are none, without saving the one open now. */
+async function openFirstOf(deps: ProjectDeps, ids: string[]): Promise<void> {
+  if (ids[0]) {
+    setCurrentProject(ids[0]);
+    await loadCurrentInto(deps);
+  } else {
+    await seedNewProject(deps, nextProjectName([]));
+  }
+}
+
 /**
  * Boot's options. The other operations here take `storage` as a trailing parameter; boot is the
  * only one with a second thing to say, so it names both rather than growing a positional gap.
@@ -99,7 +109,12 @@ export async function initProjects(
   deps: ProjectDeps,
   { storage = getProjectStorage(), preferId, exampleSong = false }: InitProjectsOptions = {},
 ): Promise<boolean> {
-  const ids = (await storage.listProjects()).map((project) => project.id);
+  const listing = storage.listProjects();
+  // Awaited below, or after the fact when a copy here opens first: either way, never unhandled.
+  listing.catch(() => {});
+  if (await openFromCopy(deps, storage, listing, preferId)) return false;
+  const listings = await listing;
+  const ids = listings.map((project) => project.id);
   if (ids.length === 0) {
     // Seed the first project under a *stable* id (the persisted current, or "default"),
     // not a fresh random one: boot can run twice (React StrictMode double-invokes the
@@ -123,7 +138,7 @@ export async function initProjects(
   } else {
     // The library before the project: a project that cannot be read throws out of the load, and the
     // recovery dialog offers the rest of the library as the way out (DAW-68).
-    await refreshProjects(storage);
+    showProjects(listings);
     // Open the first candidate that is really there: the project a link asked for, else the
     // persisted current, else the newest. Both of the first two can name something gone (see
     // `preferId`, and a stale `localStorage` pointing at a deleted project), so both are checked.
@@ -134,6 +149,55 @@ export async function initProjects(
     setCurrentProject(linked ?? ifPresent(currentProjectId()) ?? ids[0]);
     await loadCurrentInto(deps);
     return false;
+  }
+}
+
+/**
+ * Open the project boot would, from this device's copy, rather than wait for the server, which can take
+ * seconds to wake (HOST-25). The project's session catches it up once the server answers, as after any
+ * reconnect. Only a project this account has opened here before: a link to any other waits for the
+ * server, and so does a copy that won't open. Resolves whether it opened one.
+ */
+async function openFromCopy(
+  deps: ProjectDeps,
+  storage: ProjectStorage,
+  listing: Promise<ProjectListing[]>,
+  preferId: string | null | undefined,
+): Promise<boolean> {
+  if (!storage.listLocal || !storage.openLocally) return false;
+  const local = await storage.listLocal();
+  const id = preferId ?? currentProjectId();
+  if (!local.some((meta) => meta.id === id)) return false;
+  showProjects(local);
+  const opened = await storage
+    .openLocally(id, async () => {
+      setCurrentProject(id);
+      await loadCurrentInto(deps);
+    })
+    .catch(() => false);
+  if (opened) void listing.then((listings) => caughtUp(deps, storage, id, listings)).catch(() => {});
+  return opened;
+}
+
+/** The server listed the projects after one opened from this device's copy: show the list, and act on it. */
+async function caughtUp(
+  deps: ProjectDeps,
+  storage: ProjectStorage,
+  openedId: string,
+  listings: ProjectListing[],
+): Promise<void> {
+  showProjects(listings);
+  // Unreachable, the copy is all there is, as on any offline boot; and a project left since is no concern.
+  if (storage.unreachable?.() || currentProjectId() !== openedId) return;
+  if (listings.some((meta) => meta.id === openedId)) {
+    // Read it from the server once, as opening it from there would have, so the copy here keeps up.
+    await new ProjectRepository(storage.bundle(openedId), openedId).load();
+  } else {
+    // Deleted, or no longer shared, since this device last saw it.
+    await openFirstOf(
+      deps,
+      listings.map((meta) => meta.id),
+    );
   }
 }
 
@@ -353,12 +417,7 @@ export async function deleteProject(
   if (wasCurrent) {
     // Don't flush (that would resurrect the deleted bundle); repoint directly.
     const remaining = (await storage.listProjects()).map((project) => project.id).filter((other) => other !== id);
-    if (remaining[0]) {
-      setCurrentProject(remaining[0]);
-      await loadCurrentInto(deps);
-    } else {
-      await seedNewProject(deps, nextProjectName([]));
-    }
+    await openFirstOf(deps, remaining);
   }
   await refreshProjects(storage);
 }

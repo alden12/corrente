@@ -17,6 +17,11 @@
  *
  * A read the cache answered is noted (`unreachable`): the local copy holds only what was read before,
  * so a project that won't open from it is out of reach, not damaged (HOST-36).
+ *
+ * Boot doesn't wait for the server when it doesn't have to (HOST-25): a project this device holds opens
+ * from its copy alone (`openLocally`), while the server, which can take seconds to wake, is asked for
+ * the list in parallel. Each copy notes which account the server listed it for, since the cache is one
+ * per device (HOST-29) and one account's projects must not open for another.
  */
 import type { BundleStore, ProjectListing, ProjectStorage } from "./bundleStore";
 import type { EditEntry } from "./commands/types";
@@ -27,10 +32,13 @@ export class CachedBundleStore implements BundleStore {
   private readonly cache: BundleStore;
   /** Whether the last read fell back to the cache. */
   private offline = false;
+  /** Whether reads are being served from the cache alone, without asking the remote. */
+  private readonly local: () => boolean;
 
-  constructor(remote: BundleStore, cache: BundleStore) {
+  constructor(remote: BundleStore, cache: BundleStore, local: () => boolean = () => false) {
     this.remote = remote;
     this.cache = cache;
+    this.local = local;
   }
 
   unreachable(): boolean {
@@ -39,6 +47,7 @@ export class CachedBundleStore implements BundleStore {
 
   /** Read from the remote, noting whether it answered; the cache answers when it can't. */
   private async readThrough<T>(remote: () => Promise<T>, cached: () => Promise<T>): Promise<T> {
+    if (this.local()) return cached();
     try {
       const value = await remote();
       this.offline = false;
@@ -113,10 +122,15 @@ export class CachedProjectStorage implements ProjectStorage {
   private readonly cache: ProjectStorage;
   /** Whether the last listing fell back to the cache. */
   private offline = false;
+  /** Whose projects these are: the account a listing is noted against. */
+  private readonly account: () => string;
+  /** The projects being opened from the cache alone, once per opening: boot can run twice at once. */
+  private readonly localOpens: string[] = [];
 
-  constructor(remote: ProjectStorage, cache: ProjectStorage) {
+  constructor(remote: ProjectStorage, cache: ProjectStorage, account: () => string = () => "") {
     this.remote = remote;
     this.cache = cache;
+    this.account = account;
   }
 
   unreachable(): boolean {
@@ -124,7 +138,30 @@ export class CachedProjectStorage implements ProjectStorage {
   }
 
   bundle(projectId: string): BundleStore {
-    return new CachedBundleStore(this.remote.bundle(projectId), this.cache.bundle(projectId));
+    return new CachedBundleStore(this.remote.bundle(projectId), this.cache.bundle(projectId), () =>
+      this.localOpens.includes(projectId),
+    );
+  }
+
+  /** This account's projects as the server last listed them, read from the cache alone. */
+  async listLocal(): Promise<ProjectListing[]> {
+    const listings = await this.cache.listProjects();
+    const accounts = await Promise.all(
+      listings.map((listing) => this.cache.bundle(listing.id).readText(LISTED_FOR_PATH).then(accountOf)),
+    );
+    return listings.filter((_, index) => accounts[index] === this.account());
+  }
+
+  /** Run `open` with `projectId` read from the cache alone, if the cache holds it. Resolves whether it did. */
+  async openLocally(projectId: string, open: () => Promise<void>): Promise<boolean> {
+    if (!(await this.cache.bundle(projectId).exists("manifest.json"))) return false;
+    this.localOpens.push(projectId);
+    try {
+      await open();
+    } finally {
+      this.localOpens.splice(this.localOpens.indexOf(projectId), 1);
+    }
+    return true;
   }
 
   async listProjects(): Promise<ProjectListing[]> {
@@ -132,16 +169,15 @@ export class CachedProjectStorage implements ProjectStorage {
       const listings = await this.remote.listProjects();
       this.offline = false;
       // Mirror each title into the cache bundle's meta.json so an offline library still shows real
-      // names (the remote backend does not itself write meta.json). Best-effort per project.
+      // names (the remote backend does not itself write meta.json), and whose list it was, in a file of
+      // the cache's own, since reading meta.json mirrors the server's copy over ours. Best-effort per project.
+      const listedFor = JSON.stringify({ account: this.account() });
       await Promise.allSettled(
-        listings.map((listing) =>
-          this.cache
-            .bundle(listing.id)
-            .writeText(
-              "meta.json",
-              JSON.stringify({ name: listing.name, modifiedAt: listing.modifiedAt, summary: listing.summary ?? null }),
-            ),
-        ),
+        listings.flatMap((listing) => {
+          const bundle = this.cache.bundle(listing.id);
+          const meta = { name: listing.name, modifiedAt: listing.modifiedAt, summary: listing.summary ?? null };
+          return [bundle.writeText("meta.json", JSON.stringify(meta)), bundle.writeText(LISTED_FOR_PATH, listedFor)];
+        }),
       );
       return listings;
     } catch {
@@ -155,5 +191,18 @@ export class CachedProjectStorage implements ProjectStorage {
   async deleteProject(projectId: string): Promise<void> {
     await this.remote.deleteProject(projectId);
     await this.cache.deleteProject(projectId).catch(() => {});
+  }
+}
+
+/** Which account the server listed a cached project for: written only here, never read through. */
+const LISTED_FOR_PATH = "listed-for.json";
+
+/** The account in a `listed-for.json`, or undefined if it doesn't say. */
+function accountOf(raw: string | null): string | undefined {
+  try {
+    const account: unknown = (JSON.parse(raw ?? "") as { account?: unknown }).account;
+    return typeof account === "string" ? account : undefined;
+  } catch {
+    return undefined;
   }
 }
