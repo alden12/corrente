@@ -15,6 +15,9 @@ export const SECTION_LABELS: Record<string, string> = {
   osc: "Oscillator",
   o1: "Oscillator 1",
   o2: "Oscillator 2",
+  o3: "Oscillator 3",
+  glide: "Glide",
+  vib: "Vibrato",
   noise: "Noise",
   fm: "FM",
   super: "Unison",
@@ -31,6 +34,7 @@ export const SECTION_LABELS: Record<string, string> = {
   dist: "Drive",
   mod: "Chorus",
   dly: "Delay",
+  fx: "Effects",
 };
 const SECTION_ORDER = Object.keys(SECTION_LABELS);
 

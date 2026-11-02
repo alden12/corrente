@@ -170,9 +170,9 @@ describe("composeChain", () => {
       schema: glideLead.schema,
     };
     const composed = composeChain([lead, link("engine-echo", "echo")]);
-    expect(composed.definition.legato).toEqual({ param: chainParam("instrument", "legato") });
+    expect(composed.definition.legato).toEqual({ param: chainParam("instrument", "glide.legato") });
     const plan = compileDefinition(composed.definition, { params: composed.schema });
-    expect(plan.legato).toEqual({ param: chainParam("instrument", "legato") });
+    expect(plan.legato).toEqual({ param: chainParam("instrument", "glide.legato") });
     expect(composeChain([{ ...lead, definition: { ...lead.definition, legato: true } }]).definition.legato).toBe(true);
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Glide Lead: a bright, gliding mono lead, first made over MCP after the synth line of MGMT's "Time to
  * Pretend", and promoted (INST-32): a saw, a pulse and a saw an octave up through a ladder low-pass with
- * a short envelope and key tracking, vibrato, then drive, chorus and a little reverb. Legato by
- * default, so a note played over another slides there (Glide) without starting its envelopes again.
+ * a short envelope and key tracking, vibrato, then drive, chorus and a little reverb. Legato to start,
+ * so a note played over another doesn't start its envelopes again; turn Time up and it slides there.
  */
 import type { EngineBuiltin } from "../../definitions/builtin";
 
@@ -18,8 +18,8 @@ export const glideLead: EngineBuiltin = {
     { id: "o2.width", label: "Pulse Width", kind: "number", min: 0.05, max: 0.5, default: 0.3 },
     { id: "o3.level", label: "Octave Saw", kind: "number", min: 0, max: 1, default: 0.4 },
     { id: "osc.detune", label: "Detune", kind: "number", min: 0, max: 30, default: 6, unit: "ct" },
-    { id: "glide", label: "Glide", kind: "number", min: 0, max: 500, default: 60, unit: "ms" },
-    { id: "legato", label: "Legato", kind: "boolean", default: true },
+    { id: "glide.time", label: "Time", kind: "number", min: 0, max: 500, default: 0, unit: "ms" },
+    { id: "glide.legato", label: "Legato", kind: "boolean", default: true },
     {
       id: "f.cutoff",
       label: "Cutoff",
@@ -75,13 +75,13 @@ export const glideLead: EngineBuiltin = {
     format: 1,
     // A mono lead, but a released note's tail can ring under the next.
     voices: 4,
-    legato: { param: "legato" },
+    legato: { param: "glide.legato" },
     nodes: {
       // The note's pitch, sliding from the last one when played legato.
       glide: {
         block: "glide",
         voice: true,
-        inputs: { frequency: "voice.frequency", gate: "voice.gate", time: { param: "glide", scale: 0.001 } },
+        inputs: { frequency: "voice.frequency", gate: "voice.gate", time: { param: "glide.time", scale: 0.001 } },
       },
       vib: { block: "lfo", voice: true, inputs: { rate: { param: "vib.rate" } } },
       f1: {
