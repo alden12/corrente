@@ -28,6 +28,7 @@ mod clock;
 mod nodes;
 mod pitch;
 mod rhythm;
+mod slide;
 mod time;
 mod words;
 

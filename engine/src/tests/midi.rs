@@ -25,6 +25,7 @@ const LENGTH: f64 = 10.0;
 const CHANCE: f64 = 11.0;
 const DEGREES: f64 = 12.0;
 const RANGE: f64 = 13.0;
+const SLIDE: f64 = 14.0;
 const CHORD: f64 = 5.0;
 
 // TS: const fixed = (value: number) => [0, value]; const bound = (value: number) => [1, value, 1, 0, 0]; const random = (min, max) => [2, min, max]
@@ -530,4 +531,53 @@ fn range_folds_notes_by_octaves_into_its_span() {
     assert_eq!(played_through(span(60.0, 71.0), &[48, 60, 65, 75, 96], steady), vec![60, 60, 65, 63, 60]);
     // A span under an octave can't hold every note: one below lands on the first octave at or above low.
     assert_eq!(played_through(span(60.0, 64.0), &[55, 70], steady), vec![67, 58]);
+}
+
+/// A glissando from parts: `slide` makes each note a run from the last (scale 0 chromatic, 1 in key;
+/// when 0 legato, 1 always), each passing note a 64th (1500 samples here), then `delay` plays each its
+/// place in the run of 64ths later.
+// TS: device(fixed(0), [input, slide(1/64, scale, when), delay(beats: index x 1/64)], 2)
+fn glissando(scale: f64, when: f64) -> Vec<f64> {
+    device(
+        fixed(0.0),
+        &[
+            node(INPUT, &[], &[]),
+            node(SLIDE, &[&[0]], &[fixed(0.0625), fixed(scale), fixed(when)]),
+            node(DELAY, &[&[1]], &[per(INDEX, 0.0625, 0.0)]),
+        ],
+        2,
+    )
+}
+
+#[test]
+fn a_glissando_from_parts_runs_up_to_a_note_played_over_a_held_one_and_its_off_waits_for_it() {
+    let mut chain = parse(&chain_words(&[], &[glissando(0.0, 0.0)]));
+    let keys = [(0, 0, on(C)), (10, 0, on(E)), (12, 0, off(C)), (100, 0, off(E))];
+    let played = run(&mut chain, 200, &keys, steady);
+    let at = 10 * 128;
+    assert_eq!(ons(&played), vec![(0, C), (at, 61), (at + 1500, 62), (at + 3000, 63), (at + 4500, E)]);
+    // Each passing note lasts a step (the chain lets it go); the note itself is held until its key lets
+    // go, a run later.
+    let off_at = |note: i32| played.iter().find(|&&(_, event)| matches!(event, Event::Off { note: off, .. } if off == note)).map(|&(time, _)| time);
+    assert_eq!([off_at(61), off_at(62), off_at(63)], [Some(at + 1500), Some(at + 3000), Some(at + 4500)]);
+    assert_eq!(off_at(E), Some(100 * 128 + 4500));
+}
+
+#[test]
+fn a_legato_glissando_plays_a_detached_note_as_it_is_and_an_always_one_runs_to_it() {
+    let keys = [(0, 0, on(C)), (5, 0, off(C)), (10, 0, on(E)), (20, 0, off(E))];
+    let legato = run(&mut parse(&chain_words(&[], &[glissando(0.0, 0.0)])), 100, &keys, steady);
+    assert_eq!(ons(&legato), vec![(0, C), (10 * 128, E)]);
+    let always = run(&mut parse(&chain_words(&[], &[glissando(0.0, 1.0)])), 100, &keys, steady);
+    assert_eq!(ons(&always).len(), 5);
+}
+
+#[test]
+fn a_glissando_in_key_steps_through_its_notes_up_and_down() {
+    let notes = |keys: &[(u64, i32, Event)]| -> Vec<i32> {
+        ons(&run(&mut parse(&chain_words(&[], &[glissando(1.0, 1.0)])), 100, keys, steady)).into_iter().map(|(_, note)| note).collect()
+    };
+    // C major: from C up to G passes D, E and F; from G down to C, the same back.
+    assert_eq!(notes(&[(0, 0, on(C)), (10, 0, on(G))]), vec![C, 62, E, 65, G]);
+    assert_eq!(notes(&[(0, 0, on(G)), (10, 0, on(C))]), vec![G, 65, E, 62, C]);
 }

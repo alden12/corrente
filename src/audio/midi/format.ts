@@ -93,6 +93,12 @@ export const PICK_DIRECTIONS = ["up", "down", "updown", "random", "played", "cho
 /** The directions `order` numbers a chord's notes on the same sample. */
 export const ORDER_DIRECTIONS = ["up", "down", "alternate"] as const;
 
+/** How `slide` steps between two notes: every semitone, or the notes of the song's key. */
+export const SLIDE_SCALES = ["chromatic", "in key"] as const;
+
+/** When `slide` makes a run: only for a note played while a key is down, or for every note. */
+export const SLIDE_WHEN = ["legato", "always"] as const;
+
 /** Where `degrees` moves a note that isn't in the key: to the nearer note in it (the lower at a tie), or down, or up. */
 export const SNAP_SIDES = ["nearest", "down", "up"] as const;
 
@@ -216,6 +222,18 @@ export const NODE_SPECS: readonly NodeSpec[] = [
     fields: [
       { name: "low", type: "number", min: 0, max: 127, default: 36 },
       { name: "high", type: "number", min: 0, max: 127, default: 96 },
+    ],
+    output: "notes",
+  },
+  {
+    name: "slide",
+    description:
+      "plays each note as a run from the note played before it: the notes between, a semitone (or a degree of the song's key, `scale` in key) apart, each `beats` long, then the note itself, held; numbered by place in the run from 0. With `when` legato, only a note played while a key is still down runs. Follow it with a delay of { per: index, times: beats } for a glissando",
+    ports: [{ name: "notes", wire: "notes" }],
+    fields: [
+      { name: "beats", type: "beats", default: "1/64" },
+      { name: "scale", type: "choice", options: SLIDE_SCALES, default: "chromatic" },
+      { name: "when", type: "choice", options: SLIDE_WHEN, default: "legato" },
     ],
     output: "notes",
   },

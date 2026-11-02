@@ -55,6 +55,16 @@ export const strumSchema: ParamSchema = [
   { id: "tilt", label: "Tilt", kind: "number", min: -0.3, max: 0.3, default: -0.1, taper: "linear" },
 ] as const;
 
+/** How fast a glissando runs: each passing note's length. */
+export const GLISSANDO_SPEEDS = ["1/16", "1/32", "1/64", "1/128"];
+
+/** Glissando (INST-32): a run of the notes between one note and the next, chromatic or in key. */
+export const glissandoSchema: ParamSchema = [
+  { id: "speed", label: "Speed", kind: "enum", options: GLISSANDO_SPEEDS, default: "1/64" },
+  { id: "scale", label: "Scale", kind: "enum", options: ["chromatic", "in key"], default: "chromatic" },
+  { id: "when", label: "When", kind: "enum", options: ["legato", "always"], default: "legato" },
+] as const;
+
 /** Scale quantiser (DAW-12): every note into the song's key, snapping to its side. */
 export const scaleQuantiserSchema: ParamSchema = [
   { id: "snap", label: "Snap", kind: "enum", options: ["nearest", "down", "up"], default: "nearest" },
@@ -151,6 +161,13 @@ registerMidiDevice({
   schema: scaleQuantiserSchema,
   tags: ["lead", "bass"],
   color: "cyan",
+});
+registerMidiDevice({
+  type: "glissando",
+  label: "Glissando",
+  schema: glissandoSchema,
+  tags: ["lead", "keys"],
+  color: "lime",
 });
 registerMidiDevice({
   type: "harmoniser",

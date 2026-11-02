@@ -28,7 +28,9 @@
 // where someone tries a sound from Explore.
 // 8: a device definition's `legato` and the `glide` block (INST-32), in `addCustomInstrument` and
 // `updateCustomInstrument`. An older side refuses such a definition, but only meets one where someone makes it.
-export const PROTOCOL_VERSION = 8;
+// 9: the MIDI devices' `slide` node and the Glissando device (INST-32). An older side refuses a custom
+// MIDI device using `slide`, and plays no Glissando, but only meets them where someone adds one.
+export const PROTOCOL_VERSION = 9;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

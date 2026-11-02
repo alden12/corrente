@@ -16,6 +16,8 @@
 //!   later, change how long they last, or let them through by chance.
 //! - **degrees** and **range** (pitch.rs): move notes in the song's key, snapping those not in it, or
 //!   by octaves into a range.
+//! - **slide** (slide.rs): plays each note as a run from the note before, for a `delay` by index to
+//!   spread into a glissando.
 //!
 //! A note that's moved keeps track of where it went, so its note off lets go of the same notes even if
 //! a knob moved in between. A note off nobody played passes through as it is: letting go of a note
@@ -24,6 +26,7 @@
 use super::clock::Clock;
 use super::pitch;
 use super::rhythm::{self, Ratchet};
+use super::slide::Slide;
 use super::time::{Chance, Delay, Order};
 use super::{BlockTransport, Event, Field, MAX_COPIES, MAX_EVENTS, MAX_HELD, NoteContext, Timed, draw};
 
@@ -52,7 +55,7 @@ pub enum Fields {
 }
 
 // TS: the same list as midi/format.ts's NODE_SPECS, by kind number.
-pub const SPECS: [Spec; 14] = [
+pub const SPECS: [Spec; 15] = [
     Spec { ports: &[], fields: Fields::Exactly(0), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Ticks },
     Spec { ports: &[Wire::Notes, Wire::Ticks], fields: Fields::Exactly(1), output: Wire::Notes },
@@ -67,6 +70,7 @@ pub const SPECS: [Spec; 14] = [
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(1), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(2), output: Wire::Notes },
     Spec { ports: &[Wire::Notes], fields: Fields::Exactly(2), output: Wire::Notes },
+    Spec { ports: &[Wire::Notes], fields: Fields::Exactly(3), output: Wire::Notes },
 ];
 
 pub const KIND_INPUT: usize = 0;
@@ -83,6 +87,7 @@ pub const KIND_LENGTH: usize = 10;
 pub const KIND_CHANCE: usize = 11;
 pub const KIND_DEGREES: usize = 12;
 pub const KIND_RANGE: usize = 13;
+pub const KIND_SLIDE: usize = 14;
 
 /// A node's state, by kind.
 // TS: a discriminated union of each kind's state.
@@ -102,6 +107,7 @@ pub enum Kind {
     Delay(Delay),
     Length,
     Chance(Chance),
+    Slide(Slide),
 }
 
 impl Kind {
@@ -122,6 +128,7 @@ impl Kind {
             KIND_CHANCE => Kind::Chance(Chance::new()),
             KIND_DEGREES => Kind::Degrees(NoteMap::new()),
             KIND_RANGE => Kind::Range(NoteMap::new()),
+            KIND_SLIDE => Kind::Slide(Slide::new()),
             _ => return None,
         })
     }
@@ -220,6 +227,7 @@ impl Node {
             Kind::Order(order) => order.process(&inputs[0], fields, context, out),
             Kind::Delay(delay) => delay.process(&inputs[0], fields, context, out),
             Kind::Chance(chance) => chance.process(&inputs[0], fields, context, out),
+            Kind::Slide(slide) => slide.process(&inputs[0], fields, context, out),
         }
     }
 
@@ -235,6 +243,7 @@ impl Node {
             Kind::Order(order) => order.clear(),
             Kind::Delay(delay) => delay.clear(offset, out),
             Kind::Chance(chance) => chance.clear(),
+            Kind::Slide(slide) => slide.clear(),
             Kind::Input | Kind::Velocity | Kind::Euclid | Kind::Length => {}
         }
     }

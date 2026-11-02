@@ -15,6 +15,7 @@ import { euclideanDefinition } from "./euclidean";
 import { strumDefinition } from "./strum";
 import { scaleQuantiserDefinition } from "./scaleQuantiser";
 import { harmoniserDefinition } from "./harmoniser";
+import { glissandoDefinition } from "./glissando";
 
 /** The built-ins, and each open project's own devices (INST-11.3) as they register. */
 const DEFINITIONS = new Map<string, MidiDefinition>([
@@ -24,6 +25,7 @@ const DEFINITIONS = new Map<string, MidiDefinition>([
   ["strum", strumDefinition],
   ["scale-quantiser", scaleQuantiserDefinition],
   ["harmoniser", harmoniserDefinition],
+  ["glissando", glissandoDefinition],
 ]);
 
 /** A device on a track, as the project holds it. */

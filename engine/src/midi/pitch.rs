@@ -22,7 +22,7 @@ fn scale(key: Key) -> u16 {
 
 /// Whether `pitch` is in `key`.
 // TS: (scale(key) >> mod(pitch - key.tonic, 12)) & 1
-fn in_key(key: Key, pitch: i32) -> bool {
+pub fn in_key(key: Key, pitch: i32) -> bool {
     // `rem_euclid` is a remainder that's never negative, as TS's ((n % 12) + 12) % 12.
     scale(key) >> (pitch - i32::from(key.tonic)).rem_euclid(12) & 1 == 1
 }

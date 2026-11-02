@@ -57,6 +57,7 @@ const kitPads = (kit: BuiltinKit): Patch["params"] =>
     ]),
   );
 const microVa = builtinFor("micro-va");
+const glideLead = builtinFor("glide-lead");
 const hybridWave = builtinFor("hybrid-wave");
 
 // Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
@@ -307,6 +308,27 @@ export const FACTORY_PATCHES: Patch[] = [
     "env.decay": 670,
     "env.sustain": 0.68,
   }),
+  // A late-70s disco synth lead: square-heavy and bright, notes played over each other running up or
+  // down to the next through the key (the Glissando device, INST-32), with a short glide on top.
+  {
+    ...glideLead("Disco Run", ["lead", "bright", "retro"], {
+      "o1.level": 0.5,
+      "o2.level": 1,
+      "o2.width": 0.5,
+      "o3.level": 0.3,
+      "osc.detune": 4,
+      "glide.time": 20,
+      "glide.legato": true,
+      "f.cutoff": 2600,
+      "f.reso": 0.25,
+      "f.env": 12,
+      "f.decay": 250,
+      "vib.depth": 12,
+      "fx.chorus": 0.35,
+      "fx.reverb": 0.18,
+    }),
+    midiDevices: [{ type: "glissando", params: { speed: "1/64", scale: "in key", when: "legato" } }],
+  },
   // --- FX -------------------------------------------------------------------
   nimbus("Noise Sweep", ["fx", "airy"], {
     "osc.noise": 0.8,
