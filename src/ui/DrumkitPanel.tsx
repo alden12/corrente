@@ -81,6 +81,7 @@ export function DrumkitPanel({
       foldKey={instrumentFold(trackId)}
       schema={instrumentSchema("drumkit")}
       graph="instrument"
+      foldsSections={false}
     >
       <div className="flex flex-col gap-3 px-3 py-3">
         {/* Kit-wide controls (envelope, amp) as a horizontal strip above the pads. */}

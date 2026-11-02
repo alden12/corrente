@@ -59,5 +59,13 @@ export const useOpenSections = () => usePersistentSet("corrente:device-sections-
 /** A section's fold key, within its device's. */
 export const sectionFold = (deviceKey: string, namespace: string) => `${deviceKey}/${namespace}`;
 
+/** The fold keys of a device's sections that fold: those with a title. */
+export const sectionFolds = (label: string, schema: ParamSchema, deviceKey: string): string[] => {
+  const sections = toSections(schema);
+  return sections
+    .filter((section) => sectionHeading(label, sections.length, section.namespace) !== "")
+    .map((section) => sectionFold(deviceKey, section.namespace));
+};
+
 /** An instrument's fold key: one per track, as a track has one instrument. */
 export const instrumentFold = (trackId: string) => `instrument:${trackId}`;

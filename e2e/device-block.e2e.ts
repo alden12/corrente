@@ -17,12 +17,10 @@ test("devices and their sections start folded as far as they go, and what you op
   await openExploreCategory(page, "Effects");
   await page.getByRole("button", { name: 'Add "Reverb" to the selected track' }).click();
 
-  // The Reverb has no sections to fold to, so it starts folded: a column, its name running down it,
-  // with no graph button (that's for a device you're looking into).
+  // The Reverb has no sections to fold to, so it starts folded: a column, its name running down it.
   const reverb = block(page, "Reverb");
   await expect(reverb).toHaveAttribute("data-open", "false");
   await expect(reverb.getByText("Decay", { exact: true })).toHaveCount(0);
-  await expect(reverb.getByRole("button", { name: "View Reverb's graph" })).toHaveCount(0);
   const folded = (await reverb.boundingBox())!;
   expect(folded.height).toBeGreaterThan(folded.width);
   // Every folded device is the same height, however long its name.
@@ -52,7 +50,6 @@ test("devices and their sections start folded as far as they go, and what you op
 
   await reverb.getByRole("button", { name: "Unfold Reverb" }).click();
   await expect(reverb.getByText("Decay", { exact: true })).toBeVisible();
-  await expect(reverb.getByRole("button", { name: "View Reverb's graph" })).toBeVisible();
 
   await page.waitForTimeout(600); // past the project's 300ms save tick, so the reverb is saved
   await page.reload();
@@ -65,4 +62,29 @@ test("devices and their sections start folded as far as they go, and what you op
 
   await block(page, "Reverb").getByRole("button", { name: "Fold Reverb" }).click();
   await expect(block(page, "Reverb").getByText("Decay", { exact: true })).toHaveCount(0);
+});
+
+test("a device's menu folds or opens all its sections at once (DAW-61.5)", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const instrument = block(page, "Micro VA");
+  // Its fold buttons, the device's and its sections', not the menu's own.
+  await expect(instrument.locator('button[aria-expanded="false"]:not([aria-haspopup])').first()).toBeVisible();
+
+  await instrument.getByRole("button", { name: "Micro VA actions" }).click();
+  await page.getByRole("menuitem", { name: "Open all sections" }).click();
+  await expect(instrument.locator('button[aria-expanded="false"]:not([aria-haspopup])')).toHaveCount(0);
+
+  await instrument.getByRole("button", { name: "Micro VA actions" }).click();
+  await page.getByRole("menuitem", { name: "Fold all sections" }).click();
+  // Every section folded, the device itself still open.
+  await expect(instrument.locator('button[aria-expanded="true"]:not([aria-haspopup])')).toHaveCount(1);
+  await expect(instrument.getByRole("button", { name: "Fold Micro VA" })).toHaveAttribute("aria-expanded", "true");
+
+  // Folded, opening them all opens the device too.
+  await instrument.getByRole("button", { name: "Fold Micro VA" }).click();
+  await instrument.getByRole("button", { name: "Micro VA actions" }).click();
+  await page.getByRole("menuitem", { name: "Open all sections" }).click();
+  await expect(instrument).toHaveAttribute("data-open", "true");
+  await expect(instrument.locator('button[aria-expanded="false"]:not([aria-haspopup])')).toHaveCount(0);
 });

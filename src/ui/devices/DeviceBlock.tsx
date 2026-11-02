@@ -1,8 +1,9 @@
 /**
  * One device in the rack (DAW-61.3): an instrument, an effect or a MIDI device, all drawn the same
  * way. A header in the device's colour (DAW-61.2) with its name, its kind, its bypass switch and its
- * actions; open, its body. Folding is view state (`deviceFolds.ts`), never an edit. An instrument or
- * effect on the engine has a button for its graph (INST-44), where there's somewhere to show it.
+ * actions; open, its body. Folding is view state (`deviceFolds.ts`), never an edit. Its menu (DAW-61.5)
+ * folds or opens all its sections at once, and opens its graph (INST-44) for an instrument or effect
+ * on the engine, where there's somewhere to show it.
  *
  * On the desktop every device is one height (`DEVICE_HEIGHT`), folded or open, so a row of them lines
  * up. **Folded**, it's a narrow column, its name running down it (cut short with an ellipsis), as a
@@ -13,16 +14,16 @@ import { useContext, type ReactNode } from "react";
 import { deviceHue, type DeviceColor } from "../../audio/deviceColors";
 import { deviceEdge } from "../deviceColor";
 import { DeviceHue } from "./deviceHue";
-import { startsOpen, useDeviceFolds } from "./deviceFolds";
+import { sectionFolds, startsOpen, useDeviceFolds, useOpenSections } from "./deviceFolds";
 import type { ParamSchema } from "../../audio/params/types";
 import { paramCount } from "./paramCount";
 import { foldOnHeaderClick } from "../controls/foldOnHeaderClick";
 import { openDeviceGraph, useCanViewGraph } from "../tabs/openGraph";
-import { GraphIcon } from "../graph/GraphIcon";
 import type { DeviceKind } from "../../audio/definitions/chainGraph";
 import { DEVICE_HEADER_HEIGHT, DEVICE_HEIGHT, RackStacked, SECTION_HEIGHT } from "./rackLayout";
 import type { DeviceDrag } from "./useChainDrag";
 import { GripIcon, PowerIcon } from "./deviceIcons";
+import { Menu, type MenuItem } from "../Menu";
 
 const ICON_BUTTON =
   "flex items-center justify-center w-6 h-6 pointer-coarse:w-9 pointer-coarse:h-9 shrink-0 rounded text-muted hover:text-ink hover:bg-control cursor-pointer";
@@ -49,6 +50,7 @@ export function DeviceBlock({
   actions,
   schema,
   graph,
+  foldsSections = true,
   children,
 }: {
   /** Its catalog entry: the type and colour. */
@@ -70,6 +72,8 @@ export function DeviceBlock({
   schema: ParamSchema;
   /** What its graph is drawn as: an instrument, an effect or a MIDI device. */
   graph?: DeviceKind;
+  /** Whether its body is its params' sections (`DeviceSections`), so its menu can fold them all; the drum kit's pads aren't. */
+  foldsSections?: boolean;
   children: ReactNode;
 }) {
   const stacked = useContext(RackStacked);
@@ -78,6 +82,24 @@ export function DeviceBlock({
   const opensAtStart = startsOpen(label, schema);
   const open = folds.isOpen(foldKey, opensAtStart);
   const toggleFold = () => folds.toggle(foldKey, opensAtStart);
+  const [, , putSections] = useOpenSections();
+  const sections = foldsSections ? sectionFolds(label, schema, foldKey) : [];
+  const menu: MenuItem[] = [
+    ...(graph && graphable ? [{ label: "View device graph", onClick: () => openDeviceGraph(graph, device.type) }] : []),
+    ...(sections.length > 0
+      ? [
+          // Opening them opens the device too, or there'd be nothing to see.
+          {
+            label: "Open all sections",
+            onClick: () => {
+              putSections(sections, true);
+              if (!open) toggleFold();
+            },
+          },
+          { label: "Fold all sections", onClick: () => putSections(sections, false) },
+        ]
+      : []),
+  ];
   // Folded on the desktop, the header runs down a column; anywhere else, across.
   const column = !open && !stacked;
   return (
@@ -157,19 +179,14 @@ export function DeviceBlock({
               <PowerIcon />
             </button>
           )}
-          {/* Its graph is for a device you're looking into, so only open. */}
-          {open && graph && graphable && (
-            <button
-              type="button"
-              title="View device graph"
-              aria-label={`View ${label}'s graph`}
-              onClick={() => openDeviceGraph(graph, device.type)}
-              className={ICON_BUTTON}
-            >
-              <GraphIcon />
-            </button>
-          )}
           {actions}
+          {menu.length > 0 && (
+            <Menu
+              label={`${label} actions`}
+              items={menu}
+              triggerClassName={`${ICON_BUTTON} text-[17px] leading-none`}
+            />
+          )}
           {remove && (
             <button
               type="button"

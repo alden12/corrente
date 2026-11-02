@@ -12,8 +12,9 @@ test("a device's graph opens in a tab beside its track, from the rack and from E
   await page.goto("/");
   await dismissStart(page);
 
-  // From the seed track's instrument (a Micro VA) in the rack.
-  await page.getByRole("button", { name: "View Micro VA's graph" }).click();
+  // From the seed track's instrument (a Micro VA) in the rack, through its menu (DAW-61.5).
+  await page.getByRole("button", { name: "Micro VA actions" }).click();
+  await page.getByRole("menuitem", { name: "View device graph" }).click();
   await expect(tabs(page)).toHaveCount(2);
   await expect(tabs(page).nth(1)).toHaveAttribute("aria-selected", "true");
   await expect(tabs(page).nth(1)).toContainText("graph");
@@ -22,7 +23,7 @@ test("a device's graph opens in a tab beside its track, from the rack and from E
 
   // Back to the track's tab: the rack again.
   await tabs(page).first().click();
-  await expect(page.getByRole("button", { name: "View Micro VA's graph" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Micro VA actions" })).toBeVisible();
 
   // From an effect's row in Explore.
   await openExploreCategory(page, "Effects");
