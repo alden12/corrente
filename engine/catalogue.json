@@ -340,8 +340,56 @@
       ]
     },
     {
-      "name": "hold",
+      "name": "glide",
       "kind": 6,
+      "description": "Glide (portamento): follows a frequency with a lag in octaves, as an analog synth's does, so a jump up and the same jump down take the same time. It jumps straight to the frequency when the gate rises, so a new note starts on pitch; with a legato device the gate stays up from one note to the next, and it slides between them.",
+      "inputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        },
+        {
+          "name": "gate",
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frequency",
+          "min": 0,
+          "max": 24000,
+          "unit": "Hz"
+        }
+      ],
+      "controls": [
+        {
+          "name": "time",
+          "min": 0,
+          "max": 10,
+          "unit": "s",
+          "init": 0.1
+        }
+      ],
+      "meters": [],
+      "credits": [
+        {
+          "source": "maths.lib",
+          "author": "GRAME",
+          "copyright": "GRAME",
+          "licence": "LicenseRef-LGPL-2.1-or-later-with-Faust-exception"
+        }
+      ],
+      "licences": [
+        "LicenseRef-LGPL-2.1-or-later-with-Faust-exception",
+        "LicenseRef-STK-4.3"
+      ]
+    },
+    {
+      "name": "hold",
+      "kind": 7,
       "description": "Sample and hold: takes its signal's value each time the trigger rises above 0.5, and holds it until the next. With noise in, it makes random steps.",
       "inputs": [
         {
@@ -377,7 +425,7 @@
     },
     {
       "name": "keyedcompressor",
-      "kind": 7,
+      "kind": 8,
       "description": "A stereo compressor turned down by its key rather than by itself: both channels go down together when the louder side of the key passes the threshold, then are made up by the gain. A kick on the key ducks a bass (sidechain compression). Its meter shows the reduction in dB.",
       "inputs": [
         {
@@ -487,7 +535,7 @@
     },
     {
       "name": "ladder",
-      "kind": 8,
+      "kind": 9,
       "description": "A zero-delay-feedback Moog ladder low-pass, which self-oscillates as resonance nears 1.",
       "inputs": [
         {
@@ -539,7 +587,7 @@
     },
     {
       "name": "lfo",
-      "kind": 9,
+      "kind": 10,
       "description": "A low-frequency oscillator with sine, triangle, saw and square outputs from -1 to 1, all starting their cycle together: sine and triangle rise from 0, the square is high for the first half, the saw climbs from -1. Its rate can move every sample.",
       "inputs": [
         {
@@ -593,7 +641,7 @@
     },
     {
       "name": "loopgain",
-      "kind": 10,
+      "kind": 11,
       "description": "The gain for a feedback loop: what a signal going round a loop of `period` samples is multiplied by each time round, so that it dies away by 60 dB in `time` seconds whatever the period. Keeps a plucked string's decay even from low notes to high ones. Both are controls, read every 32 samples, since they barely move within a note.",
       "inputs": [],
       "outputs": [
@@ -634,7 +682,7 @@
     },
     {
       "name": "meter",
-      "kind": 11,
+      "kind": 12,
       "description": "Passes its signal through unchanged and shows its level on a meter, as a channel meter does: it rises at once and falls back over about 300 ms.",
       "inputs": [
         {
@@ -673,7 +721,7 @@
     },
     {
       "name": "mix",
-      "kind": 12,
+      "kind": 13,
       "description": "Crossfades from one signal to another: mix 0 is all dry, 1 all wet, in a straight line between; held to 0..1. For a blend that makes the sound, such as a phaser's input and all-passed signal at half and half. An effect's dry/wet knob is its chain's, by a mix param.",
       "inputs": [
         {
@@ -706,7 +754,7 @@
     },
     {
       "name": "mul",
-      "kind": 13,
+      "kind": 14,
       "description": "Multiplies two signals: a VCA, a depth, a ring modulator.",
       "inputs": [
         {
@@ -734,7 +782,7 @@
     },
     {
       "name": "noise",
-      "kind": 14,
+      "kind": 15,
       "description": "White noise.",
       "inputs": [],
       "outputs": [
@@ -754,7 +802,7 @@
     },
     {
       "name": "onepole",
-      "kind": 15,
+      "kind": 16,
       "description": "A gentle one-pole low-pass, for damping inside feedback loops.",
       "inputs": [
         {
@@ -819,7 +867,7 @@
     },
     {
       "name": "pan",
-      "kind": 16,
+      "kind": 17,
       "description": "Equal-power pan: one signal to a left and a right output, so its level stays even as it moves. Pan 0 is hard left, 0.5 centre, 1 hard right.",
       "inputs": [
         {
@@ -863,7 +911,7 @@
     },
     {
       "name": "period",
-      "kind": 17,
+      "kind": 18,
       "description": "A frequency's period in samples, less an offset: the delay that tunes a plucked string.",
       "inputs": [
         {
@@ -903,7 +951,7 @@
     },
     {
       "name": "pinknoise",
-      "kind": 18,
+      "kind": 19,
       "description": "Pink noise: falling 3 dB an octave, softer and closer to rain than white noise's hiss.",
       "inputs": [],
       "outputs": [
@@ -942,7 +990,7 @@
     },
     {
       "name": "pitch",
-      "kind": 19,
+      "kind": 20,
       "description": "Shifts a frequency by semitones, such as an envelope or LFO in semitones onto a cutoff.",
       "inputs": [
         {
@@ -974,7 +1022,7 @@
     },
     {
       "name": "pulse",
-      "kind": 20,
+      "kind": 21,
       "description": "A band-limited pulse wave whose width can move every sample (pulse-width modulation): width 0.5 is a square from -1 to 1. It has no DC offset, as an analog synth's output has none, so a narrow pulse reaches towards 2 on its short side. An octave down, it is a sub-oscillator.",
       "inputs": [
         {
@@ -1023,7 +1071,7 @@
     },
     {
       "name": "reverb",
-      "kind": 21,
+      "kind": 22,
       "description": "A stereo algorithmic reverb (Zita-Rev1): a short pre-delay, then a dense tail that decays over the time set, faster in the highs above the damping frequency.",
       "inputs": [
         {
@@ -1128,7 +1176,7 @@
     },
     {
       "name": "saw",
-      "kind": 22,
+      "kind": 23,
       "description": "A band-limited sawtooth.",
       "inputs": [
         {
@@ -1167,7 +1215,7 @@
     },
     {
       "name": "select",
-      "kind": 23,
+      "kind": 24,
       "description": "Picks one of four signals by index (0 to 3, rounded to the nearest): a waveform or mode switch, fed by a choice param, which reads as its option's index. Wire any unused choice to 0. The switch is instant, so changing it mid-note can click.",
       "inputs": [
         {
@@ -1212,7 +1260,7 @@
     },
     {
       "name": "shaper",
-      "kind": 24,
+      "kind": 25,
       "description": "Soft saturation: drive 1 is clean, higher is warmer then harder.",
       "inputs": [
         {
@@ -1251,7 +1299,7 @@
     },
     {
       "name": "sine",
-      "kind": 25,
+      "kind": 26,
       "description": "A sine wave.",
       "inputs": [
         {
@@ -1285,7 +1333,7 @@
     },
     {
       "name": "svf",
-      "kind": 26,
+      "kind": 27,
       "description": "A state-variable filter with low-pass, band-pass and high-pass outputs at once, stable however fast its cutoff moves. Each peaks at the cutoff as q rises.",
       "inputs": [
         {
@@ -1348,7 +1396,7 @@
     },
     {
       "name": "triangle",
-      "kind": 27,
+      "kind": 28,
       "description": "A band-limited triangle wave, rising from 0 at the start of its cycle. Its frequency can move every sample.",
       "inputs": [
         {
@@ -1387,7 +1435,7 @@
     },
     {
       "name": "waveshaper",
-      "kind": 28,
+      "kind": 29,
       "description": "Distortion by a curve, as the original graph format's shaper had them. shape: 0 classic (the original Distortion's), 1 tanh (smooth saturation), 2 hardClip (flat at full scale), 3 fold (folds back past full scale, bright). amount is the drive. The input is held to -1..1 first, as Web Audio's WaveShaperNode does.",
       "inputs": [
         {

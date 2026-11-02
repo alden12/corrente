@@ -40,9 +40,12 @@ const sourceWords = (source: ParamSource, value: number): number[] => [
   ...shapingWords(source),
 ];
 
+/** A setting: 0 then a number, or 1 then the value it reads and that value's shaping. */
+const settingWords = (value: ZoneValue, numberOf: (param: string) => number): number[] =>
+  typeof value === "number" ? [0, value] : [1, numberOf(value.param), ...shapingWords(value)];
+
 const zoneWords = (zone: PlanZone, numberOf: (param: string) => number): number[] => {
-  const setting = (value: ZoneValue): number[] =>
-    typeof value === "number" ? [0, value] : [1, numberOf(value.param), ...shapingWords(value)];
+  const setting = (value: ZoneValue) => settingWords(value, numberOf);
   return [
     numberOf(zone.param),
     ...setting(zone.root),
@@ -61,7 +64,7 @@ export const bindingOf = (plan: CompiledPlan): PlanBinding => {
   if (known) return known;
   const names = [...new Set(plan.params.map((source) => source.param))];
   const numbers = new Map(names.map((name, index) => [name, index]));
-  // Every param a zone reads is one of the plan's sources (compile.ts makes it one), so it's numbered.
+  // Every param a zone or legato reads is one of the plan's sources (compile.ts makes it one), so it's numbered.
   const numberOf = (param: string) => numbers.get(param) ?? -1;
   const zoneParams = new Set(plan.zones?.map((zone) => zone.param));
   const samples = names.map(
@@ -75,6 +78,7 @@ export const bindingOf = (plan: CompiledPlan): PlanBinding => {
     zones.length,
     ...plan.params.flatMap((source) => sourceWords(source, numberOf(source.param))),
     ...zones.flatMap((zone) => zoneWords(zone, numberOf)),
+    ...settingWords(plan.legato, numberOf),
   ];
   const binding = { names, numbers, samples, words };
   bindings.set(plan, binding);

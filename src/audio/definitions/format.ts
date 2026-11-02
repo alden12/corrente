@@ -238,6 +238,11 @@ export const definitionSchema = z
   .object({
     format: z.literal(DEFINITION_FORMAT),
     voices: z.number().int().min(0).max(MAX_VOICES).optional(),
+    /**
+     * Whether a note with a key down moves the sounding voice to it rather than starting another
+     * (INST-32), or the switch param that says: its envelopes carry on, and a `glide` slides.
+     */
+    legato: z.union([z.boolean(), paramBindingSchema]).optional(),
     /** How many samples late the output runs (a look-ahead), for the mixer to make up. */
     latency: z.number().int().min(0).optional(),
     nodes: z.record(z.string().regex(NODE_NAME, "node names are a letter then letters, digits and _"), nodeSchema),

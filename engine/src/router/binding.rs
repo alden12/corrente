@@ -8,12 +8,14 @@
 //!   sample source takes its value, a sample slot, as it is.
 //! - **Zones** pick which sample a note plays, by key and velocity (INST-36.6); their settings are
 //!   numbers or values read through their own shaping.
+//! - **Legato** (INST-32) is a setting too, read as each note starts: 1 (or a switch that's on) moves
+//!   the sounding voice to a new note rather than starting another.
 //!
 //! The words are f64s, each sent as two int32 words (low half first), so the arithmetic is the
 //! TypeScript's, in doubles, and what reaches the engine is the same to the bit. bank/binding.ts
 //! writes them:
 //!
-//!   values, sources, has zones (0 or 1), zones,
+//!   values, sources, has zones (0 or 1), zones, legato (a setting),
 //!   each source: value, sample (0 or 1), smoothing ms (0 for none), then its shaping,
 //!   each zone: sample value, root, low key, high key, low velocity, high velocity, start, end,
 //!              trim start, trim end, tune, level, key tracking (each setting below but the velocities),
@@ -150,17 +152,32 @@ fn round_like_js(value: f64) -> f64 {
 }
 
 /// What a track binds: its plan's sources and zones, and the values they read.
-// `#[derive(Default)]` writes a `Binding::default()` with every field empty: no sources, no zones.
-#[derive(Default)]
 pub struct Binding {
     pub sources: Vec<Source>,
     /// None without zones: every note plays. With them, a note no zone fits doesn't sound.
     pub zones: Option<Vec<Zone>>,
     /// Each value's raw value now.
     pub values: Vec<f64>,
+    /// Whether a note moves the sounding voice rather than starting another, read as it starts.
+    pub legato: Setting,
+}
+
+// The binding before a plan binds: no legato. `impl Default` writes by hand what `#[derive(Default)]`
+// would, since a Setting has no default of its own.
+impl Default for Binding {
+    // TS: { sources: [], zones: undefined, values: [], legato: 0 }
+    fn default() -> Self {
+        Binding { sources: Vec::new(), zones: None, values: Vec::new(), legato: Setting::Fixed(0.0) }
+    }
 }
 
 impl Binding {
+    /// Whether notes play legato now.
+    // TS: return zoneValue(this.legato, this.values) >= 0.5;
+    pub fn legato(&self) -> bool {
+        self.legato.read(&self.values) >= 0.5
+    }
+
     /// How `note` starts, or None if the plan has zones and none fits it. A zone's settings are read
     /// now: its tune and key tracking set the frequency, its level scales the velocity, and its trims,
     /// in milliseconds, move the start and end by the sample's length.
@@ -226,16 +243,18 @@ impl Binding {
         // TS:
         //   const sources = Array.from({ length: sourceCount }, () => reader.source());
         //   const zones = Array.from({ length: zoneCount }, () => reader.zone());
+        //   const legato = reader.setting();
         //   const values = Array.from({ length: reader.values }, () => reader.word());
         //   const from = Array.from({ length: reader.values }, () => reader.word());
         //   (each giving up with undefined if any read fails)
         let sources = (0..source_count).map(|_| reader.source()).collect::<Option<Vec<_>>>()?;
         let zones = (0..zone_count).map(|_| reader.zone()).collect::<Option<Vec<_>>>()?;
+        let legato = reader.setting()?;
         let values = (0..reader.values).map(|_| reader.word()).collect::<Option<Vec<_>>>()?;
         let from = (0..reader.values).map(|_| reader.word()).collect::<Option<Vec<_>>>()?;
         // TS: return reader.at === words.length ? [{ sources, zones: hasZones ? zones : undefined, values }, from] : undefined;
         // Words left over mean they weren't written for this reader. `cond.then_some(x)` is `cond ? x : undefined`.
-        (reader.at == words.len()).then_some((Binding { sources, zones: has_zones.then_some(zones), values }, from))
+        (reader.at == words.len()).then_some((Binding { sources, zones: has_zones.then_some(zones), values, legato }, from))
     }
 }
 

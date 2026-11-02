@@ -11,12 +11,16 @@
 //!   a sample param's slot).
 //!
 //! Nothing here allocates once bound: notes and values only index arrays bind made.
+//!
+//! Rust notes, for reading this file:
+//! - `cond.then(|| x)` is `cond ? x : undefined`, run only if `cond`; `.flatten()` turns the Option of
+//!   an Option that makes into one.
 
 use super::binding::Binding;
 use crate::midi::{Chain, Event};
 use super::sampler::Sample;
 use super::track::Track;
-use super::voices::VoiceAllocator;
+use super::voices::{LegatoOff, VoiceAllocator};
 use crate::plan::{SIGNAL_END, SIGNAL_ROOT, SIGNAL_SAMPLE, SIGNAL_START};
 
 impl Track {
@@ -101,6 +105,16 @@ impl Track {
             return;
         }
         let Some(start) = self.binding.start(note, velocity, samples) else { return };
+        // TS:
+        //   const legato = this.binding.legato();
+        //   const moved = legato ? this.voices.legatoOn(note, velocity) : undefined;
+        //   if (moved !== undefined) return this.retune(moved, offset, start.frequency, note);
+        // Legato with a key down moves that voice, keeping its zone: no new voice, no new gate.
+        let legato = self.binding.legato();
+        if let Some(slot) = legato.then(|| self.voices.legato_on(note, velocity as f32)).flatten() {
+            self.retune(slot, offset, start.frequency, note as f32);
+            return;
+        }
         let time = self.clock + u64::try_from(offset).unwrap_or(0);
         // TS: const slot = this.voices.noteOn(note, velocity, time, (slot) => this.graph?.voices[slot]?.active ?? false);
         // `graph` borrows one field while `voices`, another, is changed: Rust allows that.
@@ -123,6 +137,10 @@ impl Track {
             self.set_voice_signal(slot, SIGNAL_START, start);
             self.set_voice_signal(slot, SIGNAL_END, end);
         }
+        // TS: if (legato) this.voices.legatoStarted(note, velocity);
+        if legato {
+            self.voices.legato_started(note, velocity as f32);
+        }
     }
 
     /// Release `note`, `offset` samples into the coming block, if it's held.
@@ -137,6 +155,26 @@ impl Track {
     /// Release a note's voice: what `key_off` does with no MIDI devices, and what they let go of.
     // TS: const slot = voices.noteOff(note, time); if (slot >= 0) eng_note_off(track, slot, offset);
     pub(super) fn play_off(&mut self, offset: i32, note: i32) {
+        // TS:
+        //   if (this.binding.legato()) {
+        //     const off = this.voices.legatoOff(note);
+        //     if (off.kind === "kept") return;
+        //     if (off.kind === "back") { const start = this.binding.start(off.note, off.velocity, []); if (start) return this.retune(off.slot, offset, start.frequency, off.note); }
+        //   }
+        // Legato: letting go of the sounding key moves its voice back to the key before, if one's still
+        // down. Only the frequency is wanted, so no samples are passed: they only move a zone's trims.
+        if self.binding.legato() {
+            match self.voices.legato_off(note) {
+                LegatoOff::Kept => return,
+                LegatoOff::Back { slot, note: back, velocity } => {
+                    if let Some(start) = self.binding.start(back, f64::from(velocity), &[]) {
+                        self.retune(slot, offset, start.frequency, back as f32);
+                        return;
+                    }
+                }
+                LegatoOff::Release => {}
+            }
+        }
         // `if let Some(slot) = ...` runs the block only when note_off found a slot.
         let time = self.clock + u64::try_from(offset).unwrap_or(0);
         if let Some(slot) = self.voices.note_off(note, time) {

@@ -9,14 +9,23 @@
 //! - **A cut voice fades out over a block** while the new note starts in a spare slot, on time and
 //!   without a click. Only if every slot is still fading does a note take one over at once.
 //!
+//! - **Legato** (INST-32): while a key is down, another doesn't start a voice: the sounding one moves
+//!   to the new note, its envelopes carrying on (a `glide` block on its frequency slides there). The
+//!   keys down are kept in order, so letting go of the newest moves back to the one before; letting
+//!   go of the last releases the voice.
+//!
 //! Its arrays are made when a plan binds, so nothing here allocates while rendering. Times are samples
-//! since the track started, which only ever count up. Mono, legato, glide, unison and the sustain
-//! pedal (INST-32) come later.
+//! since the track started, which only ever count up. Mono, unison and the sustain pedal (INST-32)
+//! come later.
 //!
 //! Rust notes, for reading this file:
 //! - `impl Fn(usize) -> bool` is a function argument: here, the engine answering "is this slot still
 //!   sounding?" without the allocator needing the engine itself.
 //! - `Option::is_none_or(f)` is `value === undefined || f(value)`.
+//! - An enum's cases can carry named fields (`LegatoOff::Back { slot, note, velocity }`), like a TS
+//!   union's members; `#[derive(Debug, PartialEq)]` lets tests print and compare them.
+//! - `let &(note, _) = keys.last()?;` takes the pair the last item's loan points at apart, or returns
+//!   None if there's no last item.
 
 pub struct VoiceAllocator {
     /// The most that play at once.
@@ -29,6 +38,23 @@ pub struct VoiceAllocator {
     cutting: Vec<bool>,
     started_at: Vec<u64>,
     released_at: Vec<u64>,
+    /// The keys down under the legato voice, oldest first: the last is the one sounding.
+    keys: Vec<(i32, f32)>,
+}
+
+/// The most keys legato remembers down at once: one for every MIDI note.
+const MAX_KEYS: usize = 128;
+
+/// What letting go of a key does to a legato voice.
+// TS: type LegatoOff = { kind: "release" } | { kind: "back"; slot; note; velocity } | { kind: "none" }
+#[derive(Debug, PartialEq)]
+pub enum LegatoOff {
+    /// It was the only key down: release the voice as usual.
+    Release,
+    /// It was sounding, and another is still down: move the voice in `slot` back to that note.
+    Back { slot: usize, note: i32, velocity: f32 },
+    /// It wasn't sounding: nothing to do.
+    Kept,
 }
 
 impl VoiceAllocator {
@@ -44,6 +70,8 @@ impl VoiceAllocator {
             cutting: vec![false; slots],
             started_at: vec![0; slots],
             released_at: vec![0; slots],
+            // TS: [] with room for MAX_KEYS, so pushing never allocates while rendering.
+            keys: Vec::with_capacity(MAX_KEYS),
         }
     }
 
@@ -86,10 +114,75 @@ impl VoiceAllocator {
     }
 
     /// Let go of a slot's key (all notes off).
-    // TS: held[slot] = false; releasedAt[slot] = time;
+    // TS: held[slot] = false; releasedAt[slot] = time; keys.length = 0;
     pub fn release_slot(&mut self, slot: usize, time: u64) {
         self.held[slot] = false;
         self.released_at[slot] = time;
+        self.keys.clear();
+    }
+
+    /// Legato: move the voice sounding the newest key down to `note`, and give its slot. None when no
+    /// key is down, and the note starts a voice as usual (then `legato_started`).
+    // TS:
+    //   const sounding = keys.at(-1); if (!sounding) return undefined;
+    //   const slot = slots.find((slot) => held[slot] && notes[slot] === sounding[0]); if (slot === undefined) return undefined;
+    //   this.forget(note); keys.push([note, velocity]); notes[slot] = note; velocities[slot] = velocity; return slot;
+    pub fn legato_on(&mut self, note: i32, velocity: f32) -> Option<usize> {
+        let &(sounding, _) = self.keys.last()?;
+        let slot = (0..self.slots()).find(|&slot| self.held[slot] && self.notes[slot] == Some(sounding))?;
+        self.forget(note);
+        self.push_key(note, velocity);
+        self.notes[slot] = Some(note);
+        self.velocities[slot] = velocity;
+        Some(slot)
+    }
+
+    /// Legato: a note just started a voice, so it's the only key down.
+    // TS: keys.length = 0; keys.push([note, velocity]);
+    pub fn legato_started(&mut self, note: i32, velocity: f32) {
+        self.keys.clear();
+        self.push_key(note, velocity);
+    }
+
+    /// Legato: let go of `note`, and say what that does to the voice.
+    // TS:
+    //   const at = keys.findIndex(([key]) => key === note); if (at === -1) return { kind: "release" };
+    //   const sounding = at === keys.length - 1; keys.splice(at, 1);
+    //   if (!sounding) return { kind: "kept" };
+    //   const back = keys.at(-1); if (!back) return { kind: "release" };
+    //   const slot = slots.find((slot) => held[slot] && notes[slot] === note); if (slot === undefined) return { kind: "release" };
+    //   notes[slot] = back[0]; velocities[slot] = back[1]; return { kind: "back", slot, note: back[0], velocity: back[1] };
+    pub fn legato_off(&mut self, note: i32) -> LegatoOff {
+        let Some(at) = self.keys.iter().position(|&(key, _)| key == note) else { return LegatoOff::Release };
+        let sounding = at == self.keys.len() - 1;
+        self.keys.remove(at);
+        if !sounding {
+            return LegatoOff::Kept;
+        }
+        let Some(&(back, velocity)) = self.keys.last() else { return LegatoOff::Release };
+        let Some(slot) = (0..self.slots()).find(|&slot| self.held[slot] && self.notes[slot] == Some(note)) else {
+            return LegatoOff::Release;
+        };
+        self.notes[slot] = Some(back);
+        self.velocities[slot] = velocity;
+        LegatoOff::Back { slot, note: back, velocity }
+    }
+
+    /// Take `note` out of the keys down, if it's there (a key struck again moves to the end).
+    // TS: const at = keys.findIndex(([key]) => key === note); if (at !== -1) keys.splice(at, 1);
+    fn forget(&mut self, note: i32) {
+        if let Some(at) = self.keys.iter().position(|&(key, _)| key == note) {
+            self.keys.remove(at);
+        }
+    }
+
+    /// Put a key down last, dropping the oldest if there's no room (so it never allocates).
+    // TS: if (keys.length === MAX_KEYS) keys.shift(); keys.push([note, velocity]);
+    fn push_key(&mut self, note: i32, velocity: f32) {
+        if self.keys.len() == MAX_KEYS {
+            self.keys.remove(0);
+        }
+        self.keys.push((note, velocity));
     }
 
     /// Whether a slot's key is down.

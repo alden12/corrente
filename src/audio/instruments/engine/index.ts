@@ -4,6 +4,7 @@ import { drumkit } from "./drumkit";
 import { fm } from "./fm";
 import { mellotronFlute } from "./mellotronFlute";
 import { microVa } from "./microVa";
+import { pretendLead } from "./pretendLead";
 import { organ } from "./organ";
 import { sampler } from "./sampler";
 import { subtractive } from "./subtractive";
@@ -27,6 +28,7 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   wavetable,
   hybridWave,
   microVa,
+  pretendLead,
   nimbus,
   sampler,
   drumkit,

@@ -572,3 +572,69 @@ describe("the engine's effects: the built-ins written for it, and the test devic
     expect(Math.abs(loudest - RATE / 2)).toBeLessThan(4);
   });
 });
+
+describe("legato and glide (INST-32)", () => {
+  /** Each voice plays its glided frequency, in kHz, while its key is down. */
+  const pitched = (legato: DeviceDefinition["legato"], glide = 0): DeviceDefinition => ({
+    format: 1,
+    voices: 4,
+    legato,
+    nodes: {
+      pitch: {
+        block: "glide",
+        voice: true,
+        inputs: { frequency: "voice.frequency", gate: "voice.gate", time: glide },
+      },
+      vca: { block: "mul", voice: true, inputs: { a: { from: "pitch", scale: 0.001 }, b: "voice.gate" } },
+    },
+    voice: "vca",
+  });
+  const kHz = (note: number) => (440 * 2 ** ((note - 69) / 12)) / 1000;
+  const SWITCH = [{ id: "legato", label: "Legato", kind: "boolean" as const, default: true }];
+
+  /** Middle C, then the C above over it from 200, let go at 400, then middle C let go at 600. */
+  const played = (definition: DeviceDefinition, values: Record<string, number> = {}) => {
+    const bank = new EngineBank(wasm, RATE, 1);
+    bank.load(0, compileDefinition(definition, { params: SWITCH }), values);
+    bank.noteOn(0, 60, 1, 0);
+    bank.noteOn(0, 72, 1, 200 * SAMPLE);
+    bank.noteOff(0, 72, 400 * SAMPLE);
+    bank.noteOff(0, 60, 600 * SAMPLE);
+    const sound = Array.from({ length: 6 }, (_, block) => {
+      bank.process((block * BLOCK) / RATE);
+      return Array.from(bank.output(0, 0));
+    }).flat();
+    return { sound, bank };
+  };
+
+  it("moves the sounding voice to a note played over it, and back to the key still down", () => {
+    const { sound } = played(pitched(true));
+    expect(sound[100]).toBeCloseTo(kHz(60), 4);
+    // One voice, now on the C above: not the two a new voice would sum.
+    expect(sound[300]).toBeCloseTo(kHz(72), 4);
+    expect(sound[500]).toBeCloseTo(kHz(60), 4);
+    expect(sound.slice(600).every((sample) => sample === 0)).toBe(true);
+  });
+
+  it("starts a voice for each note without it", () => {
+    const { sound } = played(pitched(false));
+    expect(sound[300]).toBeCloseTo(kHz(60) + kHz(72), 4);
+  });
+
+  it("follows its switch", () => {
+    expect(played(pitched({ param: "legato" }), { legato: 1 }).sound[300]).toBeCloseTo(kHz(72), 4);
+    expect(played(pitched({ param: "legato" }), { legato: 0 }).sound[300]).toBeCloseTo(kHz(60) + kHz(72), 4);
+  });
+
+  it("glides between legato notes, and starts each new note on its pitch", () => {
+    const time = 0.002;
+    const { sound } = played(pitched(true, time));
+    // On pitch from its first sample, though the voice started at 0 Hz.
+    expect(sound[1]).toBeCloseTo(kHz(60), 4);
+    // Sliding up: past halfway in octaves once the glide's time has passed, and most of the way after.
+    expect(sound[201]).toBeLessThan(kHz(61));
+    expect(sound[200 + Math.round(time * RATE)]).toBeGreaterThan(kHz(66));
+    expect(sound[399]).toBeGreaterThan(kHz(70));
+    expect(sound[399]).toBeLessThan(kHz(72));
+  });
+});

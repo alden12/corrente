@@ -26,7 +26,9 @@
 // 7: each person's preview as a track of the project (COMM-1.4.5), `setPreview` and `removePreview`,
 // and the document's `previews`. An older client can't apply them, but only meets them in a project
 // where someone tries a sound from Explore.
-export const PROTOCOL_VERSION = 7;
+// 8: a device definition's `legato` and the `glide` block (INST-32), in `addCustomInstrument` and
+// `updateCustomInstrument`. An older side refuses such a definition, but only meets one where someone makes it.
+export const PROTOCOL_VERSION = 8;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

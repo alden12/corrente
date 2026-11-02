@@ -2,7 +2,7 @@
 //! note on until `finish`es it. Playing through the bank, zones and shaping included, is tested from
 //! TypeScript (test/engineBank.test.ts), against engine.wasm.
 
-use crate::router::VoiceAllocator;
+use crate::router::{LegatoOff, VoiceAllocator};
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -86,4 +86,45 @@ fn keeps_the_held_notes_with_their_velocities() {
     allocator.allocated.note_on(64, 0.25, 1, |_| false);
     allocator.allocated.note_off(60, 2);
     assert_eq!(allocator.allocated.held_notes(), vec![(64, 0.25)]);
+}
+
+/// Legato: a note with a key down moves its voice; letting go walks back through the keys still down.
+#[test]
+fn legato_moves_the_sounding_voice_and_lets_go_back_to_the_key_before() {
+    let mut allocator = Allocator::new(4, 4);
+    // TS: no key down yet, so the first note starts a voice.
+    assert_eq!(allocator.allocated.legato_on(60, 1.0), None);
+    let (slot, _) = allocator.play(60, 0);
+    allocator.allocated.legato_started(60, 1.0);
+    // Each next key moves the same voice.
+    assert_eq!(allocator.allocated.legato_on(64, 0.5), Some(slot));
+    assert_eq!(allocator.allocated.legato_on(67, 0.7), Some(slot));
+    // Letting go of a key that isn't sounding changes nothing; the sounding one goes back a key.
+    assert_eq!(allocator.allocated.legato_off(64), LegatoOff::Kept);
+    assert_eq!(allocator.allocated.legato_off(67), LegatoOff::Back { slot, note: 60, velocity: 1.0 });
+    // The last key releases the voice as usual, by its note now.
+    assert_eq!(allocator.allocated.legato_off(60), LegatoOff::Release);
+    assert_eq!(allocator.allocated.note_off(60, 1), Some(slot));
+    // With every key up, the next note starts a voice again.
+    assert_eq!(allocator.allocated.legato_on(62, 1.0), None);
+}
+
+#[test]
+fn legato_moves_a_key_struck_again_to_the_end() {
+    let mut allocator = Allocator::new(2, 2);
+    let (slot, _) = allocator.play(60, 0);
+    allocator.allocated.legato_started(60, 1.0);
+    allocator.allocated.legato_on(62, 1.0);
+    assert_eq!(allocator.allocated.legato_on(60, 1.0), Some(slot));
+    assert_eq!(allocator.allocated.legato_off(60), LegatoOff::Back { slot, note: 62, velocity: 1.0 });
+}
+
+#[test]
+fn legato_forgets_the_keys_when_every_note_lets_go() {
+    let mut allocator = Allocator::new(2, 2);
+    let (slot, _) = allocator.play(60, 0);
+    allocator.allocated.legato_started(60, 1.0);
+    allocator.allocated.legato_on(62, 1.0);
+    allocator.allocated.release_slot(slot, 1);
+    assert_eq!(allocator.allocated.legato_on(64, 1.0), None);
 }

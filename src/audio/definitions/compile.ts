@@ -75,6 +75,8 @@ export interface CompiledPlan {
   /** Sample zones, in order: a note takes the first that fits. Absent without zones. */
   zones?: PlanZone[];
   voices: number;
+  /** Legato (INST-32): 1 or 0, or the param that switches it, read as each note starts. */
+  legato: ZoneValue;
   /** How many samples late its output is (the definition's `latency`), for the mixer to make up. */
   latency: number;
   /** What it costs to run, as shares of a phone's audio thread (cost.ts). */
@@ -206,6 +208,9 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
   // A zone's params are the bank's to read, so they're params of the plan though no node reads them:
   // that is what has the device send their values.
   zones?.forEach((zone) => [{ param: zone.param }, ...zoneBindings(zone)].forEach((binding) => paramIndex(binding)));
+  // Legato's switch too, for the same reason.
+  const legato = typeof definition.legato === "object" ? definition.legato : Number(definition.legato ?? false);
+  if (typeof legato === "object") paramIndex(legato);
   // Params are numbered as the words are written, so the header, which counts them, goes on last.
   const words = Int32Array.from([params.length, resolved.voices, ...body]);
   return {
@@ -217,6 +222,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
         }
       : {}),
     voices: resolved.voices,
+    legato,
     latency: definition.latency ?? 0,
     cost,
     nodes: Object.fromEntries(

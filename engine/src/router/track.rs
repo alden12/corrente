@@ -259,6 +259,16 @@ impl Track {
         voice.fill_signal(SIGNAL_GATE, offset, 1.0);
     }
 
+    /// Move a sounding voice to a new note, `offset` samples into the coming block, without starting
+    /// it again: legato (INST-32). Its gate stays up and its blocks keep their state, so envelopes
+    /// carry on and a `glide` on its frequency slides there.
+    // TS: const voice = this.voiceMut(slot); if (!voice?.active || voice.released) return; voice.fillSignal(SIGNAL_FREQ, offset, frequency); voice.fillSignal(SIGNAL_NOTE, offset, note);
+    pub fn retune(&mut self, slot: usize, offset: i32, frequency: f32, note: f32) {
+        let Some(voice) = self.voice_mut(slot).filter(|voice| voice.active && !voice.released) else { return };
+        voice.fill_signal(SIGNAL_FREQ, offset, frequency);
+        voice.fill_signal(SIGNAL_NOTE, offset, note);
+    }
+
     /// The next seed, from 0 to 1 (xorshift: three shifts and exclusive-ors, fast and plenty random
     /// for drift and variation).
     // TS:

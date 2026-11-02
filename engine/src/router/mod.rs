@@ -68,7 +68,7 @@ pub(crate) use binding::Shaping;
 #[cfg(test)]
 pub use wavetable::{CYCLE, LEVELS};
 #[cfg(test)]
-pub use voices::VoiceAllocator;
+pub use voices::{LegatoOff, VoiceAllocator};
 
 use crate::plan::{CHANNELS, VOICE_SIGNALS};
 

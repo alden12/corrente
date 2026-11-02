@@ -81,7 +81,7 @@ export const EXAMPLE: DeviceDefinition = {
 
 export const definitionFormatDoc = () => ({
   overview:
-    `A device is { format: ${DEFINITION_FORMAT}, voices?, latency?, nodes, voice?, output? }. Each node is a block ` +
+    `A device is { format: ${DEFINITION_FORMAT}, voices?, legato?, latency?, nodes, voice?, output? }. Each node is a block ` +
     "from `blocks` below, wired by name. A node with `voice: true` runs once per sounding voice; the others " +
     "run once for the track, before the voices if they don't hear them (an LFO every voice shares), after if " +
     "they do (effects on the voices summed). `voice` names what each voice plays (one output, or [left, right]); " +
@@ -98,6 +98,12 @@ export const definitionFormatDoc = () => ({
     'voice.end: wire those to a sampler. A drum kit is a zone per pad, root on its own key: { "sample": { "param": ' +
     '"kick" }, "root": 36, "keys": [36, 36] }.',
   voices: `Up to ${MAX_VOICES}; ${DEFAULT_VOICES} if a device with voice nodes doesn't say. Past them, the voice released longest ago fades out for a new note.`,
+  legato:
+    "legato?: true, or { param } of a switch: a note played while a key is down moves the sounding voice to it " +
+    "instead of starting another, so its envelopes carry on; letting go of it goes back to the key still down. " +
+    'For a gliding mono lead, put a `glide` block on the voice\'s frequency ({ "frequency": "voice.frequency", ' +
+    '"gate": "voice.gate", "time": { "param": "glide", "scale": 0.001 } }) and feed the oscillators from it: it ' +
+    "slides between legato notes and starts each new one on pitch.",
   inputs: {
     number: "A literal, checked against the input's range.",
     param:

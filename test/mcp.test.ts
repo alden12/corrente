@@ -329,6 +329,7 @@ describe("MCP server (tracks)", () => {
       "pad",
       "pluck",
       "pluck-bass",
+      "pretend-lead",
       "sampler",
       "subtractive",
       "supersaw",

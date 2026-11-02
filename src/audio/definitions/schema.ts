@@ -222,6 +222,8 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
     problem(["nodes"], `${param} feeds both a sample and a wavetable; give each its own param`),
   );
 
+  if (typeof definition.legato === "object") checkParam(definition.legato, ["legato"]);
+
   definition.zones?.forEach((zone, index) => {
     checkSampleParam(zone.sample, ["zones", index, "sample"]);
     // Settings read from params, which must be the device's and read as numbers.
