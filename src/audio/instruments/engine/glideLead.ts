@@ -1,14 +1,14 @@
 /**
- * Pretend Lead: a bright, gliding mono lead, after the synth line of MGMT's "Time to Pretend". Built
- * over MCP and promoted (INST-32): a saw, a pulse and a saw an octave up through a ladder low-pass with
+ * Glide Lead: a bright, gliding mono lead, first made over MCP after the synth line of MGMT's "Time to
+ * Pretend", and promoted (INST-32): a saw, a pulse and a saw an octave up through a ladder low-pass with
  * a short envelope and key tracking, vibrato, then drive, chorus and a little reverb. Legato by
  * default, so a note played over another slides there (Glide) without starting its envelopes again.
  */
 import type { EngineBuiltin } from "../../definitions/builtin";
 
-export const pretendLead: EngineBuiltin = {
-  type: "pretend-lead",
-  label: "Pretend Lead",
+export const glideLead: EngineBuiltin = {
+  type: "glide-lead",
+  label: "Glide Lead",
   family: "Synths",
   tags: ["lead", "bright", "retro"],
   color: "amber",
