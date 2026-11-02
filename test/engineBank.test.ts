@@ -638,3 +638,52 @@ describe("legato and glide (INST-32)", () => {
     expect(sound[399]).toBeLessThan(kHz(72));
   });
 });
+
+describe("the blocks from the Micro VA build (INST-45)", () => {
+  /** A note held for `blocks` blocks through a voice playing `out`, the left channel. */
+  const voiced = (nodes: DeviceDefinition["nodes"], out: string, blocks = 8) => {
+    const bank = new EngineBank(wasm, RATE, 1);
+    bank.load(0, compileDefinition({ format: 1, voices: 1, nodes, voice: out }));
+    bank.noteOn(0, 60, 1, 0);
+    return Array.from({ length: blocks }, (_, block) => {
+      bank.process((block * BLOCK) / RATE);
+      return Array.from(bank.output(0, 0));
+    }).flat();
+  };
+  /** What a block makes of constant inputs, as a held note's voice plays it. */
+  const of = (block: string, inputs: Record<string, number>) =>
+    voiced({ maths: { block, voice: true, inputs } }, "maths", 1)[64];
+
+  it("hard syncs a sawtooth to a master: it repeats at the master's period, whatever its own frequency", () => {
+    const master = 100;
+    const period = RATE / master;
+    const sound = voiced(
+      {
+        master: { block: "sine", voice: true, inputs: { frequency: master } },
+        slave: { block: "syncsaw", voice: true, inputs: { frequency: 370, sync: "master" } },
+      },
+      "slave",
+      Math.ceil((4 * period) / BLOCK),
+    );
+    const steady = sound.slice(period, 2 * period);
+    steady.forEach((sample, index) => expect(sample).toBeCloseTo(sound[2 * period + index], 3));
+    // Unsynced it would repeat at its own period instead, which doesn't divide the master's.
+    expect(Math.max(...steady)).toBeGreaterThan(0.5);
+  });
+
+  it("selects among eight", () => {
+    const inputs = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8 };
+    expect(of("select", { index: 5, ...inputs })).toBeCloseTo(6, 6);
+    expect(of("select", { index: 7, ...inputs })).toBeCloseTo(8, 6);
+  });
+
+  it("does control maths", () => {
+    expect(of("abs", { signal: -0.25 })).toBeCloseTo(0.25, 6);
+    expect(of("min", { a: 0.25, b: 0.5 })).toBeCloseTo(0.25, 6);
+    expect(of("max", { a: 0.25, b: 0.5 })).toBeCloseTo(0.5, 6);
+    expect(of("clip", { signal: 0.9, low: -0.5, high: 0.5 })).toBeCloseTo(0.5, 6);
+    expect(of("clip", { signal: -0.9, low: -0.5, high: 0.5 })).toBeCloseTo(-0.5, 6);
+    expect(of("compare", { a: 0.6, b: 0.5 })).toBe(1);
+    expect(of("compare", { a: 0.4, b: 0.5 })).toBe(0);
+  });
+});

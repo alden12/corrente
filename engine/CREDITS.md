@@ -123,6 +123,10 @@ blocks, not this file. The blocks are compiled from the Faust libraries
 - `filters.lib/svf`, by Oleg Nesterov, Copyright (C) 2020 Oleg Nesterov <oleg@redhat.com>, under LicenseRef-STK-4.3
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
 
+### syncsaw
+
+- `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception
+
 ### triangle
 
 - `maths.lib`, by GRAME, (c) GRAME, under LicenseRef-LGPL-2.1-or-later-with-Faust-exception

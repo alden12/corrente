@@ -30,7 +30,10 @@
 // `updateCustomInstrument`. An older side refuses such a definition, but only meets one where someone makes it.
 // 9: the MIDI devices' `slide` node and the Glissando device (INST-32). An older side refuses a custom
 // MIDI device using `slide`, and plays no Glissando, but only meets them where someone adds one.
-export const PROTOCOL_VERSION = 9;
+// 10: the blocks from the Micro VA build (INST-45): syncsaw, abs, min, max, clip, compare, select's
+// eight inputs and inputs a block lets go unwired. An older side refuses a device using them, but only
+// meets one where someone makes it.
+export const PROTOCOL_VERSION = 10;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

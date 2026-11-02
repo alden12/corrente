@@ -139,9 +139,24 @@ describe("building the catalogue", () => {
       "bare: it declares no description",
       "bare: it declares no input_ports",
       "bare: it declares no output_ports",
-      'miscounted: output_ports: "c 1 0" is not "name min max [unit]"',
+      'miscounted: output_ports: "c 1 0" is not "name min max [unit] [=default]"',
       "miscounted: it declares 2 input ports but has 1 inputs",
     ]);
+  });
+
+  it("reads an input's default, what it takes unwired, and refuses one outside its range", () => {
+    const defaulted = block(
+      "defaulted",
+      { description: "x", input_ports: "a 0 1, b -1 1 =0.5", output_ports: "c 0 1" },
+      { inputs: 2 },
+    );
+    const [built] = buildCatalogue([defaulted]).blocks;
+    expect(built.inputs).toEqual([
+      { name: "a", min: 0, max: 1 },
+      { name: "b", min: -1, max: 1, init: 0.5 },
+    ]);
+    const outside = block("outside", { description: "x", input_ports: "a 0 1 =2", output_ports: "c 0 1" });
+    expect(problemsOf([outside])).toEqual(['outside: input_ports: "a 0 1 =2" is not "name min max [unit] [=default]"']);
   });
 });
 

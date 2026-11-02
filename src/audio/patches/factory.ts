@@ -58,6 +58,7 @@ const kitPads = (kit: BuiltinKit): Patch["params"] =>
   );
 const microVa = builtinFor("micro-va");
 const glideLead = builtinFor("glide-lead");
+const gatePad = builtinFor("gate-pad");
 const hybridWave = builtinFor("hybrid-wave");
 
 // Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
@@ -189,6 +190,14 @@ export const FACTORY_PATCHES: Patch[] = [
     },
     [chorusII],
   ),
+  // Gate Pad opened right up, an octave below under it, through a delay and a reverb (Alden's).
+  {
+    ...gatePad("Big Gate Pad", ["pad", "rhythm", "bright"], { "f.cutoff": 8000, "bounce.depth": 27.3 }, [
+      { type: "delay", params: { "delay.time": 0.404, "delay.feedback": 0.35, mix: 0.203 } },
+      { type: "reverb", params: { "reverb.decay": 2, mix: 0.3 } },
+    ]),
+    midiDevices: [{ type: "octavator", params: { octaveUp: false, octaveDown: true, level: 0.461 } }],
+  },
   // --- Keys -----------------------------------------------------------------
   nimbus(
     "Electric Piano",

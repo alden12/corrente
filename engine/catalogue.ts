@@ -7,7 +7,7 @@
  * What a block declares in its source, besides its sliders and bargraphs:
  *
  *   declare description "A band-limited sawtooth.";
- *   declare input_ports "frequency 0 24000 Hz";          (name min max [unit], comma-separated)
+ *   declare input_ports "frequency 0 24000 Hz";          (name min max [unit] [=default], comma-separated)
  *   declare output_ports "signal -1 1";
  *
  * The ranges are real ones: the block tests drive every input across its range and check every
@@ -43,6 +43,8 @@ export interface Port {
   min: number;
   max: number;
   unit?: string;
+  /** What an input left unwired reads: a control's starting value, or an audio input's `=default`. */
+  init?: number;
 }
 
 /** A control input (a Faust slider): a port with a starting value. */
@@ -222,18 +224,24 @@ const CREDIT_FIELDS = { author: "author", copyright: "copyright", license: "lice
 /** The block's own declarations and Faust's notes on the libraries it used, as one lookup. */
 const metaOf = (json: FaustJson) => Object.assign({}, ...json.meta) as Record<string, string>;
 
-/** "frequency 0 24000 Hz, offset 0 100 samples" into ports, or a problem. */
+/**
+ * "frequency 0 24000 Hz, offset 0 100 samples, e -1 1 =0" into ports, or a problem. A trailing `=n`
+ * is what the input reads when it's left unwired; without one, it must be wired.
+ */
 const parsePorts = (text: string): Port[] | string =>
   text.trim() === ""
     ? []
     : text.split(",").reduce<Port[] | string>((ports, entry) => {
         if (typeof ports === "string") return ports;
-        const [name, min, max, unit, ...rest] = entry.trim().split(/\s+/);
-        const [low, high] = [Number(min), Number(max)];
-        if (!name || !Number.isFinite(low) || !Number.isFinite(high) || low > high || rest.length > 0) {
-          return `"${entry.trim()}" is not "name min max [unit]"`;
+        const words = entry.trim().split(/\s+/);
+        const defaulted = words.at(-1)?.startsWith("=") ? words.pop()!.slice(1) : undefined;
+        const [name, min, max, unit, ...rest] = words;
+        const [low, high, init] = [Number(min), Number(max), Number(defaulted)];
+        const badDefault = defaulted !== undefined && !(Number.isFinite(init) && init >= low && init <= high);
+        if (!name || !Number.isFinite(low) || !Number.isFinite(high) || low > high || rest.length > 0 || badDefault) {
+          return `"${entry.trim()}" is not "name min max [unit] [=default]"`;
         }
-        return [...ports, { name, min: low, max: high, ...(unit ? { unit } : {}) }];
+        return [...ports, { name, min: low, max: high, ...(unit ? { unit } : {}), ...(defaulted ? { init } : {}) }];
       }, []);
 
 /** The UI items in the order the block describes them, groups flattened. */

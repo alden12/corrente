@@ -92,7 +92,8 @@ const inputsOf = (block: BlockSpec) => {
     return portInput(port, required);
   };
   return Object.fromEntries([
-    ...block.inputs.map((port) => [port.name, schemaOf(port, true)]),
+    // An audio input with a default may be left out, as a control may.
+    ...block.inputs.map((port) => [port.name, schemaOf(port, port.init === undefined)]),
     ...block.controls.map((port) => [port.name, schemaOf(port, false)]),
   ]);
 };
