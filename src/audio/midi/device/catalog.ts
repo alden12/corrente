@@ -62,7 +62,7 @@ export const GLISSANDO_SPEEDS = ["1/16", "1/32", "1/64", "1/128"];
 export const glissandoSchema: ParamSchema = [
   { id: "speed", label: "Speed", kind: "enum", options: GLISSANDO_SPEEDS, default: "1/64" },
   { id: "scale", label: "Scale", kind: "enum", options: ["chromatic", "in key"], default: "chromatic" },
-  { id: "when", label: "When", kind: "enum", options: ["legato", "always"], default: "legato" },
+  { id: "when", label: "When", kind: "enum", options: ["legato", "always"], default: "always" },
 ] as const;
 
 /** Scale quantiser (DAW-12): every note into the song's key, snapping to its side. */

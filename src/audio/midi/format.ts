@@ -233,7 +233,7 @@ export const NODE_SPECS: readonly NodeSpec[] = [
     fields: [
       { name: "beats", type: "beats", default: "1/64" },
       { name: "scale", type: "choice", options: SLIDE_SCALES, default: "chromatic" },
-      { name: "when", type: "choice", options: SLIDE_WHEN, default: "legato" },
+      { name: "when", type: "choice", options: SLIDE_WHEN, default: "always" },
     ],
     output: "notes",
   },

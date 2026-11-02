@@ -1,8 +1,8 @@
 /**
  * The glissando (INST-32): `slide` turns each note into a run from the note before it, every semitone
  * or every note of the song's key between them, then `delay` spreads the run out, each note one Speed
- * after the last. With When on legato, only notes played over a held key run, so a melody played
- * detached plays as it is.
+ * after the last. Every note runs from the last to start with; with When on legato, only notes played
+ * over a held key do, so a melody played detached plays as it is.
  */
 import { GLISSANDO_SPEEDS } from "../device/catalog";
 import { beatsOf } from "../../definitions/references";

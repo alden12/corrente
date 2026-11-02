@@ -61,11 +61,13 @@ describe("Glissando", () => {
       { scale: "in key" },
     );
     expect(inKey.map(([note]) => note)).toEqual([60, 62, 64, 65, 67]);
-    const detached = played([
+    const detached = [
       [60, 0],
       [-60, 0.05],
       [64, 0.1],
-    ]);
-    expect(detached.map(([note]) => note)).toEqual([60, 64]);
+    ] as [number, number][];
+    expect(played(detached, { when: "legato" }).map(([note]) => note)).toEqual([60, 64]);
+    // Always, to start with, it runs to every note.
+    expect(played(detached).map(([note]) => note)).toEqual([60, 61, 62, 63, 64]);
   });
 });
