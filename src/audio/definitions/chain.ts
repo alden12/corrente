@@ -90,6 +90,10 @@ const renameZone = (zone: Zone, key: string): Zone => {
   return Object.fromEntries(Object.entries(zone).map(([setting, value]) => [setting, renamed(value)])) as Zone;
 };
 
+/** An instrument's legato, its switch (if it has one) named as the chain names its params. */
+const renameLegato = (legato: NonNullable<DeviceDefinition["legato"]>, key: string): DeviceDefinition["legato"] =>
+  typeof legato === "boolean" ? legato : { ...legato, param: chainParam(key, legato.param) };
+
 const renameVoice = (voice: string | [string, string], prefix: string): string | [string, string] => {
   const rename = (reference: string) => (SHARED_SIGNALS.has(reference) ? reference : `${prefix}${reference}`);
   return typeof voice === "string" ? rename(voice) : [rename(voice[0]), rename(voice[1])];
@@ -221,6 +225,9 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
             ? {
                 zones: instrument.definition.zones.map((zone) => renameZone(zone, instrumentKey)),
               }
+            : {}),
+          ...(instrument.definition.legato !== undefined
+            ? { legato: renameLegato(instrument.definition.legato, instrumentKey) }
             : {}),
         }
       : {}),

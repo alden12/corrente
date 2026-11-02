@@ -9,6 +9,8 @@ import { ParamStore } from "../src/audio/params/store";
 import { BYPASS, chainParam, composeChain, type ChainLink } from "../src/audio/definitions/chain";
 import { compileDefinition } from "../src/audio/definitions/compile";
 import { RATE, wasm } from "./support/engine";
+import { glideLead } from "../src/audio/instruments/engine/glideLead";
+import { plainDefinition } from "../src/audio/definitions/stereo";
 
 /**
  * A chain as one plan (INST-36.7): an instrument and the effects after it composed into one
@@ -158,6 +160,20 @@ describe("composeChain", () => {
     const note = { param: chainParam("instrument", "note") };
     expect(composed.definition.zones?.[0]).toMatchObject({ root: note, keys: [note, 40] });
     expect(() => compileDefinition(composed.definition, { params: composed.schema })).not.toThrow();
+  });
+
+  it("carries an instrument's legato, its switch named under the instrument (INST-32)", () => {
+    const lead: ChainLink = {
+      key: "instrument",
+      effect: false,
+      definition: plainDefinition(glideLead.definition),
+      schema: glideLead.schema,
+    };
+    const composed = composeChain([lead, link("engine-echo", "echo")]);
+    expect(composed.definition.legato).toEqual({ param: chainParam("instrument", "legato") });
+    const plan = compileDefinition(composed.definition, { params: composed.schema });
+    expect(plan.legato).toEqual({ param: chainParam("instrument", "legato") });
+    expect(composeChain([{ ...lead, definition: { ...lead.definition, legato: true } }]).definition.legato).toBe(true);
   });
 });
 
