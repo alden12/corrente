@@ -11,6 +11,7 @@ import { subtractive } from "./subtractive";
 import { supersaw } from "./supersaw";
 import { bell } from "./bell";
 import { pad } from "./pad";
+import { gatePad } from "./gatePad";
 import { pluck } from "./pluck";
 import { pluckBass } from "./pluckBass";
 import { nimbus } from "./nimbus";
@@ -33,6 +34,7 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   sampler,
   drumkit,
   pad,
+  gatePad,
   bell,
   pluck,
   pluckBass,
