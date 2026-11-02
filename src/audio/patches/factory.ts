@@ -309,7 +309,8 @@ export const FACTORY_PATCHES: Patch[] = [
     "env.sustain": 0.68,
   }),
   // A late-70s disco synth lead: square-heavy and bright, every note running up or down to it from the
-  // last through the key (the Glissando device, INST-32). Not legato, so each note of a run strikes.
+  // last through the key (the Glissando device, INST-32), an octave below it, a delay and a reverb (tuned
+  // by Alden). Not legato, so each note of a run strikes.
   {
     ...glideLead("Disco Run", ["lead", "bright", "retro"], {
       "o1.level": 0.5,
@@ -326,7 +327,15 @@ export const FACTORY_PATCHES: Patch[] = [
       "fx.chorus": 0.35,
       "fx.reverb": 0.18,
     }),
-    midiDevices: [{ type: "glissando", params: { speed: "1/64", scale: "in key", when: "always" } }],
+    effects: [
+      { type: "delay", params: { "delay.time": 0.404, "delay.feedback": 0.35, mix: 0.203 } },
+      { type: "reverb", params: { "reverb.decay": 2, mix: 0.3 } },
+    ],
+    // An octave below under each note of the run, quieter.
+    midiDevices: [
+      { type: "glissando", params: { speed: "1/64", scale: "in key", when: "always" } },
+      { type: "octavator", params: { octaveUp: false, octaveDown: true, level: 0.461 } },
+    ],
   },
   // --- FX -------------------------------------------------------------------
   nimbus("Noise Sweep", ["fx", "airy"], {
