@@ -70,6 +70,22 @@ function padAtPoint(clientX: number, clientY: number): PadNotes | null {
  */
 export const PAD_VELOCITY = 0.85;
 
+/** One note a pad surface starts or stops. */
+export type PadNoteChange = { on: boolean; pitch: number };
+
+/**
+ * What a finger sliding from one pad to the next plays, in order. The new pad's notes start
+ * **before** the old pad's stop, as a player's fingers overlap on a real keyboard: that overlap
+ * is what a legato instrument hears as one note gliding into the next (MOBILE-37), where a
+ * gap between them would start a fresh note. Notes the two pads share keep sounding, and notes
+ * another finger holds are neither started again nor let go.
+ */
+export function slideChanges(from: PadNotes, to: PadNotes, heldElsewhere: Set<number>): PadNoteChange[] {
+  const starts = to.filter((pitch) => !heldElsewhere.has(pitch) && !from.includes(pitch));
+  const stops = from.filter((pitch) => !heldElsewhere.has(pitch) && !to.includes(pitch));
+  return [...starts.map((pitch) => ({ on: true, pitch })), ...stops.map((pitch) => ({ on: false, pitch }))];
+}
+
 /** A finger currently down on a pad. */
 interface Press {
   /** The pad it is sounding *now*, which a slide moves out from under it. */
@@ -177,10 +193,9 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
   );
 
   /**
-   * Move a sliding finger to the pad it is now over. Its old notes are released unless another
-   * finger is also holding them - a two-handed glissando crosses, and the crossing must not
-   * silence the note the other hand is still holding - and a note the two pads share keeps
-   * sounding rather than restarting.
+   * Move a sliding finger to the pad it is now over (`slideChanges` says what that plays). Its
+   * old notes are released unless another finger is also holding them - a two-handed glissando
+   * crosses, and the crossing must not silence the note the other hand is still holding.
    */
   const slideTo = useCallback(
     (event: ReactPointerEvent, press: Press) => {
@@ -188,13 +203,13 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
       // No pad under the finger: hold the note rather than cutting out. Sliding through the
       // gap above an accidental is a slide, not a lift.
       if (pitches === null || padKey(pitches) === padKey(press.pitches)) return;
-      const heldElsewhere = heldNotes(event.pointerId);
-      letGo(press.pitches, new Set([...heldElsewhere, ...pitches]));
-      play(pitches, new Set([...heldElsewhere, ...press.pitches]));
+      slideChanges(press.pitches, pitches, heldNotes(event.pointerId)).forEach((change) =>
+        change.on ? target.noteOn(change.pitch, PAD_VELOCITY) : target.noteOff(change.pitch),
+      );
       press.pitches = pitches;
       publish();
     },
-    [heldNotes, letGo, play, publish],
+    [heldNotes, publish, target],
   );
 
   const padProps = useCallback(
