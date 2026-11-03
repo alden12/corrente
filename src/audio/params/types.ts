@@ -10,6 +10,11 @@ interface BaseSpec {
   id: string;
   /** Human-readable label for UI controls and MCP tool descriptions. */
   label: string;
+  /**
+   * The panel section it goes in, if not its id's namespace (the part before the dot): a device can
+   * regroup its params this way without renaming them, since saved projects and patches name them by id.
+   */
+  section?: string;
 }
 
 export interface NumberSpec extends BaseSpec {

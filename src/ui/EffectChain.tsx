@@ -65,6 +65,7 @@ export function EffectChain({
             }}
             drag={dragOf(fx.id)}
             schema={schema}
+            params={store}
           >
             <DeviceSections
               label={info.label}

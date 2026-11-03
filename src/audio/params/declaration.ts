@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 
-const baseSpec = { id: z.string(), label: z.string() };
+const baseSpec = { id: z.string(), label: z.string(), section: z.string().min(1).optional() };
 
 export const paramSpecSchema = z.discriminatedUnion("kind", [
   z

@@ -80,6 +80,7 @@ export function DrumkitPanel({
       kind="instr"
       foldKey={instrumentFold(trackId)}
       schema={instrumentSchema("drumkit")}
+      params={params}
       graph="instrument"
       foldsSections={false}
     >

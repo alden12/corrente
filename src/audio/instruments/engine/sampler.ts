@@ -13,9 +13,11 @@ export const samplerSchema: ParamSchema = [
   // A note-name selector (C4, ...), as a drum pad's note is, rather than a slider through 0 to 127.
   { id: "sampler.root", label: "Root", kind: "number", min: 0, max: 127, default: 60, taper: "linear", format: "note" },
   { id: "sampler.keytrack", label: "Keytrack", kind: "boolean", default: true },
+  // Start, Trim end and Re-strike fold away in a Playback section of their own: set once, if at all.
   // Skips into the sample, for a recording that caught silence or a false start before the sound.
   {
     id: "sampler.start",
+    section: "playback",
     label: "Start",
     kind: "number",
     min: 0,
@@ -28,6 +30,7 @@ export const samplerSchema: ParamSchema = [
   // Cuts that much off the end, for a tail you did not want: room noise, the next hit, a click.
   {
     id: "sampler.trimEnd",
+    section: "playback",
     label: "Trim end",
     kind: "number",
     min: 0,
@@ -62,6 +65,7 @@ export const samplerSchema: ParamSchema = [
   // string still rings when it's struck again. 0 cuts it at once, as a drum hit wants.
   {
     id: "sampler.restrike",
+    section: "playback",
     label: "Re-strike",
     kind: "number",
     min: 0,

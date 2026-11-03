@@ -1,6 +1,6 @@
 /**
  * Grouping a param schema into labeled sections by id namespace (the part before the
- * dot: `osc.` / `filter.` / `pad3.` / ...), shared by every device's panel. Numbered pad
+ * dot: `osc.` / `filter.` / `pad3.` / ...), or a spec's own `section`, shared by every device's panel. Numbered pad
  * sections sort first (in pad order), then the known synth sections in signal-flow order,
  * then any unknown namespace (title-cased). Params with no namespace (an effect's `mix`, or
  * a device that names its params plainly) share one untitled section, last.
@@ -24,6 +24,7 @@ export const SECTION_LABELS: Record<string, string> = {
   organ: "Tone",
   wt: "Wavetable",
   sampler: "Sampler",
+  playback: "Playback",
   filter: "Filter",
   f: "Filter",
   fenv: "Filter Env",
@@ -40,6 +41,8 @@ const SECTION_ORDER = Object.keys(SECTION_LABELS);
 
 /** An id's namespace: the part before the dot, or "" (the untitled section) for one with none. */
 export const namespaceOf = (id: string) => (id.includes(".") ? id.slice(0, id.indexOf(".")) : "");
+/** The section a spec goes in: its own, else its id's namespace. */
+export const sectionOf = (spec: ParamSpec) => spec.section ?? namespaceOf(spec.id);
 export const padNumber = (namespace: string) => /^pad(\d+)$/.exec(namespace)?.[1];
 
 export const sectionTitle = (namespace: string) => {
@@ -64,11 +67,11 @@ export interface ParamSection {
   specs: ParamSpec[];
 }
 
-/** Group a schema into ordered sections by id namespace, preserving in-section order. */
+/** Group a schema into ordered sections (`sectionOf`), preserving in-section order. */
 export function toSections(schema: readonly ParamSpec[]): ParamSection[] {
   const groups = new Map<string, ParamSpec[]>();
   for (const spec of schema) {
-    const namespace = namespaceOf(spec.id);
+    const namespace = sectionOf(spec);
     const specs = groups.get(namespace) ?? [];
     specs.push(spec);
     groups.set(namespace, specs);

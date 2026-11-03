@@ -16,6 +16,8 @@ import { deviceEdge } from "../deviceColor";
 import { DeviceHue } from "./deviceHue";
 import { sectionFolds, startsOpen, useDeviceFolds, useOpenSections } from "./deviceFolds";
 import type { ParamSchema } from "../../audio/params/types";
+import type { ParamStore } from "../../audio/params/store";
+import { DeviceDownload } from "./DeviceDownload";
 import { paramCount } from "./paramCount";
 import { foldOnHeaderClick } from "../controls/foldOnHeaderClick";
 import { openDeviceGraph, useCanViewGraph } from "../tabs/openGraph";
@@ -49,6 +51,7 @@ export function DeviceBlock({
   drag,
   actions,
   schema,
+  params,
   graph,
   foldsSections = true,
   children,
@@ -70,6 +73,8 @@ export function DeviceBlock({
   actions?: ReactNode;
   /** Its params: how many it says folded, and whether it starts open (`startsOpen`). */
   schema: ParamSchema;
+  /** Its params' values: the header shows its samples downloading (`DeviceDownload`). */
+  params: ParamStore;
   /** What its graph is drawn as: an instrument, an effect or a MIDI device. */
   graph?: DeviceKind;
   /** Whether its body is its params' sections (`DeviceSections`), so its menu can fold them all; the drum kit's pads aren't. */
@@ -166,6 +171,7 @@ export function DeviceBlock({
           {label}
         </span>
         {!column && <span className="font-mono text-[9px] tracking-wider uppercase text-faint shrink-0">{kind}</span>}
+        <DeviceDownload schema={schema} store={params} column={column} />
         <span className={`flex items-center gap-1 shrink-0 ${column ? "flex-col" : "ml-auto pl-2"}`}>
           {bypass && (
             <button

@@ -52,6 +52,7 @@ export function InstrumentPanel({
       kind="instr"
       foldKey={instrumentFold(trackId)}
       schema={schema}
+      params={params}
       graph="instrument"
       actions={
         info.custom && (

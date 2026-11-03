@@ -59,6 +59,7 @@ export function MidiDeviceChain({
             }}
             drag={dragOf(device.id)}
             schema={schema}
+            params={store}
           >
             <DeviceSections
               label={info.label}
