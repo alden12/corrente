@@ -10,7 +10,8 @@ import type { ParamSchema } from "../../params/types";
 // Short envelope by default since notes play the whole sample (percussive).
 export const samplerSchema: ParamSchema = [
   { id: "sampler.sample", label: "Sample", kind: "sample", default: "builtin:kick" },
-  { id: "sampler.root", label: "Root", kind: "number", min: 0, max: 127, default: 60, taper: "linear" },
+  // A note-name selector (C4, ...), as a drum pad's note is, rather than a slider through 0 to 127.
+  { id: "sampler.root", label: "Root", kind: "number", min: 0, max: 127, default: 60, taper: "linear", format: "note" },
   { id: "sampler.keytrack", label: "Keytrack", kind: "boolean", default: true },
   // Skips into the sample, for a recording that caught silence or a false start before the sound.
   {

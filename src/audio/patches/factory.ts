@@ -349,6 +349,7 @@ export const FACTORY_PATCHES: Patch[] = [
       "fx.reverb": 0.18,
     }),
     effects: [
+      { type: "filter", params: { "filter.cutoff": 1900 } },
       { type: "delay", params: { "delay.time": 0.404, "delay.feedback": 0.35, mix: 0.203 } },
       { type: "reverb", params: { "reverb.decay": 2, mix: 0.3 } },
     ],

@@ -473,7 +473,10 @@ export function AppShell() {
       if (isTypingTarget(e.target)) return; // don't play while typing (but toggles/knobs are fine)
       if (e.metaKey || e.ctrlKey || e.altKey) return; // a shortcut (Cmd+A), not a note
       const midi = KEY_MAP[e.key.toLowerCase()];
-      if (midi !== undefined) liveNotes.noteOn(midi);
+      if (midi === undefined) return;
+      // Ours, so a focused select doesn't also take it as a search.
+      e.preventDefault();
+      liveNotes.noteOn(midi);
     };
     const onUp = (e: KeyboardEvent) => {
       const midi = KEY_MAP[e.key.toLowerCase()];
