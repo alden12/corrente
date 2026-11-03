@@ -2,6 +2,10 @@ import { afterAll, describe, expect, it } from "vitest";
 import { checkEffect, checkInstrument } from "../src/audio/render/deviceCheck";
 import { nodeRenderSetup } from "../server/render/nodeRender";
 import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
+import { defaultsUseFactorySamples } from "../src/audio/samples/factory";
+
+/** The instruments that sound without the network: a sampled one's recordings download (INST-55). */
+const UNSAMPLED = ENGINE_INSTRUMENTS.filter((instrument) => !defaultsUseFactorySamples(instrument.schema));
 import { ENGINE_EFFECTS } from "../src/audio/effects/engine";
 import { registerEffect, unregisterEffect } from "../src/audio/effects/catalog";
 import { registerEngineDevice, unregisterEngineDevice } from "../src/audio/definitions/engineDevices";
@@ -12,7 +16,7 @@ import type { AuthoredDefinition } from "../src/audio/definitions/format";
 const KNOWN_FAULTS: Record<string, string> = { "tape-echo": "INST-48" };
 
 describe("checkInstrument / checkEffect (AGENT-4.8)", () => {
-  it.each(ENGINE_INSTRUMENTS.map((instrument) => [instrument.type] as const))("%s passes", async (type) => {
+  it.each(UNSAMPLED.map((instrument) => [instrument.type] as const))("%s passes", async (type) => {
     const verdict = await checkInstrument({ type }, nodeRenderSetup());
     expect(verdict.problems).toEqual([]);
     expect(verdict.summary).toMatch(/^OK \(a note peaks at/);

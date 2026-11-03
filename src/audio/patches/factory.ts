@@ -15,7 +15,6 @@
 import type { Tag } from "../tags";
 import type { Patch, PatchEffect } from "./patch";
 import { BUILTIN_KITS, builtinRef, type BuiltinKit } from "../samples/catalog";
-import { factoryRef } from "../samples/factory";
 
 /** Juno-style chorus settings for the lush presets (bundled as the one effect). */
 const chorusI: PatchEffect = { type: "chorus", params: { "chorus.rate": 0.7, "chorus.depth": 0.35, mix: 0.5 } };
@@ -61,7 +60,6 @@ const microVa = builtinFor("micro-va");
 const glideLead = builtinFor("glide-lead");
 const gatePad = builtinFor("gate-pad");
 const hybridWave = builtinFor("hybrid-wave");
-const sampler = builtinFor("sampler");
 
 // Param ids match each instrument's schema. Only the interesting params are set; the ParamStore
 // fills the rest from schema defaults when the patch is applied.
@@ -201,16 +199,6 @@ export const FACTORY_PATCHES: Patch[] = [
     midiDevices: [{ type: "octavator", params: { octaveUp: false, octaveDown: true, level: 0.461 } }],
   },
   // --- Keys -----------------------------------------------------------------
-  // Sampled (INST-55): Salamander's Yamaha C5, three velocity layers. Its Sample picker offers the
-  // one-layer Lite version too, a third of the memory, for phones.
-  sampler("Grand Piano", ["keys", "warm"], {
-    "sampler.sample": factoryRef("salamander", "grand"),
-    "env.release": 600,
-    // A key struck again lets its last note die away under the new one, as the string does.
-    "sampler.restrike": 400,
-    // The loudest layer is a hard strike: a loud four-note chord peaks near -6 dBFS here.
-    "amp.level": 0.35,
-  }),
   nimbus(
     "Electric Piano",
     ["keys", "warm", "soft"],
@@ -349,9 +337,9 @@ export const FACTORY_PATCHES: Patch[] = [
       "fx.reverb": 0.18,
     }),
     effects: [
-      { type: "filter", params: { "filter.cutoff": 1900 } },
       { type: "delay", params: { "delay.time": 0.404, "delay.feedback": 0.35, mix: 0.203 } },
       { type: "reverb", params: { "reverb.decay": 2, mix: 0.3 } },
+      { type: "filter", params: { "filter.cutoff": 1900 } },
     ],
     // An octave below under each note of the run, quieter.
     midiDevices: [

@@ -12,26 +12,28 @@ import { pickableInstrumentInfos } from "../instruments/catalog";
 import { effectInfos } from "../effects/catalog";
 import { midiDeviceInfos } from "../midi/device/catalog";
 import { FACTORY_PATCHES } from "../patches/factory";
-import type { Patch } from "../patches/patch";
 import type { RenderSetup } from "../render/renderDevice";
 import type { Portrait } from "./draw";
 import { drawPortrait, midiPortrait } from "./devicePortrait";
 import { PORTRAIT_KEYS } from "./keys";
+import { defaultsUseFactorySamples, usesFactorySamples } from "../samples/factory";
 
 export async function renderPortraits(
   setup: RenderSetup,
-  /** Patches to leave out: the tests leave out the sampled ones (INST-55), which load over the network. */
-  skip: (patch: Patch) => boolean = () => false,
+  /** Leave out the sampled instruments and patches (INST-55), which load over the network: the tests do. */
+  skipSampled = false,
 ): Promise<Record<string, Portrait>> {
   const jobs: (readonly [string, () => Promise<Portrait> | Portrait])[] = [
-    ...pickableInstrumentInfos().map(
-      (info) =>
-        [
-          PORTRAIT_KEYS.instrument(info.type),
-          () => drawPortrait({ kind: "instrument", type: info.type }, setup),
-        ] as const,
-    ),
-    ...FACTORY_PATCHES.filter((patch) => !skip(patch)).map(
+    ...pickableInstrumentInfos()
+      .filter((info) => !(skipSampled && defaultsUseFactorySamples(info.schema)))
+      .map(
+        (info) =>
+          [
+            PORTRAIT_KEYS.instrument(info.type),
+            () => drawPortrait({ kind: "instrument", type: info.type }, setup),
+          ] as const,
+      ),
+    ...FACTORY_PATCHES.filter((patch) => !(skipSampled && usesFactorySamples(patch.params))).map(
       (patch) => [PORTRAIT_KEYS.patch(patch.id), () => drawPortrait({ kind: "patch", sound: patch }, setup)] as const,
     ),
     ...effectInfos().map(

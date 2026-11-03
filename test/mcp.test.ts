@@ -323,6 +323,7 @@ describe("MCP server (tracks)", () => {
       "fm",
       "gate-pad",
       "glide-lead",
+      "grand-piano",
       "hybrid-wave",
       "mellotron",
       "micro-va",

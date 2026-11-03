@@ -8,6 +8,7 @@
  * A sound's ref is `factory:<set>/<sound>`, e.g. `factory:salamander/grand`.
  */
 import salamander from "./sets/salamander.json";
+import type { ParamSchema } from "../params/types";
 
 /** One recording of a sound, and the keys and velocities it plays (SFZ's terms, as `SampleRegion`). */
 export interface FactoryRegion {
@@ -80,3 +81,7 @@ export const FACTORY_SOUNDS = FACTORY_SETS.flatMap((set) =>
 /** Whether a patch's sound plays a factory sample: one the first use downloads. */
 export const usesFactorySamples = (params: Record<string, unknown>): boolean =>
   Object.values(params).some((value) => typeof value === "string" && value.startsWith(FACTORY_PREFIX));
+
+/** Whether a device plays a factory sample as it starts (the Grand Piano does): its defaults are its sound. */
+export const defaultsUseFactorySamples = (schema: ParamSchema): boolean =>
+  usesFactorySamples(Object.fromEntries(schema.map((spec) => [spec.id, spec.default])));

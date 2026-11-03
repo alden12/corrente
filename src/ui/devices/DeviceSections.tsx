@@ -9,9 +9,10 @@
  * would only repeat its name. Stacked on a phone (`RackStacked`), sections are rows one under another,
  * their titles across, so everything flows down the screen.
  *
- * Within a section the switches and choices stack in a column of their own on the left, so a device with several
- * (the Arpeggiator's rate and pattern) reads as a tidy list rather than a wide row. Schema-driven: it
- * maps over the specs and hands each to the generic Knob, branching only on kind, never on names.
+ * Within a section the switches and choices (a sample, a note) stack in a column of their own on the left, so a
+ * device with several (the Arpeggiator's rate and pattern, the Sampler's sample, root and keytrack) reads as a tidy
+ * list rather than a wide row. Schema-driven: it maps over the specs and hands each to the generic Knob,
+ * branching only on kind, never on names.
  */
 import type { ReactNode } from "react";
 import type { ParamSchema, ParamSpec, ParamValue } from "../../audio/params/types";
@@ -23,7 +24,11 @@ import { sectionFold, sectionHeading, useOpenSections } from "./deviceFolds";
 import { RackStacked, SECTION_HEIGHT } from "./rackLayout";
 import { paramCount } from "./paramCount";
 
-const stacks = (spec: ParamSpec) => spec.kind === "boolean" || spec.kind === "enum";
+const stacks = (spec: ParamSpec) =>
+  spec.kind === "boolean" ||
+  spec.kind === "enum" ||
+  spec.kind === "sample" ||
+  (spec.kind === "number" && spec.format === "note");
 
 /** The room a row of a knob or a switch takes, so a column holds as many as its height has room for. */
 const ROW_HEIGHTS = { knob: 78, switch: 46 } as const;

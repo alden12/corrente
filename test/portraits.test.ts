@@ -9,8 +9,8 @@ import { wasm } from "./support/engine";
 import PORTRAITS from "../src/ui/explore/portraits.json";
 import { FACTORY_PATCHES } from "../src/audio/patches/factory";
 import { PORTRAIT_KEYS } from "../src/audio/portraits/keys";
-import { usesFactorySamples } from "../src/audio/samples/factory";
-import type { Patch } from "../src/audio/patches/patch";
+import { defaultsUseFactorySamples, usesFactorySamples } from "../src/audio/samples/factory";
+import { pickableInstrumentInfos } from "../src/audio/instruments/catalog";
 
 const sine = (frequency: number, seconds: number, sampleRate = 8000, shape = (value: number) => value) =>
   Float32Array.from({ length: Math.round(seconds * sampleRate) }, (_, index) =>
@@ -107,14 +107,20 @@ describe("portraits.json", () => {
 
   it("is what the built-ins sound like now (run `yarn portraits` after retuning one)", async () => {
     // A render on the engine core is the same every time, so a drawing that differs is a device that changed.
-    // The sampled instruments' patches are left out: their recordings come over the network (INST-55).
-    const sampled = (patch: Patch) => usesFactorySamples(patch.params);
-    const portraits = await renderPortraits(nodeRenderSetup(), sampled);
+    // The sampled instruments and patches are left out: their recordings come over the network (INST-55).
+    const portraits = await renderPortraits(nodeRenderSetup(), true);
     const empty = Object.entries(portraits)
       .filter(([, portrait]) => (portrait.line ?? portrait.fill ?? "").length < 20)
       .map(([key]) => key);
     expect(empty).toEqual([]);
-    const unsampled = FACTORY_PATCHES.filter(sampled).map((patch) => PORTRAIT_KEYS.patch(patch.id));
+    const unsampled = [
+      ...pickableInstrumentInfos()
+        .filter((info) => defaultsUseFactorySamples(info.schema))
+        .map((info) => PORTRAIT_KEYS.instrument(info.type)),
+      ...FACTORY_PATCHES.filter((patch) => usesFactorySamples(patch.params)).map((patch) =>
+        PORTRAIT_KEYS.patch(patch.id),
+      ),
+    ];
     expect(portraits).toEqual(
       Object.fromEntries(Object.entries(PORTRAITS).filter(([key]) => !unsampled.includes(key))),
     );

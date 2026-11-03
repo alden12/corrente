@@ -5,6 +5,7 @@ import { fm } from "./fm";
 import { mellotronFlute } from "./mellotronFlute";
 import { microVa } from "./microVa";
 import { glideLead } from "./glideLead";
+import { grandPiano } from "./grandPiano";
 import { organ } from "./organ";
 import { sampler } from "./sampler";
 import { subtractive } from "./subtractive";
@@ -24,6 +25,7 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   subtractive,
   fm,
   supersaw,
+  grandPiano,
   organ,
   mellotronFlute,
   wavetable,

@@ -5,6 +5,10 @@ import { loadNodeSample, nodeRenderSetup } from "../server/render/nodeRender";
 import { BUILTIN_URLS } from "../src/audio/samples/builtinUrls";
 import { BUILTIN_SAMPLES, builtinRef } from "../src/audio/samples/catalog";
 import { ENGINE_INSTRUMENTS } from "../src/audio/instruments/engine";
+import { defaultsUseFactorySamples } from "../src/audio/samples/factory";
+
+/** The instruments that sound without the network: a sampled one's recordings download (INST-55). */
+const UNSAMPLED = ENGINE_INSTRUMENTS.filter((instrument) => !defaultsUseFactorySamples(instrument.schema));
 import { ENGINE_EFFECTS } from "../src/audio/effects/engine";
 
 const peakOf = ({ channels }: Rendered) =>
@@ -12,7 +16,7 @@ const peakOf = ({ channels }: Rendered) =>
 const finite = ({ channels }: Rendered) => channels.every((channel) => channel.every(Number.isFinite));
 
 describe("renderDevice (AGENT-4.9): a device alone, on the engine, in Node", () => {
-  it.each(ENGINE_INSTRUMENTS.map((instrument) => [instrument.type, instrument] as const))(
+  it.each(UNSAMPLED.map((instrument) => [instrument.type, instrument] as const))(
     "%s plays a note, samples and all",
     async (_type, { type }) => {
       // A kick (a kit's GM pad) and middle C, so a kit and a tonal instrument both sound.
