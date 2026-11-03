@@ -411,6 +411,14 @@ pub extern "C" fn eng_sample_reserve(slot: i32, frames: i32, channels: i32, rate
     with_engine(|engine| engine.reserve_sample(slot, frames, channels, rate).map_or(std::ptr::null_mut(), |data| data.as_mut_ptr()))
 }
 
+/// The same for a 16-bit sample (INST-55), half the memory: JS writes whole numbers, -32768 to 32767.
+// TS: return addressOf(withEngine((engine) => engine.reserveShortSample(slot, frames, channels, rate))) ?? 0
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_sample_reserve16(slot: i32, frames: i32, channels: i32, rate: f32) -> *mut i16 {
+    let (Some(slot), Some(frames), Some(channels)) = (index(slot), index(frames), index(channels)) else { return std::ptr::null_mut() };
+    with_engine(|engine| engine.reserve_short_sample(slot, frames, channels, rate).map_or(std::ptr::null_mut(), |data| data.as_mut_ptr()))
+}
+
 /// Empty a sample slot, freeing its memory.
 // TS: if (slot >= 0) withEngine((engine) => engine.freeSample(slot))
 #[unsafe(no_mangle)]

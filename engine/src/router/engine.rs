@@ -125,7 +125,17 @@ impl Engine {
         *self.samples.maps.get_mut(slot)? = None;
         let entry = self.samples.audio.get_mut(slot)?;
         *entry = Some(sample);
-        entry.as_mut().map(Sample::data_mut)
+        entry.as_mut().and_then(Sample::data_mut)
+    }
+
+    /// The same for a 16-bit sample (INST-55): half the memory, for the big factory recordings.
+    // TS: as reserveSample, with Sample.createShort
+    pub fn reserve_short_sample(&mut self, slot: usize, frames: usize, channels: usize, rate: f32) -> Option<&mut [i16]> {
+        let sample = Sample::new_short(frames, channels, rate)?;
+        *self.samples.maps.get_mut(slot)? = None;
+        let entry = self.samples.audio.get_mut(slot)?;
+        *entry = Some(sample);
+        entry.as_mut().and_then(Sample::short_data_mut)
     }
 
     /// Put a sample map (sample_map.rs) in `slot`, replacing any audio or map there. False for a slot

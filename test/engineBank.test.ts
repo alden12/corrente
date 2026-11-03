@@ -399,6 +399,12 @@ describe("EngineBank", () => {
           expect(value).toBeCloseTo(20 / RATE, 6);
         });
 
+        it("plays a compact (16-bit) recording as the same sound, at half the memory", () => {
+          const compact = { ...short(0.3), compact: true };
+          const [value] = notes({ regions: [region("compact", compact)] }, [1]);
+          expect(value).toBeCloseTo(0.3, 4);
+        });
+
         it("lets go of a map's regions with the map", () => {
           const bank = zonedBank();
           const before = bank.samplesHeld;

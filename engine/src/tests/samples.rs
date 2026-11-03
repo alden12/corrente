@@ -250,3 +250,23 @@ fn a_slot_holds_audio_or_a_map_never_both() {
     assert!(engine.reserve_sample(5, 100, 1, RATE as f32).is_some(), "audio replaces the map");
     assert!(!engine.set_map(crate::router::MAX_SAMPLES, &map_words(&[[1.0, 38.0, 38.0, 0.0, 127.0, 38.0]])), "no such slot");
 }
+
+#[test]
+fn a_sixteen_bit_sample_plays_as_the_same_sound() {
+    // The same quarter-level sample as floats and as 16-bit whole numbers: what's heard is the same,
+    // give or take the 16-bit step (1/32768).
+    let play = |short: bool| {
+        let mut engine = sampler(WHOLE).loaded();
+        if short {
+            engine.reserve_short_sample(0, 1000, 1, RATE as f32).expect("room").fill(8192);
+        } else {
+            engine.reserve_sample(0, 1000, 1, RATE as f32).expect("room").fill(0.25);
+        }
+        engine.track_mut(0).unwrap().note_on(0, 0, 440.0, 1.0, 69.0);
+        render(&mut engine, 1)
+    };
+    assert!(play(true).iter().zip(play(false)).all(|(&short, float)| (short - float).abs() <= 1.0 / 32768.0));
+    let mut engine = Engine::new();
+    engine.init(RATE, 1);
+    assert!(engine.reserve_short_sample(0, 0, 1, RATE as f32).is_none(), "no frames");
+}

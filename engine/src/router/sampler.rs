@@ -14,9 +14,14 @@
 //! - **Between samples it interpolates** over four neighbours (a cubic through them), so a sample
 //!   played far from its root stays clean.
 //!
+//! - **Two formats:** 32-bit floats as JS has them, or 16-bit whole numbers at half the memory (INST-55),
+//!   for the factory recordings, which are 16-bit already and big.
+//!
 //! Rust notes, for reading this file:
 //! - `Box<[f32]>` is a fixed-length array on the heap, like a Float32Array: made once when JS reserves
-//!   the slot, so rendering never allocates.
+//!   the slot, so rendering never allocates. `Box<[i16]>` is an Int16Array.
+//! - An `enum` whose cases carry data is a tagged union: `Frames::Short(data)` is like
+//!   `{ kind: "short", data }`, and `match` switches on the kind with the data named.
 //! - `f64` is a 64-bit float (JS's number). The read position is one: an f32 runs out of precision
 //!   to count fractions of a sample a few minutes into a long sample.
 
@@ -38,27 +43,57 @@ const CONTROL_START: usize = 2;
 const CONTROL_END: usize = 3;
 const CONTROL_LOOP: usize = 4;
 
+/// A sample's frames: floats, or 16-bit whole numbers (-32768 to 32767 for -1 to 1).
+enum Frames {
+    Float(Box<[f32]>),
+    Short(Box<[i16]>),
+}
+
 /// One sample: one or two channels, one after the other, at its own sample rate.
 pub struct Sample {
     frames: usize,
     channels: usize,
     rate: f32,
-    data: Box<[f32]>,
+    data: Frames,
 }
 
 impl Sample {
     /// A silent sample, for JS to write into. None for one too big, or with no frames or channels.
     // TS: static create(frames, channels, rate) { return frames > 0 && ... ? { frames, channels, rate, data: new Float32Array(frames * channels) } : undefined }
     pub fn new(frames: usize, channels: usize, rate: f32) -> Option<Self> {
-        let floats = frames.checked_mul(channels)?;
-        let fits = frames > 0 && (1..=2).contains(&channels) && floats <= MAX_SAMPLE_FLOATS && rate > 0.0;
-        // `bool.then(|| x)` is `cond ? x : undefined`.
-        fits.then(|| Sample { frames, channels, rate, data: vec![0.0; floats].into_boxed_slice() })
+        let floats = Self::fits(frames, channels, rate)?;
+        Some(Sample { frames, channels, rate, data: Frames::Float(vec![0.0; floats].into_boxed_slice()) })
     }
 
-    /// Where JS writes the audio: channel 0's frames, then channel 1's.
-    pub fn data_mut(&mut self) -> &mut [f32] {
-        &mut self.data
+    /// The same, at 16 bits.
+    // TS: static createShort(frames, channels, rate) { ...the same, with data: new Int16Array(frames * channels) }
+    pub fn new_short(frames: usize, channels: usize, rate: f32) -> Option<Self> {
+        let values = Self::fits(frames, channels, rate)?;
+        Some(Sample { frames, channels, rate, data: Frames::Short(vec![0; values].into_boxed_slice()) })
+    }
+
+    /// How many values a sample of this shape holds, or None if it can't be one.
+    // TS: const values = frames * channels; return frames > 0 && channels >= 1 && channels <= 2 && values <= MAX_SAMPLE_FLOATS && rate > 0 ? values : undefined
+    fn fits(frames: usize, channels: usize, rate: f32) -> Option<usize> {
+        let values = frames.checked_mul(channels)?;
+        // `bool.then_some(x)` is `cond ? x : undefined`.
+        (frames > 0 && (1..=2).contains(&channels) && values <= MAX_SAMPLE_FLOATS && rate > 0.0).then_some(values)
+    }
+
+    /// Where JS writes float audio: channel 0's frames, then channel 1's. None for a 16-bit sample.
+    pub fn data_mut(&mut self) -> Option<&mut [f32]> {
+        match &mut self.data {
+            Frames::Float(data) => Some(data),
+            Frames::Short(_) => None,
+        }
+    }
+
+    /// Where JS writes 16-bit audio, the same way. None for a float sample.
+    pub fn short_data_mut(&mut self) -> Option<&mut [i16]> {
+        match &mut self.data {
+            Frames::Short(data) => Some(data),
+            Frames::Float(_) => None,
+        }
     }
 
     /// How long it plays at its own rate, in seconds: what a zone's trims in milliseconds measure.
@@ -67,20 +102,27 @@ impl Sample {
         self.frames as f64 / f64::from(self.rate)
     }
 
-    /// Channel 0's frames, as a wavetable reads them (a table is one channel).
+    /// Channel 0's frames, as a wavetable reads them (a table is one channel, and always floats: a
+    /// 16-bit sample is no table).
     pub(super) fn first_channel(&self) -> &[f32] {
-        &self.data[..self.frames]
+        match &self.data {
+            Frames::Float(data) => &data[..self.frames],
+            Frames::Short(_) => &[],
+        }
     }
 
     /// Channel `channel` at `position` frames in, interpolated (a mono sample's one channel for either).
-    // TS: const at = (frame) => data[channelStart + clamp(frame, 0, frames - 1)]; then the cubic.
+    // TS: const at = (frame) => value(channelStart + clamp(frame, 0, frames - 1)), a 16-bit one / 32768; then the cubic.
     fn read(&self, channel: usize, position: f64) -> f32 {
         let start = channel.min(self.channels - 1) * self.frames;
-        let frames = &self.data[start..start + self.frames];
         let whole = position.floor();
         let fraction = (position - whole) as f32;
         // `as isize` keeps it signed, since the frame before the first is -1.
-        let at = |offset: isize| frames[(whole as isize + offset).clamp(0, self.frames as isize - 1) as usize];
+        let index = |offset: isize| start + (whole as isize + offset).clamp(0, self.frames as isize - 1) as usize;
+        let at = |offset: isize| match &self.data {
+            Frames::Float(data) => data[index(offset)],
+            Frames::Short(data) => f32::from(data[index(offset)]) / 32768.0,
+        };
         hermite(at(-1), at(0), at(1), at(2), fraction)
     }
 }

@@ -69,6 +69,8 @@ export interface EngineExports {
    * channel's frames in turn; 0 if it won't fit. Memory may grow.
    */
   eng_sample_reserve(slot: number, frames: number, channels: number, rate: number): number;
+  /** As eng_sample_reserve, for 16-bit whole numbers (-32768 to 32767): half the memory (INST-55). */
+  eng_sample_reserve16(slot: number, frames: number, channels: number, rate: number): number;
   /** Puts a sample map in a slot (INST-55), from f64 words: six a region. 0, or -1 if refused. */
   eng_sample_map(slot: number, words: number, length: number): number;
   eng_sample_free(slot: number): void;

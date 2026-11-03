@@ -63,6 +63,11 @@ interface Track {
 export interface SampleAudio {
   channels: Float32Array[];
   rate: number;
+  /**
+   * Kept at 16 bits in the engine, half the memory (INST-55): for the factory recordings, which are
+   * 16-bit already and big. Anything else keeps every bit it has.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -98,6 +103,10 @@ export interface LoadOptions {
   carry?: Int32Array;
   from?: Record<string, number>;
 }
+
+/** Float audio as 16-bit whole numbers, rounded, with anything past full scale held at it. */
+const toShorts = (channel: Float32Array): Int16Array =>
+  Int16Array.from(channel, (value) => Math.max(-32768, Math.min(32767, Math.round(value * 32768))));
 
 export class EngineBank {
   readonly engine: EngineExports;
@@ -245,7 +254,7 @@ export class EngineBank {
     if (!audio) return EMPTY_SAMPLE;
     if (!isSampleMap(audio)) {
       const slot = this.freeSlot();
-      this.loadSample(slot, audio.channels, audio.rate);
+      this.loadSample(slot, audio.channels, audio.rate, audio.compact);
       this.sampleSlots.set(ref, { slot, users: 1 });
       return slot;
     }
@@ -297,17 +306,23 @@ export class EngineBank {
    * channels of the same length, at the sample's own rate. A sampler names its slot, and plays it at
    * any track's notes (INST-36.6). `setSample` is the way in by name; this is the slot itself.
    */
-  loadSample(slot: number, channels: Float32Array[], rate: number): void {
+  loadSample(slot: number, channels: Float32Array[], rate: number, compact = false): void {
     const frames = channels[0]?.length ?? 0;
     const even = channels.every((channel) => channel.length === frames);
-    const pointer = even ? this.engine.eng_sample_reserve(slot, frames, channels.length, rate) : 0;
+    const reserve = compact ? this.engine.eng_sample_reserve16 : this.engine.eng_sample_reserve;
+    const pointer = even ? reserve(slot, frames, channels.length, rate) : 0;
     if (pointer === 0) {
       throw new RangeError(
         `sample slot ${slot}: ${channels.length} channels of ${frames} frames at ${rate} Hz don't fit (0 to ${SAMPLE_SLOTS - 1}, one or two channels of the same length, up to 2^24 floats)`,
       );
     }
-    const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);
-    channels.forEach((channel, index) => data.set(channel, index * frames));
+    if (compact) {
+      const data = new Int16Array(this.engine.memory.buffer, pointer, frames * channels.length);
+      channels.forEach((channel, index) => data.set(toShorts(channel), index * frames));
+    } else {
+      const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);
+      channels.forEach((channel, index) => data.set(channel, index * frames));
+    }
     this.view();
   }
 
