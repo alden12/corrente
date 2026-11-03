@@ -11,7 +11,7 @@
  * window opens (`SavedSamples`), so a sample of your own still plays on a machine whose window never
  * imported it: the window's storage is a cache, and the host's project is the record.
  */
-import type { SampleAudio } from "../audio/bank/bank";
+import { isSampleMap, type SampleAudio } from "../audio/bank/bank";
 import type { PackageSamples } from "../audio/bank/devicePackage";
 import { getAudioBuffer } from "../audio/audioStore";
 import type { ProjectStore } from "../audio/project/projectStore";
@@ -97,7 +97,9 @@ export const pageSamples = (project: ProjectStore, saved: SavedSamples): Package
         const bytes = await file(from);
         return bytes && decoded(bytes).catch(() => null);
       };
-      const made = (await sampleAudioFor(ref, true, load, TABLE_RATE))?.channels[0];
+      // A table is one channel of floats (never a map, which sampleAudioFor turns down for one).
+      const table = await sampleAudioFor(ref, true, load, TABLE_RATE);
+      const made = table && !isSampleMap(table) ? table.channels[0] : undefined;
       if (made) return made;
       const bytes = saved.tables[ref] ? fromBase64(saved.tables[ref]) : undefined;
       return bytes ? new Float32Array(bytes.slice().buffer) : null;

@@ -3,7 +3,7 @@
  * engine render core off the main thread, rendering projects and drawing portraits; a worker can't decode audio (no Web Audio there), so it
  * asks the page for each sample and audio clip it needs, decoded, as it comes to them.
  */
-import type { SampleAudio } from "../../bank/bank";
+import type { BankSample } from "../../bank/bank";
 import type { ProjectData } from "../../project/types";
 import type { Portrait } from "../../portraits/draw";
 import type { PortraitJob } from "../../portraits/devicePortrait";
@@ -27,11 +27,11 @@ export interface PortraitRequest {
   engine: ArrayBuffer;
 }
 
-/** From the page: the audio the worker asked for, or null if it won't load. */
+/** From the page: the audio the worker asked for (a factory sound's map, for one), or null if it won't load. */
 export interface Loaded {
   kind: "loaded";
   request: number;
-  audio: SampleAudio | null;
+  audio: BankSample | null;
 }
 
 export type ToWorker = RenderRequest | PortraitRequest | Loaded;

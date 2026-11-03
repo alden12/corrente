@@ -13,6 +13,7 @@ import {
   BANK_PROCESSOR,
   INPUTS_PER_TRACK,
   TRACKS_PER_BANK,
+  transfersOf,
   type BankOptions,
   type FromBank,
   type ToBank,
@@ -161,7 +162,7 @@ export const takeSlot = async (
   const track = owner.taken.indexOf(false);
   owner.taken[track] = true;
   owner.listeners[track] = listener;
-  const post = (message: ToBank) => owner.node.port.postMessage(message);
+  const post = (message: ToBank) => owner.node.port.postMessage(message, transfersOf(message));
   return {
     node: owner.node,
     track,

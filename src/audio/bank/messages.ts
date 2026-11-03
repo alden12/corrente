@@ -69,3 +69,18 @@ export const BANK_PROCESSOR = "engine-bank";
 export const TRACKS_PER_BANK = 16;
 /** Node inputs per track: its main input (left, right), then its sidechain (left, right). */
 export const INPUTS_PER_TRACK = 2;
+
+/**
+ * The buffers a message can hand over to the worklet rather than copy: a sample map's 16-bit
+ * recordings (INST-55), which can be most of a piano. Each once, as `postMessage` asks.
+ */
+export const transfersOf = (message: ToBank): ArrayBuffer[] =>
+  message.type === "sample" && message.audio && "regions" in message.audio
+    ? [
+        ...new Set(
+          message.audio.regions.flatMap((region) =>
+            "shorts" in region.audio ? region.audio.shorts.map((shorts) => shorts.buffer as ArrayBuffer) : [],
+          ),
+        ),
+      ]
+    : [];

@@ -8,6 +8,7 @@ import type { AgentTool } from "../types";
 import { defineTool, type ToolContext } from "./factory";
 import { GROOVES, grooveById } from "../../grooves/catalog";
 import { BUILTIN_SAMPLES, BUILTIN_WAVETABLES, assetRef, builtinRef, wavetableRef } from "../../samples/catalog";
+import { FACTORY_SOUNDS } from "../../samples/factory";
 
 export function projectTools(ctx: ToolContext): AgentTool[] {
   const { projectStore, dispatch, scheduler } = ctx;
@@ -69,10 +70,11 @@ export function projectTools(ctx: ToolContext): AgentTool[] {
     defineTool({
       name: "list_samples",
       description:
-        "List sample references usable on a Sampler track: built-in kit + the project's imported samples, and the built-in wavetables a wavetable can play (any sample also plays as a wavetable, cut into 2048-sample cycles).",
+        "List sample references usable on a Sampler track: built-in kit, the sampled instruments (multi-sampled, downloaded on first use, each with its size in MB), the project's imported samples, and the built-in wavetables a wavetable can play (any sample also plays as a wavetable, cut into 2048-sample cycles).",
       schema: z.object({}),
       run: () => ({
         builtin: BUILTIN_SAMPLES.map((sample) => ({ ref: builtinRef(sample.id), name: sample.name })),
+        sampledInstruments: FACTORY_SOUNDS,
         project: projectStore.getSamples().map((asset) => ({ ref: assetRef(asset.id), name: asset.name })),
         wavetables: BUILTIN_WAVETABLES.map((table) => ({ ref: wavetableRef(table.id), name: table.name })),
       }),

@@ -12,6 +12,14 @@ import type { LoadAudio, LoadSample } from "../../src/audio/render/sampleAudio";
 import type { SampleAsset } from "../../src/audio/samples/catalog";
 import type { RenderSetup } from "../../src/audio/render/renderDevice";
 import type { SampleAudio } from "../../src/audio/bank/bank";
+import { FLACDecoder } from "@wasm-audio-decoders/flac";
+import {
+  DEFAULT_FACTORY_URL,
+  factoryFileUrl,
+  factoryMap,
+  toShorts,
+  type LoadFactoryFile,
+} from "../../src/audio/samples/factoryMap";
 
 const ENGINE_URL = new URL("../../engine/engine.wasm", import.meta.url);
 /** The built-in kit's files: `<id>.wav`, as builtinUrls.ts bundles them for the browser. */
@@ -20,8 +28,42 @@ export const builtinSampleUrl = (id: string) => new URL(`../../src/audio/samples
 /** One decode per built-in, shared by every render. */
 const builtins = new Map<string, Promise<SampleAudio | null>>();
 
+/**
+ * Where the factory samples are for this process (INST-55): `FACTORY_URL`, else corrente.cloud's. A
+ * folder rather than an address reads them from disk: `yarn portraits` before they're uploaded.
+ */
+const FACTORY_URL = process.env.FACTORY_URL || DEFAULT_FACTORY_URL;
+const factoryFetch = (url: string): Promise<Uint8Array> =>
+  url.includes("://")
+    ? fetch(url).then(async (response) => {
+        if (!response.ok) throw new Error(`${url}: ${response.status}`);
+        return new Uint8Array(await response.arrayBuffer());
+      })
+    : readFile(url);
+/** Factory files' bytes by hash, fetched once a process: a few MB a sound, and they never change. */
+const factoryBytes = new Map<string, Promise<Uint8Array>>();
+
+/** A factory recording, fetched (once) and decoded to 16-bit. */
+const nodeFactoryFile: LoadFactoryFile = async (region) => {
+  const pending = factoryBytes.get(region.file) ?? factoryFetch(factoryFileUrl(FACTORY_URL, region));
+  factoryBytes.set(region.file, pending);
+  const bytes = await pending.catch((error: unknown) => {
+    factoryBytes.delete(region.file);
+    throw error;
+  });
+  const decoder = new FLACDecoder();
+  await decoder.ready;
+  try {
+    const { channelData, sampleRate } = await decoder.decodeFile(bytes);
+    return { shorts: toShorts(channelData), rate: sampleRate };
+  } finally {
+    decoder.free();
+  }
+};
+
 export const loadNodeSample: LoadSample = (ref) => {
   const parsed = parseRef(ref);
+  if (parsed.kind === "factory") return factoryMap(parsed.id, nodeFactoryFile);
   if (parsed.kind !== "builtin" || !BUILTIN_SAMPLES.some((sample) => sample.id === parsed.id))
     return Promise.resolve(null);
   const pending =

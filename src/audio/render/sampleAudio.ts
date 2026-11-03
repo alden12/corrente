@@ -6,10 +6,13 @@
 import { builtinWavetable } from "../dsp/wavetable";
 import { parseRef } from "../samples/catalog";
 import { cyclesOf, tableOf } from "../samples/tables";
-import type { SampleAudio } from "../bank/bank";
+import { isSampleMap, type BankSample, type SampleAudio } from "../bank/bank";
 
-/** A sample ref's audio, up to two channels at its own rate; null for none or one that won't load. */
-export type LoadSample = (ref: string) => Promise<SampleAudio | null>;
+/**
+ * A sample ref's audio, up to two channels at its own rate (or a factory sound's sample map); null for
+ * none or one that won't load.
+ */
+export type LoadSample = (ref: string) => Promise<BankSample | null>;
 
 /** An audio clip's file by its id, decoded, at its own rate; null for one that won't load. */
 export type LoadAudio = (fileId: string) => Promise<SampleAudio | null>;
@@ -20,14 +23,14 @@ const builtinTables = new Map<string, Float32Array | null>();
 /**
  * What the engine gets for a sample param: the sample, or, played as a wavetable, a band-limited table
  * made from single cycles (a built-in's, or a sample's first channel cut into 2048-sample cycles).
- * Null for none, or a sample shorter than a cycle.
+ * Null for none, or a sample shorter than a cycle (or a map: one recording can be a table, many can't).
  */
 export async function sampleAudioFor(
   ref: string,
   asTable: boolean,
   load: LoadSample,
   sampleRate: number,
-): Promise<SampleAudio | null> {
+): Promise<BankSample | null> {
   if (!asTable) return load(ref);
   const table = await tableFor(ref, load);
   return table && { channels: [table], rate: sampleRate };
@@ -39,7 +42,7 @@ async function tableFor(ref: string, load: LoadSample): Promise<Float32Array | n
   const parsed = parseRef(ref);
   if (parsed.kind !== "wavetable") {
     const audio = await load(ref);
-    return tableFrom(audio ? cyclesOf(audio.channels[0]) : undefined);
+    return tableFrom(audio && !isSampleMap(audio) ? cyclesOf(audio.channels[0]) : undefined);
   }
   if (!builtinTables.has(parsed.id)) builtinTables.set(parsed.id, tableFrom(builtinWavetable(parsed.id)));
   return builtinTables.get(parsed.id) ?? null;

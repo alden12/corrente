@@ -6,14 +6,16 @@
  */
 import { loadSampleBuffer } from "../samples/builtinUrls";
 import { sampleAudioFor, type LoadAudio, type LoadSample } from "../render/sampleAudio";
-import type { SampleAudio } from "./bank";
+import type { BankSample, SampleAudio } from "./bank";
+import { parseRef } from "../samples/catalog";
+import { browserFactoryMap } from "../samples/factoryFiles";
 import { getAudioBuffer } from "../audioStore";
 
 /** A decoded sample for the bank, under a sample param. */
 export interface SampleMessage {
   param: string;
   ref: string;
-  audio: SampleAudio | null;
+  audio: BankSample | null;
 }
 
 export class DeviceSamples {
@@ -88,6 +90,8 @@ const audioOf = (buffer: AudioBuffer): SampleAudio => ({
 export const browserSample =
   (context: BaseAudioContext): LoadSample =>
   async (ref) => {
+    const parsed = parseRef(ref);
+    if (parsed.kind === "factory") return browserFactoryMap(context, parsed.id);
     const buffer = await loadSampleBuffer(context, ref);
     return buffer && audioOf(buffer);
   };

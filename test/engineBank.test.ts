@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EngineBank, PlanRejected, type SampleAudio, type SampleMap } from "../src/audio/bank/bank";
+import { EngineBank, PlanRejected, type SampleAudio, type SampleMap, type ShortAudio } from "../src/audio/bank/bank";
 import { EVENT, EventQueue } from "../src/audio/bank/events";
 import { BLOCK } from "../src/audio/bank/exports";
 import { TEST_EFFECTS, TEST_INSTRUMENTS } from "./support/testDevices";
@@ -356,7 +356,7 @@ describe("EngineBank", () => {
 
       describe("sample maps (INST-55)", () => {
         /** A region of `audio` for the low zone's keys, in SFZ's terms. */
-        const region = (ref: string, audio: SampleAudio, lovel = 0, hivel = 127, keycenter = 48) => ({
+        const region = (ref: string, audio: SampleAudio | ShortAudio, lovel = 0, hivel = 127, keycenter = 48) => ({
           ref,
           audio,
           lokey: 0,
@@ -399,9 +399,9 @@ describe("EngineBank", () => {
           expect(value).toBeCloseTo(20 / RATE, 6);
         });
 
-        it("plays a compact (16-bit) recording as the same sound, at half the memory", () => {
-          const compact = { ...short(0.3), compact: true };
-          const [value] = notes({ regions: [region("compact", compact)] }, [1]);
+        it("plays a 16-bit recording as the same sound, at half the memory", () => {
+          const shorts = { shorts: [new Int16Array(4 * BLOCK).fill(Math.round(0.3 * 32768))], rate: RATE };
+          const [value] = notes({ regions: [region("shorts", shorts)] }, [1]);
           expect(value).toBeCloseTo(0.3, 4);
         });
 

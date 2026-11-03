@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_HOSTED_APP_URL?: string;
   /** Where to register interest in the online app while it's invite-only. */
   readonly VITE_INTEREST_URL?: string;
+  /** Where the factory samples are (INST-55); https://corrente.cloud/factory, which any page may read, if unset. */
+  readonly VITE_FACTORY_URL?: string;
 }
 
 interface ImportMeta {

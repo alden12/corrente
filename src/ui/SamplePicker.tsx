@@ -4,16 +4,19 @@
  * its own component because, unlike the other param controls, it needs the
  * project's sample library and an import action threaded in from the panel.
  */
-import { useRef } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import type { ParamSpec } from "../audio/params/types";
 import {
   BUILTIN_SAMPLES,
   BUILTIN_WAVETABLES,
   builtinRef,
+  parseRef,
   wavetableRef,
   type SampleAsset,
 } from "../audio/samples/catalog";
 import { Select } from "./controls/Select";
+import { FACTORY_SOUNDS } from "../audio/samples/factory";
+import { factoryLoading } from "../audio/samples/factoryFiles";
 
 export function SamplePicker({
   spec,
@@ -36,6 +39,10 @@ export function SamplePicker({
   hideLabel?: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement | null>(null);
+  // A sampled instrument downloads the first time it's used (INST-55): how far it has got.
+  const loading = useSyncExternalStore(factoryLoading.subscribe, factoryLoading.read);
+  const parsed = parseRef(value);
+  const downloading = parsed.kind === "factory" ? loading[parsed.id] : undefined;
 
   const onPick = async (file: File) => {
     const ref = await onImportFile?.(file);
@@ -69,6 +76,16 @@ export function SamplePicker({
               </option>
             ))}
           </optgroup>
+          {!(spec.kind === "sample" && spec.wavetable) && (
+            // Downloaded the first time they're used, so each says how big it is.
+            <optgroup label="Sampled instruments">
+              {FACTORY_SOUNDS.map((sound) => (
+                <option key={sound.ref} value={sound.ref}>
+                  {`${sound.name} (${sound.downloadMB} MB)`}
+                </option>
+              ))}
+            </optgroup>
+          )}
           {assets.length > 0 && (
             <optgroup label="Imported">
               {assets.map((asset) => (
@@ -115,6 +132,11 @@ export function SamplePicker({
           </>
         )}
       </div>
+      {downloading && (
+        <span role="status" className="text-[10px] text-muted tabular-nums">
+          {`Downloading ${(downloading.loaded / 1e6).toFixed(1)} of ${(downloading.total / 1e6).toFixed(1)} MB`}
+        </span>
+      )}
     </label>
   );
 }

@@ -33,7 +33,10 @@
 // 10: the blocks from the Micro VA build (INST-45): syncsaw, abs, min, max, clip, compare, select's
 // eight inputs and inputs a block lets go unwired. An older side refuses a device using them, but only
 // meets one where someone makes it.
-export const PROTOCOL_VERSION = 10;
+// 11: factory samples (INST-55), `factory:<set>/<sound>` refs to sample maps loaded on first use. An
+// older side plays such a sample param as silence, but only meets one where someone picks a sampled
+// instrument.
+export const PROTOCOL_VERSION = 11;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

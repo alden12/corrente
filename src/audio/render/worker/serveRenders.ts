@@ -8,7 +8,7 @@
  * them from storage.
  */
 import { ProjectStore } from "../../project/projectStore";
-import type { SampleAudio } from "../../bank/bank";
+import type { BankSample, SampleAudio } from "../../bank/bank";
 import { renderProject } from "../renderProject";
 import { drawPortrait } from "../../portraits/devicePortrait";
 import { buffersOf, type FromWorker, type LoadRequest, type ToWorker } from "./messages";
@@ -21,11 +21,11 @@ export interface WorkerPort {
 
 export function serveRenders(port: WorkerPort): void {
   /** Requests waiting for their audio. */
-  const waiting = new Map<number, (audio: SampleAudio | null) => void>();
+  const waiting = new Map<number, (audio: BankSample | null) => void>();
   let nextRequest = 0;
 
   const ask = (id: number, what: LoadRequest["what"], ref: string) =>
-    new Promise<SampleAudio | null>((resolve) => {
+    new Promise<BankSample | null>((resolve) => {
       const request = nextRequest++;
       waiting.set(request, resolve);
       port.post({ kind: "load", id, request, what, ref });
@@ -39,7 +39,8 @@ export function serveRenders(port: WorkerPort): void {
         engine,
         sampleRate,
         loadSample: (ref: string) => ask(id, "sample", ref),
-        loadAudio: (fileId: string) => ask(id, "audio", fileId),
+        // An audio clip's file is always plain audio: only a sample param can name a map.
+        loadAudio: (fileId: string) => ask(id, "audio", fileId) as Promise<SampleAudio | null>,
       };
       renderProject(store, setup, options).then(
         (render) => port.post({ kind: "done", id, render }, buffersOf(render.channels)),

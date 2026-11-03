@@ -4,6 +4,7 @@ import { SCALE_NAMES } from "../../../src/audio/theory/scales";
 import { z } from "zod";
 import { GROOVES, grooveById } from "../../../src/audio/grooves/catalog";
 import { BUILTIN_SAMPLES, builtinRef, assetRef } from "../../../src/audio/samples/catalog";
+import { FACTORY_SOUNDS } from "../../../src/audio/samples/factory";
 import { timeSignatureSchema } from "../../../src/audio/project/schema";
 import { ok, fail } from "../shared";
 import type { ToolContext } from "../context";
@@ -106,13 +107,14 @@ export function registerTransportTools({ server, target }: ToolContext): void {
     {
       title: "List samples",
       description:
-        "List samples for the Sampler instrument: the built-in kit plus the project's imported library. Set a Sampler track's sample by calling set_parameter with param \"sampler.sample\" and one of these refs. Importing a new file is done in the app UI (the server can't read local files).",
+        "List samples for the Sampler instrument: the built-in kit, the sampled instruments (multi-sampled, such as a grand piano: downloaded on first use, so each gives its size in MB to download and to hold), plus the project's imported library. Set a Sampler track's sample by calling set_parameter with param \"sampler.sample\" and one of these refs. Importing a new file is done in the app UI (the server can't read local files).",
     },
     async () =>
       ok(
         JSON.stringify(
           {
             builtin: BUILTIN_SAMPLES.map((sample) => ({ ref: builtinRef(sample.id), name: sample.name })),
+            sampledInstruments: FACTORY_SOUNDS,
             project: target.project.getSamples().map((sample) => ({ ref: assetRef(sample.id), name: sample.name })),
           },
           null,

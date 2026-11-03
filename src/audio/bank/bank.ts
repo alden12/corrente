@@ -63,11 +63,16 @@ interface Track {
 export interface SampleAudio {
   channels: Float32Array[];
   rate: number;
-  /**
-   * Kept at 16 bits in the engine, half the memory (INST-55): for the factory recordings, which are
-   * 16-bit already and big. Anything else keeps every bit it has.
-   */
-  compact?: boolean;
+}
+
+/**
+ * Audio as 16-bit whole numbers, kept that way in the engine at half the memory (INST-55): the factory
+ * recordings, which are 16-bit already and big, and are made this way as soon as they're decoded so a
+ * whole piano is never held as floats. Anything else keeps every bit it has, as `SampleAudio`.
+ */
+export interface ShortAudio {
+  shorts: Int16Array[];
+  rate: number;
 }
 
 /**
@@ -77,7 +82,7 @@ export interface SampleAudio {
  */
 export interface SampleRegion {
   ref: string;
-  audio: SampleAudio;
+  audio: SampleAudio | ShortAudio;
   lokey: number;
   hikey: number;
   lovel: number;
@@ -103,10 +108,6 @@ export interface LoadOptions {
   carry?: Int32Array;
   from?: Record<string, number>;
 }
-
-/** Float audio as 16-bit whole numbers, rounded, with anything past full scale held at it. */
-const toShorts = (channel: Float32Array): Int16Array =>
-  Int16Array.from(channel, (value) => Math.max(-32768, Math.min(32767, Math.round(value * 32768))));
 
 export class EngineBank {
   readonly engine: EngineExports;
@@ -245,16 +246,17 @@ export class EngineBank {
    * user. The empty slot if it isn't loaded and there's no audio. A map holds each of its regions'
    * audio first (each a user of it), then takes a slot of its own naming theirs.
    */
-  private holdSample(ref: string, audio: BankSample | null): number {
+  private holdSample(ref: string, audio: BankSample | ShortAudio | null): number {
     const held = this.sampleSlots.get(ref);
     if (held) {
       held.users++;
       return held.slot;
     }
     if (!audio) return EMPTY_SAMPLE;
-    if (!isSampleMap(audio)) {
+    if ("shorts" in audio || !isSampleMap(audio)) {
       const slot = this.freeSlot();
-      this.loadSample(slot, audio.channels, audio.rate, audio.compact);
+      if ("shorts" in audio) this.loadShortSample(slot, audio.shorts, audio.rate);
+      else this.loadSample(slot, audio.channels, audio.rate);
       this.sampleSlots.set(ref, { slot, users: 1 });
       return slot;
     }
@@ -306,23 +308,32 @@ export class EngineBank {
    * channels of the same length, at the sample's own rate. A sampler names its slot, and plays it at
    * any track's notes (INST-36.6). `setSample` is the way in by name; this is the slot itself.
    */
-  loadSample(slot: number, channels: Float32Array[], rate: number, compact = false): void {
+  loadSample(slot: number, channels: Float32Array[], rate: number): void {
+    this.writeSample(slot, channels, rate, Float32Array, this.engine.eng_sample_reserve);
+  }
+
+  /** The same for 16-bit audio, kept at 16 bits (`ShortAudio`). */
+  loadShortSample(slot: number, shorts: Int16Array[], rate: number): void {
+    this.writeSample(slot, shorts, rate, Int16Array, this.engine.eng_sample_reserve16);
+  }
+
+  private writeSample<Values extends Float32Array | Int16Array>(
+    slot: number,
+    channels: Values[],
+    rate: number,
+    view: new (buffer: ArrayBuffer, offset: number, length: number) => Values,
+    reserve: (slot: number, frames: number, channels: number, rate: number) => number,
+  ): void {
     const frames = channels[0]?.length ?? 0;
     const even = channels.every((channel) => channel.length === frames);
-    const reserve = compact ? this.engine.eng_sample_reserve16 : this.engine.eng_sample_reserve;
     const pointer = even ? reserve(slot, frames, channels.length, rate) : 0;
     if (pointer === 0) {
       throw new RangeError(
         `sample slot ${slot}: ${channels.length} channels of ${frames} frames at ${rate} Hz don't fit (0 to ${SAMPLE_SLOTS - 1}, one or two channels of the same length, up to 2^24 floats)`,
       );
     }
-    if (compact) {
-      const data = new Int16Array(this.engine.memory.buffer, pointer, frames * channels.length);
-      channels.forEach((channel, index) => data.set(toShorts(channel), index * frames));
-    } else {
-      const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);
-      channels.forEach((channel, index) => data.set(channel, index * frames));
-    }
+    const data = new view(this.engine.memory.buffer as ArrayBuffer, pointer, frames * channels.length);
+    channels.forEach((channel, index) => data.set(channel, index * frames));
     this.view();
   }
 

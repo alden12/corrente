@@ -16,6 +16,7 @@
  * never the content hash, so trimming or re-encoding a sample never breaks them.
  */
 import type { Tag } from "../tags";
+import { FACTORY_PREFIX, factorySound } from "./factory";
 
 export interface BuiltinSample {
   /** Stable id, e.g. "kick". The ref is `builtin:${id}`. */
@@ -111,7 +112,9 @@ export type SampleRef =
   | { kind: "none" }
   | { kind: "builtin"; id: string }
   | { kind: "asset"; id: string }
-  | { kind: "wavetable"; id: string };
+  | { kind: "wavetable"; id: string }
+  /** A factory sound (INST-55): a sample map, `<set>/<sound>`, loaded on first use. */
+  | { kind: "factory"; id: string };
 
 /** Build the ref string for a built-in sample. */
 export const builtinRef = (id: string): string => `builtin:${id}`;
@@ -127,6 +130,7 @@ export function parseRef(ref: string): SampleRef {
   if (ref.startsWith("builtin:")) return { kind: "builtin", id: ref.slice("builtin:".length) };
   if (ref.startsWith("asset:")) return { kind: "asset", id: ref.slice("asset:".length) };
   if (ref.startsWith("wavetable:")) return { kind: "wavetable", id: ref.slice("wavetable:".length) };
+  if (ref.startsWith(FACTORY_PREFIX)) return { kind: "factory", id: ref.slice(FACTORY_PREFIX.length) };
   return { kind: "none" };
 }
 
@@ -146,5 +150,6 @@ export function refLabel(ref: string, assets: SampleAsset[] = []): string {
   if (parsed.kind === "wavetable") {
     return BUILTIN_WAVETABLES.find((table) => table.id === parsed.id)?.name ?? parsed.id;
   }
+  if (parsed.kind === "factory") return factorySound(parsed.id)?.name ?? parsed.id;
   return "None";
 }
