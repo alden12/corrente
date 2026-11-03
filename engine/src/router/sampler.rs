@@ -26,8 +26,8 @@ use super::Slot;
 use crate::plan::Node;
 use crate::plan::SAMPLER_CONTROLS;
 
-/// How many samples a bank holds at once.
-pub const MAX_SAMPLES: usize = 256;
+/// How many samples a bank holds at once: a sampled piano's map names around a hundred (INST-55).
+pub const MAX_SAMPLES: usize = 1024;
 /// The most floats one sample may take (frames times channels): 64MB, about 3 minutes of stereo.
 pub const MAX_SAMPLE_FLOATS: usize = 1 << 24;
 

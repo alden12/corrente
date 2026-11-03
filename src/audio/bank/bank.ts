@@ -27,6 +27,7 @@ import {
   EMPTY_SAMPLE,
   INPUT_CHANNELS,
   OUTPUT_CHANNELS,
+  SAMPLE_SLOTS,
   startEngine,
   withWords,
   type EngineExports,
@@ -64,6 +65,34 @@ export interface SampleAudio {
   rate: number;
 }
 
+/**
+ * One recording in a sample map, with the keys and velocities it plays and the note it was recorded
+ * at, in SFZ's terms (`lokey` to `hikey`, `lovel` to `hivel` on MIDI's 0 to 127, `pitch_keycenter`).
+ * `ref` names its audio, so two maps sharing a recording share its slot.
+ */
+export interface SampleRegion {
+  ref: string;
+  audio: SampleAudio;
+  lokey: number;
+  hikey: number;
+  lovel: number;
+  hivel: number;
+  keycenter: number;
+}
+
+/**
+ * A sample made of regions (INST-55): the engine plays the one for a note's key and velocity, and
+ * regions that fit the same note take turns (round robin), in this order.
+ */
+export interface SampleMap {
+  regions: SampleRegion[];
+}
+
+/** What a sample param is given: audio, or a map of it. */
+export type BankSample = SampleAudio | SampleMap;
+
+export const isSampleMap = (sample: BankSample): sample is SampleMap => "regions" in sample;
+
 /** How a plan loads, beyond its values (`EngineBank.load`). */
 export interface LoadOptions {
   carry?: Int32Array;
@@ -78,8 +107,8 @@ export class EngineBank {
   /** The transport to count the beat from: stopped at 120 until told otherwise. */
   private transport: Transport = { time: 0, beat: 0, tempo: 120, playing: false };
   private readonly tracks: Track[];
-  /** Each sample loaded, by ref: its slot, and how many sample params name it. */
-  private readonly sampleSlots = new Map<string, { slot: number; users: number }>();
+  /** Each sample loaded, by ref: its slot, how many sample params (or maps) name it, and a map's regions. */
+  private readonly sampleSlots = new Map<string, { slot: number; users: number; regions?: string[] }>();
   private outputs: Float32Array[][] = [];
   private inputs: Float32Array[][] = [];
   /**
@@ -190,7 +219,7 @@ export class EngineBank {
    * doesn't have it yet (null, or an empty ref, for none). Takes effect at once. Throws a RangeError,
    * leaving the param as it was, if the sample is too big or every slot is taken.
    */
-  setSample(track: number, param: string, ref: string, audio: SampleAudio | null): void {
+  setSample(track: number, param: string, ref: string, audio: BankSample | null): void {
     const state = this.trackAt(track);
     const previous = state.samples[param];
     const slot = ref ? this.holdSample(ref, audio) : EMPTY_SAMPLE;
@@ -204,24 +233,50 @@ export class EngineBank {
 
   /**
    * The slot `ref` is in, loading `audio` into a free one first if it isn't loaded, counting one more
-   * user. The empty slot if it isn't loaded and there's no audio.
+   * user. The empty slot if it isn't loaded and there's no audio. A map holds each of its regions'
+   * audio first (each a user of it), then takes a slot of its own naming theirs.
    */
-  private holdSample(ref: string, audio: SampleAudio | null): number {
+  private holdSample(ref: string, audio: BankSample | null): number {
     const held = this.sampleSlots.get(ref);
     if (held) {
       held.users++;
       return held.slot;
     }
     if (!audio) return EMPTY_SAMPLE;
+    if (!isSampleMap(audio)) {
+      const slot = this.freeSlot();
+      this.loadSample(slot, audio.channels, audio.rate);
+      this.sampleSlots.set(ref, { slot, users: 1 });
+      return slot;
+    }
+    const regions: string[] = [];
+    try {
+      const words = audio.regions.flatMap((region) => {
+        const slot = this.holdSample(region.ref, region.audio);
+        regions.push(region.ref);
+        return [slot, region.lokey, region.hikey, region.lovel, region.hivel, region.keycenter];
+      });
+      const slot = this.freeSlot();
+      const encoded = new Int32Array(Float64Array.from(words).buffer);
+      const code = this.withWords(encoded, (pointer) => this.engine.eng_sample_map(slot, pointer, encoded.length));
+      if (code !== 0) throw new RangeError(`sample map ${ref}: the engine refused its ${audio.regions.length} regions`);
+      this.sampleSlots.set(ref, { slot, users: 1, regions });
+      return slot;
+    } catch (error) {
+      regions.forEach((region) => this.releaseSample(region));
+      throw error;
+    }
+  }
+
+  /** A slot no sample is in. */
+  private freeSlot(): number {
     const taken = new Set([...this.sampleSlots.values()].map((entry) => entry.slot));
     const slot = Array.from({ length: EMPTY_SAMPLE }, (_, index) => index).find((index) => !taken.has(index));
     if (slot === undefined) throw new RangeError(`every sample slot is taken (${EMPTY_SAMPLE})`);
-    this.loadSample(slot, audio.channels, audio.rate);
-    this.sampleSlots.set(ref, { slot, users: 1 });
     return slot;
   }
 
-  /** One fewer user of `ref`; the last frees its slot. */
+  /** One fewer user of `ref`; the last frees its slot, and a map's last lets go of its regions. */
   private releaseSample(ref: string): void {
     const held = this.sampleSlots.get(ref);
     if (!held) return;
@@ -229,6 +284,7 @@ export class EngineBank {
     if (held.users > 0) return;
     this.freeSample(held.slot);
     this.sampleSlots.delete(ref);
+    held.regions?.forEach((region) => this.releaseSample(region));
   }
 
   /** How many samples the bank holds, for tests. */
@@ -237,7 +293,7 @@ export class EngineBank {
   }
 
   /**
-   * Put a sample in one of the engine's sample slots (0 to 255), replacing any there: one or two
+   * Put a sample in one of the engine's sample slots (0 to SAMPLE_SLOTS - 1), replacing any there: one or two
    * channels of the same length, at the sample's own rate. A sampler names its slot, and plays it at
    * any track's notes (INST-36.6). `setSample` is the way in by name; this is the slot itself.
    */
@@ -247,7 +303,7 @@ export class EngineBank {
     const pointer = even ? this.engine.eng_sample_reserve(slot, frames, channels.length, rate) : 0;
     if (pointer === 0) {
       throw new RangeError(
-        `sample slot ${slot}: ${channels.length} channels of ${frames} frames at ${rate} Hz don't fit (0 to 255, one or two channels of the same length, up to 2^24 floats)`,
+        `sample slot ${slot}: ${channels.length} channels of ${frames} frames at ${rate} Hz don't fit (0 to ${SAMPLE_SLOTS - 1}, one or two channels of the same length, up to 2^24 floats)`,
       );
     }
     const data = new Float32Array(this.engine.memory.buffer, pointer, frames * channels.length);

@@ -53,6 +53,7 @@ mod graph;
 mod keys;
 mod params;
 mod render;
+mod sample_map;
 mod sampler;
 mod sources;
 mod track;
@@ -69,6 +70,11 @@ pub(crate) use binding::Shaping;
 pub use wavetable::{CYCLE, LEVELS};
 #[cfg(test)]
 pub use voices::{LegatoOff, VoiceAllocator};
+// The sample maps' tests make maps, and slots up to the last.
+#[cfg(test)]
+pub use sample_map::SampleMap;
+#[cfg(test)]
+pub use sampler::MAX_SAMPLES;
 
 use crate::plan::{CHANNELS, VOICE_SIGNALS};
 

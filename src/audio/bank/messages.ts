@@ -3,7 +3,7 @@
  * AudioContext seconds; a track is the bank's track slot, which is also the node's output index.
  */
 import type { CompiledPlan } from "../definitions/compile";
-import type { LoadOptions, SampleAudio } from "./bank";
+import type { BankSample, LoadOptions } from "./bank";
 
 export type ToBank =
   /** `options`: what carries on from the plan it replaces, and params that ramp in (EngineBank.load). */
@@ -18,7 +18,7 @@ export type ToBank =
   /** Move a MIDI device value, numbered as chainWords' `values`, at `time`. */
   | { type: "midiValue"; track: number; value: number; raw: number; time: number }
   /** A sample param now names `ref`, with its audio (none for an empty ref, or one that didn't load). */
-  | { type: "sample"; track: number; param: string; ref: string; audio: SampleAudio | null }
+  | { type: "sample"; track: number; param: string; ref: string; audio: BankSample | null }
   /** The song's key (DAW-12): a tonic pitch class and its scale as bits. Applies to every track. */
   | ({ type: "key" } & EngineKey)
   /** Where the transport is: `beat` at context time `time`, at `tempo`. Applies to every track. */

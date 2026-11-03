@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EngineBank, PlanRejected } from "../src/audio/bank/bank";
+import { EngineBank, PlanRejected, type SampleAudio, type SampleMap } from "../src/audio/bank/bank";
 import { EVENT, EventQueue } from "../src/audio/bank/events";
 import { BLOCK } from "../src/audio/bank/exports";
 import { TEST_EFFECTS, TEST_INSTRUMENTS } from "./support/testDevices";
@@ -352,6 +352,61 @@ describe("EngineBank", () => {
         bank.process(0);
         expect(bank.output(0, 0).every((sample) => sample === 0)).toBe(true);
         expect(bank.engine.eng_voice_active(0, 0)).toBe(0);
+      });
+
+      describe("sample maps (INST-55)", () => {
+        /** A region of `audio` for the low zone's keys, in SFZ's terms. */
+        const region = (ref: string, audio: SampleAudio, lovel = 0, hivel = 127, keycenter = 48) => ({
+          ref,
+          audio,
+          lokey: 0,
+          hikey: 59,
+          lovel,
+          hivel,
+          keycenter,
+        });
+        /** A few blocks of one value: short, so a released note is over before the next starts. */
+        const short = (value: number) => ({ channels: [new Float32Array(4 * BLOCK).fill(value)], rate: RATE });
+        /** The low zone given a map, and what each note on 48 plays in turn, a sample in. */
+        const notes = (map: SampleMap, velocities: number[]) => {
+          const bank = zonedBank();
+          bank.setSample(0, "low", "map", map);
+          return velocities.map((velocity) => {
+            bank.noteOn(0, 48, velocity, 0);
+            bank.process(0);
+            const value = bank.output(0, 0)[10];
+            bank.allNotesOff(0, 0);
+            Array.from({ length: 8 }, () => bank.process(0));
+            return value;
+          });
+        };
+
+        it("plays the region for the note's velocity", () => {
+          const layered = { regions: [region("map-soft", short(0.3), 0, 63), region("map-loud", short(0.6), 64, 127)] };
+          const [soft, loud] = notes(layered, [0.3, 1]);
+          expect(soft).toBeCloseTo(0.3 * 0.3, 6);
+          expect(loud).toBeCloseTo(0.6, 6);
+        });
+
+        it("takes turns between regions that fit the same note", () => {
+          const takes = { regions: [region("take-1", short(0.3)), region("take-2", short(0.4))] };
+          notes(takes, [1, 1, 1]).forEach((value, index) => expect(value).toBeCloseTo([0.3, 0.4, 0.3][index], 6));
+        });
+
+        it("plays a region from the note it was recorded at", () => {
+          // Recorded an octave below the note played, so it reads twice as fast.
+          const [value] = notes({ regions: [region("ramp", { channels: [ramp], rate: RATE }, 0, 127, 36)] }, [1]);
+          expect(value).toBeCloseTo(20 / RATE, 6);
+        });
+
+        it("lets go of a map's regions with the map", () => {
+          const bank = zonedBank();
+          const before = bank.samplesHeld;
+          bank.setSample(0, "low", "map", { regions: [region("one", flat(0.3)), region("two", flat(0.4))] });
+          expect(bank.samplesHeld).toBe(before + 2);
+          bank.setSample(0, "low", "low", flat(0.1));
+          expect(bank.samplesHeld).toBe(before);
+        });
       });
 
       it("reads a zone's settings from its params as each note starts", () => {

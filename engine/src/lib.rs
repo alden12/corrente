@@ -401,7 +401,7 @@ pub extern "C" fn eng_key(tonic: i32, scale: i32) {
     with_engine(|engine| engine.set_key(tonic, scale));
 }
 
-/// Make room for a sample in slot `slot` (0 to 255), `frames` long with 1 or 2 `channels` at its own
+/// Make room for a sample in slot `slot` (0 to MAX_SAMPLES - 1), `frames` long with 1 or 2 `channels` at its own
 /// `rate`, and return where JS writes it: channel 0's frames, then channel 1's. 0 if the slot doesn't
 /// exist or the sample is too big. Memory may grow, so JS makes its views again after this.
 // TS: return addressOf(withEngine((engine) => engine.reserveSample(slot, frames, channels, rate))) ?? 0
@@ -417,6 +417,18 @@ pub extern "C" fn eng_sample_reserve(slot: i32, frames: i32, channels: i32, rate
 pub extern "C" fn eng_sample_free(slot: i32) {
     if let Some(slot) = index(slot) {
         with_engine(|engine| engine.free_sample(slot));
+    }
+}
+
+/// Put a sample map (INST-55, router/sample_map.rs) in a slot, from memory eng_malloc handed out, f64s
+/// as pairs of words: six for each region (slot, lokey, hikey, lovel, hivel, keycenter). 0, or -1 if
+/// the words don't make a map or the slot doesn't exist (the slot keeps what it had).
+// TS: const doubles = doublesAt(pointer, length); return doubles && slot >= 0 && withEngine((engine) => engine.setMap(slot, doubles)) ? 0 : REJECTED;
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_sample_map(slot: i32, pointer: *const i32, length: i32) -> i32 {
+    match (doubles_at(pointer, length), index(slot)) {
+        (Some(doubles), Some(slot)) if with_engine(|engine| engine.set_map(slot, &doubles)) => 0,
+        _ => plan::REJECTED,
     }
 }
 

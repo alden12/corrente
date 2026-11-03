@@ -2,6 +2,7 @@
 //! its end or round its loop.
 
 use super::*;
+use crate::router::SampleMap;
 
 /// A voice playing a sampler: the note's frequency and gate in, both outputs out. `controls` are
 /// sample slot, root note, start, end, loop.
@@ -123,7 +124,7 @@ fn an_empty_slot_is_silent_and_freeing_one_silences_it() {
 fn samples_that_cannot_fit_are_refused() {
     let mut engine = Engine::new();
     engine.init(RATE, 1);
-    assert!(engine.reserve_sample(256, 100, 1, 48000.0).is_none(), "a slot past the last");
+    assert!(engine.reserve_sample(crate::router::MAX_SAMPLES, 100, 1, 48000.0).is_none(), "a slot past the last");
     assert!(engine.reserve_sample(0, 100, 3, 48000.0).is_none(), "three channels");
     assert!(engine.reserve_sample(0, 0, 1, 48000.0).is_none(), "no frames");
     assert!(engine.reserve_sample(0, 1 << 24, 2, 48000.0).is_none(), "too big");
@@ -201,4 +202,51 @@ fn each_voice_plays_the_zone_it_was_given() {
     engine.track_mut(0).unwrap().set_voice_signal(3, SIGNAL_SAMPLE, 2.0);
     assert!(render(&mut engine, 1).iter().all(|&sample| near(sample, -0.25)));
     assert!(!engine.track(0).is_some_and(|track| track.voice_active(3)));
+}
+
+/// A map's words: slot, lokey, hikey, lovel, hivel, keycenter for each region.
+// TS: const mapWords = (regions: number[][]) => regions.flat()
+fn map_words(regions: &[[f64; 6]]) -> Vec<f64> {
+    regions.iter().flatten().copied().collect()
+}
+
+#[test]
+fn a_map_picks_the_region_by_key_and_velocity() {
+    // A soft and a loud snare on 38, and a kick on 36 at any velocity.
+    let map = SampleMap::parse(&map_words(&[[1.0, 38.0, 38.0, 0.0, 63.0, 38.0], [2.0, 38.0, 38.0, 64.0, 127.0, 38.0], [3.0, 36.0, 36.0, 0.0, 127.0, 36.0]])).expect("a map");
+    let slot = |note: i32, velocity: f64| map.pick(note, velocity).map(|region| region.slot);
+    assert_eq!(slot(38, 0.3), Some(1), "soft");
+    assert_eq!(slot(38, 0.9), Some(2), "loud");
+    // 63.5 rounds to 64, so the two ranges meet with no gap between them.
+    assert_eq!(slot(38, 63.5 / 127.0), Some(2), "on the boundary");
+    assert_eq!(slot(36, 1.0), Some(3), "the kick");
+    assert_eq!(slot(40, 1.0), None, "no region for the key");
+}
+
+#[test]
+fn regions_that_fit_the_same_note_take_turns() {
+    // Two takes of a snare and two of a hat: each drum alternates on its own.
+    let map = SampleMap::parse(&map_words(&[[1.0, 38.0, 38.0, 0.0, 127.0, 38.0], [2.0, 38.0, 38.0, 0.0, 127.0, 38.0], [3.0, 42.0, 42.0, 0.0, 127.0, 42.0], [4.0, 42.0, 42.0, 0.0, 127.0, 42.0]])).expect("a map");
+    let played: Vec<usize> = [38, 42, 38, 42, 38].iter().filter_map(|&note| map.pick(note, 1.0)).map(|region| region.slot).collect();
+    assert_eq!(played, vec![1, 3, 2, 4, 1]);
+}
+
+#[test]
+fn maps_that_do_not_make_sense_are_refused() {
+    assert!(SampleMap::parse(&[]).is_none(), "no regions");
+    assert!(SampleMap::parse(&[1.0, 38.0, 38.0, 0.0, 127.0]).is_none(), "half a region");
+    assert!(SampleMap::parse(&map_words(&[[-1.0, 38.0, 38.0, 0.0, 127.0, 38.0]])).is_none(), "a slot before the first");
+    assert!(SampleMap::parse(&map_words(&[[crate::router::MAX_SAMPLES as f64, 38.0, 38.0, 0.0, 127.0, 38.0]])).is_none(), "a slot past the last");
+    assert!(SampleMap::parse(&map_words(&[[1.0, 40.0, 38.0, 0.0, 127.0, 38.0]])).is_none(), "keys upside down");
+    assert!(SampleMap::parse(&map_words(&[[1.0, 38.0, 38.0, 100.0, 50.0, 38.0]])).is_none(), "velocities upside down");
+}
+
+#[test]
+fn a_slot_holds_audio_or_a_map_never_both() {
+    let mut engine = Engine::new();
+    engine.init(RATE, 1);
+    assert!(engine.set_map(5, &map_words(&[[1.0, 38.0, 38.0, 0.0, 127.0, 38.0]])), "a map in slot 5");
+    assert!(!engine.set_map(5, &[1.0]), "bad words leave it");
+    assert!(engine.reserve_sample(5, 100, 1, RATE as f32).is_some(), "audio replaces the map");
+    assert!(!engine.set_map(crate::router::MAX_SAMPLES, &map_words(&[[1.0, 38.0, 38.0, 0.0, 127.0, 38.0]])), "no such slot");
 }

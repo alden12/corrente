@@ -18,7 +18,7 @@
 
 use super::binding::Binding;
 use crate::midi::{Chain, Event};
-use super::sampler::Sample;
+use super::sample_map::Samples;
 use super::track::Track;
 use super::voices::{LegatoOff, VoiceAllocator};
 use crate::plan::{SIGNAL_END, SIGNAL_ROOT, SIGNAL_SAMPLE, SIGNAL_START};
@@ -29,7 +29,7 @@ impl Track {
     /// how an effect added to a chain fades in from bypassed). False, changing nothing, if there is no
     /// plan or the binding has a different number of sources from it.
     // TS: the second half of bank.ts's load, from `state.plan = plan` on.
-    pub(super) fn bind(&mut self, binding: Binding, from: &[f64], sample_rate: i32, samples: &[Option<Sample>]) -> bool {
+    pub(super) fn bind(&mut self, binding: Binding, from: &[f64], sample_rate: i32, samples: &Samples) -> bool {
         // TS: const graph = this.graph; if (!graph || binding.sources.length !== graph.plan.paramCount) return false;
         let Some(graph) = &self.graph else { return false };
         if binding.sources.len() != graph.plan.param_count {
@@ -86,7 +86,7 @@ impl Track {
     /// block: in the slot the allocator picks, cutting the voice it steals, with the zone it fits. A
     /// note no zone fits doesn't sound, or take a voice.
     // TS: this.midi ? this.midi.key(offset, on(note, velocity)) : this.playOn(offset, note, velocity, samples)
-    pub fn key_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &[Option<Sample>]) {
+    pub fn key_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &Samples) {
         match &mut self.midi {
             Some(chain) => chain.key(offset, Event::On { note, velocity: velocity as f32, length: None, index: 0 }),
             None => self.play_on(offset, note, velocity, samples),
@@ -95,7 +95,7 @@ impl Track {
 
     /// Start a note in a voice: what `key_on` does with no MIDI devices, and what they play.
     // TS: bank.ts's startNote.
-    pub(super) fn play_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &[Option<Sample>]) {
+    pub(super) fn play_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &Samples) {
         // TS:
         //   if (this.voices.slots === 0) return;
         //   const start = this.binding.start(note, velocity, samples); if (!start) return;
@@ -167,7 +167,7 @@ impl Track {
             match self.voices.legato_off(note) {
                 LegatoOff::Kept => return,
                 LegatoOff::Back { slot, note: back, velocity } => {
-                    if let Some(start) = self.binding.start(back, f64::from(velocity), &[]) {
+                    if let Some(start) = self.binding.start(back, f64::from(velocity), &Samples::new()) {
                         self.retune(slot, offset, start.frequency, back as f32);
                         return;
                     }
@@ -196,7 +196,7 @@ impl Track {
     // TS:
     //   const down = this.midi ? [...this.midi.down()] : this.voices.heldNotes();
     //   this.releaseVoices(0); this.midi = chain; down.forEach(([note, velocity]) => this.keyOn(0, note, velocity, samples));
-    pub fn load_midi(&mut self, chain: Option<Chain>, samples: &[Option<Sample>]) {
+    pub fn load_midi(&mut self, chain: Option<Chain>, samples: &Samples) {
         let down = match &self.midi {
             Some(old) => old.down().to_vec(),
             None => self.voices.held_notes(),

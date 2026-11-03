@@ -3,6 +3,7 @@
 
 use super::binding::Binding;
 use crate::midi::{self, BlockTransport, Key};
+use super::sample_map::{SampleMap, Samples};
 use super::sampler::{MAX_SAMPLES, Sample};
 use super::track::Track;
 use super::{BLOCK, SILENT_SLOT, Slot};
@@ -22,15 +23,15 @@ pub struct Engine {
     key: Key,
     /// The host signals for the block, filled from `transport` and shared by every track.
     host: [Slot; HOST_SIGNALS],
-    /// The samples samplers play, by slot: MAX_SAMPLES slots, each empty or holding one.
-    samples: Vec<Option<Sample>>,
+    /// The samples samplers play, by slot: MAX_SAMPLES slots, each empty or holding audio or a map.
+    samples: Samples,
 }
 
 impl Engine {
     // `const fn` can also run at compile time, which lib.rs needs to set up the
     // one engine before anything calls it.
     pub const fn new() -> Self {
-        Engine { sample_rate: 48000, tracks: Vec::new(), transport: (0.0, 120.0, false), key: Key::C_MAJOR, host: [SILENT_SLOT; HOST_SIGNALS], samples: Vec::new() }
+        Engine { sample_rate: 48000, tracks: Vec::new(), transport: (0.0, 120.0, false), key: Key::C_MAJOR, host: [SILENT_SLOT; HOST_SIGNALS], samples: Samples::new() }
     }
 
     /// Set the sample rate and how many tracks the bank has, all silent until a plan loads.
@@ -39,10 +40,12 @@ impl Engine {
     pub fn init(&mut self, sample_rate: i32, track_count: usize) -> i32 {
         self.sample_rate = sample_rate;
         self.tracks = (0..track_count.min(MAX_TRACKS)).map(|_| Track::new()).collect();
-        // TS: this.samples = new Array(MAX_SAMPLES).fill(undefined). `resize_with` makes the slots
-        // here, so filling one later never grows the list mid-render.
-        self.samples.clear();
-        self.samples.resize_with(MAX_SAMPLES, || None);
+        // TS: this.samples = { audio: new Array(MAX_SAMPLES).fill(undefined), maps: new Array(MAX_SAMPLES).fill(undefined) }.
+        // `resize_with` makes the slots here, so filling one later never grows the lists mid-render.
+        self.samples.audio.clear();
+        self.samples.audio.resize_with(MAX_SAMPLES, || None);
+        self.samples.maps.clear();
+        self.samples.maps.resize_with(MAX_SAMPLES, || None);
         faust::COUNT as i32
     }
 
@@ -114,19 +117,34 @@ impl Engine {
 
     /// Make room for a sample in `slot`, replacing any there, and lend JS the memory to write it into:
     /// each channel's frames in turn. None for a slot that doesn't exist or a sample that won't fit.
-    // TS: const sample = Sample.create(frames, channels, rate); if (!sample || slot >= this.samples.length) return undefined; this.samples[slot] = sample; return sample.data;
+    // TS: const sample = Sample.create(frames, channels, rate); if (!sample || slot >= this.samples.audio.length) return undefined; this.samples.maps[slot] = undefined; this.samples.audio[slot] = sample; return sample.data;
     // `*entry = Some(sample)` frees whatever the slot held before. `.as_mut()` then lends the new
     // sample back out of its Option, writably.
     pub fn reserve_sample(&mut self, slot: usize, frames: usize, channels: usize, rate: f32) -> Option<&mut [f32]> {
-        let entry = self.samples.get_mut(slot)?;
-        *entry = Some(Sample::new(frames, channels, rate)?);
+        let sample = Sample::new(frames, channels, rate)?;
+        *self.samples.maps.get_mut(slot)? = None;
+        let entry = self.samples.audio.get_mut(slot)?;
+        *entry = Some(sample);
         entry.as_mut().map(Sample::data_mut)
     }
 
+    /// Put a sample map (sample_map.rs) in `slot`, replacing any audio or map there. False for a slot
+    /// that doesn't exist or words that don't make a map (the slot keeps what it had).
+    // TS: const map = SampleMap.parse(words); if (!map || slot >= this.samples.maps.length) return false; this.samples.audio[slot] = undefined; this.samples.maps[slot] = map; return true;
+    pub fn set_map(&mut self, slot: usize, words: &[f64]) -> bool {
+        let (Some(map), true) = (SampleMap::parse(words), slot < self.samples.maps.len()) else { return false };
+        self.samples.audio[slot] = None;
+        self.samples.maps[slot] = Some(map);
+        true
+    }
+
     /// Empty a sample slot, freeing its memory. A sampler still pointing at it plays silence.
-    // TS: if (this.samples[slot] !== undefined) this.samples[slot] = undefined
+    // TS: this.samples.audio[slot] = undefined; this.samples.maps[slot] = undefined
     pub fn free_sample(&mut self, slot: usize) {
-        if let Some(entry) = self.samples.get_mut(slot) {
+        if let Some(entry) = self.samples.audio.get_mut(slot) {
+            *entry = None;
+        }
+        if let Some(entry) = self.samples.maps.get_mut(slot) {
             *entry = None;
         }
     }

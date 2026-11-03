@@ -80,8 +80,10 @@ describe("the engine's memory over a long session", () => {
       }
     };
 
-    // Two passes through every plan on each track, at every sample length, to reach the high-water mark.
-    const warmUp = PLANS.length * 2 * 2 * 5;
+    // Every combination once, to reach the high-water mark: the plans on each track (12 rounds), the five
+    // sample lengths and the emptying every seventh round only line up again after all three, 420 rounds.
+    // Fewer missed one: after the sample maps (INST-55), the heap reached its peak at round 245.
+    const warmUp = PLANS.length * 2 * 5 * 7;
     Array.from({ length: warmUp }, (_, index) => round(index));
     const warm = bank.engine.memory.buffer.byteLength;
     Array.from({ length: 600 }, (_, index) => round(warmUp + index));

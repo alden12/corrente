@@ -18,7 +18,7 @@ use crate::midi::{BlockTransport, Chain, Event, MAX_EVENTS};
 use super::carry::{map_fits, section_map, same_node, take_over};
 use super::graph::{Graph, Output, SectionState, Voice};
 use super::params::ParamSource;
-use super::sampler::Sample;
+use super::sample_map::Samples;
 use super::voices::VoiceAllocator;
 use super::{BLOCK, SILENCE, SILENT_SLOT, SLOT, Slot};
 use crate::plan::{CHANNELS, HOST_SIGNALS, MAX_INPUTS, Plan, SIGNAL_FREQ, SIGNAL_GATE, SIGNAL_NOTE, SIGNAL_SAMPLE, SIGNAL_SEED, SIGNAL_VELOCITY, VOICE_SIGNALS};
@@ -155,7 +155,7 @@ impl Track {
 
     /// Render one block into `output`, crossfading from the outgoing graph in the block after a load.
     /// The MIDI devices' notes for the block go to the voices first.
-    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &[Option<Sample>], transport: BlockTransport) {
+    pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &Samples, transport: BlockTransport) {
         // TS: this.midi?.block(this.clock, transport).forEach(([offset, event]) => event.kind === "on" ? this.playOn(...) : this.playOff(...))
         // `.take()` lends the chain out of the track while the track plays its notes, then puts it back.
         self.played_count = 0;
@@ -177,7 +177,7 @@ impl Track {
         }
         // TS: if (this.graph) this.graph.render(this.inputs, host, samples, this.voiceSum, this.output); else this.output.forEach((channel) => channel.fill(0));
         match &mut self.graph {
-            Some(graph) => graph.render(&self.inputs, host, samples, &mut self.voice_sum, &mut self.output),
+            Some(graph) => graph.render(&self.inputs, host, &samples.audio, &mut self.voice_sum, &mut self.output),
             None => self.output.iter_mut().for_each(|channel| channel.fill(0.0)),
         }
         // TS:
@@ -187,7 +187,7 @@ impl Track {
         //   }
         //   this.fading = false;
         if let (true, Some(outgoing)) = (self.fading, &mut self.outgoing) {
-            outgoing.render(&self.inputs, host, samples, &mut self.voice_sum, &mut self.faded);
+            outgoing.render(&self.inputs, host, &samples.audio, &mut self.voice_sum, &mut self.faded);
             self.output.iter_mut().zip(&self.faded).for_each(|(channel, faded)| {
                 channel.iter_mut().zip(faded).enumerate().for_each(|(index, (sample, &old))| {
                     let fade_in = (index + 1) as f32 / BLOCK as f32;

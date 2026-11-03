@@ -33,6 +33,7 @@
 //! - `enum Setting { Fixed(f64), Bound(usize, Shaping) }` is a TS discriminated union whose cases
 //!   carry data; `match` reads it by case.
 
+use super::sample_map::Samples;
 use super::sampler::Sample;
 
 /// A value's shaping on the way to the engine: read off `table` if it has points, then scaled and
@@ -180,9 +181,10 @@ impl Binding {
 
     /// How `note` starts, or None if the plan has zones and none fits it. A zone's settings are read
     /// now: its tune and key tracking set the frequency, its level scales the velocity, and its trims,
-    /// in milliseconds, move the start and end by the sample's length.
+    /// in milliseconds, move the start and end by the sample's length. A zone whose sample is a map
+    /// (sample_map.rs) plays the region the map picks, from the region's keycenter; none fits, no note.
     // TS: the first half of bank.ts's startNote, from `zoneFor` to the eng_voice_signal calls.
-    pub fn start(&self, note: i32, velocity: f64, samples: &[Option<Sample>]) -> Option<NoteStart> {
+    pub fn start(&self, note: i32, velocity: f64, samples: &Samples) -> Option<NoteStart> {
         let values = &self.values;
         // TS: if (!this.zones) return { frequency: frequencyOf(note), velocity, zone: undefined };
         // `let Some(x) = y else { ... }` names what's inside an Option, or runs the else (which must leave).
@@ -200,19 +202,28 @@ impl Binding {
             note_value >= low_key && note_value <= high_key && velocity >= low_velocity && velocity <= high_velocity
         })?;
         // TS:
-        //   const root = zoneValue(zone.root, values);
+        //   const map = samples.maps[values[zone.param]];
+        //   const region = map?.pick(note, velocity); if (map && !region) return undefined;
+        //   const [sample, root] = region ? [region.slot, region.keycenter] : [values[zone.param], zoneValue(zone.root, values)];
         //   const played = zoneValue(zone.keytrack, values) >= 0.5 ? note : root;
         //   const frequency = frequencyOf(played) * 2 ** (zoneValue(zone.tune, values) / 12);
-        //   const sample = values[zone.param];
-        let root = zone.root.read(values);
+        // `.and_then(Option::as_ref)`: the slot exists, and holds a map (each slot is an Option).
+        // `match` is a switch that names what's inside: `Some(map)` runs with the map, `None` without.
+        let map = samples.maps.get(values[zone.sample].max(0.0) as usize).and_then(Option::as_ref);
+        let (sample, root) = match map {
+            Some(map) => {
+                let region = map.pick(note, velocity)?;
+                (region.slot as f64, region.keycenter)
+            }
+            None => (values[zone.sample], zone.root.read(values)),
+        };
         let played = if zone.keytrack.read(values) >= 0.5 { note_value } else { root };
         let frequency = frequency_of(played) * 2f64.powf(zone.tune.read(values) / 12.0);
-        let sample = values[zone.sample];
         // TS:
         //   const seconds = samples[sample]?.seconds() ?? 0;
         //   const perMs = seconds > 0 ? 1 / (1000 * seconds) : 0;
         // `.and_then(Option::as_ref)`: the slot exists, and holds a sample (each slot is an Option).
-        let seconds = samples.get(sample as usize).and_then(Option::as_ref).map_or(0.0, Sample::seconds);
+        let seconds = samples.audio.get(sample as usize).and_then(Option::as_ref).map_or(0.0, Sample::seconds);
         let per_ms = if seconds > 0.0 { 1.0 / (1000.0 * seconds) } else { 0.0 };
         // TS:
         //   const start = Math.min(1, Math.max(0, zoneValue(zone.start) + zoneValue(zone.trimStart) * perMs));

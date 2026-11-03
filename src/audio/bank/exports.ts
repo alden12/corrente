@@ -65,10 +65,12 @@ export interface EngineExports {
   /** The song's key from the coming block: a tonic pitch class, and its scale as bits (theory/key.ts). */
   eng_key(tonic: number, scale: number): void;
   /**
-   * Makes room for a sample in a slot (0 to 255) and returns where to write it, each channel's frames
-   * in turn; 0 if it won't fit. Memory may grow.
+   * Makes room for a sample in a slot (0 to SAMPLE_SLOTS - 1) and returns where to write it, each
+   * channel's frames in turn; 0 if it won't fit. Memory may grow.
    */
   eng_sample_reserve(slot: number, frames: number, channels: number, rate: number): number;
+  /** Puts a sample map in a slot (INST-55), from f64 words: six a region. 0, or -1 if refused. */
+  eng_sample_map(slot: number, words: number, length: number): number;
   eng_sample_free(slot: number): void;
   eng_process(): void;
   eng_track_peak(track: number, channel: number): number;
@@ -84,7 +86,7 @@ export interface EngineExports {
 /** The voice signals a note's sample zone fills, by the engine's numbers (engine/src/plan/mod.rs). */
 export const ZONE_SIGNAL = { sample: 5, root: 6, start: 7, end: 8 } as const;
 /** Sample slots in an engine. The last is kept empty: a sample param with no sample points at it. */
-export const SAMPLE_SLOTS = 256;
+export const SAMPLE_SLOTS = 1024;
 export const EMPTY_SAMPLE = SAMPLE_SLOTS - 1;
 /** Samples in a block: every eng_process renders this many. */
 export const BLOCK = 128;
