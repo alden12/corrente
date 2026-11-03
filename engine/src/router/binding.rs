@@ -15,7 +15,7 @@
 //! TypeScript's, in doubles, and what reaches the engine is the same to the bit. bank/binding.ts
 //! writes them:
 //!
-//!   values, sources, has zones (0 or 1), zones, legato (a setting),
+//!   values, sources, has zones (0 or 1), zones, legato and restrike (settings),
 //!   each source: value, sample (0 or 1), smoothing ms (0 for none), then its shaping,
 //!   each zone: sample value, root, low key, high key, low velocity, high velocity, start, end,
 //!              trim start, trim end, tune, level, key tracking (each setting below but the velocities),
@@ -161,14 +161,17 @@ pub struct Binding {
     pub values: Vec<f64>,
     /// Whether a note moves the sounding voice rather than starting another, read as it starts.
     pub legato: Setting,
+    /// How long, in seconds, a re-struck note's previous voice fades under the new one (INST-56.1,
+    /// SFZ's `off_time`): 0 for the quick cut a stolen voice gets.
+    pub restrike: Setting,
 }
 
 // The binding before a plan binds: no legato. `impl Default` writes by hand what `#[derive(Default)]`
 // would, since a Setting has no default of its own.
 impl Default for Binding {
-    // TS: { sources: [], zones: undefined, values: [], legato: 0 }
+    // TS: { sources: [], zones: undefined, values: [], legato: 0, restrike: 0 }
     fn default() -> Self {
-        Binding { sources: Vec::new(), zones: None, values: Vec::new(), legato: Setting::Fixed(0.0) }
+        Binding { sources: Vec::new(), zones: None, values: Vec::new(), legato: Setting::Fixed(0.0), restrike: Setting::Fixed(0.0) }
     }
 }
 
@@ -177,6 +180,12 @@ impl Binding {
     // TS: return zoneValue(this.legato, this.values) >= 0.5;
     pub fn legato(&self) -> bool {
         self.legato.read(&self.values) >= 0.5
+    }
+
+    /// How long a re-struck note's previous voice fades now, in seconds (never less than nothing).
+    // TS: return Math.max(0, zoneValue(this.restrike, this.values));
+    pub fn restrike(&self) -> f64 {
+        self.restrike.read(&self.values).max(0.0)
     }
 
     /// How `note` starts, or None if the plan has zones and none fits it. A zone's settings are read
@@ -254,18 +263,19 @@ impl Binding {
         // TS:
         //   const sources = Array.from({ length: sourceCount }, () => reader.source());
         //   const zones = Array.from({ length: zoneCount }, () => reader.zone());
-        //   const legato = reader.setting();
+        //   const legato = reader.setting(); const restrike = reader.setting();
         //   const values = Array.from({ length: reader.values }, () => reader.word());
         //   const from = Array.from({ length: reader.values }, () => reader.word());
         //   (each giving up with undefined if any read fails)
         let sources = (0..source_count).map(|_| reader.source()).collect::<Option<Vec<_>>>()?;
         let zones = (0..zone_count).map(|_| reader.zone()).collect::<Option<Vec<_>>>()?;
         let legato = reader.setting()?;
+        let restrike = reader.setting()?;
         let values = (0..reader.values).map(|_| reader.word()).collect::<Option<Vec<_>>>()?;
         let from = (0..reader.values).map(|_| reader.word()).collect::<Option<Vec<_>>>()?;
         // TS: return reader.at === words.length ? [{ sources, zones: hasZones ? zones : undefined, values }, from] : undefined;
         // Words left over mean they weren't written for this reader. `cond.then_some(x)` is `cond ? x : undefined`.
-        (reader.at == words.len()).then_some((Binding { sources, zones: has_zones.then_some(zones), values, legato }, from))
+        (reader.at == words.len()).then_some((Binding { sources, zones: has_zones.then_some(zones), values, legato, restrike }, from))
     }
 }
 

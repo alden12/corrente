@@ -224,6 +224,7 @@ const checkAcross = (definition: DeviceDefinition, params: ParamSchema | undefin
   );
 
   if (typeof definition.legato === "object") checkParam(definition.legato, ["legato"]);
+  if (typeof definition.restrike === "object") checkParam(definition.restrike, ["restrike"]);
 
   definition.zones?.forEach((zone, index) => {
     checkSampleParam(zone.sample, ["zones", index, "sample"]);

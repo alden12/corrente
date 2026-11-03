@@ -16,7 +16,7 @@
 use super::binding::Binding;
 use crate::midi::{BlockTransport, Chain, Event, MAX_EVENTS};
 use super::carry::{map_fits, section_map, same_node, take_over};
-use super::graph::{Graph, Output, SectionState, Voice};
+use super::graph::{CUT, Graph, Output, SectionState, Voice};
 use super::params::ParamSource;
 use super::sample_map::Samples;
 use super::voices::VoiceAllocator;
@@ -59,6 +59,8 @@ pub struct Track {
     /// plays (a portrait) from the engine itself.
     played: [f32; PLAYED_WORDS],
     played_count: usize,
+    /// The sample rate the plan was loaded at: what a re-strike's fade in seconds is counted in.
+    pub(super) sample_rate: i32,
 }
 
 /// Room for every event a chain can play in a block (its notes and the note offs of lengths ending).
@@ -85,6 +87,7 @@ impl Track {
             midi: None,
             played: [0.0; PLAYED_WORDS],
             played_count: 0,
+            sample_rate: 48000,
         }
     }
 
@@ -102,6 +105,7 @@ impl Track {
             self.fading = self.outgoing.is_some();
         }
         self.graph = Some(Graph::new(plan, sample_rate));
+        self.sample_rate = sample_rate;
     }
 
     /// Hand the outgoing graph's state to the one just loaded. `words` are whether the voices carry
@@ -306,11 +310,19 @@ impl Track {
 
     /// Fade a voice out over CUT samples from `offset` into the coming block, then free its slot: how
     /// a stolen voice goes without a click.
-    // TS: const voice = this.voiceMut(slot); if (!voice?.active || voice.cutting) return; voice.cutting = true; voice.cutFrom = clamp(offset, 0, BLOCK - 1);
+    // TS: this.cutOver(slot, offset, CUT)
     pub fn cut(&mut self, slot: usize, offset: i32) {
+        self.cut_over(slot, offset, CUT);
+    }
+
+    /// The same, over `samples` (at least CUT): a re-struck note's previous voice dies away under the
+    /// new one (INST-56.1), as a piano's string still rings when the hammer strikes it again.
+    // TS: const voice = this.voiceMut(slot); if (!voice?.active || voice.cutting) return; voice.cutting = true; voice.cutFrom = clamp(offset, 0, BLOCK - 1); voice.cutLength = Math.max(samples, CUT);
+    pub(super) fn cut_over(&mut self, slot: usize, offset: i32, samples: usize) {
         let Some(voice) = self.voice_mut(slot).filter(|voice| voice.active && !voice.cutting) else { return };
         voice.cutting = true;
         voice.cut_from = usize::try_from(offset).unwrap_or(0).min(BLOCK - 1);
+        voice.cut_length = samples.max(CUT) as f32;
     }
 
     /// Set a param's value; it ramps there from where it is, over its ramp.

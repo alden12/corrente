@@ -243,6 +243,12 @@ export const definitionSchema = z
      * (INST-32), or the switch param that says: its envelopes carry on, and a `glide` slides.
      */
     legato: z.union([z.boolean(), paramBindingSchema]).optional(),
+    /**
+     * How long, in seconds, a re-struck note's previous voice fades under the new one (INST-56.1, SFZ's
+     * `off_time`), or the param that says: a piano's string still rings when it's struck again. None
+     * (or 0) cuts it as fast as a stolen voice.
+     */
+    restrike: z.union([z.number().min(0).max(4), paramBindingSchema]).optional(),
     /** How many samples late the output runs (a look-ahead), for the mixer to make up. */
     latency: z.number().int().min(0).optional(),
     nodes: z.record(z.string().regex(NODE_NAME, "node names are a letter then letters, digits and _"), nodeSchema),

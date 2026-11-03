@@ -90,6 +90,13 @@ const renameZone = (zone: Zone, key: string): Zone => {
   return Object.fromEntries(Object.entries(zone).map(([setting, value]) => [setting, renamed(value)])) as Zone;
 };
 
+/** An instrument's re-strike fade, its param (if it has one) named as the chain names its params. */
+const renameRestrike = (
+  restrike: NonNullable<DeviceDefinition["restrike"]>,
+  key: string,
+): DeviceDefinition["restrike"] =>
+  typeof restrike === "number" ? restrike : { ...restrike, param: chainParam(key, restrike.param) };
+
 /** An instrument's legato, its switch (if it has one) named as the chain names its params. */
 const renameLegato = (legato: NonNullable<DeviceDefinition["legato"]>, key: string): DeviceDefinition["legato"] =>
   typeof legato === "boolean" ? legato : { ...legato, param: chainParam(key, legato.param) };
@@ -228,6 +235,9 @@ export const composeChain = (links: ChainLink[]): ComposedChain => {
             : {}),
           ...(instrument.definition.legato !== undefined
             ? { legato: renameLegato(instrument.definition.legato, instrumentKey) }
+            : {}),
+          ...(instrument.definition.restrike !== undefined
+            ? { restrike: renameRestrike(instrument.definition.restrike, instrumentKey) }
             : {}),
         }
       : {}),

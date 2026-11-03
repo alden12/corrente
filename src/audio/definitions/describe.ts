@@ -81,7 +81,7 @@ export const EXAMPLE: DeviceDefinition = {
 
 export const definitionFormatDoc = () => ({
   overview:
-    `A device is { format: ${DEFINITION_FORMAT}, voices?, legato?, latency?, nodes, voice?, output? }. Each node is a block ` +
+    `A device is { format: ${DEFINITION_FORMAT}, voices?, legato?, restrike?, latency?, nodes, voice?, output? }. Each node is a block ` +
     "from `blocks` below, wired by name. A node with `voice: true` runs once per sounding voice; the others " +
     "run once for the track, before the voices if they don't hear them (an LFO every voice shares), after if " +
     "they do (effects on the voices summed). `voice` names what each voice plays (one output, or [left, right]); " +
@@ -104,6 +104,10 @@ export const definitionFormatDoc = () => ({
     'For a gliding mono lead, put a `glide` block on the voice\'s frequency ({ "frequency": "voice.frequency", ' +
     '"gate": "voice.gate", "time": { "param": "glide", "scale": 0.001 } }) and feed the oscillators from it: it ' +
     "slides between legato notes and starts each new one on pitch.",
+  restrike:
+    "restrike?: seconds (0 to 4), or { param, scale? } of a knob: how long a note struck again while still " +
+    "sounding fades out under the new one, as a piano's string still rings when struck again. Left out, it's " +
+    'cut as quickly as a stolen voice. E.g. { "param": "restrike", "scale": 0.001 } for a knob in ms.',
   inputs: {
     number: "A literal, checked against the input's range.",
     param:

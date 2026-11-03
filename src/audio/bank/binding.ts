@@ -64,7 +64,7 @@ export const bindingOf = (plan: CompiledPlan): PlanBinding => {
   if (known) return known;
   const names = [...new Set(plan.params.map((source) => source.param))];
   const numbers = new Map(names.map((name, index) => [name, index]));
-  // Every param a zone or legato reads is one of the plan's sources (compile.ts makes it one), so it's numbered.
+  // Every param a zone, legato or the re-strike fade reads is one of the plan's sources (compile.ts makes it one), so it's numbered.
   const numberOf = (param: string) => numbers.get(param) ?? -1;
   const zoneParams = new Set(plan.zones?.map((zone) => zone.param));
   const samples = names.map(
@@ -79,6 +79,7 @@ export const bindingOf = (plan: CompiledPlan): PlanBinding => {
     ...plan.params.flatMap((source) => sourceWords(source, numberOf(source.param))),
     ...zones.flatMap((zone) => zoneWords(zone, numberOf)),
     ...settingWords(plan.legato, numberOf),
+    ...settingWords(plan.restrike, numberOf),
   ];
   const binding = { names, numbers, samples, words };
   bindings.set(plan, binding);

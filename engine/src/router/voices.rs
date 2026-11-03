@@ -32,6 +32,8 @@ pub struct VoiceAllocator {
     voices: usize,
     /// The slot the last `note_on` needs cut first.
     pub cut: Option<usize>,
+    /// Whether that slot held the same note: a re-strike, which fades as the definition says (INST-56.1).
+    pub restruck: bool,
     notes: Vec<Option<i32>>,
     velocities: Vec<f32>,
     held: Vec<bool>,
@@ -63,6 +65,7 @@ impl VoiceAllocator {
         VoiceAllocator {
             voices: voices.min(slots),
             cut: None,
+            restruck: false,
             // TS: new Array(slots).fill(undefined), and so on: `vec![x; n]` is n copies of x.
             notes: vec![None; slots],
             velocities: vec![0.0; slots],
@@ -89,6 +92,8 @@ impl VoiceAllocator {
         //   if (this.cut !== undefined) { cutting[cut] = true; held[cut] = false; notes[cut] = undefined; }
         // `&sounding` lends the function rather than handing it over, so it can be used again below.
         self.cut = self.to_cut(note, &sounding);
+        // TS: this.restruck = this.cut !== undefined && notes[this.cut] === note;
+        self.restruck = self.cut.is_some_and(|cut| self.notes[cut] == Some(note));
         if let Some(cut) = self.cut {
             self.cutting[cut] = true;
             self.held[cut] = false;

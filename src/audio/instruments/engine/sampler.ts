@@ -57,6 +57,18 @@ export const samplerSchema: ParamSchema = [
     unit: "ms",
     taper: "exponential",
   },
+  // How long a note struck again while it still sounds fades under the new one (INST-56.1): a piano's
+  // string still rings when it's struck again. 0 cuts it at once, as a drum hit wants.
+  {
+    id: "sampler.restrike",
+    label: "Re-strike",
+    kind: "number",
+    min: 0,
+    max: 2000,
+    default: 0,
+    unit: "ms",
+    taper: "linear",
+  },
 ] as const;
 
 export const sampler: EngineBuiltin = {
@@ -103,6 +115,7 @@ export const sampler: EngineBuiltin = {
     },
     voice: "amp",
     output: "level",
+    restrike: { param: "sampler.restrike", scale: 0.001 },
     zones: [
       {
         sample: { param: "sampler.sample" },

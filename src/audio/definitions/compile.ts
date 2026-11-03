@@ -77,6 +77,8 @@ export interface CompiledPlan {
   voices: number;
   /** Legato (INST-32): 1 or 0, or the param that switches it, read as each note starts. */
   legato: ZoneValue;
+  /** A re-struck note's fade (INST-56.1), in seconds, or the param that sets it, read as each note starts. */
+  restrike: ZoneValue;
   /** How many samples late its output is (the definition's `latency`), for the mixer to make up. */
   latency: number;
   /** What it costs to run, as shares of a phone's audio thread (cost.ts). */
@@ -211,6 +213,8 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
   // Legato's switch too, for the same reason.
   const legato = typeof definition.legato === "object" ? definition.legato : Number(definition.legato ?? false);
   if (typeof legato === "object") paramIndex(legato);
+  const restrike = definition.restrike ?? 0;
+  if (typeof restrike === "object") paramIndex(restrike);
   // Params are numbered as the words are written, so the header, which counts them, goes on last.
   const words = Int32Array.from([params.length, resolved.voices, ...body]);
   return {
@@ -223,6 +227,7 @@ const plan = (definition: DeviceDefinition, resolved: Resolved): CompiledPlan =>
       : {}),
     voices: resolved.voices,
     legato,
+    restrike,
     latency: definition.latency ?? 0,
     cost,
     nodes: Object.fromEntries(

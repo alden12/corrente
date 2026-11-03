@@ -206,6 +206,8 @@ export const FACTORY_PATCHES: Patch[] = [
   sampler("Grand Piano", ["keys", "warm"], {
     "sampler.sample": factoryRef("salamander", "grand"),
     "env.release": 600,
+    // A key struck again lets its last note die away under the new one, as the string does.
+    "sampler.restrike": 400,
     // The loudest layer is a hard strike: a loud four-note chord peaks near -6 dBFS here.
     "amp.level": 0.35,
   }),

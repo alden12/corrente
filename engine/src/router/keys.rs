@@ -123,12 +123,13 @@ impl Track {
             graph.as_ref().and_then(|graph| graph.voices.get(slot)).is_some_and(|voice| voice.active)
         });
         // TS:
-        //   if (this.voices.cut !== undefined) this.cut(this.voices.cut, offset);
+        //   if (this.voices.cut !== undefined) this.cutOver(this.voices.cut, offset, this.voices.restruck ? this.binding.restrike() * this.sampleRate : 0);
         //   this.noteOn(slot, offset, start.frequency, start.velocity, note);
         //   if (start.zone) { const [sample, root, from, to] = start.zone; this.setVoiceSignal(slot, SIGNAL_SAMPLE, sample); ... }
         // `if let Some([a, b, c, d]) = x` unpacks the array inside the Option, naming its four items.
         if let Some(cut) = self.voices.cut {
-            self.cut(cut, offset);
+            let fade = if self.voices.restruck { self.binding.restrike() * f64::from(self.sample_rate) } else { 0.0 };
+            self.cut_over(cut, offset, fade as usize);
         }
         self.note_on(slot, offset, start.frequency, start.velocity, note as f32);
         if let Some([sample, root, start, end]) = start.zone {

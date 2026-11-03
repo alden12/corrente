@@ -354,6 +354,53 @@ describe("EngineBank", () => {
         expect(bank.engine.eng_voice_active(0, 0)).toBe(0);
       });
 
+      describe("a re-struck note (INST-56.1)", () => {
+        /** One zone over every key, a steady sample, and a re-strike fade of `restrike` seconds. */
+        const struckTwice = (restrike: number) => {
+          const bank = new EngineBank(wasm, RATE, 1);
+          bank.load(
+            0,
+            compileDefinition({
+              format: 1,
+              restrike,
+              zones: [{ sample: { param: "sound" }, root: 60 }],
+              nodes: {
+                player: {
+                  block: "sampler",
+                  voice: true,
+                  inputs: {
+                    frequency: "voice.frequency",
+                    gate: "voice.gate",
+                    sample: "voice.sample",
+                    root: "voice.root",
+                  },
+                },
+              },
+              voice: "player.left",
+            }),
+          );
+          bank.setSample(0, "sound", "steady", flat(0.2));
+          bank.noteOn(0, 60, 1, 0);
+          bank.process(0);
+          bank.noteOn(0, 60, 1, 0);
+          // The block after the second strike: the first note's voice, if it's still there, adds to it.
+          bank.process(0);
+          bank.process(0);
+          return bank.output(0, 0)[10];
+        };
+
+        it("cuts the last note at once without a fade, so only the new one sounds", () => {
+          expect(struckTwice(0)).toBeCloseTo(0.2, 5);
+        });
+
+        it("lets the last note die away under the new one over the fade", () => {
+          // A second's fade, a few blocks in: the first note is still most of the way up.
+          const both = struckTwice(1);
+          expect(both).toBeGreaterThan(0.38);
+          expect(both).toBeLessThan(0.4);
+        });
+      });
+
       describe("sample maps (INST-55)", () => {
         /** A region of `audio` for the low zone's keys, in SFZ's terms. */
         const region = (ref: string, audio: SampleAudio | ShortAudio, lovel = 0, hivel = 127, keycenter = 48) => ({

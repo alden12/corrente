@@ -21,10 +21,12 @@ pub(super) struct Voice {
     pub(super) current: [f32; VOICE_SIGNALS],
     pub(super) active: bool,
     pub(super) released: bool,
-    /// Being cut: fading out from sample `cut_from` of this block, at `cut_gain` when it starts.
+    /// Being cut: fading out from sample `cut_from` of this block, at `cut_gain` when it starts, all
+    /// the way down over `cut_length` samples.
     pub(super) cutting: bool,
     pub(super) cut_from: usize,
     pub(super) cut_gain: f32,
+    pub(super) cut_length: f32,
 }
 
 /// Slots a graph has beyond its plan's voices, for notes that start while stolen ones fade.
@@ -36,8 +38,8 @@ pub(super) const SPARE_VOICES: usize = 4;
 fn slots_for(voices: usize) -> usize {
     if voices == 0 { 0 } else { voices + SPARE_VOICES }
 }
-/// How long a cut voice takes to fade out, in samples.
-const CUT: usize = BLOCK;
+/// How long a cut voice takes to fade out, in samples, unless its cut says longer (a re-struck note's).
+pub(super) const CUT: usize = BLOCK;
 
 /// A plan and everything it runs on. A track has one, and for the block after a load, the one it
 /// replaced, fading out.
@@ -88,16 +90,17 @@ impl Voice {
             cutting: false,
             cut_from: 0,
             cut_gain: 1.0,
+            cut_length: CUT as f32,
         }
     }
 
-    /// The cut's gain at sample `index` of this block: 1 until it starts, then down to 0 over CUT.
-    // TS: return !this.cutting || index < this.cutFrom ? this.cutGain : Math.max(0, this.cutGain - (index - this.cutFrom + 1) / CUT)
+    /// The cut's gain at sample `index` of this block: 1 until it starts, then down to 0 over its length.
+    // TS: return !this.cutting || index < this.cutFrom ? this.cutGain : Math.max(0, this.cutGain - (index - this.cutFrom + 1) / this.cutLength)
     pub(super) fn cut_at(&self, index: usize) -> f32 {
         if !self.cutting || index < self.cut_from {
             return self.cut_gain;
         }
-        (self.cut_gain - (index - self.cut_from + 1) as f32 / CUT as f32).max(0.0)
+        (self.cut_gain - (index - self.cut_from + 1) as f32 / self.cut_length).max(0.0)
     }
 
     /// Set a signal to `value` from sample `from` + 1 on (from = -1 sets the whole slot).
