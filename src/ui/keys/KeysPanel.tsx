@@ -77,7 +77,11 @@ export function KeysPanel({
 }) {
   const keycap = useKeycapLabels();
   const held = useHeldKeys(keyboard);
-  const hint = !settings.chords && rowMode === "octaves" ? "Shift sharps · [ ] octave" : "[ ] octave";
+  const hint = settings.chords
+    ? "Shift rows 5-8 · [ ] octave"
+    : rowMode === "octaves"
+      ? "Shift sharps · [ ] octave"
+      : "[ ] octave";
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).

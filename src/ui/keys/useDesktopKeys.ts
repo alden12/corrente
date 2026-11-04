@@ -43,8 +43,9 @@ export function useDesktopKeys(
   const settings = drawnRowSettings(padSettings, shownRows, mostRows, setShownRows, octavesSpanned(rowMode));
   const touch = usePadTouch(liveNotes);
   const enabled = started && !settings.editingChords;
-  // Shift turns the octave rows into their sharps; accidental rows have them already.
-  const raised = useShiftHeld(enabled && !settings.chords && rowMode === "octaves");
+  // Shift turns the octave rows into their sharps (accidental rows have them already), and in chords
+  // mode moves the keys up onto the four chord rows above.
+  const raised = useShiftHeld(enabled && (settings.chords || rowMode === "octaves"));
 
   const rows = keyboardRows({
     tonic: settings.tonic,

@@ -102,6 +102,13 @@ describe("keyboardRows, chords", () => {
     expect(rows[4][0].code).toBe("off-keys-4-0");
     expect(rows[4][0].pad).not.toBeNull();
   });
+  it("with Shift held, plays the four chord rows above the keyboard's own, which are then clicked", () => {
+    const rows = layout({ chords: true });
+    const raised = layout({ chords: true, raised: true });
+    expect(raised[4][0].code).toBe("KeyZ");
+    expect(raised[0][0].code).toBe("off-keys-0-0");
+    expect(pitchesOf("KeyZ", { chords: true, raised: true })).toEqual(rows[4][0].pad?.pitches);
+  });
 });
 
 describe("keyboardRows, arranging chords", () => {

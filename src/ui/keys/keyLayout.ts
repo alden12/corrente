@@ -88,7 +88,10 @@ export interface KeyboardLayoutOptions {
   /** Octave of the bottom row's tonic, in the roll's numbering (C4 = 60). */
   lowOctave: number;
   rowMode: KeyRowMode;
-  /** Shift is held: each key of an octave row plays the black key beside its note. */
+  /**
+   * Shift is held: each key of an octave row plays the black key beside its note, and in chords mode
+   * the keyboard's rows move up a keyboard's worth, onto chord rows five to eight.
+   */
   raised: boolean;
   chords: boolean;
   prefs: ChordPrefs;
@@ -150,7 +153,7 @@ const offKeyCodes = (rowIndex: number): readonly string[] =>
 /** Whether a cell is one of the chord rows past the keys rather than a real key. */
 export const isOffKeyCode = (code: string) => code.startsWith("off-keys-");
 
-function chordKeys({ tonic, scale, lowOctave, prefs, editing }: KeyboardLayoutOptions): KeyCell[][] {
+function chordKeys({ tonic, scale, lowOctave, prefs, editing, raised }: KeyboardLayoutOptions): KeyCell[][] {
   const grid = (octave: number, rows?: number) =>
     chordRows({ tonic, scale, lowOctave: lowOctave + octave, prefs, editing, rows });
   // Every row the key fills, and never fewer than the keyboard's four; the same for each octave.
@@ -159,7 +162,10 @@ function chordKeys({ tonic, scale, lowOctave, prefs, editing }: KeyboardLayoutOp
   // degree is that column of the octave above (and the closing tonic is the next octave's first).
   const degrees = SCALES[scale].length;
   const grids = Array.from({ length: Math.ceil(KEYS_PER_ROW / degrees) }, (_unused, octave) => grid(octave, depth));
-  const codesFor = (rowIndex: number) => KEY_ROWS[rowIndex] ?? offKeyCodes(rowIndex);
+  // Raised, the keys play the four rows above their own, and their own rows are clicked.
+  const keyRow = raised ? KEY_ROW_COUNT : 0;
+  const codesFor = (rowIndex: number) =>
+    (rowIndex >= keyRow ? KEY_ROWS[rowIndex - keyRow] : undefined) ?? offKeyCodes(rowIndex);
   return Array.from({ length: depth }, (_unused, rowIndex) =>
     codesFor(rowIndex).map((code, column) => {
       const chord = grids[Math.floor(column / degrees)][rowIndex]?.[column % degrees];
