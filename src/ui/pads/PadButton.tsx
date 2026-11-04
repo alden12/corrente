@@ -7,7 +7,7 @@
  */
 import type { CSSProperties, ReactNode } from "react";
 import { padKey, type PadNotes, type PadTouch } from "./usePadTouch";
-import type { ChordHint } from "../../audio/theory/chordMoves";
+import type { ChordHint, ChordMood, HintStrength } from "../../audio/theory/chordMoves";
 
 /**
  * Fill, not outline. Every pad wears the same grey and they are separated by the gaps between
@@ -39,17 +39,19 @@ export interface PadEditing {
 }
 
 /**
- * A next-chord hint (DAW-12.2): the whole pad tinted, as a chess board lights a piece's squares. Green
- * (the theme's `good`), not the teal a press and a star wear, so a hint never looks held; stronger for
- * a strong move; coral (`hot`) for a chord that leads to a new key (DAW-12.3). It takes the place of a
- * star's tint, whose ★ caption still says it's starred.
+ * A next-chord hint (DAW-12.2): the whole pad tinted, as a chess board lights a piece's squares. Its
+ * colour is the chord's mood (DAW-12.4), deeper for a strong move, none of them the teal a press and a
+ * star wear, so a hint never looks held. It takes the place of a star's tint, whose ★ caption still says
+ * it's starred. Spelled out whole, so Tailwind sees every class.
  */
-const HINT_FILL: Record<ChordHint, string> = { strong: "bg-good/30", good: "bg-good/12", keyChange: "bg-hot/25" };
-const HINT_DESCRIPTION: Record<ChordHint, string> = {
-  strong: "A strong next chord",
-  good: "A good next chord",
-  keyChange: "Leads to a new key",
+const HINT_FILL: Record<ChordMood, Record<HintStrength, string>> = {
+  bright: { strong: "bg-mood-bright/30", good: "bg-mood-bright/12" },
+  sad: { strong: "bg-mood-sad/30", good: "bg-mood-sad/12" },
+  tense: { strong: "bg-mood-tense/30", good: "bg-mood-tense/12" },
+  dark: { strong: "bg-mood-dark/30", good: "bg-mood-dark/12" },
 };
+const describeHint = ({ strength, mood, keyChange }: ChordHint) =>
+  `A ${strength} next chord, ${mood}${keyChange ? ", leading to a new key" : ""}`;
 
 /** Roughly how wide a monospace character is, as a share of the font size. */
 const MONO_CHAR_WIDTH = 0.62;
@@ -102,7 +104,7 @@ export function PadButton({
       type="button"
       aria-label={name}
       // Described, not named, so a hint never changes what the pad is called.
-      aria-description={hint ? HINT_DESCRIPTION[hint] : undefined}
+      aria-description={hint ? describeHint(hint) : undefined}
       aria-pressed={editing ? editing.selected : sounding}
       data-pitches={padKey(pitches)}
       {...(editing ? { onClick: editing.onSelect } : touch.padProps(pitches))}
@@ -115,8 +117,10 @@ export function PadButton({
       // The radius *is* here, because every pad everywhere has the same one; only size and
       // position are the caller's business.
       className={`[container-type:inline-size] flex flex-col items-center justify-center rounded-md leading-none select-none ${editing ? "touch-pan-y" : "touch-none"} cursor-pointer transition-colors ${
-        sounding ? "bg-you/30 text-you" : `${hint ? HINT_FILL[hint] : toneFill(tone)} ${TONE_TEXT[tone]}`
-      } ${latched ? "ring-1 ring-inset ring-you" : ""} ${editClass} ${className}`}
+        sounding
+          ? "bg-you/30 text-you"
+          : `${hint ? HINT_FILL[hint.mood][hint.strength] : toneFill(tone)} ${TONE_TEXT[tone]}`
+      } ${latched ? "ring-1 ring-inset ring-you" : ""} ${hint?.keyChange ? "relative" : ""} ${editClass} ${className}`}
       style={style}
     >
       {/* Capped at the pad's width, so a label too long even shrunk (a kit pad's sample name) ellipsises
@@ -125,6 +129,23 @@ export function PadButton({
         {label}
       </span>
       {sublabel && <span className="mt-0.5 font-mono text-[9px] text-faint">{sublabel}</span>}
+      {/* A key change (DAW-12.3): an orange arrow in the corner, beside the mood's fill rather than
+          instead of it. Positioned only then: only a chord pad leads to a key, never an accidental,
+          which positions itself. */}
+      {hint?.keyChange && (
+        <svg
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+          className="absolute top-1 right-1 w-3.5 h-3.5 text-hot pointer-events-none"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 12 12 4M6 4h6v6" />
+        </svg>
+      )}
     </button>
   );
 }

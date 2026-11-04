@@ -14,8 +14,7 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { chordRows, type ChordPad } from "../../audio/theory/chords";
-import { chordHint } from "../../audio/theory/chordMoves";
-import { usePlayedChord } from "./lastPlayed";
+import { useChordHints } from "./chordHints";
 import { rowGap } from "./geometry";
 import type { PadSettings } from "./padSettings";
 import { PadButton } from "./PadButton";
@@ -44,9 +43,7 @@ export function ChordPads({
   const { tonic, scale, lowOctave, chordRows: shown, chordPrefs: prefs, editingChords: editing } = settings;
   const [base, ...above] = chordRows({ tonic, scale, lowOctave, prefs, editing });
   // The chord last played, where it is on these pads: what the next-chord hints light from (DAW-12.2).
-  const played = usePlayedChord([base, ...above].flat());
-  const hintFor = (chord: ChordPad) =>
-    played && settings.hints && !editing ? chordHint(played, chord, { tonic, scale }) : null;
+  const hintFor = useChordHints([base, ...above].flat(), settings);
   const scrolling = Math.min(shown - 1, above.length);
 
   const row = (pads: (ChordPad | null)[], rowIndex: number) => (

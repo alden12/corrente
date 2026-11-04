@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chordRows, type ChordPad } from "../src/audio/theory/chords";
 import { DEFAULT_CHORD_PREFS } from "../src/audio/theory/chordPrefs";
-import { chordHint, keyChangeTo, nextChordHint } from "../src/audio/theory/chordMoves";
+import { chordHint, chordMood, keyChangeTo, nextChordHint } from "../src/audio/theory/chordMoves";
 import { SCALES, type ScaleName } from "../src/audio/theory/scales";
 
 /** Every chord pad in a key, by name. */
@@ -100,9 +100,38 @@ describe("key changes (DAW-12.3)", () => {
   });
 
   it("lights a doorway as a key change where it would be a good move: D after C, but not E", () => {
-    expect(chordHint(pads.get("C")!, pads.get("D")!, C_MAJOR)).toBe("keyChange");
+    expect(chordHint(pads.get("C")!, pads.get("D")!, C_MAJOR)).toEqual({
+      strength: "good",
+      mood: "bright",
+      keyChange: true,
+    });
     // A major third up isn't one of the moves.
     expect(chordHint(pads.get("C")!, pads.get("E")!, C_MAJOR)).toBeNull();
-    expect(chordHint(pads.get("C")!, pads.get("G")!, C_MAJOR)).toBe("strong");
+    expect(chordHint(pads.get("C")!, pads.get("G")!, C_MAJOR)).toEqual({
+      strength: "strong",
+      mood: "bright",
+      keyChange: false,
+    });
+  });
+});
+
+describe("chord moods (DAW-12.4)", () => {
+  const pads = padsIn(0, "major");
+  const moodOf = (name: string) => chordMood(pads.get(name)!);
+
+  it("reads major as bright, minor as sad, a dominant 7th as tense and diminished as dark", () => {
+    expect(["C", "Am", "G7", "B°", "Cmaj7", "Dm7", "Csus4"].map(moodOf)).toEqual([
+      "bright",
+      "sad",
+      "tense",
+      "dark",
+      "bright",
+      "sad",
+      "tense",
+    ]);
+  });
+
+  it("reads a minor chord borrowed from outside the key as dark", () => {
+    expect(moodOf("Fm")).toBe("dark");
   });
 });

@@ -20,8 +20,48 @@ import type { ChordPad, ChordQuality } from "./chords";
 import type { ProjectKey } from "./key";
 import { SCALES } from "./scales";
 
-/** How good a move is: `strong` lights brightly, `good` faintly; `keyChange` leads out of the key. */
-export type ChordHint = "strong" | "good" | "keyChange";
+/** How good a move is: `strong` lights brightly, `good` faintly. */
+export type HintStrength = "strong" | "good";
+
+/**
+ * How a chord feels (DAW-12.4), from its quality: the colour a hint takes, the strength its depth. Four,
+ * far enough apart to tell at a faint tint; a minor chord borrowed from outside the key reads dark.
+ */
+export type ChordMood = "bright" | "sad" | "tense" | "dark";
+
+const QUALITY_MOODS: Record<ChordQuality, ChordMood> = {
+  major: "bright",
+  sixth: "bright",
+  add9: "bright",
+  major7: "bright",
+  major9: "bright",
+  power: "bright",
+  minor: "sad",
+  minor7: "sad",
+  minorAdd9: "sad",
+  minorSixth: "sad",
+  minor9: "sad",
+  minorMajor7: "sad",
+  dominant7: "tense",
+  dominant9: "tense",
+  sus4: "tense",
+  sus2: "tense",
+  augmented: "tense",
+  augmentedMajor7: "tense",
+  diminished: "dark",
+  halfDiminished: "dark",
+  diminished7: "dark",
+};
+
+export const chordMood = (chord: ChordPad): ChordMood =>
+  chord.outside && QUALITY_MOODS[chord.quality] === "sad" ? "dark" : QUALITY_MOODS[chord.quality];
+
+/** What a pad wears after the chord last played: how good a move it is, how it feels, and whether it leads to a new key. */
+export interface ChordHint {
+  strength: HintStrength;
+  mood: ChordMood;
+  keyChange: boolean;
+}
 
 /** Semitones up from one root to the next, as pitch classes: 5 is down a fifth (up a fourth). */
 const UP_A_STEP = 2;
@@ -49,11 +89,11 @@ const isDominant = (chord: ChordPad, degrees: number) =>
  * How good `to` sounds after `from`, or null for no hint, in a scale of `degrees` notes (the
  * cadences are a seven-note scale's). Never a chord outside the key: those are `chordHint`'s.
  */
-export const nextChordHint = (from: ChordPad, to: ChordPad, degrees: number): "strong" | "good" | null =>
+export const nextChordHint = (from: ChordPad, to: ChordPad, degrees: number): HintStrength | null =>
   to.outside ? null : moveHint(from, to, degrees);
 
 /** The rules above, for any chord, in the key or not. */
-function moveHint(from: ChordPad, to: ChordPad, degrees: number): "strong" | "good" | null {
+function moveHint(from: ChordPad, to: ChordPad, degrees: number): HintStrength | null {
   const motion = (((to.root - from.root) % 12) + 12) % 12;
   if (motion === 0) {
     if (to.family === from.family && to.quality === from.quality) return null;
@@ -90,11 +130,12 @@ export function keyChangeTo(chord: ChordPad, key: ProjectKey): ProjectKey | null
 }
 
 /**
- * The hint `to` wears after `from` in `key`: a move within the key as `nextChordHint` rates it, or a
- * key change where a chord that leads out of the key would be a good move from here.
+ * The hint `to` wears after `from` in `key`, or null: a move within the key as `nextChordHint` rates it,
+ * or a chord that leads out of the key where it would be a good move from here.
  */
 export function chordHint(from: ChordPad, to: ChordPad, key: ProjectKey): ChordHint | null {
-  const degrees = SCALES[key.scale].length;
-  if (!to.outside) return moveHint(from, to, degrees);
-  return keyChangeTo(to, key) && moveHint(from, to, degrees) ? "keyChange" : null;
+  const keyChange = !!keyChangeTo(to, key);
+  if (to.outside && !keyChange) return null;
+  const strength = moveHint(from, to, SCALES[key.scale].length);
+  return strength && { strength, mood: chordMood(to), keyChange };
 }
