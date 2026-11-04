@@ -10,6 +10,8 @@
  *   fifth below, so that is all it lights, with V's deceptive step up to vi. A diminished chord leads up
  *   a semitone; a sus chord resolves to its own triad.
  * - **The classic cadences** in a seven-note scale: I to V, and IV to V or home to I.
+ * - **The same root, another colour** (C to Cmaj7, G to G7): the harmony stays and moves inside, so the
+ *   rest of the column is a good move, the same chord excepted.
  * Chords outside the key are never lit here: they are the key-change hints' (DAW-12.3).
  */
 import type { ChordPad, ChordQuality } from "./chords";
@@ -46,7 +48,10 @@ const isDominant = (chord: ChordPad, degrees: number) =>
 export function nextChordHint(from: ChordPad, to: ChordPad, degrees: number): ChordHint | null {
   if (to.outside) return null;
   const motion = (((to.root - from.root) % 12) + 12) % 12;
-  if (motion === 0) return SUSPENDED_FAMILIES.includes(from.family) && to.family === "triad" ? "strong" : null;
+  if (motion === 0) {
+    if (to.family === from.family && to.quality === from.quality) return null;
+    return SUSPENDED_FAMILIES.includes(from.family) && to.family === "triad" ? "strong" : "good";
+  }
   if (isDominant(from, degrees)) {
     if (motion === DOWN_A_FIFTH) return "strong";
     // The deceptive cadence: V to vi, home in disguise.

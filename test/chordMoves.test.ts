@@ -33,7 +33,8 @@ describe("nextChordHint (DAW-12.2)", () => {
 
   it("from V, lights home, and vi as the deceptive cadence", () => {
     expect(lit("G")).toEqual({ strong: ["C"], good: ["Am"] });
-    expect(lit("G7")).toEqual({ strong: ["C"], good: ["Am"] });
+    // And its own column: G7 can fall back to G.
+    expect(lit("G7")).toEqual({ strong: ["C"], good: ["Am", "G"] });
   });
 
   it("from IV, lights V and home", () => {
@@ -49,14 +50,21 @@ describe("nextChordHint (DAW-12.2)", () => {
     expect(lit("B°")).toEqual({ strong: ["C"], good: [] });
   });
 
-  it("resolves a secondary dominant to its target, and nothing else", () => {
-    // E is V of vi in C major.
-    expect(lit("E")).toEqual({ strong: ["Am"], good: [] });
+  it("resolves a secondary dominant to its target, and only its own column besides", () => {
+    // E is V of vi in C major; its column's triad is Em.
+    expect(lit("E")).toEqual({ strong: ["Am"], good: ["Em"] });
   });
 
   it("resolves a sus chord to its own triad", () => {
     const pads = padsIn(0, "major");
     expect(nextChordHint(pads.get("Csus4")!, pads.get("C")!, 7)).toBe("strong");
+  });
+
+  it("lights the rest of a chord's column faintly, a new colour on the same root, but not itself", () => {
+    const pads = padsIn(0, "major");
+    expect(nextChordHint(pads.get("C")!, pads.get("Cmaj7")!, 7)).toBe("good");
+    expect(nextChordHint(pads.get("G")!, pads.get("G7")!, 7)).toBe("good");
+    expect(nextChordHint(pads.get("C")!, pads.get("C")!, 7)).toBeNull();
   });
 
   it("never lights a chord outside the key", () => {
