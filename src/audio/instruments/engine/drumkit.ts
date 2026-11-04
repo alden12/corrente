@@ -1,11 +1,13 @@
 /**
- * Drum Kit: a zone per pad, each its own sample on its own note (the General MIDI drum map by
- * default), with a level and a tune. A note picks a pad rather than a pitch.
+ * Simple House Kit, the first drum kit (type `drumkit`, as it was the only one): a zone per pad, each
+ * its own sample on its own note (the General MIDI drum map by default), with a level and a tune. A
+ * note picks a pad rather than a pitch. Every other kit is this instrument seeded with other sounds,
+ * an instrument of its own so the kit's panel can pick between them (`playsPads`).
  */
 import type { EngineBuiltin } from "../../definitions/builtin";
 import type { ParamSchema } from "../../params/types";
 import type { ParamSpec } from "../../params/types";
-import { DEFAULT_KIT, builtinRef } from "../../samples/catalog";
+import { DEFAULT_KIT, builtinRef, type BuiltinKit } from "../../samples/catalog";
 
 // Drum kit: a multi-pad sample player. A played MIDI note *selects a pad* (it does not
 // pitch the sample); which note fires a pad is a per-pad param (`pad{n}.note`), defaulting
@@ -43,11 +45,12 @@ export interface KitSound {
   gmNote?: number;
 }
 
+/** A built-in kit's sounds, in its order. */
+export const builtinKitSounds = (kit: BuiltinKit): KitSound[] =>
+  kit.samples.map((sample) => ({ sample: builtinRef(sample.id), gmNote: sample.gmNote }));
+
 /** The default kit's sounds, on the first pads. */
-const DEFAULT_SOUNDS: KitSound[] = DEFAULT_KIT.samples.map((sample) => ({
-  sample: builtinRef(sample.id),
-  gmNote: sample.gmNote,
-}));
+const DEFAULT_SOUNDS = builtinKitSounds(DEFAULT_KIT);
 
 /** Every pad's params, the first ones seeded with `sounds` (each on its GM note, its hats choked). */
 export const drumPadSpecs = (sounds: readonly KitSound[] = DEFAULT_SOUNDS): ParamSpec[] =>
@@ -158,7 +161,7 @@ export const drumkitSchema: ParamSchema = kitSchema();
 
 export const drumkit: EngineBuiltin = {
   type: "drumkit",
-  label: "Drum Kit",
+  label: "Simple House Kit",
   family: "Percussion",
   tags: ["percussion"],
   color: "pink",

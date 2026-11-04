@@ -317,6 +317,7 @@ describe("MCP server (tracks)", () => {
     expect(data.connected).toBe(false);
     expect(data.tracks).toEqual([]);
     expect(data.instruments.map((i: { id: string }) => i.id).sort()).toEqual([
+      "808-kit",
       "acid",
       "acoustic-kit",
       "bell",

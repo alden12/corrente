@@ -2,6 +2,7 @@
 import { acid } from "./acid";
 import { drumkit } from "./drumkit";
 import { acousticKit } from "./acousticKit";
+import { kit808 } from "./kit808";
 import { fm } from "./fm";
 import { mellotronFlute } from "./mellotronFlute";
 import { microVa } from "./microVa";
@@ -35,8 +36,10 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   glideLead,
   nimbus,
   sampler,
-  drumkit,
+  // The kits, the recorded one first.
   acousticKit,
+  drumkit,
+  kit808,
   pad,
   gatePad,
   bell,

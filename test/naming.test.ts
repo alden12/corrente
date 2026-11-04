@@ -14,7 +14,7 @@ describe("a new thing's default name", () => {
     const project = new ProjectStore(false);
     project.addTrack("subtractive");
     project.addTrack("drumkit");
-    expect(project.getTracks().map((track) => track.name)).toEqual(["Subtractive", "Drum Kit"]);
-    expect(project.defaultTrackName("drumkit")).toBe("Drum Kit 2");
+    expect(project.getTracks().map((track) => track.name)).toEqual(["Subtractive", "Simple House Kit"]);
+    expect(project.defaultTrackName("drumkit")).toBe("Simple House Kit 2");
   });
 });

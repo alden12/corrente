@@ -14,11 +14,11 @@ test("a Drum Kit track shows the step grid; toggling a cell writes a note", asyn
   await page.goto("/");
   await dismissStart(page);
 
-  // Applying Drum Kit (from Explore's Instruments) to the (selected) seed track
+  // Applying Simple House Kit (from Explore's Instruments) to the (selected) seed track
   // loads the built-in pads. Switch the editor to Pads to get the step grid.
   await openExploreCategory(page, "Instruments");
-  await swapFromExplore(page, "Drum Kit");
-  await expect(page.getByRole("tablist").getByTitle("Drum Kit", { exact: true })).toBeVisible();
+  await swapFromExplore(page, "Simple House Kit");
+  await expect(page.getByRole("tablist").getByTitle("Simple House Kit", { exact: true })).toBeVisible();
   await page.getByRole("radio", { name: "Pads", exact: true }).click();
 
   // A pad row for the built-in Kick, with its step cells.
@@ -38,7 +38,7 @@ test("a Drum Kit track can switch to the piano roll (Keys), editing the same cli
   await dismissStart(page);
 
   await openExploreCategory(page, "Instruments");
-  await swapFromExplore(page, "Drum Kit");
+  await swapFromExplore(page, "Simple House Kit");
 
   // Place a kick hit in the step grid (writes a note into the clip).
   await page.getByRole("radio", { name: "Pads", exact: true }).click();
@@ -68,7 +68,7 @@ test("on a phone the drum roll gets the touch treatment, like any other roll (MO
   await dismissStart(page);
 
   await openExploreCategory(page, "Instruments");
-  await swapFromExplore(page, "Drum Kit");
+  await swapFromExplore(page, "Simple House Kit");
   await page.getByRole("radio", { name: "Keys", exact: true }).click();
   await expect(page.getByTestId("piano-grid")).toBeVisible();
 
@@ -90,8 +90,8 @@ test("on the desktop, a Drum Kit track's keys are its pads, in order from Z", as
   await page.goto("/");
   await dismissStart(page);
   await openExploreCategory(page, "Instruments");
-  await swapFromExplore(page, "Drum Kit");
-  await expect(page.getByRole("tablist").getByTitle("Drum Kit", { exact: true })).toBeVisible();
+  await swapFromExplore(page, "Simple House Kit");
+  await expect(page.getByRole("tablist").getByTitle("Simple House Kit", { exact: true })).toBeVisible();
 
   // The kit's first pad (the built-in Kick, on GM note 36) is on Z, and the key lights while held.
   const kick = page.getByRole("button", { name: "Kick (C2)", exact: true });
@@ -102,4 +102,22 @@ test("on the desktop, a Drum Kit track's keys are its pads, in order from Z", as
   await expect(kick).toHaveAttribute("aria-pressed", "false");
   // No key, range or chords to set for a kit.
   await expect(page.getByRole("button", { name: "Chords", exact: true })).toHaveCount(0);
+});
+
+test("the kit's own picker swaps the whole kit in one undoable edit", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Instruments");
+  await swapFromExplore(page, "Simple House Kit");
+  await expect(page.getByRole("button", { name: "Kick (C2)", exact: true })).toBeVisible();
+
+  // Every pad instrument is offered, and picking one brings its own sounds, not the last kit's.
+  const kit = page.getByRole("combobox", { name: "Kit" });
+  await expect(kit.getByRole("option")).toHaveText(["Acoustic Kit", "Simple House Kit", "808 Kit"]);
+  await kit.selectOption({ label: "808 Kit" });
+  await expect(page.getByRole("button", { name: "808 Kick (C2)", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(kit).toHaveValue("drumkit");
+  await expect(page.getByRole("button", { name: "Kick (C2)", exact: true })).toBeVisible();
 });

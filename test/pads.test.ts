@@ -10,13 +10,13 @@ const pad = (number: number): ParamSchema => [
 ];
 
 describe("pad instruments (INST-54)", () => {
-  it("reads a kit from its schema, not its name: the Drum Kit and the Acoustic Kit, nothing else built in", () => {
+  it("reads a kit from its schema, not its name: the three kits, nothing else built in", () => {
     expect(padCount(instrumentSchema("drumkit"))).toBe(DRUMKIT_PADS);
     expect(
       pickableInstrumentInfos()
         .filter((info) => playsPads(info.schema))
         .map((info) => info.type),
-    ).toEqual(["drumkit", "acoustic-kit"]);
+    ).toEqual(["acoustic-kit", "drumkit", "808-kit"]);
   });
 
   it("counts a pad only with both a sample and a note", () => {

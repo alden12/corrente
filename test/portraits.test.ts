@@ -105,6 +105,7 @@ describe("portraits.json", () => {
     expect(missing).toEqual([]);
   });
 
+  // Every built-in rendered one at a time: about 5.5 s here once the 808 Kit became an instrument, past the default.
   it("is what the built-ins sound like now (run `yarn portraits` after retuning one)", async () => {
     // A render on the engine core is the same every time, so a drawing that differs is a device that changed.
     // The sampled instruments and patches are left out: their recordings come over the network (INST-55).
@@ -124,5 +125,5 @@ describe("portraits.json", () => {
     expect(portraits).toEqual(
       Object.fromEntries(Object.entries(PORTRAITS).filter(([key]) => !unsampled.includes(key))),
     );
-  });
+  }, 30_000);
 });

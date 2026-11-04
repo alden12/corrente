@@ -15,7 +15,10 @@ import type { Dispatch } from "../audio/commands/types";
 import type { ProjectStore } from "../audio/project/projectStore";
 import { paramKey } from "../audio/commands/authorship";
 import type { SampleAsset } from "../audio/samples/catalog";
-import { catalogEntry, instrumentSchema } from "../audio/instruments/catalog";
+import { catalogEntry, instrumentSchema, pickableInstrumentInfos } from "../audio/instruments/catalog";
+import { playsPads } from "../audio/instruments/pads";
+import { soundChains, trackSound } from "../audio/patches/sound";
+import { Select } from "./controls/Select";
 import { DeviceBlock } from "./devices/DeviceBlock";
 import { instrumentFold } from "./devices/deviceFolds";
 import { importSampleFile } from "../audio/samples/importSample";
@@ -91,6 +94,12 @@ export function DrumkitPanel({
       <div className="flex flex-col gap-3 px-3 py-3">
         {/* Kit-wide controls (envelope, amp) as a horizontal strip above the pads. */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <KitPicker
+            instrumentType={instrumentType}
+            trackId={trackId}
+            dispatch={dispatch}
+            projectStore={projectStore}
+          />
           {otherSections.map((section) => (
             <div key={section.namespace} className="flex flex-wrap items-center gap-3 min-w-0">
               <span className="font-mono text-[9px] tracking-[0.16em] uppercase text-faint">
@@ -159,5 +168,48 @@ export function DrumkitPanel({
         </div>
       </div>
     </DeviceBlock>
+  );
+}
+
+/**
+ * The kit itself, picked from every instrument that plays pads (INST-54), so a new kit is here once it's
+ * in the catalog. Picking one is the whole kit, its sounds and settings as the kit has them: a pad's
+ * sample moves with a swap otherwise, as shared params carry over. One edit, keeping the track's effects
+ * and MIDI devices, so it's one undo.
+ */
+function KitPicker({
+  instrumentType,
+  trackId,
+  dispatch,
+  projectStore,
+}: {
+  instrumentType: string;
+  trackId: string;
+  dispatch: Dispatch;
+  projectStore: ProjectStore;
+}) {
+  const kits = pickableInstrumentInfos().filter((info) => playsPads(info.schema));
+  const pick = (type: string) => {
+    const track = projectStore.getTrack(trackId);
+    if (!track || track.kind !== "instrument") return;
+    const sound = {
+      ...trackSound(track, projectStore),
+      instrumentType: type,
+      params: {},
+      name: catalogEntry(type).label,
+    };
+    dispatch({ type: "applyPatch", trackId, ...soundChains(sound) });
+  };
+  return (
+    <label className="flex items-center gap-3 min-w-0">
+      <span className="font-mono text-[9px] tracking-[0.16em] uppercase text-faint">Kit</span>
+      <Select value={instrumentType} onChange={(event) => pick(event.target.value)}>
+        {kits.map((info) => (
+          <option key={info.type} value={info.type}>
+            {info.label}
+          </option>
+        ))}
+      </Select>
+    </label>
   );
 }

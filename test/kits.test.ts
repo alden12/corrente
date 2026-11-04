@@ -1,8 +1,8 @@
-/** The built-in kits (INST-9.1): each synthesized sample has the voice it is rendered from, and each kit but the default is a patch. */
+/** The built-in kits (INST-9.1): each synthesized sample has the voice it is rendered from, and each kit is an instrument. */
 import { describe, expect, it } from "vitest";
 import { BUILTIN_KITS, DEFAULT_KIT, builtinRef } from "../src/audio/samples/catalog";
 import { VOICES_808 } from "../src/audio/samples/kits/voices808";
-import { FACTORY_PATCHES } from "../src/audio/patches/factory";
+import { instrumentSchema } from "../src/audio/instruments/catalog";
 
 const kit808 = BUILTIN_KITS.find((kit) => kit.id === "808")!;
 
@@ -15,14 +15,17 @@ describe("the built-in kits", () => {
     expect(DEFAULT_KIT.id).toBe("house");
   });
 
-  it("offers every other kit as a Drum Kit patch, its samples on pads in order on their General MIDI notes", () => {
-    const patch = FACTORY_PATCHES.find((candidate) => candidate.name === "808 Kit");
-    expect(patch?.instrumentType).toBe("drumkit");
-    kit808.samples.forEach((sample, index) => {
-      expect(patch?.params[`pad${index + 1}.sample`]).toBe(builtinRef(sample.id));
-      expect(patch?.params[`pad${index + 1}.note`]).toBe(sample.gmNote);
-    });
-    expect(FACTORY_PATCHES.some((candidate) => candidate.name === `${DEFAULT_KIT.name} Kit`)).toBe(false);
+  it("makes each kit an instrument, its samples on pads in order on their General MIDI notes", () => {
+    const defaultOf = (type: string, id: string) => instrumentSchema(type).find((spec) => spec.id === id)?.default;
+    for (const [type, kit] of [
+      ["drumkit", DEFAULT_KIT],
+      ["808-kit", kit808],
+    ] as const) {
+      kit.samples.forEach((sample, index) => {
+        expect(defaultOf(type, `pad${index + 1}.sample`)).toBe(builtinRef(sample.id));
+        expect(defaultOf(type, `pad${index + 1}.note`)).toBe(sample.gmNote);
+      });
+    }
   });
 
   it("puts each kit's sounds on different notes, so no pad hides another", () => {

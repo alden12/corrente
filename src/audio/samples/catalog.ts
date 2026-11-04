@@ -47,20 +47,21 @@ export interface SampleAsset {
 export interface BuiltinKit {
   id: string;
   name: string;
-  /** What its patch is tagged in Explore (`tags.ts`). */
+  /** What its instrument is tagged in Explore (`tags.ts`). */
   tags: readonly Tag[];
   samples: BuiltinSample[];
 }
 
 /**
- * The built-in kits. **The first is the default**: a new Drum Kit's pads start on it. Each sample's
- * file is `assets/<id>.wav`; the house kit's are made by `assets/generate.mjs`, the 808's are rendered
- * from its voices (`kits/voices808.ts`) on the engine by `yarn kits`.
+ * The built-in kits, each a kit instrument of its own. **The first is the default**: the Simple
+ * House Kit's pads start on it. Each sample's file is `assets/<id>.wav`; the house kit's are made by
+ * `assets/generate.mjs`, the 808's are rendered from its voices (`kits/voices808.ts`) on the engine by
+ * `yarn kits`.
  */
 export const BUILTIN_KITS: BuiltinKit[] = [
   {
     id: "house",
-    name: "House",
+    name: "Simple House",
     tags: ["percussion"],
     samples: [
       { id: "kick", name: "Kick", gmNote: 36 }, // Bass Drum 1
