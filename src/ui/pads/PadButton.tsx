@@ -41,10 +41,15 @@ export interface PadEditing {
 /**
  * A next-chord hint (DAW-12.2): the whole pad tinted, as a chess board lights a piece's squares. Green
  * (the theme's `good`), not the teal a press and a star wear, so a hint never looks held; stronger for
- * a strong move. It takes the place of a star's tint, whose ★ caption still says it's starred.
+ * a strong move; coral (`hot`) for a chord that leads to a new key (DAW-12.3). It takes the place of a
+ * star's tint, whose ★ caption still says it's starred.
  */
-const HINT_FILL = { strong: "bg-good/30", good: "bg-good/12" } as const;
-const HINT_DESCRIPTION = { strong: "A strong next chord", good: "A good next chord" } as const;
+const HINT_FILL: Record<ChordHint, string> = { strong: "bg-good/30", good: "bg-good/12", keyChange: "bg-hot/25" };
+const HINT_DESCRIPTION: Record<ChordHint, string> = {
+  strong: "A strong next chord",
+  good: "A good next chord",
+  keyChange: "Leads to a new key",
+};
 
 /** Roughly how wide a monospace character is, as a share of the font size. */
 const MONO_CHAR_WIDTH = 0.62;

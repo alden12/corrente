@@ -116,7 +116,7 @@ export function useKeyboardPlaying({
       const strike = velocityRef.current();
       pad.pitches.filter((pitch) => !sounding.has(pitch)).forEach((pitch) => target.noteOn(pitch, strike));
       held.current.set(event.code, { pitches: pad.pitches, pad: padKey(pad.pitches) });
-      playedPad(padKey(pad.pitches));
+      playedPad(pad.pitches);
       publish();
     };
     const onUp = (event: KeyboardEvent) => {

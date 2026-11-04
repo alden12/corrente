@@ -29,6 +29,7 @@ import { CONTROL_BASE, TONE_ACTIVE } from "../controls/tone";
 import type { PadTouch } from "./usePadTouch";
 import { ChordPads } from "./ChordPads";
 import { ChordEditBar } from "./ChordEditBar";
+import { KeyChangeButton } from "./KeyChangeButton";
 
 /** The ways to arrange the chords, as the key menu offers them. Custom is whatever you made. */
 const ARRANGE_MODES: { mode: ChordArrangeMode; label: string }[] = [
@@ -69,6 +70,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
     ...(chords
       ? [
           { separator: true },
+          { label: "Hints", checked: settings.hints, onClick: () => settings.setHints(!settings.hints) },
           { label: "Edit chords…", onClick: () => settings.setEditingChords(true) },
           {
             label: "Arrange by",
@@ -118,6 +120,7 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
       >
         Chords
       </button>
+      {chords && settings.hints && <KeyChangeButton settings={settings} />}
       <div className="ml-auto shrink-0 flex items-center">
         <IconButton
           label="Lower octave"

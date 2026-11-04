@@ -208,7 +208,7 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
         change.on ? target.noteOn(change.pitch, PAD_VELOCITY) : target.noteOff(change.pitch),
       );
       press.pitches = pitches;
-      playedPad(padKey(pitches));
+      playedPad(pitches);
       publish();
     },
     [heldNotes, publish, target],
@@ -222,7 +222,7 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
         event.currentTarget.setPointerCapture(event.pointerId);
         releaseLatched();
         play(pitches, heldNotes());
-        playedPad(padKey(pitches));
+        playedPad(pitches);
         presses.current.set(event.pointerId, {
           pitches,
           startX: event.clientX,

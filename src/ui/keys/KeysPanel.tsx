@@ -23,10 +23,8 @@ import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardP
 import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "../pads/KeysPreview";
-import { useLastPlayed } from "../pads/lastPlayed";
-import { padKey } from "../pads/usePadTouch";
-import { nextChordHint, type ChordHint } from "../../audio/theory/chordMoves";
-import { SCALES } from "../../audio/theory/scales";
+import { usePlayedChord } from "../pads/lastPlayed";
+import { chordHint, type ChordHint } from "../../audio/theory/chordMoves";
 
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
@@ -83,11 +81,10 @@ export function KeysPanel({
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
-  const lastPlayed = useLastPlayed();
-  const played = rows.flat().find(({ pad }) => pad?.chord && padKey(pad.pitches) === lastPlayed)?.pad?.chord;
+  const played = usePlayedChord(rows.flat().map(({ pad }) => pad?.chord));
   const hintFor = (pad: KeyPad) =>
-    played && pad.chord && !settings.editingChords
-      ? nextChordHint(played, pad.chord, SCALES[settings.scale].length)
+    played && pad.chord && settings.hints && !settings.editingChords
+      ? chordHint(played, pad.chord, { tonic: settings.tonic, scale: settings.scale })
       : null;
   // With accidental rows, the note rows sit half a key right of them, so each accidental falls
   // between its two notes. Shift keeps every row where it is: its accidentals are on the same keys.

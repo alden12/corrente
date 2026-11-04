@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chordRows, type ChordPad } from "../src/audio/theory/chords";
 import { DEFAULT_CHORD_PREFS } from "../src/audio/theory/chordPrefs";
-import { nextChordHint } from "../src/audio/theory/chordMoves";
+import { chordHint, keyChangeTo, nextChordHint } from "../src/audio/theory/chordMoves";
 import { SCALES, type ScaleName } from "../src/audio/theory/scales";
 
 /** Every chord pad in a key, by name. */
@@ -75,5 +75,34 @@ describe("nextChordHint (DAW-12.2)", () => {
   it("holds in another key and mode: A minor's iv and VII lead home and to III", () => {
     expect(lit("Dm", 9, "minor").strong).toContain("G");
     expect(lit("G", 9, "minor").strong).toContain("C");
+  });
+});
+
+describe("key changes (DAW-12.3)", () => {
+  const C_MAJOR = { tonic: 0, scale: "major" } as const;
+  const pads = padsIn(0, "major");
+
+  it("leads each secondary dominant to its target's key, major or minor as the key's chord there is", () => {
+    expect(keyChangeTo(pads.get("D")!, C_MAJOR)).toEqual({ tonic: 7, scale: "major" });
+    expect(keyChangeTo(pads.get("E")!, C_MAJOR)).toEqual({ tonic: 9, scale: "minor" });
+    expect(keyChangeTo(pads.get("A")!, C_MAJOR)).toEqual({ tonic: 2, scale: "minor" });
+    expect(keyChangeTo(pads.get("C7")!, C_MAJOR)).toEqual({ tonic: 5, scale: "major" });
+  });
+
+  it("leads nowhere from a chord in the key, or a borrowed minor one", () => {
+    expect(keyChangeTo(pads.get("G")!, C_MAJOR)).toBeNull();
+    expect(keyChangeTo(pads.get("Fm")!, C_MAJOR)).toBeNull();
+  });
+
+  it("isn't a key change for harmonic minor's own V, which leads home", () => {
+    const harmonic = padsIn(9, "harmonic minor");
+    expect(keyChangeTo(harmonic.get("E")!, { tonic: 9, scale: "harmonic minor" })).toBeNull();
+  });
+
+  it("lights a doorway as a key change where it would be a good move: D after C, but not E", () => {
+    expect(chordHint(pads.get("C")!, pads.get("D")!, C_MAJOR)).toBe("keyChange");
+    // A major third up isn't one of the moves.
+    expect(chordHint(pads.get("C")!, pads.get("E")!, C_MAJOR)).toBeNull();
+    expect(chordHint(pads.get("C")!, pads.get("G")!, C_MAJOR)).toBe("strong");
   });
 });

@@ -14,10 +14,8 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { chordRows, type ChordPad } from "../../audio/theory/chords";
-import { nextChordHint } from "../../audio/theory/chordMoves";
-import { SCALES } from "../../audio/theory/scales";
-import { useLastPlayed } from "./lastPlayed";
-import { padKey } from "./usePadTouch";
+import { chordHint } from "../../audio/theory/chordMoves";
+import { usePlayedChord } from "./lastPlayed";
 import { rowGap } from "./geometry";
 import type { PadSettings } from "./padSettings";
 import { PadButton } from "./PadButton";
@@ -46,9 +44,9 @@ export function ChordPads({
   const { tonic, scale, lowOctave, chordRows: shown, chordPrefs: prefs, editingChords: editing } = settings;
   const [base, ...above] = chordRows({ tonic, scale, lowOctave, prefs, editing });
   // The chord last played, where it is on these pads: what the next-chord hints light from (DAW-12.2).
-  const lastPlayed = useLastPlayed();
-  const played = [base, ...above].flat().find((chord) => chord && padKey(chord.pitches) === lastPlayed);
-  const hintFor = (chord: ChordPad) => (played && !editing ? nextChordHint(played, chord, SCALES[scale].length) : null);
+  const played = usePlayedChord([base, ...above].flat());
+  const hintFor = (chord: ChordPad) =>
+    played && settings.hints && !editing ? chordHint(played, chord, { tonic, scale }) : null;
   const scrolling = Math.min(shown - 1, above.length);
 
   const row = (pads: (ChordPad | null)[], rowIndex: number) => (

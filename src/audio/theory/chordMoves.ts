@@ -12,12 +12,16 @@
  * - **The classic cadences** in a seven-note scale: I to V, and IV to V or home to I.
  * - **The same root, another colour** (C to Cmaj7, G to G7): the harmony stays and moves inside, so the
  *   rest of the column is a good move, the same chord excepted.
- * Chords outside the key are never lit here: they are the key-change hints' (DAW-12.3).
+ * Chords outside the key light only as **key changes** (DAW-12.3, `chordHint`): a secondary dominant is
+ * the classic doorway to a closely related key (D, V of V in C major, leads to G major), so where the
+ * rules above would call it a good move, it lights in a colour of its own, and playing it offers the change.
  */
 import type { ChordPad, ChordQuality } from "./chords";
+import type { ProjectKey } from "./key";
+import { SCALES } from "./scales";
 
-/** How good a move is: `strong` lights brightly, `good` faintly. */
-export type ChordHint = "strong" | "good";
+/** How good a move is: `strong` lights brightly, `good` faintly; `keyChange` leads out of the key. */
+export type ChordHint = "strong" | "good" | "keyChange";
 
 /** Semitones up from one root to the next, as pitch classes: 5 is down a fifth (up a fourth). */
 const UP_A_STEP = 2;
@@ -43,10 +47,13 @@ const isDominant = (chord: ChordPad, degrees: number) =>
 
 /**
  * How good `to` sounds after `from`, or null for no hint, in a scale of `degrees` notes (the
- * cadences are a seven-note scale's).
+ * cadences are a seven-note scale's). Never a chord outside the key: those are `chordHint`'s.
  */
-export function nextChordHint(from: ChordPad, to: ChordPad, degrees: number): ChordHint | null {
-  if (to.outside) return null;
+export const nextChordHint = (from: ChordPad, to: ChordPad, degrees: number): "strong" | "good" | null =>
+  to.outside ? null : moveHint(from, to, degrees);
+
+/** The rules above, for any chord, in the key or not. */
+function moveHint(from: ChordPad, to: ChordPad, degrees: number): "strong" | "good" | null {
   const motion = (((to.root - from.root) % 12) + 12) % 12;
   if (motion === 0) {
     if (to.family === from.family && to.quality === from.quality) return null;
@@ -61,4 +68,33 @@ export function nextChordHint(from: ChordPad, to: ChordPad, degrees: number): Ch
   if (motion === DOWN_A_FIFTH) return "strong";
   if (degrees === 7 && !from.outside && CADENCES[from.degree]?.includes(to.degree)) return "strong";
   return motion === UP_A_FIFTH || motion === UP_A_STEP || DOWN_A_THIRD.includes(motion) ? "good" : null;
+}
+
+/** A major and a minor triad, in semitones above the root: what a new key's tonic chord is. */
+const TONIC_TRIADS = { major: [0, 4, 7], minor: [0, 3, 7] } as const;
+
+/**
+ * The key a chord leads to, or null: a secondary dominant (outside the key, pulling a fifth down)
+ * leads to the key of its target, major or minor as the key's own chord there is. D in C major leads
+ * to G major, E to A minor. Not the key it's in: harmonic minor's own V leads home, not away.
+ */
+export function keyChangeTo(chord: ChordPad, key: ProjectKey): ProjectKey | null {
+  if (!chord.outside || !isDominant(chord, SCALES[key.scale].length)) return null;
+  const target = (chord.root + DOWN_A_FIFTH) % 12;
+  const inKey = new Set(SCALES[key.scale].map((interval) => (key.tonic + interval) % 12));
+  const scale = (["major", "minor"] as const).find((name) =>
+    TONIC_TRIADS[name].every((interval) => inKey.has((target + interval) % 12)),
+  );
+  if (!scale || (target === key.tonic && scale === key.scale)) return null;
+  return { tonic: target, scale };
+}
+
+/**
+ * The hint `to` wears after `from` in `key`: a move within the key as `nextChordHint` rates it, or a
+ * key change where a chord that leads out of the key would be a good move from here.
+ */
+export function chordHint(from: ChordPad, to: ChordPad, key: ProjectKey): ChordHint | null {
+  const degrees = SCALES[key.scale].length;
+  if (!to.outside) return moveHint(from, to, degrees);
+  return keyChangeTo(to, key) && moveHint(from, to, degrees) ? "keyChange" : null;
 }

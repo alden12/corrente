@@ -58,6 +58,11 @@ export interface PadSettings {
   accidentals: boolean;
   /** Each pad a chord rather than a note (MOBILE-12). */
   chords: boolean;
+  /** Light the chords that sound good next, and the ones that lead to a new key (DAW-12.2, DAW-12.3). */
+  hints: boolean;
+  setHints: (on: boolean) => void;
+  /** Change the song's key, tonic and scale in one edit: what a key change does. */
+  setKey: (key: ProjectKey) => void;
   /** Chord rows on show, the base row of triads included. The rest are a scroll away. */
   chordRows: number;
   /** How the chord columns are arranged in this scale: order, hidden and favourites. */
@@ -115,6 +120,7 @@ export function usePadSettings(octavesPerRow: number, maxRows: number, songKey: 
   // prove the better default on a phone - that is a question for real use, not for now.
   const [accidentals, setAccidentals] = usePersistentBoolean("corrente:pads-accidentals", true);
   const [chords, setChordsStored] = usePersistentBoolean(CHORDS_KEY, false);
+  const [hints, setHints] = usePersistentBoolean("corrente:pads-chord-hints", true);
   const [storedChordRows, setChordRows] = usePersistentNumber("corrente:pads-chord-rows", 3, 1, CHORD_ROW_LIMIT);
   // Kept as asked for, like the octaves, so raising the sheet gives back rows that did not fit.
   const chordRows = Math.max(1, Math.min(storedChordRows, maxRows, CHORD_ROW_LIMIT));
@@ -167,6 +173,9 @@ export function usePadSettings(octavesPerRow: number, maxRows: number, songKey: 
     octaves,
     accidentals,
     chords,
+    hints,
+    setHints,
+    setKey: songKey.setKey,
     chordRows,
     chordPrefs: prefsFor(arrangement, scale),
     setChordPrefs: (prefs) => saveArrangement(customise(arrangement, scale, prefs)),
