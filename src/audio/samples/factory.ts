@@ -8,6 +8,7 @@
  * A sound's ref is `factory:<set>/<sound>`, e.g. `factory:salamander/grand`.
  */
 import salamander from "./sets/salamander.json";
+import virtuosity from "./sets/virtuosity.json";
 import type { ParamSchema } from "../params/types";
 
 /** One recording of a sound, and the keys and velocities it plays (SFZ's terms, as `SampleRegion`). */
@@ -42,7 +43,7 @@ export interface FactorySet {
   sounds: FactorySound[];
 }
 
-export const FACTORY_SETS: FactorySet[] = [salamander];
+export const FACTORY_SETS: FactorySet[] = [salamander, virtuosity];
 
 export const FACTORY_PREFIX = "factory:";
 

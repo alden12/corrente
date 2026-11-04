@@ -1,0 +1,729 @@
+{
+  "id": "virtuosity",
+  "name": "Virtuosity Drums",
+  "licence": "CC0-1.0",
+  "credit": "Virtuosity Drums by Versilian Studios, CC0",
+  "source": "https://github.com/sfzinstruments/virtuosity_drums/tree/9f04cf9a734527edfbb0a4eee1f674e45bbf71bc",
+  "sounds": [
+    {
+      "id": "kick",
+      "name": "Kick",
+      "regions": [
+        {
+          "file": "2047d55b174cf73733f330cf1c4d4a47dae106fb5156ba63636244435967911f",
+          "frames": 117890,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 39375,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 31,
+          "keycenter": 60
+        },
+        {
+          "file": "6f3a96a4be8b0a3b8f22906765f62369e71391030cf7b2483583de1ebbf6f10c",
+          "frames": 98220,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 32233,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 31,
+          "keycenter": 60
+        },
+        {
+          "file": "b7488a747193368c2990214dd65874bbc8154d83ce0ca0a882d40323d304231f",
+          "frames": 99725,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 36576,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 32,
+          "hivel": 63,
+          "keycenter": 60
+        },
+        {
+          "file": "30d5f8f41344294d04144110f470500c6151d90781187c66e16a8c02c38076af",
+          "frames": 94594,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 36230,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 32,
+          "hivel": 63,
+          "keycenter": 60
+        },
+        {
+          "file": "2dddd133105f1400502431b539a7403b22e965b8c6e2e972eb685cc828be0c7c",
+          "frames": 112772,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 51370,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 64,
+          "hivel": 95,
+          "keycenter": 60
+        },
+        {
+          "file": "89b01c6ccec54d6cda35f4793b67da5b3bcab0294da4a5793a26b560ea215032",
+          "frames": 115622,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 52119,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 64,
+          "hivel": 95,
+          "keycenter": 60
+        },
+        {
+          "file": "b68ca9ef9de779b23164444c147eda0568928f3da8d14866261120398c4e3373",
+          "frames": 113255,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 58205,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 96,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "9ffd908f2440c9258556b6988c7939962822ef94553f27b5b09f622d4224503c",
+          "frames": 119284,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 59465,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 96,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "snare",
+      "name": "Snare",
+      "regions": [
+        {
+          "file": "3652d313b7a6f8492d134a3b9b5d8378d15cb5e4719da22f100fb589f5c4ad83",
+          "frames": 91749,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 35672,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 3,
+          "keycenter": 60
+        },
+        {
+          "file": "5fb4dece4afa8dbb6f6d2030d93499f9642998cb595e53a48dd999e9d9564eed",
+          "frames": 79887,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 39291,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 4,
+          "hivel": 45,
+          "keycenter": 60
+        },
+        {
+          "file": "a7ca2b0a38e9eb173d01455c087b6d75444838e3bfb582c8793dbf6c61f131c0",
+          "frames": 80215,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 48102,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 46,
+          "hivel": 84,
+          "keycenter": 60
+        },
+        {
+          "file": "1ad26547ee917e0e4ba86a7e2e2c3b38e48a19775b0b7ee481dbcaf20f878d08",
+          "frames": 91314,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 60304,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 85,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "rimshot",
+      "name": "Rimshot",
+      "regions": [
+        {
+          "file": "0874da7de4eeabbd6dd5c3fd69e5c2c1b3b4a907fe575572272cf11bd322a5ee",
+          "frames": 127676,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 64332,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 10,
+          "keycenter": 60
+        },
+        {
+          "file": "b1436a2e71b3ccdc3de07c0632633434946c5eec1a8a75ca6bec19188542c325",
+          "frames": 112837,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 74764,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 11,
+          "hivel": 74,
+          "keycenter": 60
+        },
+        {
+          "file": "1af5d327b92dcf68c51a219dd7164168f3ec5f6cf9972bdc46e36c036c73bf6a",
+          "frames": 94594,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 65689,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 75,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "side-stick",
+      "name": "Side Stick",
+      "regions": [
+        {
+          "file": "c226685f770f0ffc3b8c5e21c479acdc4bf99f99983de8e504d1039690e09874",
+          "frames": 103706,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 39092,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 15,
+          "keycenter": 60
+        },
+        {
+          "file": "387c58d5ccc40aedb3f1c0ae7b18ddb99c9b3a7fd45b88ab6bd44cfb136453fa",
+          "frames": 106965,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 52686,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 16,
+          "hivel": 79,
+          "keycenter": 60
+        },
+        {
+          "file": "4c1ebccb88e28421d7c9f6eca5f8db03cbadea934d16934f3f08f1163b20fb4d",
+          "frames": 105226,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 59284,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 80,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "low-tom",
+      "name": "Low Tom",
+      "regions": [
+        {
+          "file": "ba6d1bebd5273d4fa8c6b6336b993be4ae9a3d104441f7d0cb6b3e42b86a3742",
+          "frames": 148699,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 50634,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 7,
+          "keycenter": 60
+        },
+        {
+          "file": "f3b559fdf73dba78a8d22c992f0ad3000fdd557a5cc85d7a3552b5ddc8f543c1",
+          "frames": 164979,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 67494,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 8,
+          "hivel": 71,
+          "keycenter": 60
+        },
+        {
+          "file": "ebf4115210b1c73fd75c71926343a627e874a362e1fdc8ebc08a630cb12502de",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 81070,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 72,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "high-tom",
+      "name": "High Tom",
+      "regions": [
+        {
+          "file": "effe46e8116ef4eeac064bab04de8e35b2da270463bf7f8042ffc198c7bbfb83",
+          "frames": 97514,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 34890,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 7,
+          "keycenter": 60
+        },
+        {
+          "file": "42f89a08850d468de07838456c122c0454d72fc4e5184664625dd8a9c9e89dbb",
+          "frames": 77882,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 39145,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 8,
+          "hivel": 71,
+          "keycenter": 60
+        },
+        {
+          "file": "768cd792da3a202a8d1c2877b6624e6192f61bd81422e2af64e775c173a0bded",
+          "frames": 107165,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 56370,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 72,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "hat-closed",
+      "name": "Closed Hat",
+      "regions": [
+        {
+          "file": "7141119cb0424003b8d9ebeb3e00755845e382da8a195b5f7cf5e4df23d59465",
+          "frames": 36432,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 17344,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 31,
+          "keycenter": 60
+        },
+        {
+          "file": "c906abd887c4d760bca30624c79347b0f264a1e7b20bfcd1254da83e09c8fcc3",
+          "frames": 26879,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 14538,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 31,
+          "keycenter": 60
+        },
+        {
+          "file": "a4befe4f68fc1d13324d822dfdb79e951db67cb2b31227ecfbac07f32c41b17c",
+          "frames": 33406,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 24817,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 32,
+          "hivel": 95,
+          "keycenter": 60
+        },
+        {
+          "file": "0ebdeaf4faf207454261fdb7aa188fd36f66c45297aff984cea65179685541a6",
+          "frames": 33572,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 24239,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 32,
+          "hivel": 95,
+          "keycenter": 60
+        },
+        {
+          "file": "376d6008510592f1608b97961c43e1b699d1edaf70d502d52c95653b63c58b0f",
+          "frames": 37490,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 40526,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 96,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "1b611c42007dfa9e0906ec78201609ece8225271e6e2e70464dac28f7cc6c6bc",
+          "frames": 36846,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 40450,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 96,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "hat-pedal",
+      "name": "Pedal Hat",
+      "regions": [
+        {
+          "file": "5b68a2015191709b2d2a7358124ae41f4261e8733a2d6fbecaa6360c856e13b4",
+          "frames": 92516,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 40911,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "889a89073bdb3fe96d72a109615ffd35f924f2194e2c2bb9a056cb8d29c26dc6",
+          "frames": 82701,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 39406,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "bfa05001c89bed643ff18900523caf713680fbb50f60bf1e516a3408bfe478a5",
+          "frames": 110955,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 52494,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "7cc16d7da374a5b2b07bd73eef971075033b57e23c2e51eeb25885952048f4d9",
+          "frames": 115066,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 54702,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "hat-open",
+      "name": "Open Hat",
+      "regions": [
+        {
+          "file": "2b34ecfbef9fe37ec64e95d8f6d05db245bfcae48f459da18b6dee906b697fbb",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 110558,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 31,
+          "keycenter": 60
+        },
+        {
+          "file": "e78ea638975a639350567c5596f488330e3748f66a1bbe1c34852448a8b9769a",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 111361,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 31,
+          "keycenter": 60
+        },
+        {
+          "file": "b0db30f8e3f84006990cc8a62b5ab66026cf04111bd681cbdb93da17a40c201b",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 152469,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 32,
+          "hivel": 95,
+          "keycenter": 60
+        },
+        {
+          "file": "4c91648f00b97e3a4cb9ee69ef79a961970204556f18914ddcb5c70980047525",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 164755,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 32,
+          "hivel": 95,
+          "keycenter": 60
+        },
+        {
+          "file": "adc0c05d912958cd35bf1ef0f5d4538bdb2acf484638b12c35aef3b2b83803a5",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 233894,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 96,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "f92b370d00463e6035fd0836616aa912042054b57dc48603abf01ddd909cccf0",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 241160,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 96,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "crash",
+      "name": "Crash",
+      "regions": [
+        {
+          "file": "0312ca586de01c6fc51cda5edee2a8f81a10043d9c043e6cea751f8dcd247340",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 163230,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "beb24bdfb8ac762ffab6016bdb3a23bf5b7d40ea8d532af494e1a68656c34a8a",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 161661,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "545bc0d007a4f97d39d268e9b7cd2a31c6fa1fb331a6752221544d771d1038dd",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 229627,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "1851298c1ce1737f5192b1c2f9adc803cdc67f1fab139815c824d43a263a7185",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 222648,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "ride",
+      "name": "Ride",
+      "regions": [
+        {
+          "file": "9638925081f75930e49a219ed89b574ecfd55d2a820de26c4a057a171b43893d",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 91453,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "b2c460d27bf8abf244a769f34e14e3be1c9368749e51497f7d0889bb644542ba",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 107355,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "3009d8ba2870ec99f09e8fd143782547e1e60b4f892b7b20521263f5dcb0bd8f",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 146639,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 85,
+          "keycenter": 60
+        },
+        {
+          "file": "6c15c9aeb02656232cd2592a6be82d461aceeb5bf8e15d0c159fef1747adaa5c",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 153538,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 85,
+          "keycenter": 60
+        },
+        {
+          "file": "da49425822e68ada8fffe66f23a3a1f4a87dba09bfbc20957ec20e4c10b0e4fa",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 184598,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 86,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "2bb03d6b68b35688b50a1cbb71085e92fbdadbbcc397c0af79e61d8b2b1dd2fc",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 187315,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 86,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    },
+    {
+      "id": "ride-bell",
+      "name": "Ride Bell",
+      "regions": [
+        {
+          "file": "bf217f8cbf3a9ed71e5f0f6a10d73a904716f93af85b0308e421f241ccf69ae9",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 94056,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "a5eff6f0939d67674db8b316546413546b7457214d095b568a2a3ceb9927b573",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 94943,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 0,
+          "hivel": 42,
+          "keycenter": 60
+        },
+        {
+          "file": "934512dd296f4ae7785c5dcd1ab1536be28677bcd997b461b88d29db28abab53",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 210159,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 127,
+          "keycenter": 60
+        },
+        {
+          "file": "19b8fb8c32d96c9f0586272dbee907f1245fa82243b8354eb48d90ef8bacdeb5",
+          "frames": 192000,
+          "channels": 2,
+          "rate": 48000,
+          "bytes": 207845,
+          "lokey": 0,
+          "hikey": 127,
+          "lovel": 43,
+          "hivel": 127,
+          "keycenter": 60
+        }
+      ]
+    }
+  ]
+}

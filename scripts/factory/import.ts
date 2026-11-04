@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { FLACDecoder } from "@wasm-audio-decoders/flac";
 import flacFactory from "libflacjs";
 import { Encoder } from "libflacjs/lib/encoder";
@@ -50,21 +50,20 @@ async function textFiles(set: FactorySetSource): Promise<Map<string, string>> {
   return new Map(texts);
 }
 
-/** A recording capped to `cap` seconds, the last `fade` of it faded out, as 16-bit FLAC. */
+/** A recording capped to `cap` seconds, the last `fade` of it faded out, scaled by `gain`, as 16-bit FLAC. */
 function encoded(
   Flac: ReturnType<typeof flacFactory>,
   channels: Float32Array[],
   rate: number,
-  cap: number,
-  fade: number,
+  { cap, fade, gain }: { cap: number; fade: number; gain: number },
 ) {
   const frames = Math.min(channels[0].length, Math.round(cap * rate));
   const fadeFrames = Math.min(frames, Math.round(fade * rate));
   const shorts = channels.map((channel) =>
     Int32Array.from({ length: frames }, (_, frame) => {
       // Only a recording cut short fades: one that ends on its own already has.
-      const gain = frames < channel.length && frame >= frames - fadeFrames ? (frames - frame) / fadeFrames : 1;
-      return Math.max(-32768, Math.min(32767, Math.round(channel[frame] * gain * 32768)));
+      const faded = frames < channel.length && frame >= frames - fadeFrames ? (frames - frame) / fadeFrames : 1;
+      return Math.max(-32768, Math.min(32767, Math.round(channel[frame] * faded * gain * 32768)));
     }),
   );
   const encoder = new Encoder(Flac, { sampleRate: rate, channels: shorts.length, bitsPerSample: 16, compression: 8 });
@@ -75,59 +74,103 @@ function encoded(
   return { bytes, frames };
 }
 
+/** Recordings summed sample by sample into stereo, a mono one into both sides. */
+const mixed = (takes: Float32Array[][]): Float32Array[] => {
+  const frames = Math.max(...takes.map((channels) => channels[0].length));
+  return [0, 1].map((side) => {
+    const out = new Float32Array(frames);
+    takes.forEach((channels) => {
+      const channel = channels[Math.min(side, channels.length - 1)];
+      channel.forEach((value, frame) => {
+        out[frame] += value;
+      });
+    });
+    return out;
+  });
+};
+
+/** How loud a recording gets: its largest sample either way. */
+const peakOf = (channels: Float32Array[]) =>
+  channels.reduce((most, channel) => channel.reduce((peak, value) => Math.max(peak, Math.abs(value)), most), 0);
+
+/** Where a mixed-down library's loudest hit lands: -1 dBFS, the dynamics between hits kept. */
+const MIX_PEAK = 0.89;
+
 async function importSet(set: FactorySetSource): Promise<void> {
   const texts = await textFiles(set);
-  const regions = parseSfz(set.entry, (path) => {
-    const text = texts.get(path);
+  // The instrument's paths are relative to its own folder, which may not be the repository's top.
+  const folder = posix.dirname(set.entry);
+  const inRepo = (path: string) => posix.normalize(posix.join(folder, path));
+  const parsed = parseSfz(posix.basename(set.entry), (path) => {
+    const text = texts.get(inRepo(path));
     if (text === undefined) throw new Error(`${set.id}: ${path} isn't in ${set.repo}`);
     return text;
   });
+  // A multi-mic library is curated from its lead mic's regions; the rest are mixed into each hit.
+  const [lead, ...others] = set.mics ?? [];
+  const regions = lead ? parsed.filter((region) => region.sample.includes(`/${lead}/`)) : parsed;
   const decoder = new FLACDecoder();
   await decoder.ready;
   const Flac = flacFactory();
   mkdirSync(FACTORY_OUT, { recursive: true });
-  // Each source recording once, however many sounds keep it.
-  const made = new Map<string, { file: string; frames: number; channels: number; rate: number; bytes: number }>();
-  const recording = async (sample: string) => {
-    const known = made.get(sample);
-    if (known) return known;
+
+  // One at a time: a decoder decodes one file at once.
+  const decoded = async (path: string) => {
     await decoder.reset();
-    const { channelData, sampleRate } = await decoder.decodeFile(await sourceFile(set, sample));
-    const channels = channelData.slice(0, 2);
-    const { bytes, frames } = encoded(Flac, channels, sampleRate, set.capSeconds, set.fadeSeconds);
-    const file = createHash("sha256").update(bytes).digest("hex");
-    writeFileSync(join(FACTORY_OUT, `${file}.flac`), bytes);
-    const entry = { file, frames, channels: channels.length, rate: sampleRate, bytes: bytes.length };
-    made.set(sample, entry);
-    return entry;
+    const { channelData, sampleRate } = await decoder.decodeFile(await sourceFile(set, inRepo(path)));
+    return { channels: channelData.slice(0, 2), rate: sampleRate };
   };
-  const sounds: FactorySet["sounds"] = [];
-  for (const sound of set.sounds) {
-    const kept = sound.keep(regions);
-    const mapped = [];
-    // One at a time: a decoder decodes one file at once.
-    for (const { region, lovel, hivel } of kept) {
-      const audio = await recording(region.sample);
+  /** A hit as it will be kept: the recording, or with mics, it and its counterparts mixed down. */
+  const hitAudio = async (sample: string) => {
+    if (!lead) return decoded(sample);
+    const counterpart = (mic: string) => sample.replace(`/${lead}/`, `/${mic}/`).replace(`/${lead}_`, `/${mic}_`);
+    const takes = [await decoded(sample)];
+    for (const mic of others) takes.push(await decoded(counterpart(mic)));
+    return { channels: mixed(takes.map((take) => take.channels)), rate: takes[0].rate };
+  };
+
+  const curated = set.sounds.map((sound) => ({ sound, kept: sound.keep(regions) }));
+  // Each source recording once, however many sounds keep it: read every one first, so a mixed-down
+  // library can be scaled as a whole to its loudest hit.
+  const audio = new Map<string, Awaited<ReturnType<typeof hitAudio>>>();
+  for (const { region } of curated.flatMap(({ kept }) => kept)) {
+    if (!audio.has(region.sample)) audio.set(region.sample, await hitAudio(region.sample));
+  }
+  decoder.free();
+  const loudest = Math.max(...[...audio.values()].map((hit) => peakOf(hit.channels)));
+  // A library as recorded is left as it is (the piano's files don't change); a mixdown is scaled.
+  const gain = lead ? MIX_PEAK / loudest : 1;
+
+  const made = new Map(
+    [...audio].map(([sample, { channels, rate }]) => {
+      const { bytes, frames } = encoded(Flac, channels, rate, { cap: set.capSeconds, fade: set.fadeSeconds, gain });
+      const file = createHash("sha256").update(bytes).digest("hex");
+      writeFileSync(join(FACTORY_OUT, `${file}.flac`), bytes);
+      return [sample, { file, frames, channels: channels.length, rate, bytes: bytes.length }] as const;
+    }),
+  );
+  const sounds: FactorySet["sounds"] = curated.map(({ sound, kept }) => {
+    const mapped = kept.map(({ region, lovel, hivel }) => {
       const number = (opcode: string, otherwise: number) => Number(region.opcodes[opcode] ?? otherwise);
       const key = number("key", NaN);
-      mapped.push({
-        ...audio,
-        lokey: number("lokey", key),
-        hikey: number("hikey", key),
+      return {
+        ...made.get(region.sample)!,
+        // A drum answers every key at its own pitch: its pad picks it by the pad's note.
+        lokey: sound.anyKey ? 0 : number("lokey", key),
+        hikey: sound.anyKey ? 127 : number("hikey", key),
         lovel,
         hivel,
         // SFZ's `tune` is cents the recording is played up by: the same as rooting it that much lower.
-        keycenter: number("pitch_keycenter", key) - number("tune", 0) / 100,
-      });
-    }
-    sounds.push({ id: sound.id, name: sound.name, regions: mapped });
+        keycenter: sound.anyKey ? 60 : number("pitch_keycenter", key) - number("tune", 0) / 100,
+      };
+    });
     const bytes = mapped.reduce((sum, region) => sum + region.bytes, 0);
     const memory = mapped.reduce((sum, region) => sum + region.frames * region.channels * 2, 0);
     console.log(
       `${set.id}/${sound.id}: ${mapped.length} regions, ${(bytes / 1e6).toFixed(1)} MB to download, ${(memory / 1e6).toFixed(1)} MB in the engine`,
     );
-  }
-  decoder.free();
+    return { id: sound.id, name: sound.name, regions: mapped };
+  });
   const out: FactorySet = {
     id: set.id,
     name: set.name,

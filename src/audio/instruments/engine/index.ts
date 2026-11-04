@@ -1,6 +1,7 @@
 /** The built-in instruments, written in the engine's own format, in the order the library lists them. */
 import { acid } from "./acid";
 import { drumkit } from "./drumkit";
+import { acousticKit } from "./acousticKit";
 import { fm } from "./fm";
 import { mellotronFlute } from "./mellotronFlute";
 import { microVa } from "./microVa";
@@ -35,6 +36,7 @@ export const ENGINE_INSTRUMENTS: readonly EngineBuiltin[] = [
   nimbus,
   sampler,
   drumkit,
+  acousticKit,
   pad,
   gatePad,
   bell,

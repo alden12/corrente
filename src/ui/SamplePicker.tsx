@@ -7,7 +7,7 @@
 import { useRef, useSyncExternalStore } from "react";
 import type { ParamSpec } from "../audio/params/types";
 import {
-  BUILTIN_SAMPLES,
+  BUILTIN_KITS,
   BUILTIN_WAVETABLES,
   builtinRef,
   parseRef,
@@ -15,7 +15,7 @@ import {
   type SampleAsset,
 } from "../audio/samples/catalog";
 import { Select } from "./controls/Select";
-import { FACTORY_SOUNDS } from "../audio/samples/factory";
+import { FACTORY_SETS, FACTORY_SOUNDS } from "../audio/samples/factory";
 import { factoryLoading } from "../audio/samples/factoryFiles";
 
 export function SamplePicker({
@@ -69,23 +69,27 @@ export function SamplePicker({
               ))}
             </optgroup>
           )}
-          <optgroup label="Built-in">
-            {BUILTIN_SAMPLES.map((sample) => (
-              <option key={sample.id} value={builtinRef(sample.id)}>
-                {sample.name}
-              </option>
-            ))}
-          </optgroup>
-          {!(spec.kind === "sample" && spec.wavetable) && (
-            // Downloaded the first time they're used, so each says how big it is.
-            <optgroup label="Sampled instruments">
-              {FACTORY_SOUNDS.map((sound) => (
-                <option key={sound.ref} value={sound.ref}>
-                  {`${sound.name} (${sound.downloadMB} MB)`}
+          {/* A group per kit and per sampled set, so the list reads as kits rather than one long run. */}
+          {BUILTIN_KITS.map((kit) => (
+            <optgroup key={kit.id} label={`${kit.name} kit`}>
+              {kit.samples.map((sample) => (
+                <option key={sample.id} value={builtinRef(sample.id)}>
+                  {sample.name}
                 </option>
               ))}
             </optgroup>
-          )}
+          ))}
+          {!(spec.kind === "sample" && spec.wavetable) &&
+            // Downloaded the first time they're used, so each says how big it is.
+            FACTORY_SETS.map((set) => (
+              <optgroup key={set.id} label={set.name}>
+                {FACTORY_SOUNDS.filter((sound) => sound.set === set.name).map((sound) => (
+                  <option key={sound.ref} value={sound.ref}>
+                    {`${sound.name} (${sound.downloadMB} MB)`}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           {assets.length > 0 && (
             <optgroup label="Imported">
               {assets.map((asset) => (

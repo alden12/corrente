@@ -4,3 +4,4 @@ The sampled instruments (INST-55) are curated from these openly licensed librari
 trimmed, faded, and made 16-bit, which the licences allow.
 
 - **Salamander Grand Piano**: Salamander Grand Piano by Alexander Holm (Yamaha C5), SFZ by kinwie, CC BY 3.0. CC-BY-3.0, from https://github.com/sfzinstruments/SalamanderGrandPiano (3382bf9).
+- **Virtuosity Drums**: Virtuosity Drums by Versilian Studios, CC0. CC0-1.0, from https://github.com/sfzinstruments/virtuosity_drums (9f04cf9).

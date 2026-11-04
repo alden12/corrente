@@ -37,12 +37,25 @@ export const chokeFor = (gmNote: number | undefined): number =>
  *  seed their note from the sample's General MIDI note). Contiguous from the GM base. */
 export const noteForPad = (padIndex: number): number => DRUMKIT_BASE_NOTE + padIndex;
 
-const drumPadSpecs = (): ParamSpec[] =>
+/** A sound a kit puts on a pad by default: its sample ref, and its General MIDI note. */
+export interface KitSound {
+  sample: string;
+  gmNote?: number;
+}
+
+/** The default kit's sounds, on the first pads. */
+const DEFAULT_SOUNDS: KitSound[] = DEFAULT_KIT.samples.map((sample) => ({
+  sample: builtinRef(sample.id),
+  gmNote: sample.gmNote,
+}));
+
+/** Every pad's params, the first ones seeded with `sounds` (each on its GM note, its hats choked). */
+export const drumPadSpecs = (sounds: readonly KitSound[] = DEFAULT_SOUNDS): ParamSpec[] =>
   Array.from({ length: DRUMKIT_PADS }, (_unused, index): ParamSpec[] => {
     const pad = index + 1;
-    const builtin = DEFAULT_KIT.samples[index]; // seed the first pads with the default kit
+    const sound = sounds[index];
     return [
-      { id: `pad${pad}.sample`, label: "Sample", kind: "sample", default: builtin ? builtinRef(builtin.id) : "" },
+      { id: `pad${pad}.sample`, label: "Sample", kind: "sample", default: sound?.sample ?? "" },
       {
         id: `pad${pad}.note`,
         label: "Note",
@@ -51,7 +64,7 @@ const drumPadSpecs = (): ParamSpec[] =>
         max: 127,
         // Follow the General MIDI drum map for the built-in kit (kick = 36, snare = 38,
         // ...); fall back to a contiguous layout for any extra pads.
-        default: builtin?.gmNote ?? noteForPad(index),
+        default: sound?.gmNote ?? noteForPad(index),
         taper: "linear",
         format: "note", // shown as a note-name selector (C2, ...), matching the piano roll
       },
@@ -83,15 +96,20 @@ const drumPadSpecs = (): ParamSpec[] =>
         kind: "number",
         min: 0,
         max: DRUMKIT_CHOKE_GROUPS,
-        default: chokeFor(builtin?.gmNote),
+        default: chokeFor(sound?.gmNote),
         taper: "linear",
         step: 1,
       },
     ];
   }).flat();
 
-export const drumkitSchema: ParamSchema = [
-  ...drumPadSpecs(),
+/**
+ * A kit's whole schema: its pads, seeded with `sounds`, and the shared envelope and level. `release` is
+ * how long a pad takes to die away once let go: short for the built-in one-shots, long for a recorded
+ * cymbal, which a quick tap shouldn't cut off.
+ */
+export const kitSchema = (sounds?: readonly KitSound[], release = 40): ParamSchema => [
+  ...drumPadSpecs(sounds),
   // A short shared amp envelope (pads are one-shots, so these mostly just soften the
   // very start/end); amp.level is the kit master. env.* are required by the shared voice.
   {
@@ -110,12 +128,14 @@ export const drumkitSchema: ParamSchema = [
     kind: "number",
     min: 1,
     max: 4000,
-    default: 40,
+    default: release,
     unit: "ms",
     taper: "exponential",
   },
   { id: "amp.level", label: "Level", kind: "number", min: 0, max: 1, default: 0.9, taper: "linear", smoothMs: 10 },
 ];
+
+export const drumkitSchema: ParamSchema = kitSchema();
 
 export const drumkit: EngineBuiltin = {
   type: "drumkit",
