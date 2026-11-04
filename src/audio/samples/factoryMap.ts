@@ -21,13 +21,20 @@ export type FactoryProgress = (loaded: number, total: number) => void;
 /** Recordings fetched and decoded at once: enough to keep a connection busy, few enough to hold. */
 const AT_ONCE = 4;
 
-/** Decoded floats as 16-bit whole numbers, rounded, past full scale held at it: up to two channels. */
+/**
+ * Decoded floats as 16-bit whole numbers, rounded, past full scale held at it: up to two channels. A
+ * loop, not `Int16Array.from` with a function per sample: the full piano is ~49 million samples, which
+ * took 2.2 s that way in Chromium and 0.1 s this way, every time the app opens.
+ */
 export const toShorts = (channels: Float32Array[]): Int16Array[] =>
-  channels
-    .slice(0, 2)
-    .map((channel) =>
-      Int16Array.from(channel, (value) => Math.max(-32768, Math.min(32767, Math.round(value * 32768)))),
-    );
+  channels.slice(0, 2).map((channel) => {
+    const shorts = new Int16Array(channel.length);
+    for (let index = 0; index < channel.length; index++) {
+      const value = Math.round(channel[index] * 32768);
+      shorts[index] = value > 32767 ? 32767 : value < -32768 ? -32768 : value;
+    }
+    return shorts;
+  });
 
 /**
  * The sample map for `factory:<id>`, or null for no such sound, or one whose recordings didn't all
