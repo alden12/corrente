@@ -43,12 +43,11 @@ export interface PadEditing {
 /**
  * A next-chord hint (DAW-12.2): the whole pad tinted, as a chess board lights a piece's squares. One
  * green, deeper for a strong move, none of it the teal a press and a star wear, so a hint never looks
- * held; a chord leading to a new key (DAW-12.3) is a quieter orange-grey with a small arrow in its corner, in the ink colour (white on a dark ground), unlike any dot. It
- * takes the place of a star's tint, whose ★ caption still says it's starred. Spelled out whole, so
- * Tailwind sees every class.
+ * held. A chord leading to a new key (DAW-12.3) lights the same, plus a small arrow in its corner in
+ * the ink colour (white on a dark ground), unlike any dot. It takes the place of a star's tint, whose ★
+ * caption still says it's starred. Spelled out whole, so Tailwind sees every class.
  */
 const HINT_FILL: Record<HintStrength, string> = { strong: "bg-good/30", good: "bg-good/12" };
-const KEY_CHANGE_FILL = "bg-[color-mix(in_srgb,var(--color-hot)_16%,var(--color-control))]";
 /**
  * The chord's mood (DAW-12.4), as a dot in the pad's corner. None for bright, the plain major chord most
  * moves land on (2026-11-04, Alden), so a dot says the chord is something else.
@@ -59,7 +58,6 @@ const MOOD_DOT: Record<ChordMood, string | null> = {
   tense: "bg-mood-tense",
   dark: "bg-mood-dark",
 };
-const hintFill = (hint: PadHint) => (hint.keyChange ? KEY_CHANGE_FILL : HINT_FILL[hint.strength]);
 const describeHint = ({ strength, mood, keyChange }: PadHint) =>
   `A ${strength} next chord${mood ? `, ${mood}` : ""}${keyChange ? ", leading to a new key" : ""}`;
 
@@ -139,7 +137,7 @@ export function PadButton({
       // The radius *is* here, because every pad everywhere has the same one; only size and
       // position are the caller's business.
       className={`[container-type:inline-size] flex flex-col items-center justify-center rounded-md leading-none select-none ${editing ? "touch-pan-y" : "touch-none"} cursor-pointer transition-colors ${
-        sounding ? "bg-you/30 text-you" : `${hint ? hintFill(hint) : toneFill(tone)} ${TONE_TEXT[tone]}`
+        sounding ? "bg-you/30 text-you" : `${hint ? HINT_FILL[hint.strength] : toneFill(tone)} ${TONE_TEXT[tone]}`
       } ${latched ? "ring-1 ring-inset ring-you" : ""} ${hint?.mood || hint?.keyChange ? "relative" : ""} ${editClass} ${className}`}
       style={style}
     >
