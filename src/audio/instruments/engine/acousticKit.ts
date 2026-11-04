@@ -33,6 +33,6 @@ export const acousticKit: EngineBuiltin = {
   label: "Acoustic Kit",
   tags: ["percussion", "warm"],
   color: "amber",
-  // A let-go pad rings on: a crash tapped is still a crash.
-  schema: kitSchema(sounds, 4000),
+  // A let-go pad rings on, a crash tapped is still a crash, and one hit again rings under the new hit.
+  schema: kitSchema(sounds, { release: 4000, restrike: 2000 }),
 };

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { instrumentSchema, hasInstrument } from "../src/audio/instruments/catalog";
-import { drumkitSchema, DRUMKIT_PADS, DRUMKIT_BASE_NOTE, noteForPad } from "../src/audio/instruments/engine/drumkit";
+import {
+  drumkit,
+  drumkitSchema,
+  DRUMKIT_PADS,
+  DRUMKIT_BASE_NOTE,
+  noteForPad,
+} from "../src/audio/instruments/engine/drumkit";
 import { DEFAULT_KIT } from "../src/audio/samples/catalog";
 
 const BUILTIN_SAMPLES = DEFAULT_KIT.samples;
@@ -45,5 +51,16 @@ describe("drumkit catalog", () => {
     expect(pad1?.kind === "sample" && pad1.default).toBe("builtin:kick");
     const pad16 = drumkitSchema.find((spec) => spec.id === "pad16.sample");
     expect(pad16?.kind === "sample" && pad16.default).toBe(""); // only 7 built-ins, rest empty
+  });
+});
+
+describe("kit re-strike (INST-56.1)", () => {
+  const restrikeDefault = (type: string) =>
+    instrumentSchema(type).find((spec) => spec.id === "kit.restrike" && spec.kind === "number")?.default;
+
+  it("cuts a pad hit again on the electronic kit, and lets the Acoustic Kit's ring under the new hit", () => {
+    expect(restrikeDefault("drumkit")).toBe(0);
+    expect(restrikeDefault("acoustic-kit")).toBe(2000);
+    expect(drumkit.definition.restrike).toEqual({ param: "kit.restrike", scale: 0.001 });
   });
 });

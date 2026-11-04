@@ -104,11 +104,18 @@ export const drumPadSpecs = (sounds: readonly KitSound[] = DEFAULT_SOUNDS): Para
   }).flat();
 
 /**
- * A kit's whole schema: its pads, seeded with `sounds`, and the shared envelope and level. `release` is
- * how long a pad takes to die away once let go: short for the built-in one-shots, long for a recorded
- * cymbal, which a quick tap shouldn't cut off.
+ * How a kit's hits die away. `release` is how long a pad takes once let go: short for the built-in
+ * one-shots, long for a recorded cymbal, which a quick tap shouldn't cut off. `restrike` is how long a
+ * pad hit again while it still sounds fades under the new hit (INST-56.1): 0 cuts it, as an electronic
+ * kit wants, and a crash struck twice builds on itself.
  */
-export const kitSchema = (sounds?: readonly KitSound[], release = 40): ParamSchema => [
+export interface KitRing {
+  release: number;
+  restrike: number;
+}
+
+/** A kit's whole schema: its pads, seeded with `sounds`, and the shared envelope and level. */
+export const kitSchema = (sounds?: readonly KitSound[], ring: KitRing = { release: 40, restrike: 0 }): ParamSchema => [
   ...drumPadSpecs(sounds),
   // A short shared amp envelope (pads are one-shots, so these mostly just soften the
   // very start/end); amp.level is the kit master. env.* are required by the shared voice.
@@ -128,9 +135,21 @@ export const kitSchema = (sounds?: readonly KitSound[], release = 40): ParamSche
     kind: "number",
     min: 1,
     max: 4000,
-    default: release,
+    default: ring.release,
     unit: "ms",
     taper: "exponential",
+  },
+  {
+    id: "kit.restrike",
+    // Beside the release, the other way a hit dies away: a kit has no playback section of its own.
+    section: "env",
+    label: "Re-strike",
+    kind: "number",
+    min: 0,
+    max: 2000,
+    default: ring.restrike,
+    unit: "ms",
+    taper: "linear",
   },
   { id: "amp.level", label: "Level", kind: "number", min: 0, max: 1, default: 0.9, taper: "linear", smoothMs: 10 },
 ];
@@ -181,6 +200,7 @@ export const drumkit: EngineBuiltin = {
     },
     voice: "amp",
     output: "level",
+    restrike: { param: "kit.restrike", scale: 0.001 },
     // A zone per pad, on its own note: the note picks the pad, and plays it at its own pitch.
     zones: Array.from({ length: DRUMKIT_PADS }, (_, index) => {
       const pad = `pad${index + 1}`;
