@@ -20,7 +20,7 @@ import { openExplorePage, requestExploreSearch } from "../ui/explore/explorePage
 import { RAIL_ITEMS } from "../ui/libraryViews";
 import { KnobExtrasProvider } from "../ui/knobExtras";
 import { KeysPanel } from "../ui/keys/KeysPanel";
-import { useDesktopKeys } from "../ui/keys/useDesktopKeys";
+import { kitOf, useDesktopKeys } from "../ui/keys/useDesktopKeys";
 import { useSongKey } from "../ui/pads/songKey";
 import { usePersistentBoolean } from "../ui/usePersistent";
 import { DeviceRack } from "../ui/workbench/DeviceRack";
@@ -86,8 +86,8 @@ export function PluginApp({
   // (Live's computer MIDI keyboard) while they're folded; the pads play either way.
   const taken = useSyncExternalStore(keyboardTaken.subscribe, keyboardTaken.read);
   const keys = useDesktopKeys(notes, taken, useSongKey(project, dispatch), {
-    key: "corrente:plugin-keys-open",
-    initial: false,
+    fold: { key: "corrente:plugin-keys-open", initial: false },
+    kit: kitOf(track, project.getSamples()),
   });
   const updateReady = useSyncExternalStore(updates.ready.subscribe, updates.ready.read);
   const release = useSyncExternalStore(updates.release.subscribe, updates.release.read);

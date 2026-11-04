@@ -85,3 +85,21 @@ test("on a phone the drum roll gets the touch treatment, like any other roll (MO
   await expect(page.getByTestId("piano-grid")).toBeVisible();
   await expect(velocityLane).toBeHidden();
 });
+
+test("on the desktop, a Drum Kit track's keys are its pads, in order from Z", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openExploreCategory(page, "Instruments");
+  await swapFromExplore(page, "Drum Kit");
+  await expect(page.getByRole("tablist").getByTitle("Drum Kit", { exact: true })).toBeVisible();
+
+  // The kit's first pad (the built-in Kick, on GM note 36) is on Z, and the key lights while held.
+  const kick = page.getByRole("button", { name: "Kick (C2)", exact: true });
+  await expect(kick).toBeVisible();
+  await page.keyboard.down("z");
+  await expect(kick).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.up("z");
+  await expect(kick).toHaveAttribute("aria-pressed", "false");
+  // No key, range or chords to set for a kit.
+  await expect(page.getByRole("button", { name: "Chords", exact: true })).toHaveCount(0);
+});

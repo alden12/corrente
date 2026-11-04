@@ -192,6 +192,35 @@ function chordKeys({ tonic, scale, lowOctave, prefs, editing, raised }: Keyboard
   );
 }
 
+/** A kit's pad, as a key plays it: the note that fires it and its sound's name. */
+export interface KitKey {
+  note: number;
+  label: string;
+}
+
+/**
+ * A kit's loaded pads across the keyboard (INST-54), in pad order, ten to a row from the bottom: the
+ * General MIDI kit's kick, snare and hats land on Z, X and C. Forty keys for a kit's thirty-two pads.
+ */
+export const kitRows = (pads: readonly KitKey[]): KeyCell[][] =>
+  KEY_ROWS.map((codes, rowIndex) =>
+    codes.map((code, column) => {
+      const pad = pads[rowIndex * KEYS_PER_ROW + column];
+      return {
+        code,
+        pad: pad
+          ? {
+              pitches: [pad.note],
+              name: `${pad.label} (${pitchName(pad.note)})`,
+              label: pad.label,
+              sublabel: pitchName(pad.note),
+              tone: "in-scale",
+            }
+          : null,
+      };
+    }),
+  );
+
 /** Each playing key's pad, by code: what a key press looks up. */
 export const padsByCode = (rows: KeyCell[][]): Map<string, KeyPad> =>
   new Map(rows.flat().flatMap(({ code, pad }) => (pad ? [[code, pad] as const] : [])));

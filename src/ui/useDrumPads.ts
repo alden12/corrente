@@ -16,11 +16,15 @@ export interface DrumPad {
   note: number;
 }
 
-export function usePads(store: ParamStore): DrumPad[] {
+const NO_PADS: DrumPad[] = [];
+
+/** A kit's pads; none without a store (a track that isn't a kit, for a caller that asks either way). */
+export function usePads(store: ParamStore | undefined): DrumPad[] {
   const cache = useRef<{ key: string; pads: DrumPad[] }>({ key: "", pads: [] });
   return useSyncExternalStore(
-    (onChange) => store.subscribe(onChange),
+    (onChange) => store?.subscribe(onChange) ?? (() => {}),
     () => {
+      if (!store) return NO_PADS;
       const pads = Array.from(
         { length: padCount(store.allSpecs()) },
         (_unused, index): DrumPad => ({

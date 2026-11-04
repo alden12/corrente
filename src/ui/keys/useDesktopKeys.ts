@@ -15,27 +15,46 @@ import type { LiveNotes } from "../../audio/live/liveNotes";
 import { OCTAVE_RANGE, usePadSettings, type PadSettings, type SongKey } from "../pads/padSettings";
 import { PAD_VELOCITY, usePadTouch } from "../pads/usePadTouch";
 import { usePersistentBoolean, usePersistentNumber } from "../usePersistent";
-import { KEY_ROW_COUNT, keyboardRows, octavesSpanned, padsByCode, type KeyRowMode } from "./keyLayout";
+import { KEY_ROW_COUNT, keyboardRows, kitRows, octavesSpanned, padsByCode, type KeyRowMode } from "./keyLayout";
 import { useKeyboardPlaying, useShiftHeld } from "./useKeyboardPlaying";
 import { keysPanelHeight } from "./panelGeometry";
+import type { ParamStore } from "../../audio/params/store";
+import { refLabel, type SampleAsset } from "../../audio/samples/catalog";
+import type { Track } from "../../audio/project/projectStore";
+import { playsPads } from "../../audio/instruments/pads";
+import { usePads } from "../useDrumPads";
+
+/** A kit track's pads, which the keys play instead of notes (INST-54): its params and the project's samples, to name them. */
+export interface KeysKit {
+  params: ParamStore;
+  samples: SampleAsset[];
+}
+
+/** The selected track as the keys play it: a kit when its instrument plays pads, else nothing. */
+export const kitOf = (track: Track | undefined, samples: SampleAsset[]): KeysKit | undefined =>
+  track?.kind === "instrument" && playsPads(track.params.allSpecs()) ? { params: track.params, samples } : undefined;
 
 export function useDesktopKeys(
   liveNotes: LiveNotes,
   started: boolean,
   songKey: SongKey,
-  // Where the panel remembers being open, and whether it starts so: the plugin's window starts folded.
-  fold: { key: string; initial: boolean } = { key: "corrente:keys-open", initial: true },
+  {
+    // Where the panel remembers being open, and whether it starts so: the plugin's window starts folded.
+    fold = { key: "corrente:keys-open", initial: true },
+    kit,
+  }: { fold?: { key: string; initial: boolean }; kit?: KeysKit } = {},
 ) {
   const [open, setOpen] = usePersistentBoolean(fold.key, fold.initial);
   // Not persisted: a strip you set while playing, not a preference.
   const [velocity, setVelocity] = useState(PAD_VELOCITY);
   const [storedRows, setShownRows] = usePersistentNumber("corrente:keys-rows-shown", KEY_ROW_COUNT, 1, CHORD_ROW_LIMIT);
   const padSettings = usePadSettings(1, KEY_ROW_COUNT, songKey);
-  // The most rows there are to draw: the keyboard's four, or in chords mode every row the key offers.
+  // The most rows there are to draw: the keyboard's four (a kit's too), or in chords mode every row the key offers.
   const { tonic, scale, lowOctave, chordPrefs: prefs, editingChords: editing } = padSettings;
-  const mostRows = padSettings.chords
-    ? Math.max(KEY_ROW_COUNT, chordRows({ tonic, scale, lowOctave, prefs, editing }).length)
-    : KEY_ROW_COUNT;
+  const mostRows =
+    !kit && padSettings.chords
+      ? Math.max(KEY_ROW_COUNT, chordRows({ tonic, scale, lowOctave, prefs, editing }).length)
+      : KEY_ROW_COUNT;
   const shownRows = Math.min(storedRows, mostRows);
   // The pads' own Accidentals switch: on, alternate rows are the accidentals, as the pads show them
   // in a band above each row; off, every row is an octave and Shift reaches the sharps.
@@ -45,18 +64,22 @@ export function useDesktopKeys(
   const enabled = started && !settings.editingChords;
   // Shift turns the octave rows into their sharps (accidental rows have them already), and in chords
   // mode moves the keys up onto the four chord rows above.
-  const raised = useShiftHeld(enabled && (settings.chords || rowMode === "octaves"));
+  const raised = useShiftHeld(enabled && !kit && (settings.chords || rowMode === "octaves"));
+  const kitPads = usePads(kit?.params).filter((pad) => pad.ref !== "" && pad.ref !== "none");
 
-  const rows = keyboardRows({
-    tonic: settings.tonic,
-    scale: settings.scale,
-    lowOctave: settings.lowOctave,
-    rowMode,
-    raised,
-    chords: settings.chords,
-    prefs: settings.chordPrefs,
-    editing: settings.editingChords,
-  });
+  // A kit's pads, or the notes or chords of the key.
+  const rows = kit
+    ? kitRows(kitPads.map((pad) => ({ note: pad.note, label: refLabel(pad.ref, kit.samples) })))
+    : keyboardRows({
+        tonic: settings.tonic,
+        scale: settings.scale,
+        lowOctave: settings.lowOctave,
+        rowMode,
+        raised,
+        chords: settings.chords,
+        prefs: settings.chordPrefs,
+        editing: settings.editingChords,
+      });
   const keyboard = useKeyboardPlaying({
     pads: padsByCode(rows),
     target: liveNotes,
@@ -77,6 +100,7 @@ export function useDesktopKeys(
       rowMode,
       velocity,
       onVelocity: setVelocity,
+      kit: !!kit,
     },
     height: keysPanelHeight(open, shownRows),
   };

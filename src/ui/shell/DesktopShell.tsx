@@ -34,7 +34,7 @@ import { setFromExplore } from "../explore/fromExplore";
 import { EXPLORE_SHORTCUTS } from "../libraryViews";
 import { openProjectsPage } from "../projects/projectsPage";
 import { KeysPanel } from "../keys/KeysPanel";
-import { useDesktopKeys } from "../keys/useDesktopKeys";
+import { kitOf, useDesktopKeys } from "../keys/useDesktopKeys";
 
 // Layout bounds. The activity rail is always shown on the left; the panel beside it (the library's
 // views, or the agent) collapses to that rail. The timeline can grow until only MIN_CENTER of the
@@ -93,7 +93,10 @@ export function DesktopShell({
   const [dragging, setDragging] = useState(false);
   // The computer keyboard, played in key (DAW-12.1). Here rather than in the piano roll that shows
   // it, so the keys play whatever the workbench is showing.
-  const keys = useDesktopKeys(liveNotes, started, useSongKey(projectStore, dispatch));
+  // A kit track's keys play its pads (INST-54).
+  const keys = useDesktopKeys(liveNotes, started, useSongKey(projectStore, dispatch), {
+    kit: kitOf(selectedTrack, projectStore.getSamples()),
+  });
 
   // Track the body height so the timeline can never crowd out the workbench:
   // the effective height is clamped to leave at least MIN_CENTER up top, which

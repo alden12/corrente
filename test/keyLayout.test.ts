@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CHORD_PREFS, setHidden } from "../src/audio/theory/chordPrefs";
-import { isAccidentalRow, keyboardRows, padsByCode, qwertyLabel } from "../src/ui/keys/keyLayout";
+import { isAccidentalRow, keyboardRows, kitRows, padsByCode, qwertyLabel } from "../src/ui/keys/keyLayout";
 
 type Options = Parameters<typeof keyboardRows>[0];
 
@@ -124,5 +124,16 @@ describe("keyboardRows, arranging chords", () => {
 describe("qwertyLabel", () => {
   it("prints letters, digits and punctuation", () => {
     expect(["KeyZ", "Digit0", "Comma", "Semicolon", "Slash"].map(qwertyLabel)).toEqual(["Z", "0", ",", ";", "/"]);
+  });
+});
+
+describe("kitRows (INST-54)", () => {
+  it("lays a kit's pads across the keys in order, ten to a row from Z", () => {
+    const pads = Array.from({ length: 12 }, (_unused, index) => ({ note: 36 + index, label: `Pad ${index + 1}` }));
+    const byCode = padsByCode(kitRows(pads));
+    expect(byCode.get("KeyZ")?.pitches).toEqual([36]);
+    expect(byCode.get("Slash")?.pitches).toEqual([45]);
+    expect(byCode.get("KeyA")?.label).toBe("Pad 11");
+    expect(byCode.size).toBe(12);
   });
 });

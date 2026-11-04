@@ -59,6 +59,7 @@ export function KeysPanel({
   rowMode,
   velocity,
   onVelocity,
+  kit,
 }: {
   /** The layout, bottom row first (`keyboardRows`). */
   rows: KeyCell[][];
@@ -74,14 +75,18 @@ export function KeysPanel({
   /** The velocity the keys strike at, 0..1. */
   velocity: number;
   onVelocity: (velocity: number) => void;
+  /** The track is a kit: the keys are its pads, with no key, range or chords to set (INST-54). */
+  kit: boolean;
 }) {
   const keycap = useKeycapLabels();
   const held = useHeldKeys(keyboard);
-  const hint = settings.chords
-    ? "Shift rows 5-8 · [ ] octave"
-    : rowMode === "octaves"
-      ? "Shift sharps · [ ] octave"
-      : "[ ] octave";
+  const hint = kit
+    ? "Pads in order, from Z"
+    : settings.chords
+      ? "Shift rows 5-8 · [ ] octave"
+      : rowMode === "octaves"
+        ? "Shift sharps · [ ] octave"
+        : "[ ] octave";
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
@@ -92,8 +97,10 @@ export function KeysPanel({
   const hintFor = (pad: KeyPad) => (pad.chord ? chordHint(pad.chord) : null);
   // With accidental rows, the note rows sit half a key right of them, so each accidental falls
   // between its two notes. Shift keeps every row where it is: its accidentals are on the same keys.
+  // A kit's pads are a plain grid, like the chords.
+  const grid = settings.chords || kit;
   const offset = (rowIndex: number) =>
-    rowMode === "accidentals" && !settings.chords && !isAccidentalRow(rowIndex, { chords: settings.chords, rowMode });
+    rowMode === "accidentals" && !grid && !isAccidentalRow(rowIndex, { chords: settings.chords, rowMode });
 
   return (
     <div className="h-full bg-ground flex flex-col min-h-0 overflow-hidden">
@@ -101,12 +108,14 @@ export function KeysPanel({
         {open && (
           <>
             <span className="font-mono text-[10px] text-faint shrink-0">{hint}</span>
-            <div className="flex-1 min-w-0 flex">
-              <ScalePadControls settings={settings} octavesPerRow={1} />
-            </div>
+            {!kit && (
+              <div className="flex-1 min-w-0 flex">
+                <ScalePadControls settings={settings} octavesPerRow={1} />
+              </div>
+            )}
           </>
         )}
-        {!open && <KeysPreview settings={settings} />}
+        {!open && !kit && <KeysPreview settings={settings} />}
       </SectionHeader>
       {open && (
         <div className="flex-1 min-h-0 flex" style={{ padding: BODY_PADDING, gap: BODY_PADDING }}>
@@ -128,7 +137,7 @@ export function KeysPanel({
                   key={rowIndex}
                   row={row}
                   offset={offset(rowIndex)}
-                  units={rowUnits(rowMode === "accidentals" && !settings.chords)}
+                  units={rowUnits(rowMode === "accidentals" && !grid)}
                   settings={settings}
                   touch={lit}
                   heldAt={held.heldAt}
