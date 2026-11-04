@@ -207,8 +207,8 @@ function KeyRow({
             tone={pad.tone}
             touch={touch}
             // PadButton caps the label at the key's width, so a long chord name ellipsises rather than
-            // spilling over the keycap.
-            className="shrink-0 overflow-hidden px-1.5"
+            // spilling over the keycap. Not clipped itself, so a key change's badge can sit over its corner.
+            className="shrink-0 px-1.5"
             style={{ ...style, ...edge }}
             editing={editingFor(pad, settings)}
             hint={hintFor(pad)}

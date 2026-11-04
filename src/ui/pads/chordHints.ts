@@ -7,13 +7,16 @@
  */
 import { chordHint, keyChangeTo, type ChordHint, type ChordMood } from "../../audio/theory/chordMoves";
 import type { ChordPad } from "../../audio/theory/chords";
-import { keyLabel } from "../../audio/theory/key";
+import { keyLabel, keyShortLabel } from "../../audio/theory/key";
 import { usePlayedChord } from "./lastPlayed";
 import type { PadKeyChange } from "./PadButton";
 import type { PadSettings } from "./padSettings";
 
-/** What a pad wears: a hint, its mood's dot only where the dots are on. */
-export type PadHint = Omit<ChordHint, "mood"> & { mood: ChordMood | null };
+/**
+ * What a pad wears: a hint, its mood's dot only where the dots are on, and for a chord leading to a new
+ * key, that key as its tonic chord is named ("Am"), for the arrow to point to.
+ */
+export type PadHint = Omit<ChordHint, "mood" | "keyChange"> & { mood: ChordMood | null; keyChange: string | null };
 
 /** A function from a pad on show to its hint, given every chord pad on show (to find the one played). */
 export function useChordHints(
@@ -24,7 +27,8 @@ export function useChordHints(
   const { tonic, scale, hints, moodDots, editingChords } = settings;
   return (pad) => {
     const hint = played && hints && !editingChords ? chordHint(played, pad, { tonic, scale }) : null;
-    return hint && { ...hint, mood: moodDots ? hint.mood : null };
+    const next = hint?.keyChange ? keyChangeTo(pad, { tonic, scale }) : null;
+    return hint && { ...hint, mood: moodDots ? hint.mood : null, keyChange: next && keyShortLabel(next) };
   };
 }
 

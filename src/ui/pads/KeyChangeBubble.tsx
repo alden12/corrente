@@ -46,7 +46,7 @@ export function KeyChangeBubble({
       {...{ [LIFT_TARGET]: "" }}
       onClick={onTake}
       aria-label={`Change key to ${label}`}
-      className={`${CONTROL_BASE} fixed z-50 -translate-x-1/2 px-3 rounded-full shadow-md bg-hot text-white font-mono text-[12px] whitespace-nowrap hover:brightness-110 data-[over]:brightness-125`}
+      className={`${CONTROL_BASE} fixed z-50 -translate-x-1/2 px-3 rounded-full shadow-md bg-card ring-1 ring-line text-ink font-mono text-[12px] whitespace-nowrap hover:bg-line data-[over]:bg-line data-[over]:ring-muted`}
       style={{ height: HEIGHT_PX }}
     >
       {`→ ${label}`}

@@ -43,8 +43,8 @@ export interface PadEditing {
 /**
  * A next-chord hint (DAW-12.2): the whole pad tinted, as a chess board lights a piece's squares. One
  * green, deeper for a strong move, none of it the teal a press and a star wear, so a hint never looks
- * held. A chord leading to a new key (DAW-12.3) lights the same, plus a small arrow in its corner in
- * the ink colour (white on a dark ground), unlike any dot. It takes the place of a star's tint, whose ★
+ * held. A chord leading to a new key (DAW-12.3) lights the same, plus a badge on its corner, an arrow
+ * to the key it leads to ("→Am"). It takes the place of a star's tint, whose ★
  * caption still says it's starred. Spelled out whole, so Tailwind sees every class.
  */
 const HINT_FILL: Record<HintStrength, string> = { strong: "bg-good/30", good: "bg-good/12" };
@@ -59,7 +59,7 @@ const MOOD_DOT: Record<ChordMood, string | null> = {
   dark: "bg-mood-dark",
 };
 const describeHint = ({ strength, mood, keyChange }: PadHint) =>
-  `A ${strength} next chord${mood ? `, ${mood}` : ""}${keyChange ? ", leading to a new key" : ""}`;
+  `A ${strength} next chord${mood ? `, ${mood}` : ""}${keyChange ? `, leading to ${keyChange}` : ""}`;
 
 /** A key change a held pad offers, above it (DAW-12.3). */
 export interface PadKeyChange {
@@ -156,18 +156,13 @@ export function PadButton({
         />
       )}
       {hint?.keyChange && (
-        <svg
-          viewBox="0 0 16 16"
+        <span
           aria-hidden="true"
-          className="absolute top-1 right-1 w-2.5 h-2.5 text-ink pointer-events-none"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          // Over the corner, half outside, as a badge sits: into the gap between pads, over the next one.
+          className="absolute -top-1.5 -right-1.5 z-10 flex items-center h-3.5 px-1 rounded-full bg-card ring-1 ring-line shadow-sm opacity-70 font-mono text-[9px] leading-none text-ink pointer-events-none"
         >
-          <path d="M4 12 12 4M6 4h6v6" />
-        </svg>
+          {`→${hint.keyChange}`}
+        </span>
       )}
       {sounding && keyChange && <KeyChangeBubble anchor={self} label={keyChange.label} onTake={keyChange.take} />}
     </button>

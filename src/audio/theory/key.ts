@@ -26,6 +26,12 @@ export const keySchema = z.object({
 /** "C major", "F# dorian". */
 export const keyLabel = (key: ProjectKey): string => `${PITCH_CLASSES[key.tonic]} ${key.scale}`;
 
+/** As its tonic chord is named, for a tight space: "C", "Am"; another mode as its full label. */
+export const keyShortLabel = (key: ProjectKey): string =>
+  key.scale === "major" || key.scale === "minor"
+    ? `${PITCH_CLASSES[key.tonic]}${key.scale === "minor" ? "m" : ""}`
+    : keyLabel(key);
+
 /**
  * Every name a tonic goes by, sharps and flats alike, and its pitch class: what an agent may write
  * (it will often reach for a flat key, Bb or Eb). The key is stored as a pitch class, so either
