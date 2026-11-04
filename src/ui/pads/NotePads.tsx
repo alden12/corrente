@@ -16,6 +16,8 @@
 import { useEffect } from "react";
 import type { InstrumentTrack } from "../../audio/project/projectStore";
 import type { SampleAsset } from "../../audio/samples/catalog";
+import { instrumentSchema } from "../../audio/instruments/catalog";
+import { playsPads } from "../../audio/instruments/pads";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "./KeysPreview";
 import type { Fold } from "../controls/FoldButton";
@@ -55,7 +57,7 @@ export function NotePads({
   const rows = fitPads(room, accidentals && !chords);
   const settings = usePadSettings(octavesPerRow, rows, songKey);
   const touch = usePadTouch(notes);
-  const isKit = track.instrumentType === "drumkit";
+  const isKit = playsPads(instrumentSchema(track.instrumentType));
 
   /**
    * Silence whatever is sounding when the pads go away or the track changes under them. A

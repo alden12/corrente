@@ -15,6 +15,8 @@ import type { Scheduler } from "../../audio/sequencer/scheduler";
 import type { Recorder } from "../../audio/recording/recorder";
 import type { Dispatch } from "../../audio/commands/types";
 import type { SampleAsset } from "../../audio/samples/catalog";
+import { instrumentSchema } from "../../audio/instruments/catalog";
+import { playsPads } from "../../audio/instruments/pads";
 import { usePersistentString } from "../usePersistent";
 import { PianoRoll } from "../PianoRoll";
 import { DrumRoll } from "../DrumRoll";
@@ -75,7 +77,8 @@ export function InstrumentEditor({
   /** Folds the roll away under its toolbar (the desktop column, DAW-61.1). */
   fold?: Fold;
 }) {
-  const isDrumkit = track.instrumentType === "drumkit";
+  // A kit's editors are the drum roll and the step grid (INST-54).
+  const isDrumkit = track.kind === "instrument" && playsPads(instrumentSchema(track.instrumentType));
   const [mode, setMode] = usePersistentString<DrumEditor>(`corrente:drum-editor:${track.id}`, "keys", DRUM_EDITORS);
   const active = track.clips.find((clip) => clip.id === track.activeClipId) ?? track.clips[0];
   const { timeSignature } = useProject(projectStore);

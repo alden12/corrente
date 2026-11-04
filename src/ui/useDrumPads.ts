@@ -5,7 +5,7 @@
  */
 import { useRef, useSyncExternalStore } from "react";
 import type { ParamStore } from "../audio/params/store";
-import { DRUMKIT_PADS } from "../audio/instruments/engine/drumkit";
+import { padCount } from "../audio/instruments/pads";
 
 export interface DrumPad {
   /** 0-based pad index. */
@@ -22,7 +22,7 @@ export function usePads(store: ParamStore): DrumPad[] {
     (onChange) => store.subscribe(onChange),
     () => {
       const pads = Array.from(
-        { length: DRUMKIT_PADS },
+        { length: padCount(store.allSpecs()) },
         (_unused, index): DrumPad => ({
           index,
           ref: String(store.get(`pad${index + 1}.sample`)),

@@ -4,6 +4,7 @@
  * dispatching as the agent; applying a patch creates a new track from a saved sound.
  */
 import { z } from "zod";
+import { PAD_ID, PAD_SAMPLE_ID } from "../../instruments/pads";
 import type { AgentTool } from "../types";
 import type { ParamSpec } from "../../params/types";
 import type { ParamStore } from "../../params/store";
@@ -232,9 +233,6 @@ export function soundTools(ctx: ToolContext): AgentTool[] {
 // A pad-based instrument (the drum kit) declares `pad{n}.sample` / `pad{n}.note` params.
 // These read that shape generically (by id pattern), so nothing hardcodes "drumkit": any
 // instrument with pads gets the same concise map, and instruments without pads get none.
-
-const PAD_ID = /^pad(\d+)\./;
-const PAD_SAMPLE_ID = /^pad(\d+)\.sample$/;
 
 /** Pad numbers whose sample slot is filled (an empty pad makes no sound, so it is noise). */
 function loadedPadNumbers(specs: readonly ParamSpec[], params: ParamStore): Set<number> {

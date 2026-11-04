@@ -13,7 +13,8 @@ import type { Dispatch } from "../../audio/commands/types";
 import type { SampleAsset } from "../../audio/samples/catalog";
 import { savePatchFromTrack } from "../../audio/patches/library";
 import { parseTags } from "../../audio/tags";
-import { EMPTY_INSTRUMENT, pickableInstrumentInfos } from "../../audio/instruments/catalog";
+import { EMPTY_INSTRUMENT, instrumentSchema, pickableInstrumentInfos } from "../../audio/instruments/catalog";
+import { playsPads } from "../../audio/instruments/pads";
 import { MidiDeviceChain } from "../MidiDeviceChain";
 import { InstrumentPanel } from "../InstrumentPanel";
 import { DrumkitPanel } from "../DrumkitPanel";
@@ -144,9 +145,10 @@ export function DeviceRack({
       {track.kind === "instrument" &&
         (track.instrumentType === EMPTY_INSTRUMENT ? (
           <InstrumentPicker trackId={track.id} dispatch={dispatch} />
-        ) : track.instrumentType === "drumkit" ? (
-          // A drum kit uses its own pad panel in place of the generic one.
+        ) : playsPads(instrumentSchema(track.instrumentType)) ? (
+          // A kit uses the pad panel in place of the generic one (INST-54).
           <DrumkitPanel
+            instrumentType={track.instrumentType}
             params={track.params}
             trackId={track.id}
             dispatch={dispatch}

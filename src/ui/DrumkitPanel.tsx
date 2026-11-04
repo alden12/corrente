@@ -25,6 +25,7 @@ import { toSections, sectionTitle, padNumber } from "./paramSections";
 import { usePads } from "./useDrumPads";
 
 export function DrumkitPanel({
+  instrumentType,
   params,
   trackId,
   dispatch,
@@ -32,6 +33,8 @@ export function DrumkitPanel({
   onRevealSamples,
   projectStore,
 }: {
+  /** Its instrument: any that plays pads (`playsPads`), the Drum Kit or another. */
+  instrumentType: string;
   params: ParamStore;
   trackId: string;
   dispatch: Dispatch;
@@ -41,8 +44,9 @@ export function DrumkitPanel({
   projectStore: ProjectStore;
 }) {
   const pads = usePads(params);
-  const info = catalogEntry("drumkit");
-  const sections = toSections(instrumentSchema("drumkit"));
+  const info = catalogEntry(instrumentType);
+  const schema = instrumentSchema(instrumentType);
+  const sections = toSections(schema);
   const padSections = sections.filter((section) => padNumber(section.namespace));
   const otherSections = sections.filter((section) => !padNumber(section.namespace));
 
@@ -79,7 +83,7 @@ export function DrumkitPanel({
       label={info.label}
       kind="instr"
       foldKey={instrumentFold(trackId)}
-      schema={instrumentSchema("drumkit")}
+      schema={schema}
       params={params}
       graph="instrument"
       foldsSections={false}
