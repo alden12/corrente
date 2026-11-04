@@ -30,6 +30,7 @@
  * claims the drag before the first move arrives, and there is no gesture at all.
  */
 import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { playedPad } from "./lastPlayed";
 
 /** Where a pad's notes go. `LiveNotes` satisfies this; a test can pass a spy. */
 export interface PadNoteTarget {
@@ -207,6 +208,7 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
         change.on ? target.noteOn(change.pitch, PAD_VELOCITY) : target.noteOff(change.pitch),
       );
       press.pitches = pitches;
+      playedPad(padKey(pitches));
       publish();
     },
     [heldNotes, publish, target],
@@ -220,6 +222,7 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
         event.currentTarget.setPointerCapture(event.pointerId);
         releaseLatched();
         play(pitches, heldNotes());
+        playedPad(padKey(pitches));
         presses.current.set(event.pointerId, {
           pitches,
           startX: event.clientX,

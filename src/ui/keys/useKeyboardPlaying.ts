@@ -24,6 +24,7 @@ import { isTypingTarget } from "../typingTarget";
 import { padKey, type PadNoteTarget, type PadNotes } from "../pads/usePadTouch";
 import { OCTAVE_KEYS, type KeyPad } from "./keyLayout";
 import { createValueStore } from "../../listeners";
+import { playedPad } from "../pads/lastPlayed";
 
 interface HeldKey {
   /** What it is sounding, which the layout may have moved on from since. */
@@ -115,6 +116,7 @@ export function useKeyboardPlaying({
       const strike = velocityRef.current();
       pad.pitches.filter((pitch) => !sounding.has(pitch)).forEach((pitch) => target.noteOn(pitch, strike));
       held.current.set(event.code, { pitches: pad.pitches, pad: padKey(pad.pitches) });
+      playedPad(padKey(pad.pitches));
       publish();
     };
     const onUp = (event: KeyboardEvent) => {

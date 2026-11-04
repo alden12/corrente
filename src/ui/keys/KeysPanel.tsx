@@ -23,6 +23,10 @@ import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardP
 import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "../pads/KeysPreview";
+import { useLastPlayed } from "../pads/lastPlayed";
+import { padKey } from "../pads/usePadTouch";
+import { nextChordHint, type ChordHint } from "../../audio/theory/chordMoves";
+import { SCALES } from "../../audio/theory/scales";
 
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
@@ -78,6 +82,13 @@ export function KeysPanel({
   const hint = !settings.chords && rowMode === "octaves" ? "Shift sharps · [ ] octave" : "[ ] octave";
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
+  // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
+  const lastPlayed = useLastPlayed();
+  const played = rows.flat().find(({ pad }) => pad?.chord && padKey(pad.pitches) === lastPlayed)?.pad?.chord;
+  const hintFor = (pad: KeyPad) =>
+    played && pad.chord && !settings.editingChords
+      ? nextChordHint(played, pad.chord, SCALES[settings.scale].length)
+      : null;
   // With accidental rows, the note rows sit half a key right of them, so each accidental falls
   // between its two notes. Shift keeps every row where it is: its accidentals are on the same keys.
   const offset = (rowIndex: number) =>
@@ -121,6 +132,7 @@ export function KeysPanel({
                   touch={lit}
                   heldAt={held.heldAt}
                   keycap={keycap}
+                  hintFor={hintFor}
                 />
               ))}
             </div>
@@ -143,6 +155,7 @@ function KeyRow({
   touch,
   heldAt,
   keycap,
+  hintFor,
 }: {
   row: KeyCell[];
   /** Set half a key across: a note row, with the accidentals between its keys. */
@@ -153,6 +166,7 @@ function KeyRow({
   touch: PadTouch;
   heldAt: HeldKeys["heldAt"];
   keycap: (code: string) => string;
+  hintFor: (pad: KeyPad) => ChordHint | null;
 }) {
   const unit = `(100% / ${units})`;
   const style = { width: `calc(${unit} - ${KEY_GAP}px)`, marginRight: KEY_GAP };
@@ -175,6 +189,7 @@ function KeyRow({
             className="shrink-0 overflow-hidden px-1.5"
             style={{ ...style, ...edge }}
             editing={editingFor(pad, settings)}
+            hint={hintFor(pad)}
           />
         ) : (
           // Holds the key's place, so the keys either side stay in their columns.

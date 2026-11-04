@@ -30,7 +30,7 @@
  * Pure and DOM-free; the panel draws it and `useKeyboardPlaying` plays it.
  */
 import { SCALES, intervalLabel, pitchAt, type ScaleName } from "../../audio/theory/scales";
-import { chordRows, type ChordFamily, type ChordPrefs } from "../../audio/theory/chords";
+import { chordRows, type ChordPad, type ChordPrefs } from "../../audio/theory/chords";
 import { pitchName } from "../../audio/params/noteName";
 
 /** The playing rows, **bottom row first**, by `KeyboardEvent.code`. */
@@ -66,8 +66,8 @@ export interface KeyPad {
   label: string;
   sublabel: string;
   tone: KeyTone;
-  /** A chord's identity, for the chord editor to select it by. */
-  chord?: { degree: number; family: ChordFamily | "triad"; hidden: boolean };
+  /** Its chord, for the chord editor to select it by and the next-chord hints to read (DAW-12.2). */
+  chord?: ChordPad;
 }
 
 export interface KeyCell {
@@ -179,7 +179,7 @@ function chordKeys({ tonic, scale, lowOctave, prefs, editing }: KeyboardLayoutOp
               : rowIndex === 0 && chord.degree === 0
                 ? "tonic"
                 : "in-scale",
-          chord: { degree: chord.degree, family: chord.family, hidden: chord.hidden },
+          chord,
         },
       };
     }),

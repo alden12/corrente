@@ -61,6 +61,8 @@ const QUALITY_TABLE = {
 } as const satisfies Record<string, Quality>;
 
 type QualityName = keyof typeof QUALITY_TABLE;
+/** A chord quality by name (`dominant7`, `minor`), for what reads how a chord behaves (chordMoves.ts). */
+export type ChordQuality = QualityName;
 const QUALITIES: Record<QualityName, Quality> = QUALITY_TABLE;
 
 interface Family {
@@ -136,6 +138,9 @@ export interface ChordPad {
   pitches: number[];
   /** As it is written: `Cmaj7`, `Em/G`. */
   name: string;
+  /** Its root as a MIDI pitch (not its lowest note, for an inversion), and its quality. */
+  root: number;
+  quality: ChordQuality;
   /** The line under it: the degree as a roman numeral on the base row, the family above it. */
   caption: string;
   /** Its scale degree (0 = the tonic, the closing column included) and family: what an edit names. */
@@ -252,12 +257,14 @@ export const CHORD_ROW_LIMIT = 1 + DEFAULT_CHORD_ORDER.length;
 const familyQualities = (family: ChordFamily): readonly QualityName[] => CHORD_FAMILIES[family].qualities ?? [];
 
 /** A chord's notes and name, before it is placed in a column. */
-type Chord = Pick<ChordPad, "pitches" | "name">;
+type Chord = Pick<ChordPad, "pitches" | "name" | "root" | "quality">;
 
 function chordOf(root: number, quality: QualityName): Chord {
   return {
     pitches: QUALITIES[quality].intervals.map((interval) => root + interval),
     name: PITCH_CLASSES[root % 12] + QUALITIES[quality].suffix,
+    root,
+    quality,
   };
 }
 
@@ -265,5 +272,5 @@ function chordOf(root: number, quality: QualityName): Chord {
 function invert(chord: Chord, count: number, root: number): Chord {
   const pitches = [...chord.pitches.slice(count), ...chord.pitches.slice(0, count).map((pitch) => pitch + 12)];
   const bass = pitches[0] % 12;
-  return { pitches, name: bass === root % 12 ? chord.name : `${chord.name}/${PITCH_CLASSES[bass]}` };
+  return { ...chord, pitches, name: bass === root % 12 ? chord.name : `${chord.name}/${PITCH_CLASSES[bass]}` };
 }

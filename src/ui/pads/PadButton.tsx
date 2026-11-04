@@ -7,6 +7,7 @@
  */
 import type { CSSProperties, ReactNode } from "react";
 import { padKey, type PadNotes, type PadTouch } from "./usePadTouch";
+import type { ChordHint } from "../../audio/theory/chordMoves";
 
 /**
  * Fill, not outline. Every pad wears the same grey and they are separated by the gaps between
@@ -35,6 +36,13 @@ export interface PadEditing {
   hidden: boolean;
 }
 
+/**
+ * A next-chord hint (DAW-12.2): a dot at the top of the pad, as a chess board dots a piece's moves.
+ * A dot rather than a fill or a ring, which a star, a press and a latch already wear.
+ */
+const HINT_DOT = { strong: "size-2 bg-you", good: "size-1.5 bg-you/45" } as const;
+const HINT_DESCRIPTION = { strong: "A strong next chord", good: "A good next chord" } as const;
+
 /** Roughly how wide a monospace character is, as a share of the font size. */
 const MONO_CHAR_WIDTH = 0.62;
 
@@ -58,6 +66,7 @@ export function PadButton({
   className = "",
   style,
   editing,
+  hint,
 }: {
   /** What it is, for the accessibility tree and for tests: a note name, or a kit pad's sample. */
   name: string;
@@ -72,6 +81,8 @@ export function PadButton({
   className?: string;
   style?: CSSProperties;
   editing?: PadEditing;
+  /** How good it would sound next, after the chord last played (chord pads only). */
+  hint?: ChordHint | null;
 }) {
   const sounding = !editing && touch.isSounding(pitches);
   const latched = !editing && touch.isLatched(pitches);
@@ -82,6 +93,8 @@ export function PadButton({
     <button
       type="button"
       aria-label={name}
+      // Described, not named, so a hint never changes what the pad is called.
+      aria-description={hint ? HINT_DESCRIPTION[hint] : undefined}
       aria-pressed={editing ? editing.selected : sounding}
       data-pitches={padKey(pitches)}
       {...(editing ? { onClick: editing.onSelect } : touch.padProps(pitches))}
@@ -95,7 +108,7 @@ export function PadButton({
       // position are the caller's business.
       className={`[container-type:inline-size] flex flex-col items-center justify-center rounded-md leading-none select-none ${editing ? "touch-pan-y" : "touch-none"} cursor-pointer transition-colors ${
         sounding ? "bg-you/30 text-you" : TONE_CLASS[tone]
-      } ${latched ? "ring-1 ring-inset ring-you" : ""} ${editClass} ${className}`}
+      } ${latched ? "ring-1 ring-inset ring-you" : ""} ${hint ? "relative" : ""} ${editClass} ${className}`}
       style={style}
     >
       {/* Capped at the pad's width, so a label too long even shrunk (a kit pad's sample name) ellipsises
@@ -104,6 +117,13 @@ export function PadButton({
         {label}
       </span>
       {sublabel && <span className="mt-0.5 font-mono text-[9px] text-faint">{sublabel}</span>}
+      {/* Positioned only when hinted: only a chord pad is, and never an accidental, which positions itself. */}
+      {hint && (
+        <span
+          aria-hidden="true"
+          className={`absolute top-1 left-1/2 -translate-x-1/2 rounded-full pointer-events-none ${HINT_DOT[hint]}`}
+        />
+      )}
     </button>
   );
 }
