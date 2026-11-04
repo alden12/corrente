@@ -44,3 +44,28 @@ test("in chords mode the rows past the keyboard's four scroll into view", async 
   await top.dispatchEvent("pointerdown", { pointerId: 1, isPrimary: true, button: 0 });
   await expect(top).toHaveAttribute("aria-pressed", "true");
 });
+
+test("a held chord that leads to a new key offers it above, taken by letting go there (DAW-12.3)", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await page.getByRole("button", { name: "Chords", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Key and scale" })).toContainText("C major");
+
+  // E is V of vi in C major, the doorway to A minor.
+  const doorway = page.locator("[data-keys-scroll]").getByRole("button", { name: "E", exact: true }).first();
+  await doorway.scrollIntoViewIfNeeded();
+  const bubble = page.getByRole("button", { name: "Change key to A minor" });
+  await expect(bubble).toHaveCount(0);
+  const pad = (await doorway.boundingBox())!;
+  await page.mouse.move(pad.x + pad.width / 2, pad.y + pad.height / 2);
+  await page.mouse.down();
+  await expect(bubble).toBeVisible();
+
+  // The pad holds the pointer, so the bubble is pressed by the lift, not its own click.
+  const target = (await bubble.boundingBox())!;
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(bubble).toHaveAttribute("data-over", "");
+  await page.mouse.up();
+  await expect(page.getByRole("button", { name: "Key and scale" })).toContainText("A minor");
+  await expect(bubble).toHaveCount(0);
+});

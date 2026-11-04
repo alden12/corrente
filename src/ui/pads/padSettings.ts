@@ -18,7 +18,6 @@
 import { useState } from "react";
 import { usePersistentBoolean, usePersistentNumber, usePersistentString } from "../usePersistent";
 import { PITCH_CLASSES, pitchAt, type ScaleName } from "../../audio/theory/scales";
-import { HINT_COLOURS, type HintColours } from "./chordHints";
 import type { ProjectKey } from "../../audio/theory/key";
 import { pitchName } from "../noteNames";
 import { CHORD_ROW_LIMIT, type ChordFamily, type ChordPrefs } from "../../audio/theory/chords";
@@ -62,9 +61,9 @@ export interface PadSettings {
   /** Light the chords that sound good next, and the ones that lead to a new key (DAW-12.2, DAW-12.3). */
   hints: boolean;
   setHints: (on: boolean) => void;
-  /** Hints coloured by the chord's mood, or by strength alone (DAW-12.4). */
-  hintColours: HintColours;
-  setHintColours: (colours: HintColours) => void;
+  /** A dot on each hint in the colour of the chord's mood (DAW-12.4). */
+  moodDots: boolean;
+  setMoodDots: (on: boolean) => void;
   /** Change the song's key, tonic and scale in one edit: what a key change does. */
   setKey: (key: ProjectKey) => void;
   /** Chord rows on show, the base row of triads included. The rest are a scroll away. */
@@ -125,11 +124,7 @@ export function usePadSettings(octavesPerRow: number, maxRows: number, songKey: 
   const [accidentals, setAccidentals] = usePersistentBoolean("corrente:pads-accidentals", true);
   const [chords, setChordsStored] = usePersistentBoolean(CHORDS_KEY, false);
   const [hints, setHints] = usePersistentBoolean("corrente:pads-chord-hints", true);
-  const [hintColours, setHintColours] = usePersistentString<HintColours>(
-    "corrente:pads-hint-colours",
-    "mood",
-    HINT_COLOURS,
-  );
+  const [moodDots, setMoodDots] = usePersistentBoolean("corrente:pads-mood-dots", true);
   const [storedChordRows, setChordRows] = usePersistentNumber("corrente:pads-chord-rows", 3, 1, CHORD_ROW_LIMIT);
   // Kept as asked for, like the octaves, so raising the sheet gives back rows that did not fit.
   const chordRows = Math.max(1, Math.min(storedChordRows, maxRows, CHORD_ROW_LIMIT));
@@ -184,8 +179,8 @@ export function usePadSettings(octavesPerRow: number, maxRows: number, songKey: 
     chords,
     hints,
     setHints,
-    hintColours,
-    setHintColours,
+    moodDots,
+    setMoodDots,
     setKey: songKey.setKey,
     chordRows,
     chordPrefs: prefsFor(arrangement, scale),

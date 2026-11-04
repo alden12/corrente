@@ -23,8 +23,7 @@ import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardP
 import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, KIT_KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "../pads/KeysPreview";
-import { useChordHints } from "../pads/chordHints";
-import type { ChordHint } from "../../audio/theory/chordMoves";
+import { keyChangeFor, useChordHints, type PadHint } from "../pads/chordHints";
 
 /** `navigator.keyboard.getLayoutMap`, where the browser has it (Chromium): what each key prints. */
 type LayoutMap = { get(code: string): string | undefined };
@@ -180,13 +179,14 @@ function KeyRow({
   touch: PadTouch;
   heldAt: HeldKeys["heldAt"];
   keycap: (code: string) => string;
-  hintFor: (pad: KeyPad) => ChordHint | null;
+  hintFor: (pad: KeyPad) => PadHint | null;
   /** A kit's pads: taller keys, the keycap over the sound's name. */
   kit: boolean;
 }) {
   const unit = `(100% / ${units})`;
   const style = { width: `calc(${unit} - ${KEY_GAP}px)`, marginRight: KEY_GAP };
   const edges = offscreenEdges(row, heldAt);
+  const keyChange = keyChangeFor(settings);
   return (
     <div className="flex" style={{ height: kit ? KIT_KEY_HEIGHT : KEY_HEIGHT }}>
       {offset && <div className="shrink-0" style={{ width: `calc(0.5 * ${unit})` }} />}
@@ -212,6 +212,7 @@ function KeyRow({
             style={{ ...style, ...edge }}
             editing={editingFor(pad, settings)}
             hint={hintFor(pad)}
+            keyChange={pad.chord && keyChange(pad.chord)}
           />
         ) : (
           // Holds the key's place, so the keys either side stay in their columns.

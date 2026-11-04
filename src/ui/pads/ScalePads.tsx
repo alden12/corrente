@@ -29,19 +29,12 @@ import { CONTROL_BASE, TONE_ACTIVE } from "../controls/tone";
 import type { PadTouch } from "./usePadTouch";
 import { ChordPads } from "./ChordPads";
 import { ChordEditBar } from "./ChordEditBar";
-import { KeyChangeButton } from "./KeyChangeButton";
-import type { HintColours } from "./chordHints";
 
 /** The ways to arrange the chords, as the key menu offers them. Custom is whatever you made. */
 const ARRANGE_MODES: { mode: ChordArrangeMode; label: string }[] = [
   { mode: "popular", label: "Popular" },
   { mode: "type", label: "Type" },
   { mode: "custom", label: "Custom" },
-];
-
-const HINT_COLOUR_CHOICES: { colours: HintColours; label: string }[] = [
-  { colours: "mood", label: "Mood" },
-  { colours: "strength", label: "Strength" },
 ];
 
 /**
@@ -78,13 +71,10 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
           { separator: true },
           { label: "Hints", checked: settings.hints, onClick: () => settings.setHints(!settings.hints) },
           {
-            label: "Colour hints by",
+            label: "Mood dots",
+            checked: settings.moodDots,
             disabled: !settings.hints,
-            submenu: HINT_COLOUR_CHOICES.map(({ colours, label }) => ({
-              label,
-              checked: settings.hintColours === colours,
-              onClick: () => settings.setHintColours(colours),
-            })),
+            onClick: () => settings.setMoodDots(!settings.moodDots),
           },
           { label: "Edit chords…", onClick: () => settings.setEditingChords(true) },
           {
@@ -135,7 +125,6 @@ export function ScalePadControls({ settings, octavesPerRow }: { settings: PadSet
       >
         Chords
       </button>
-      {chords && settings.hints && <KeyChangeButton settings={settings} />}
       <div className="ml-auto shrink-0 flex items-center">
         <IconButton
           label="Lower octave"

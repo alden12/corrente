@@ -57,6 +57,17 @@ export type PadNotes = readonly number[];
 /** What identifies a pad, and what it carries in `data-pitches` for a slide to find it by. */
 export const padKey = (pitches: PadNotes) => pitches.join(",");
 
+/**
+ * What a finger can let go over to press, though its pointer is captured by its pad: the key change
+ * above a held chord (DAW-12.3). It wears `data-over` while the finger is on it, and is clicked when
+ * the finger lifts there.
+ */
+export const LIFT_TARGET = "data-lift-target";
+
+/** The lift target under a point, if any. */
+const liftTargetAt = (clientX: number, clientY: number) =>
+  document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>(`[${LIFT_TARGET}]`) ?? null;
+
 /** The pad under a point, or null where there is none - a gap, or off the section entirely. */
 function padAtPoint(clientX: number, clientY: number): PadNotes | null {
   const pad = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-pitches]");
@@ -97,6 +108,8 @@ interface Press {
   axis: "slide" | "sustain" | null;
   /** Dragged far enough that letting go will leave the note sounding. */
   latching: boolean;
+  /** The lift target it's over, marked `data-over`: what letting go here presses. */
+  over: HTMLElement | null;
 }
 
 export interface PadTouch {
@@ -185,6 +198,9 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
     (event: ReactPointerEvent, latch: boolean) => {
       const press = presses.current.get(event.pointerId);
       if (!press) return;
+      // Pressed before the note ends, while what it offers is still there to press.
+      press.over?.removeAttribute("data-over");
+      if (latch) press.over?.click();
       presses.current.delete(event.pointerId);
       if (latch && press.latching) latched.current.set(padKey(press.pitches), press.pitches);
       else letGo(press.pitches, heldNotes());
@@ -229,12 +245,19 @@ export function usePadTouch(target: PadNoteTarget): PadTouch {
           startY: event.clientY,
           axis: null,
           latching: false,
+          over: null,
         });
         publish();
       },
       onPointerMove: (event: ReactPointerEvent) => {
         const press = presses.current.get(event.pointerId);
         if (!press) return;
+        const over = liftTargetAt(event.clientX, event.clientY);
+        if (over !== press.over) {
+          press.over?.removeAttribute("data-over");
+          over?.setAttribute("data-over", "");
+          press.over = over;
+        }
         const acrossPads = event.clientX - press.startX;
         const down = event.clientY - press.startY;
         if (!press.axis) {
