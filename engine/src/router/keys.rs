@@ -131,6 +131,8 @@ impl Track {
             let fade = if self.voices.restruck { self.binding.restrike() * f64::from(self.sample_rate) } else { 0.0 };
             self.cut_over(cut, offset, fade as usize);
         }
+        // TS: this.choke(start.choke, slot, offset);
+        self.choke(start.choke, slot, offset);
         self.note_on(slot, offset, start.frequency, start.velocity, note as f32);
         if let Some([sample, root, start, end]) = start.zone {
             self.set_voice_signal(slot, SIGNAL_SAMPLE, sample);

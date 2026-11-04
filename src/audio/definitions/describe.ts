@@ -89,10 +89,11 @@ export const definitionFormatDoc = () => ({
     "read `input.left` and `input.right`.",
   zones:
     "zones?: [{ sample: { param }, root, keys?: [low, high], velocities?: [low, high], start?, end?, trimStart?, " +
-    "trimEnd?, tune?, level?, keytrack? }, ...] maps notes to samples: each zone a sample param, the note it plays " +
+    "trimEnd?, tune?, level?, keytrack?, choke? }, ...] maps notes to samples: each zone a sample param, the note it plays " +
     "at its own pitch, the keys (MIDI, both ends included) and velocities (0 to 1) it answers, and the part of the " +
     "sample: start and end as fractions, trimStart and trimEnd as milliseconds cut off each end. tune moves it in " +
-    "semitones, level scales the note's velocity (0 to 4), keytrack false plays it at its own pitch on any key. " +
+    "semitones, level scales the note's velocity (0 to 4), keytrack false plays it at its own pitch on any key, " +
+    "and choke (a group, 1 to 32; 0 or left out for none) cuts the group's other sounding notes as it starts: a closed hi-hat stops the open one. " +
     "Each but sample and velocities can be { param } instead, read as a note starts (a pad's note, its tune). " +
     "A note takes the first zone that fits (none: it doesn't sound), and its voice reads it as voice.sample, voice.root, voice.start and " +
     'voice.end: wire those to a sampler. A drum kit is a zone per pad, root on its own key: { "sample": { "param": ' +

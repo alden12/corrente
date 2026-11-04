@@ -21,6 +21,18 @@ import { DEFAULT_KIT, builtinRef } from "../../samples/catalog";
 export const DRUMKIT_PADS = 32;
 export const DRUMKIT_BASE_NOTE = 36; // GM note 36 (kick), where the General MIDI drum map begins
 
+/** The General MIDI hi-hats: closed (42), pedal (44) and open (46). */
+const HI_HATS = [42, 44, 46];
+/** The most choke groups a pad can pick from: enough for a kit's hats, cymbals and more. */
+export const DRUMKIT_CHOKE_GROUPS = 8;
+
+/**
+ * A pad's default choke group, from its sound's General MIDI note (INST-9.2): the hi-hats share group 1,
+ * so a closed hat stops the open one ringing, as a hand on the cymbals does. Everything else, none.
+ */
+export const chokeFor = (gmNote: number | undefined): number =>
+  gmNote !== undefined && HI_HATS.includes(gmNote) ? 1 : 0;
+
 /** Fallback default note for a 0-based pad index, for pads past the built-in kit (which
  *  seed their note from the sample's General MIDI note). Contiguous from the GM base. */
 export const noteForPad = (padIndex: number): number => DRUMKIT_BASE_NOTE + padIndex;
@@ -63,6 +75,17 @@ const drumPadSpecs = (): ParamSpec[] =>
         unit: "st",
         taper: "linear",
         step: 1, // whole semitones
+      },
+      // 0 for none; a pad in a group cuts the group's other pads as it plays.
+      {
+        id: `pad${pad}.choke`,
+        label: "Choke",
+        kind: "number",
+        min: 0,
+        max: DRUMKIT_CHOKE_GROUPS,
+        default: chokeFor(builtin?.gmNote),
+        taper: "linear",
+        step: 1,
       },
     ];
   }).flat();
@@ -148,6 +171,7 @@ export const drumkit: EngineBuiltin = {
         tune: { param: `${pad}.tune` },
         level: { param: `${pad}.level` },
         keytrack: false,
+        choke: { param: `${pad}.choke` },
       };
     }),
   },

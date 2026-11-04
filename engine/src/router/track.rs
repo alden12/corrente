@@ -16,7 +16,7 @@
 use super::binding::Binding;
 use crate::midi::{BlockTransport, Chain, Event, MAX_EVENTS};
 use super::carry::{map_fits, section_map, same_node, take_over};
-use super::graph::{CUT, Graph, Output, SectionState, Voice};
+use super::graph::{CHOKE_SECONDS, CUT, Graph, Output, SectionState, Voice};
 use super::params::ParamSource;
 use super::sample_map::Samples;
 use super::voices::VoiceAllocator;
@@ -313,6 +313,34 @@ impl Track {
     // TS: this.cutOver(slot, offset, CUT)
     pub fn cut(&mut self, slot: usize, offset: i32) {
         self.cut_over(slot, offset, CUT);
+    }
+
+    /// Put the note starting in `slot` in choke group `group` (INST-9.2), and cut every other sounding
+    /// voice in the group over CHOKE_SECONDS, `offset` samples into the coming block: a closed hi-hat
+    /// stops the open one. Group 0 is none. A loop over the slots rather than a list of them, so a
+    /// note start allocates nothing.
+    // TS:
+    //   const voice = this.voiceMut(slot); if (voice) voice.choke = group;
+    //   if (group === 0) return;
+    //   const fade = CHOKE_SECONDS * this.sampleRate;
+    //   this.graph?.voices.forEach((voice, other) => { if (other !== slot && voice.choke === group) this.cutOver(other, offset, fade); });
+    pub(super) fn choke(&mut self, group: i32, slot: usize, offset: i32) {
+        if let Some(voice) = self.voice_mut(slot) {
+            voice.choke = group;
+        }
+        if group == 0 {
+            return;
+        }
+        let fade = (CHOKE_SECONDS * f64::from(self.sample_rate)) as usize;
+        let slots = self.graph.as_ref().map_or(0, |graph| graph.voices.len());
+        for other in (0..slots).filter(|&other| other != slot) {
+            // `is_some_and` is true only for a voice that's there and in the group; cut_over skips one
+            // that's silent or already fading.
+            let in_group = self.voice_mut(other).is_some_and(|voice| voice.choke == group);
+            if in_group {
+                self.cut_over(other, offset, fade);
+            }
+        }
     }
 
     /// The same, over `samples` (at least CUT): a re-struck note's previous voice dies away under the

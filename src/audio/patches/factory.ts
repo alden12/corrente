@@ -15,6 +15,7 @@
 import type { Tag } from "../tags";
 import type { Patch, PatchEffect } from "./patch";
 import { BUILTIN_KITS, builtinRef, type BuiltinKit } from "../samples/catalog";
+import { chokeFor } from "../instruments/engine/drumkit";
 
 /** Juno-style chorus settings for the lush presets (bundled as the one effect). */
 const chorusI: PatchEffect = { type: "chorus", params: { "chorus.rate": 0.7, "chorus.depth": 0.35, mix: 0.5 } };
@@ -54,6 +55,8 @@ const kitPads = (kit: BuiltinKit): Patch["params"] =>
     kit.samples.flatMap((sample, index) => [
       [`pad${index + 1}.sample`, builtinRef(sample.id)],
       ...(sample.gmNote === undefined ? [] : [[`pad${index + 1}.note`, sample.gmNote]]),
+      // Its hats in a choke group, wherever the kit puts them.
+      [`pad${index + 1}.choke`, chokeFor(sample.gmNote)],
     ]),
   );
 const microVa = builtinFor("micro-va");

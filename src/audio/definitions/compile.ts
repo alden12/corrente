@@ -52,6 +52,8 @@ export interface PlanZone {
   level: ZoneValue;
   /** 1 to follow the keys, 0 to play at its own pitch whatever the key. */
   keytrack: ZoneValue;
+  /** Its choke group: a note in it cuts the group's other sounding notes. 0 for none. */
+  choke: ZoneValue;
 }
 /** A param source the engine keeps a smoothed buffer for: which param, and how to turn it into a value. */
 export interface ParamSource {
@@ -394,6 +396,7 @@ const planZone = (zone: Zone): PlanZone => ({
   tune: zone.tune ?? 0,
   level: zone.level ?? 1,
   keytrack: typeof zone.keytrack === "boolean" ? Number(zone.keytrack) : (zone.keytrack ?? 1),
+  choke: zone.choke ?? 0,
 });
 
 /** The param bindings among a zone's settings. */
@@ -408,4 +411,5 @@ export const zoneBindings = (zone: PlanZone): ParamBinding[] =>
     zone.tune,
     zone.level,
     zone.keytrack,
+    zone.choke,
   ].filter((value): value is ParamBinding => typeof value === "object");

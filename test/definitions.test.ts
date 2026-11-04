@@ -563,6 +563,7 @@ describe("definitions the compiler refuses", () => {
             tune: 0,
             level: 1,
             keytrack: 1,
+            choke: 0,
           },
         ]);
         expect(plan.params).toEqual([{ param: "drum", scale: 1, offset: 0, sample: true }]);

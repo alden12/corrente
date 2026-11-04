@@ -52,7 +52,9 @@ const zoneWords = (zone: PlanZone, numberOf: (param: string) => number): number[
     ...setting(zone.keys[0]),
     ...setting(zone.keys[1]),
     ...zone.velocities,
-    ...[zone.start, zone.end, zone.trimStart, zone.trimEnd, zone.tune, zone.level, zone.keytrack].flatMap(setting),
+    ...[zone.start, zone.end, zone.trimStart, zone.trimEnd, zone.tune, zone.level, zone.keytrack, zone.choke].flatMap(
+      setting,
+    ),
   ];
 };
 

@@ -193,12 +193,16 @@ const unit = z.number().min(0).max(1);
 /** A zone's setting: a number, or a param's value read when a note starts (a pad's note, its tune). */
 const zoneValue = <Value extends z.ZodNumber>(value: Value) => z.union([value, paramBindingSchema]);
 
+/** The highest choke group: as many as a kit has pads to put in them. */
+export const MAX_CHOKE_GROUP = 32;
+
 /**
  * A sample zone: which sample (a sample param), the note it plays at its own pitch (`root`), the
  * keys and velocities it answers (both ends included; every key and velocity if left out), and the
  * part of it to play: `start` and `end` as fractions of it, and `trimStart` and `trimEnd` as
  * milliseconds cut off each end (both, if given: the whole sample if neither). `tune` moves it in
- * semitones, `level` scales the note's velocity, and `keytrack` off plays it at its own pitch
+ * semitones, `level` scales the note's velocity, `choke` names a group whose other sounding notes it
+ * cuts (a closed hi-hat stops the open one; 0 is none), and `keytrack` off plays it at its own pitch
  * whatever the key. Each but the sample and velocities can be a param, read as a note starts.
  */
 export const zoneSchema = z.strictObject({
@@ -213,6 +217,7 @@ export const zoneSchema = z.strictObject({
   tune: zoneValue(z.number().min(-48).max(48)).optional(),
   level: zoneValue(z.number().min(0).max(4)).optional(),
   keytrack: z.union([z.boolean(), paramBindingSchema]).optional(),
+  choke: zoneValue(z.number().int().min(0).max(MAX_CHOKE_GROUP)).optional(),
 });
 
 /** The most zones a definition may have. */

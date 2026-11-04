@@ -18,7 +18,8 @@
 //!   values, sources, has zones (0 or 1), zones, legato and restrike (settings),
 //!   each source: value, sample (0 or 1), smoothing ms (0 for none), then its shaping,
 //!   each zone: sample value, root, low key, high key, low velocity, high velocity, start, end,
-//!              trim start, trim end, tune, level, key tracking (each setting below but the velocities),
+//!              trim start, trim end, tune, level, key tracking, choke group (each setting below but the
+//!              velocities),
 //!   each value's raw value, then each value's starting point (NaN for none: it starts at its value).
 //!
 //! A shaping is scale, offset, a count of points, then each point's input and output. A setting is 0
@@ -130,6 +131,8 @@ pub struct Zone {
     level: Setting,
     /// 1 to follow the keys, 0 to play at its own pitch whatever the key.
     keytrack: Setting,
+    /// Its choke group (INST-9.2): a note in it cuts the group's other sounding notes. 0 for none.
+    choke: Setting,
 }
 
 /// How a note starts: the engine's note on, and the zone signals it sets if it plays a zone.
@@ -138,6 +141,8 @@ pub struct NoteStart {
     pub velocity: f32,
     /// The sample slot, root, start and end (the voice signals SIGNAL_SAMPLE to SIGNAL_END).
     pub zone: Option<[f32; 4]>,
+    /// The zone's choke group, 0 for none (and for a plan with no zones).
+    pub choke: i32,
 }
 
 /// A key's frequency, in doubles (bank.ts's `frequencyOf`).
@@ -198,7 +203,12 @@ impl Binding {
         // TS: if (!this.zones) return { frequency: frequencyOf(note), velocity, zone: undefined };
         // `let Some(x) = y else { ... }` names what's inside an Option, or runs the else (which must leave).
         let Some(zones) = &self.zones else {
-            return Some(NoteStart { frequency: frequency_of(f64::from(note)) as f32, velocity: velocity as f32, zone: None });
+            return Some(NoteStart {
+                frequency: frequency_of(f64::from(note)) as f32,
+                velocity: velocity as f32,
+                zone: None,
+                choke: 0,
+            });
         };
         // TS: const zone = zones.find((zone) => note >= lowKey && note <= highKey && velocity >= lowVelocity && velocity <= highVelocity);
         //     if (!zone) return undefined;
@@ -239,12 +249,13 @@ impl Binding {
         //   const end = Math.min(1, Math.max(start, zoneValue(zone.end) - zoneValue(zone.trimEnd) * perMs));
         let start = (zone.start.read(values) + zone.trim_start.read(values) * per_ms).clamp(0.0, 1.0);
         let end = (zone.end.read(values) - zone.trim_end.read(values) * per_ms).max(start).min(1.0);
-        // TS: return { frequency, velocity: velocity * zoneValue(zone.level), zone: [sample, root, start, end] };
-        // `as f32` narrows each double to the single precision the engine's signals use.
+        // TS: return { frequency, velocity: velocity * zoneValue(zone.level), zone: [sample, root, start, end], choke: Math.max(0, Math.round(zoneValue(zone.choke))) };
+        // `as f32` narrows each double to the single precision the engine's signals use; `as i32`, to a whole number.
         Some(NoteStart {
             frequency: frequency as f32,
             velocity: (velocity * zone.level.read(values)) as f32,
             zone: Some([sample as f32, root as f32, start as f32, end as f32]),
+            choke: round_like_js(zone.choke.read(values)).max(0.0) as i32,
         })
     }
 
@@ -360,6 +371,7 @@ impl Reader<'_> {
             tune: self.setting()?,
             level: self.setting()?,
             keytrack: self.setting()?,
+            choke: self.setting()?,
         })
     }
 }

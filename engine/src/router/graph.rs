@@ -27,6 +27,8 @@ pub(super) struct Voice {
     pub(super) cut_from: usize,
     pub(super) cut_gain: f32,
     pub(super) cut_length: f32,
+    /// The choke group of the note it plays (INST-9.2), 0 for none: a new note in the group cuts it.
+    pub(super) choke: i32,
 }
 
 /// Slots a graph has beyond its plan's voices, for notes that start while stolen ones fade.
@@ -40,6 +42,10 @@ fn slots_for(voices: usize) -> usize {
 }
 /// How long a cut voice takes to fade out, in samples, unless its cut says longer (a re-struck note's).
 pub(super) const CUT: usize = BLOCK;
+
+/// How long a choked voice takes to fade, in seconds (INST-9.2): quick, as a hand closes a hi-hat, and
+/// not so quick that it clicks.
+pub(super) const CHOKE_SECONDS: f64 = 0.012;
 
 /// A plan and everything it runs on. A track has one, and for the block after a load, the one it
 /// replaced, fading out.
@@ -91,6 +97,7 @@ impl Voice {
             cut_from: 0,
             cut_gain: 1.0,
             cut_length: CUT as f32,
+            choke: 0,
         }
     }
 

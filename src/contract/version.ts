@@ -36,7 +36,9 @@
 // 11: factory samples (INST-55), `factory:<set>/<sound>` refs to sample maps loaded on first use. An
 // older side plays such a sample param as silence, but only meets one where someone picks a sampled
 // instrument.
-export const PROTOCOL_VERSION = 11;
+// 12: a zone's `choke` group (INST-9.2), a closed hi-hat cutting the open one. An older side refuses a
+// custom device using it, but only meets one where someone makes it.
+export const PROTOCOL_VERSION = 12;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

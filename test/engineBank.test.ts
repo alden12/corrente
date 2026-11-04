@@ -401,6 +401,66 @@ describe("EngineBank", () => {
         });
       });
 
+      describe("choke groups (INST-9.2)", () => {
+        /** A closed hat (42) and an open one (46), in `group` both, and a snare (38) in none, each steady. */
+        const kit = (group: number) => {
+          const bank = new EngineBank(wasm, RATE, 1);
+          const pad = (param: string, key: number, choke: number) => ({
+            sample: { param },
+            root: 60,
+            keys: [key, key] as [number, number],
+            keytrack: false,
+            choke,
+          });
+          bank.load(
+            0,
+            compileDefinition({
+              format: 1,
+              zones: [pad("closed", 42, group), pad("open", 46, group), pad("snare", 38, 0)],
+              nodes: {
+                player: {
+                  block: "sampler",
+                  voice: true,
+                  inputs: {
+                    frequency: "voice.frequency",
+                    gate: "voice.gate",
+                    sample: "voice.sample",
+                    root: "voice.root",
+                  },
+                },
+              },
+              voice: "player.left",
+            }),
+          );
+          bank.setSample(0, "closed", "closed", flat(0.1));
+          bank.setSample(0, "open", "open", flat(0.2));
+          bank.setSample(0, "snare", "snare", flat(0.4));
+          return bank;
+        };
+        /** What plays a while after each note in `notes` starts, a block apart. */
+        const after = (bank: EngineBank, notes: number[]) => {
+          notes.forEach((note) => {
+            bank.noteOn(0, note, 1, 0);
+            bank.process(0);
+          });
+          // Past the choke's fade (12 ms, under five blocks).
+          Array.from({ length: 6 }, () => bank.process(0));
+          return bank.output(0, 0)[10];
+        };
+
+        it("cuts the open hat when the closed one plays in its group", () => {
+          expect(after(kit(1), [46, 42])).toBeCloseTo(0.1, 5);
+        });
+
+        it("lets both ring with no group", () => {
+          expect(after(kit(0), [46, 42])).toBeCloseTo(0.3, 5);
+        });
+
+        it("leaves a pad in no group sounding", () => {
+          expect(after(kit(1), [46, 38, 42])).toBeCloseTo(0.5, 5);
+        });
+      });
+
       describe("sample maps (INST-55)", () => {
         /** A region of `audio` for the low zone's keys, in SFZ's terms. */
         const region = (ref: string, audio: SampleAudio | ShortAudio, lovel = 0, hivel = 127, keycenter = 48) => ({

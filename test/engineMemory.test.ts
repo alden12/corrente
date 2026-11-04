@@ -80,11 +80,12 @@ describe("the engine's memory over a long session", () => {
       }
     };
 
-    // Every combination twice, to reach the high-water mark: the plans on each track (12 rounds), the
-    // five sample lengths and the emptying every seventh round only line up again after all three, 420
-    // rounds, and the heap's layout depends on the order it all came in too. Once wasn't always enough
-    // (it peaked at round 245, then after INST-56.1's restrike at round 521); it stays flat from there.
-    const warmUp = PLANS.length * 2 * 5 * 7 * 2;
+    // Every combination three times, to reach the high-water mark: the plans on each track (12 rounds),
+    // the five sample lengths and the emptying every seventh round only line up again after all three,
+    // 420 rounds, and the heap's layout depends on the order it all came in too. Fewer wasn't always
+    // enough: it peaked at round 245, then after INST-56.1's restrike at round 521, then after INST-9.2's
+    // choke group (a voice four bytes bigger) at round 1121, and stayed flat from there to round 6000.
+    const warmUp = PLANS.length * 2 * 5 * 7 * 3;
     Array.from({ length: warmUp }, (_, index) => round(index));
     const warm = bank.engine.memory.buffer.byteLength;
     Array.from({ length: 600 }, (_, index) => round(warmUp + index));
