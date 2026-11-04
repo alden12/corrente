@@ -3,11 +3,14 @@
  * layout, the key handling and the panel's height, in one place so the shell stays a layout.
  *
  * **All four rows always play; the range control says how many are drawn.** The panel can shrink
- * to a row in the piano roll without losing a key, and the octave arrows move the whole range.
+ * to a row in the piano roll without losing a key, and the octave arrows move the whole range. In
+ * chords mode it can also grow past the keyboard's four, to every chord row the key has: the rows
+ * past the keys have no key, and are there to click.
  */
 import { useState } from "react";
 import { pitchName } from "../../audio/params/noteName";
 import { pitchAt } from "../../audio/theory/scales";
+import { CHORD_ROW_LIMIT, chordRows } from "../../audio/theory/chords";
 import type { LiveNotes } from "../../audio/live/liveNotes";
 import { OCTAVE_RANGE, usePadSettings, type PadSettings, type SongKey } from "../pads/padSettings";
 import { PAD_VELOCITY, usePadTouch } from "../pads/usePadTouch";
@@ -26,12 +29,18 @@ export function useDesktopKeys(
   const [open, setOpen] = usePersistentBoolean(fold.key, fold.initial);
   // Not persisted: a strip you set while playing, not a preference.
   const [velocity, setVelocity] = useState(PAD_VELOCITY);
-  const [shownRows, setShownRows] = usePersistentNumber("corrente:keys-rows-shown", KEY_ROW_COUNT, 1, KEY_ROW_COUNT);
+  const [storedRows, setShownRows] = usePersistentNumber("corrente:keys-rows-shown", KEY_ROW_COUNT, 1, CHORD_ROW_LIMIT);
   const padSettings = usePadSettings(1, KEY_ROW_COUNT, songKey);
+  // The most rows there are to draw: the keyboard's four, or in chords mode every row the key offers.
+  const { tonic, scale, lowOctave, chordPrefs: prefs, editingChords: editing } = padSettings;
+  const mostRows = padSettings.chords
+    ? Math.max(KEY_ROW_COUNT, chordRows({ tonic, scale, lowOctave, prefs, editing }).length)
+    : KEY_ROW_COUNT;
+  const shownRows = Math.min(storedRows, mostRows);
   // The pads' own Accidentals switch: on, alternate rows are the accidentals, as the pads show them
   // in a band above each row; off, every row is an octave and Shift reaches the sharps.
   const rowMode: KeyRowMode = padSettings.accidentals ? "accidentals" : "octaves";
-  const settings = drawnRowSettings(padSettings, shownRows, setShownRows, octavesSpanned(rowMode));
+  const settings = drawnRowSettings(padSettings, shownRows, mostRows, setShownRows, octavesSpanned(rowMode));
   const touch = usePadTouch(liveNotes);
   const enabled = started && !settings.editingChords;
   // Shift turns the octave rows into their sharps; accidental rows have them already.
@@ -79,13 +88,14 @@ export function useDesktopKeys(
 function drawnRowSettings(
   settings: PadSettings,
   shown: number,
+  mostRows: number,
   setShown: (rows: number) => void,
   spanned: number,
 ): PadSettings {
   const highestLow = OCTAVE_RANGE.max - spanned;
   const lowOctave = Math.min(settings.lowOctave, highestLow);
   const canMove = (direction: -1 | 1) => (direction < 0 ? lowOctave > OCTAVE_RANGE.min : lowOctave < highestLow);
-  const canSize = (direction: -1 | 1) => (direction < 0 ? shown > 1 : shown < KEY_ROW_COUNT);
+  const canSize = (direction: -1 | 1) => (direction < 0 ? shown > 1 : shown < mostRows);
   const low = pitchName(pitchAt(settings.tonic, lowOctave));
   return {
     ...settings,

@@ -63,7 +63,7 @@
      apart to tell at a faint tint, bright the same green as `good`. */
   --color-mood-bright: #2ecc71;
   --color-mood-sad: #a07cf2;
-  --color-mood-tense: #f0b429;
+  --color-mood-tense: #f2883a;
   --color-mood-dark: #e5555f;
 
   /* An overlay that dims a region *toward the app background*, whichever ground that is:
@@ -163,7 +163,7 @@
     --color-warn: #b07908;
     --color-mood-bright: #15a34a;
     --color-mood-sad: #7449d9;
-    --color-mood-tense: #b07908;
+    --color-mood-tense: #c25e0c;
     --color-mood-dark: #c53a46;
     --color-recess: rgba(20, 24, 32, 0.06);
     --color-row-tint: rgba(20, 24, 32, 0.045);
@@ -193,7 +193,7 @@
   --color-warn: #b07908;
   --color-mood-bright: #15a34a;
   --color-mood-sad: #7449d9;
-  --color-mood-tense: #b07908;
+  --color-mood-tense: #c25e0c;
   --color-mood-dark: #c53a46;
   --color-recess: rgba(20, 24, 32, 0.06);
   --color-row-tint: rgba(20, 24, 32, 0.045);
