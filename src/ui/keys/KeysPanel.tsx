@@ -20,7 +20,7 @@ import { ScalePadControls } from "../pads/ScalePads";
 import type { PadTouch } from "../pads/usePadTouch";
 import { isAccidentalRow, isOffKeyCode, qwertyLabel, type KeyCell, type KeyPad, type KeyRowMode } from "./keyLayout";
 import { useHeldKeys, type HeldKeys, type KeyboardPlaying } from "./useKeyboardPlaying";
-import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, rowUnits } from "./panelGeometry";
+import { BODY_PADDING, KEY_GAP, KEY_HEIGHT, KIT_KEY_HEIGHT, rowUnits } from "./panelGeometry";
 import { SectionHeader } from "../controls/SectionHeader";
 import { KeysPreview } from "../pads/KeysPreview";
 import { useChordHints } from "../pads/chordHints";
@@ -132,19 +132,22 @@ export function KeysPanel({
             className={`flex-1 min-w-0 flex flex-col-reverse ${settings.chords || settings.editingChords ? "overflow-y-auto" : "overflow-hidden"}`}
           >
             <div className="flex flex-col-reverse" style={{ gap: KEY_GAP }}>
-              {(settings.chords || settings.editingChords ? rows : rows.slice(0, shownRows)).map((row, rowIndex) => (
-                <KeyRow
-                  key={rowIndex}
-                  row={row}
-                  offset={offset(rowIndex)}
-                  units={rowUnits(rowMode === "accidentals" && !grid)}
-                  settings={settings}
-                  touch={lit}
-                  heldAt={held.heldAt}
-                  keycap={keycap}
-                  hintFor={hintFor}
-                />
-              ))}
+              {(!kit && (settings.chords || settings.editingChords) ? rows : rows.slice(0, shownRows)).map(
+                (row, rowIndex) => (
+                  <KeyRow
+                    key={rowIndex}
+                    row={row}
+                    offset={offset(rowIndex)}
+                    units={rowUnits(rowMode === "accidentals" && !grid)}
+                    settings={settings}
+                    touch={lit}
+                    heldAt={held.heldAt}
+                    keycap={keycap}
+                    hintFor={hintFor}
+                    kit={kit}
+                  />
+                ),
+              )}
             </div>
           </div>
         </div>
@@ -166,6 +169,7 @@ function KeyRow({
   heldAt,
   keycap,
   hintFor,
+  kit,
 }: {
   row: KeyCell[];
   /** Set half a key across: a note row, with the accidentals between its keys. */
@@ -177,12 +181,14 @@ function KeyRow({
   heldAt: HeldKeys["heldAt"];
   keycap: (code: string) => string;
   hintFor: (pad: KeyPad) => ChordHint | null;
+  /** A kit's pads: taller keys, the keycap over the sound's name. */
+  kit: boolean;
 }) {
   const unit = `(100% / ${units})`;
   const style = { width: `calc(${unit} - ${KEY_GAP}px)`, marginRight: KEY_GAP };
   const edges = offscreenEdges(row, heldAt);
   return (
-    <div className="flex" style={{ height: KEY_HEIGHT }}>
+    <div className="flex" style={{ height: kit ? KIT_KEY_HEIGHT : KEY_HEIGHT }}>
       {offset && <div className="shrink-0" style={{ width: `calc(0.5 * ${unit})` }} />}
       {row.map(({ code, pad }) => {
         const edge = edgeStyle(edges.get(code));
@@ -191,7 +197,13 @@ function KeyRow({
             key={code}
             pitches={pad.pitches}
             name={pad.name}
-            label={<OneLine keycap={keycap(code)} what={`${pad.label} ${pad.sublabel}`} />}
+            label={
+              kit ? (
+                <TwoLines keycap={keycap(code)} what={pad.label} />
+              ) : (
+                <OneLine keycap={keycap(code)} what={`${pad.label} ${pad.sublabel}`} />
+              )
+            }
             tone={pad.tone}
             touch={touch}
             // PadButton caps the label at the key's width, so a long chord name ellipsises rather than
@@ -262,6 +274,16 @@ function OneLine({ keycap, what }: { keycap: string; what: string }) {
     <span className="flex items-baseline gap-1.5 min-w-0 max-w-full" title={`${keycap}  ${what}`}>
       {keycap && <span className="shrink-0 text-[13px]">{keycap}</span>}
       <span className="min-w-0 truncate text-[10px] font-normal text-muted">{what}</span>
+    </span>
+  );
+}
+
+/** A kit's pad: its keycap, and its sound's name under it with the room of the key's whole width. */
+function TwoLines({ keycap, what }: { keycap: string; what: string }) {
+  return (
+    <span className="flex flex-col items-center gap-1 min-w-0 max-w-full" title={`${keycap}  ${what}`}>
+      <span className="text-[13px]">{keycap}</span>
+      <span className="max-w-full truncate text-[10px] font-normal text-muted">{what}</span>
     </span>
   );
 }

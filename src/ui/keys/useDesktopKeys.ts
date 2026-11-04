@@ -15,9 +15,17 @@ import type { LiveNotes } from "../../audio/live/liveNotes";
 import { OCTAVE_RANGE, usePadSettings, type PadSettings, type SongKey } from "../pads/padSettings";
 import { PAD_VELOCITY, usePadTouch } from "../pads/usePadTouch";
 import { usePersistentBoolean, usePersistentNumber } from "../usePersistent";
-import { KEY_ROW_COUNT, keyboardRows, kitRows, octavesSpanned, padsByCode, type KeyRowMode } from "./keyLayout";
+import {
+  KEYS_PER_ROW,
+  KEY_ROW_COUNT,
+  keyboardRows,
+  kitRows,
+  octavesSpanned,
+  padsByCode,
+  type KeyRowMode,
+} from "./keyLayout";
 import { useKeyboardPlaying, useShiftHeld } from "./useKeyboardPlaying";
-import { keysPanelHeight } from "./panelGeometry";
+import { KEY_HEIGHT, KIT_KEY_HEIGHT, keysPanelHeight } from "./panelGeometry";
 import type { ParamStore } from "../../audio/params/store";
 import { refLabel, type SampleAsset } from "../../audio/samples/catalog";
 import type { Track } from "../../audio/project/projectStore";
@@ -55,7 +63,9 @@ export function useDesktopKeys(
     !kit && padSettings.chords
       ? Math.max(KEY_ROW_COUNT, chordRows({ tonic, scale, lowOctave, prefs, editing }).length)
       : KEY_ROW_COUNT;
-  const shownRows = Math.min(storedRows, mostRows);
+  const kitPads = usePads(kit?.params).filter((pad) => pad.ref !== "" && pad.ref !== "none");
+  // A kit shows the rows its pads fill, and no more: a few pads would otherwise sit under empty rows.
+  const shownRows = kit ? Math.max(1, Math.ceil(kitPads.length / KEYS_PER_ROW)) : Math.min(storedRows, mostRows);
   // The pads' own Accidentals switch: on, alternate rows are the accidentals, as the pads show them
   // in a band above each row; off, every row is an octave and Shift reaches the sharps.
   const rowMode: KeyRowMode = padSettings.accidentals ? "accidentals" : "octaves";
@@ -65,8 +75,6 @@ export function useDesktopKeys(
   // Shift turns the octave rows into their sharps (accidental rows have them already), and in chords
   // mode moves the keys up onto the four chord rows above.
   const raised = useShiftHeld(enabled && !kit && (settings.chords || rowMode === "octaves"));
-  const kitPads = usePads(kit?.params).filter((pad) => pad.ref !== "" && pad.ref !== "none");
-
   // A kit's pads, or the notes or chords of the key.
   const rows = kit
     ? kitRows(kitPads.map((pad) => ({ note: pad.note, label: refLabel(pad.ref, kit.samples) })))
@@ -102,7 +110,7 @@ export function useDesktopKeys(
       onVelocity: setVelocity,
       kit: !!kit,
     },
-    height: keysPanelHeight(open, shownRows),
+    height: keysPanelHeight(open, shownRows, kit ? KIT_KEY_HEIGHT : KEY_HEIGHT),
   };
 }
 
