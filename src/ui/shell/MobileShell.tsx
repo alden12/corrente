@@ -356,6 +356,7 @@ export function MobileShell({
               editLog={editLog}
               versionStore={versionStore}
               dispatch={dispatch}
+              scheduler={scheduler}
               activeView={view}
               onOpenShare={onOpenShare}
               onPick={() => setTab("studio")}
@@ -521,6 +522,7 @@ export function MobileShell({
                 projectStore={projectStore}
                 editLog={editLog}
                 dispatch={dispatch}
+                scheduler={scheduler}
                 history={<ActivityView editLog={editLog} versionStore={versionStore} />}
                 onOpenShare={onOpenShare}
                 onOpenTiming={onOpenTiming}

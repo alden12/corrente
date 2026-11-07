@@ -6,15 +6,21 @@
  * Choosing a track selects it (`onOpenTrack` then takes the phone to the Studio). A group's fold is
  * the arrangement's too, one value remembered on this device (`groupFolds.ts`, DAW-49). The toolbar
  * adds tracks and groups, filters by name and folds or opens every group at once.
+ *
+ * While the transport runs, a playhead crosses every strip (DAW-69), so you can see where the song is
+ * without opening the timeline. One loop sets it as CSS variables on the tree, which each strip's line
+ * reads, rather than a re-render a frame.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
+import type { Scheduler } from "../../audio/sequencer/scheduler";
 import { useProject } from "../../audio/project/useProject";
 import { beatsPerBar } from "../../audio/project/schema";
 import { summarizeProject } from "../../audio/projects/summary";
 import { arrangementAddItems } from "../arrangement/addItems";
 import { Menu } from "../Menu";
+import { useAnimationFrame } from "../useAnimationFrame";
 import { treeRows } from "./overviewData";
 import { ProjectTreeRow, type TreeContext } from "./ProjectTreeRow";
 
@@ -31,11 +37,14 @@ const toolClass =
 export function ProjectTree({
   projectStore,
   dispatch,
+  scheduler,
   onOpenTrack,
   scrolls = false,
 }: {
   projectStore: ProjectStore;
   dispatch: Dispatch;
+  /** The transport, for the playhead across the strips. */
+  scheduler: Scheduler;
   /** After a track is chosen: the phone goes to the Studio; the desktop already shows it. */
   onOpenTrack?: () => void;
   /** Fill the space left and scroll its rows there, the toolbar and ruler staying put (the desktop). */
@@ -49,6 +58,17 @@ export function ProjectTree({
   const spanBeats = summarizeProject(projectStore.snapshot()).spanBeats;
   const rows = treeRows(project.groups, project.tracks, filter, spanBeats);
   const filtering = filter.trim() !== "";
+  const treeRef = useRef<HTMLDivElement>(null);
+
+  // The playhead, as a fraction of the song the strips span: hidden while stopped, or past their end.
+  useAnimationFrame(() => {
+    const element = treeRef.current;
+    if (!element) return;
+    const position = scheduler.getPositionBeats() / Math.max(1, spanBeats);
+    element.style.setProperty("--playhead-left", `${position * 100}%`);
+    element.style.setProperty("--playhead-shown", scheduler.isPlaying && position <= 1 ? "1" : "0");
+  }, [scheduler, spanBeats]);
+
   const anyOpen = project.groups.some((group) => !group.collapsed);
 
   const context: TreeContext = {
@@ -70,6 +90,7 @@ export function ProjectTree({
   return (
     // The indent widens on a phone, where a row is a finger's height too.
     <div
+      ref={treeRef}
       className={`flex flex-col [--tree-indent:14px] pointer-coarse:[--tree-indent:16px] ${scrolls ? "flex-1 min-h-0" : ""}`}
     >
       <div className="shrink-0 flex items-center gap-0.5 h-8 pointer-coarse:h-12 pl-4 pr-1.5">

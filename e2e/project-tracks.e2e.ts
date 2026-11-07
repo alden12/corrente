@@ -27,6 +27,32 @@ test("a track's row shows its chain and mutes it", async ({ page }) => {
   await expect(tracks(page).getByRole("button", { name: "Unmute main" })).toBeVisible();
 });
 
+test("a playhead crosses the clip strips while the transport runs", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  await openProjectTracks(page);
+
+  // A line on each strip with clips (the open group's is empty, so none there), hidden while stopped.
+  await expect(tracks(page).getByTestId("strip-playhead")).toHaveCount(1);
+  const playhead = tracks(page).getByTestId("strip-playhead").first();
+  await expect(playhead).toHaveCSS("opacity", "0");
+
+  await expect(page.getByRole("button", { name: /Play/ })).toBeEnabled();
+  await page.keyboard.press("Space");
+  await expect(playhead).toHaveCSS("opacity", "1");
+  // It moves: its left edge leaves the strip's start.
+  const strip = playhead.locator("..");
+  await expect
+    .poll(async () => {
+      const [line, box] = await Promise.all([playhead.boundingBox(), strip.boundingBox()]);
+      return line && box ? line.x - box.x : 0;
+    })
+    .toBeGreaterThan(2);
+
+  await page.keyboard.press("Space");
+  await expect(playhead).toHaveCSS("opacity", "0");
+});
+
 test("selecting a track in the list selects it in the workbench", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);

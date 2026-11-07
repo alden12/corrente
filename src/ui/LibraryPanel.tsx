@@ -9,6 +9,7 @@ import type { ProjectStore } from "../audio/project/projectStore";
 import type { EditLog } from "../audio/commands/editLog";
 import type { VersionStore } from "../audio/commands/history";
 import type { Dispatch } from "../audio/commands/types";
+import type { Scheduler } from "../audio/sequencer/scheduler";
 import type { SoundPreview } from "../audio/live/preview";
 import { DevicePanel } from "./explore/DevicePanel";
 import { SamplePanel } from "./explore/SamplePanel";
@@ -27,6 +28,7 @@ export function LibraryPanel({
   editLog,
   versionStore,
   dispatch,
+  scheduler,
   activeView,
   onOpenShare,
   onPick,
@@ -40,6 +42,8 @@ export function LibraryPanel({
   editLog: EditLog;
   versionStore: VersionStore;
   dispatch: Dispatch;
+  /** The transport, for the project page's playhead (DAW-69). */
+  scheduler: Scheduler;
   activeView: PanelView;
   onOpenShare: (projectId: string, projectName: string) => void;
   /** Something was taken from the library. Set where the panel is covering what it changes. */
@@ -109,6 +113,7 @@ export function LibraryPanel({
             projectStore={projectStore}
             editLog={editLog}
             dispatch={dispatch}
+            scheduler={scheduler}
             onOpenShare={onOpenShare}
             onOpenTiming={onOpenTiming}
           />

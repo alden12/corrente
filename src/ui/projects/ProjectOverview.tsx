@@ -14,6 +14,7 @@ import { useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { EditLog } from "../../audio/commands/editLog";
 import type { Dispatch } from "../../audio/commands/types";
+import type { Scheduler } from "../../audio/sequencer/scheduler";
 import { useProject } from "../../audio/project/useProject";
 import { currentProjectId, subscribeCurrentProject } from "../../audio/projectRepository";
 import { listProjects, subscribeProjects } from "../../audio/projects/library";
@@ -39,6 +40,7 @@ export function ProjectOverview({
   projectStore,
   editLog,
   dispatch,
+  scheduler,
   history,
   onOpenShare,
   onOpenTiming,
@@ -47,6 +49,8 @@ export function ProjectOverview({
   projectStore: ProjectStore;
   editLog: EditLog;
   dispatch: Dispatch;
+  /** The transport, for the playhead across the clip strips (DAW-69). */
+  scheduler: Scheduler;
   /** A History tab's content, beside Tracks. Omitted, there are no tabs: just the tracks. */
   history?: ReactNode;
   onOpenShare: (projectId: string, projectName: string) => void;
@@ -186,7 +190,13 @@ export function ProjectOverview({
       {history && tab === "history" ? (
         history
       ) : (
-        <ProjectTree projectStore={projectStore} dispatch={dispatch} onOpenTrack={onOpenTrack} scrolls={!history} />
+        <ProjectTree
+          projectStore={projectStore}
+          dispatch={dispatch}
+          scheduler={scheduler}
+          onOpenTrack={onOpenTrack}
+          scrolls={!history}
+        />
       )}
     </div>
   );

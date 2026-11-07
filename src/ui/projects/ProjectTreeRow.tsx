@@ -60,6 +60,15 @@ function Strip({ blocks, faded }: { blocks: StripBlock[]; faded: boolean }) {
           }}
         />
       ))}
+      {/* The playhead (DAW-69), placed and shown by the tree's loop through CSS variables. Not on an
+          empty strip (an open group's), where it would be a line floating on its own. */}
+      {blocks.length > 0 && (
+        <span
+          data-testid="strip-playhead"
+          className="absolute inset-y-0 w-0.5 -ml-px bg-you pointer-events-none"
+          style={{ left: "var(--playhead-left, 0%)", opacity: "var(--playhead-shown, 0)" }}
+        />
+      )}
     </span>
   );
 }

@@ -204,6 +204,7 @@ export function DesktopShell({
           editLog={editLog}
           versionStore={versionStore}
           dispatch={dispatch}
+          scheduler={scheduler}
           activeView={libView}
           onOpenShare={onOpenShare}
           onOpenTiming={onOpenTiming}
