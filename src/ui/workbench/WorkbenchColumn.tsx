@@ -115,6 +115,11 @@ export function WorkbenchColumn({
   useEffect(() => {
     if (bindingHere) setDevicesOpen(true);
   }, [bindingHere, setDevicesOpen]);
+  /** The devices' bottom: room to scroll past them for the preview, which ends there; open, a rule. */
+  const devicesEdge = (() => {
+    if (preview) return "pb-6";
+    return devicesOpen ? "border-b border-line" : undefined;
+  })();
   const scrollToDevice = (key: string) => {
     const scroll = () =>
       columnRef.current
@@ -257,7 +262,9 @@ export function WorkbenchColumn({
 
       {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
           sticks to the top once they reach it. */}
-      <section aria-label="Devices" className={preview ? "pb-6" : undefined}>
+      {/* Open, a rule under the devices: the automation below starts with its own header, and nothing
+          else marks where the rack ends. Folded, the bar's own rule is the divider. */}
+      <section aria-label="Devices" className={devicesEdge}>
         <DevicesBar
           track={track}
           projectStore={projectStore}
