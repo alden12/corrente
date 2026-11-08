@@ -20,7 +20,7 @@ import type { Dispatch } from "../../audio/commands/types";
 import type { AutomationClipData } from "../../audio/project/types";
 import type { AutomationRun } from "../../audio/automation/playback";
 import { packRuns, runCurve } from "../../audio/automation/rows";
-import { AUTOMATION_ROW_PX, FOLDED_BAND_PX, timelineRuns } from "./automationLayout";
+import { AUTOMATION_ROW_PX, FOLDED_BAND_PX, timelineRuns, visibleRows, type AutomationView } from "./automationLayout";
 import { clipValueAt } from "../../audio/automation/curve";
 import { newAutomationId, newPlacementId } from "../../audio/commands/ids";
 import { paletteAccent } from "../deviceColor";
@@ -69,9 +69,7 @@ export function EyeIcon({ shut = false }: { shut?: boolean }) {
 export function AutomationRows({
   track,
   depth,
-  folded,
-  hidden,
-  onHideRow,
+  view,
   headerW,
   laneWidth,
   pxPerBeat,
@@ -85,10 +83,8 @@ export function AutomationRows({
 }: {
   track: Track;
   depth: number;
-  folded: boolean;
-  /** The rows hidden by their eye. */
-  hidden: ReadonlySet<number>;
-  onHideRow: (row: number) => void;
+  /** Folded, and the rows hidden by their eye. */
+  view: AutomationView;
   headerW: number;
   laneWidth: number;
   pxPerBeat: number;
@@ -121,21 +117,52 @@ export function AutomationRows({
     chosen.automationId === run.clip.id &&
     (chosen.placementId === undefined || chosen.placementId === run.placementId);
 
-  const header = (content: React.ReactNode, height: number) => (
+  const shown = visibleRows(rows, view);
+  const count = track.automations.length;
+  /** The header column's cell: a lead in the gutter (the fold, on the first row), then its content. */
+  const header = (lead: React.ReactNode, content: React.ReactNode, height: number) => (
     <div className={`shrink-0 ${stickyHeader ? "sticky left-0 z-10" : ""}`} style={{ width: headerW }}>
       <div
-        className="flex items-center gap-2 pr-1.5 border-b border-r border-line-soft bg-panel text-[11px] text-muted"
-        style={{ height, paddingLeft: GUTTER_PAD + depth * INDENT + 18 }}
+        className="flex items-center gap-1.5 pr-1.5 border-b border-r border-line-soft bg-panel text-[11px] text-muted"
+        style={{ height, paddingLeft: GUTTER_PAD + depth * INDENT }}
       >
+        <span className="w-4 shrink-0 grid place-items-center">{lead}</span>
         {content}
       </div>
     </div>
   );
+  const foldButton = (
+    <button
+      type="button"
+      aria-expanded={!view.folded}
+      aria-label={view.folded ? `Show automation (${count})` : `Fold automation (${count})`}
+      title={view.folded ? "Show this track's automation" : "Fold this track's automation away"}
+      onClick={view.onFold}
+      className="w-4 text-[13px] leading-none text-muted hover:text-ink cursor-pointer"
+    >
+      {view.folded ? "▸" : "▾"}
+    </button>
+  );
 
-  if (folded)
+  // Folded, or with every row hidden: a band with the curves drawn faintly, and the way back.
+  if (shown.length === 0)
     return (
       <div className="flex" data-testid="automation-band" data-track-id={track.id}>
-        {header(null, FOLDED_BAND_PX)}
+        {header(
+          view.folded ? foldButton : null,
+          view.folded ? (
+            <span className="truncate text-[10px]">Automation · {count}</span>
+          ) : (
+            <button
+              type="button"
+              onClick={view.onShowHidden}
+              className="truncate text-[10px] text-muted hover:text-ink cursor-pointer"
+            >
+              {view.hidden.size} hidden · show
+            </button>
+          ),
+          FOLDED_BAND_PX,
+        )}
         <div
           className="relative border-b border-line-soft bg-recess overflow-hidden"
           style={{ width: laneWidth, height: FOLDED_BAND_PX }}
@@ -167,10 +194,9 @@ export function AutomationRows({
       </div>
     );
 
-  const visibleRows = Array.from({ length: rows }, (_, row) => row).filter((row) => !hidden.has(row));
   return (
     <>
-      {visibleRows.map((row) => {
+      {shown.map((row, index) => {
         const inRow = packed.filter((entry) => entry.row === row).map((entry) => entry.run);
         const knobs = [
           ...new Set(inRow.flatMap((run) => run.clip.bindings.map((binding) => knobLabel(track, binding).knob))),
@@ -178,15 +204,26 @@ export function AutomationRows({
         return (
           <div key={row} className="flex" data-testid="automation-row" data-track-id={track.id}>
             {header(
+              index === 0 ? foldButton : null,
               <>
                 <span className="flex-1 min-w-0 truncate" title={knobs.join(", ")}>
                   {knobs.length > 0 ? knobs.join(", ") : "Not driving anything yet"}
                 </span>
+                {index === 0 && view.hidden.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={view.onShowHidden}
+                    title="Show the hidden automation rows"
+                    className="h-6 px-1.5 shrink-0 rounded bg-control text-[10px] text-muted hover:text-ink cursor-pointer"
+                  >
+                    {view.hidden.size} hidden
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label="Hide this automation row"
                   title="Hide this row"
-                  onClick={() => onHideRow(row)}
+                  onClick={() => view.onHideRow(row)}
                   className="w-7 h-7 shrink-0 grid place-items-center rounded text-muted hover:text-ink cursor-pointer"
                 >
                   <EyeIcon />

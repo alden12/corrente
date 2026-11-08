@@ -45,9 +45,9 @@ import { usePinchZoom, type PinchGesture } from "./usePinchZoom";
 import { beatsPerBar as beatsPerBarOf } from "../audio/project/schema";
 import { usePersistentNumber, usePersistentSet } from "./usePersistent";
 import { automationSelection } from "./automation/automationSelection";
-import { automationHeight } from "./arrangement/automationLayout";
+import { automationHeight, type AutomationView } from "./arrangement/automationLayout";
 import { useArrangementSnapDivision, useArrangementSnapOn } from "./editorPrefs";
-import { GroupHeader, TrackRow, type AutomationView } from "./arrangement/rows";
+import { GroupHeader, TrackRow } from "./arrangement/rows";
 import { useSharedGridScroll } from "./arrangement/useSharedGridScroll";
 import { arrangementAddItems } from "./arrangement/addItems";
 import { IconButton } from "./controls/IconButton";
@@ -204,7 +204,7 @@ export function ArrangementTimeline({
     const track = row.kind === "track" ? projectStore.getTrack(row.track.id) : undefined;
     if (!track) return total;
     const view = automationView(track.id);
-    return total + automationHeight(track, view.folded, view.hidden);
+    return total + automationHeight(track, view);
   }, 0);
   const contentH = RULER_H + rows.length * ROW_PX + automationPx;
 

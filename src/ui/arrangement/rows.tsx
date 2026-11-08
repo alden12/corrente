@@ -11,6 +11,7 @@ import type { Dispatch } from "../../audio/commands/types";
 import { newAutomationId, newPlacementId, newTrackId } from "../../audio/commands/ids";
 import { automationSelection, newAutomationPoints } from "../automation/automationSelection";
 import { AutomationRows } from "./AutomationRows";
+import type { AutomationView } from "./automationLayout";
 import { colorMenu, paletteAccent } from "../deviceColor";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { Menu } from "../Menu";
@@ -100,53 +101,6 @@ export function GroupHeader({
   );
 }
 
-/** How a track's automation rows show (DAW-67.4): folded into a band, and which rows are hidden. */
-export interface AutomationView {
-  folded: boolean;
-  hidden: ReadonlySet<number>;
-  onFold: () => void;
-  /** Bring the hidden rows back. */
-  onShowHidden: () => void;
-  onHideRow: (row: number) => void;
-}
-
-/**
- * The track's automation chip: how many clips, folding them away and back, and how many rows are
- * hidden, which a click brings back.
- */
-function AutomationChip({ count, view }: { count: number; view: AutomationView }) {
-  if (count === 0) return null;
-  return (
-    <span className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
-      {view.hidden.size > 0 && !view.folded && (
-        <button
-          type="button"
-          onClick={view.onShowHidden}
-          title="Show the hidden automation rows"
-          className="h-6 px-1.5 rounded bg-control text-[10px] text-muted hover:text-ink cursor-pointer"
-        >
-          {view.hidden.size} hidden
-        </button>
-      )}
-      <button
-        type="button"
-        aria-expanded={!view.folded}
-        aria-label={view.folded ? `Show automation (${count})` : `Fold automation (${count})`}
-        title={view.folded ? "Show this track's automation" : "Fold this track's automation away"}
-        onClick={view.onFold}
-        className={`h-6 px-1 flex items-center gap-0.5 rounded text-[10px] cursor-pointer ${
-          view.folded ? "text-muted hover:text-ink" : "bg-control text-ink"
-        }`}
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
-          <path d="M1 8 C4 8 6 2 11 2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        </svg>
-        {count}
-      </button>
-    </span>
-  );
-}
-
 function TrackHeader({
   track,
   depth,
@@ -209,7 +163,6 @@ function TrackHeader({
         onCommit={(name) => dispatch({ type: "setTrack", trackId: track.id, name })}
         className="font-mono text-[13px] text-strong flex-1 min-w-0"
       />
-      <AutomationChip count={track.automations.length} view={automation} />
       <VolumeKnob
         value={track.volume}
         title="Volume"
@@ -314,9 +267,7 @@ export function TrackRow({
         <AutomationRows
           track={track}
           depth={depth}
-          folded={automation.folded}
-          hidden={automation.hidden}
-          onHideRow={automation.onHideRow}
+          view={automation}
           headerW={headerW}
           laneWidth={laneWidth}
           pxPerBeat={pxPerBeat}
