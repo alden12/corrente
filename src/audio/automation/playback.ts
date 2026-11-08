@@ -28,6 +28,8 @@ export interface AutomationRun {
   length: number;
   /** Where in the clip the run starts. */
   offset: number;
+  /** The automation placement it plays at; unset for a linked clip, which plays at its note clip's. */
+  placementId?: string;
 }
 
 /** One knob's value at a beat of the continuous count: the binding, and the value in its units. */
@@ -61,7 +63,13 @@ export function automationRuns(track: AutomatedTrack, loopStart: number, loopLen
         : track.launchedClipId
           ? []
           : track.automationPlacements.filter((placement) => placement.clipId === clip.id);
-      return placements.map(({ startBeat, length, offset }) => ({ clip, startBeat, length, offset }));
+      return placements.map(({ startBeat, length, offset, ...placement }) => ({
+        clip,
+        startBeat,
+        length,
+        offset,
+        ...(clip.linkedClipId === undefined && "id" in placement ? { placementId: placement.id } : {}),
+      }));
     })
     .sort((left, right) => left.startBeat - right.startBeat);
 }

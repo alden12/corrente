@@ -43,9 +43,11 @@ import { useCursor } from "./useCursor";
 import { anchorZoomX } from "./timeline/anchoredZoom";
 import { usePinchZoom, type PinchGesture } from "./usePinchZoom";
 import { beatsPerBar as beatsPerBarOf } from "../audio/project/schema";
-import { usePersistentNumber } from "./usePersistent";
+import { usePersistentNumber, usePersistentSet } from "./usePersistent";
+import { automationSelection } from "./automation/automationSelection";
+import { automationHeight } from "./arrangement/automationLayout";
 import { useArrangementSnapDivision, useArrangementSnapOn } from "./editorPrefs";
-import { GroupHeader, TrackRow } from "./arrangement/rows";
+import { GroupHeader, TrackRow, type AutomationView } from "./arrangement/rows";
 import { useSharedGridScroll } from "./arrangement/useSharedGridScroll";
 import { arrangementAddItems } from "./arrangement/addItems";
 import { IconButton } from "./controls/IconButton";
@@ -177,11 +179,39 @@ export function ArrangementTimeline({
   const minViewBeats = pxPerBeat > 0 ? Math.max(0, viewportW - headerW) / pxPerBeat : 0;
   const viewBeats = Math.max(arrangedEnd + TRAIL_BEATS, Math.ceil(minViewBeats));
   const laneWidth = beatToX(viewBeats, pxPerBeat);
-  const contentH = RULER_H + rows.length * ROW_PX;
+  // Each track's automation rows above it (DAW-67.4): folded per track, and rows hidden by their eye.
+  const [foldedTracks, toggleFolded] = usePersistentSet("corrente:automation-folded", 500);
+  const [hiddenRows, toggleHiddenRow, putHiddenRows] = usePersistentSet("corrente:automation-hidden", 1000);
+  const automationView = (trackId: string): AutomationView => {
+    const hidden = new Set(
+      [...hiddenRows]
+        .filter((key) => key.startsWith(`${trackId}:`))
+        .map((key) => Number(key.slice(trackId.length + 1))),
+    );
+    return {
+      folded: foldedTracks.has(trackId),
+      hidden,
+      onFold: () => toggleFolded(trackId),
+      onShowHidden: () =>
+        putHiddenRows(
+          [...hidden].map((row) => `${trackId}:${row}`),
+          false,
+        ),
+      onHideRow: (row) => toggleHiddenRow(`${trackId}:${row}`),
+    };
+  };
+  const automationPx = rows.reduce((total, row) => {
+    const track = row.kind === "track" ? projectStore.getTrack(row.track.id) : undefined;
+    if (!track) return total;
+    const view = automationView(track.id);
+    return total + automationHeight(track, view.folded, view.hidden);
+  }, 0);
+  const contentH = RULER_H + rows.length * ROW_PX + automationPx;
 
   // Selecting a placement makes its track + clip active, so the roll follows it
   // (and takes the paste marker off its track - selection and marker are mutually exclusive).
   const selectPlacement = (trackId: string, p: Placement) => {
+    automationSelection.set(null);
     setSelection({ trackId, id: p.id });
     setMarkerTrackId(null);
     projectStore.selectTrack(trackId);
@@ -222,6 +252,18 @@ export function ArrangementTimeline({
         setSelection(null);
         setMarkerTrackId(null);
         scheduler.setCursor(null);
+        return;
+      }
+      // A picked automation placement goes off the timeline (DAW-67.4).
+      const automation = automationSelection.read();
+      if (automation?.placementId && (e.key === "Delete" || e.key === "Backspace")) {
+        e.preventDefault();
+        dispatch({
+          type: "removeAutomationPlacement",
+          trackId: automation.trackId,
+          placementId: automation.placementId,
+        });
+        automationSelection.set(null);
         return;
       }
       if (!selection) return;
@@ -580,6 +622,8 @@ export function ArrangementTimeline({
                     onHover={(beat) => setDropTarget(beat === null ? null : { trackId: row.track.id, beat })}
                     scrollRef={scrollRef}
                     stickyHeader={stickyHeaders}
+                    automation={automationView(row.track.id)}
+                    onPickAutomation={clearSelection}
                   />
                 ),
               )}

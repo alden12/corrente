@@ -8,7 +8,9 @@ import type { RefObject } from "react";
 import type { GroupMeta, TrackMeta, Placement } from "../../audio/project/types";
 import type { ProjectStore } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
-import { newTrackId } from "../../audio/commands/ids";
+import { newAutomationId, newPlacementId, newTrackId } from "../../audio/commands/ids";
+import { automationSelection, newAutomationPoints } from "../automation/automationSelection";
+import { AutomationRows } from "./AutomationRows";
 import { colorMenu, paletteAccent } from "../deviceColor";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { Menu } from "../Menu";
@@ -98,12 +100,60 @@ export function GroupHeader({
   );
 }
 
+/** How a track's automation rows show (DAW-67.4): folded into a band, and which rows are hidden. */
+export interface AutomationView {
+  folded: boolean;
+  hidden: ReadonlySet<number>;
+  onFold: () => void;
+  /** Bring the hidden rows back. */
+  onShowHidden: () => void;
+  onHideRow: (row: number) => void;
+}
+
+/**
+ * The track's automation chip: how many clips, folding them away and back, and how many rows are
+ * hidden, which a click brings back.
+ */
+function AutomationChip({ count, view }: { count: number; view: AutomationView }) {
+  if (count === 0) return null;
+  return (
+    <span className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
+      {view.hidden.size > 0 && !view.folded && (
+        <button
+          type="button"
+          onClick={view.onShowHidden}
+          title="Show the hidden automation rows"
+          className="h-6 px-1.5 rounded bg-control text-[10px] text-muted hover:text-ink cursor-pointer"
+        >
+          {view.hidden.size} hidden
+        </button>
+      )}
+      <button
+        type="button"
+        aria-expanded={!view.folded}
+        aria-label={view.folded ? `Show automation (${count})` : `Fold automation (${count})`}
+        title={view.folded ? "Show this track's automation" : "Fold this track's automation away"}
+        onClick={view.onFold}
+        className={`h-6 px-1 flex items-center gap-0.5 rounded text-[10px] cursor-pointer ${
+          view.folded ? "text-muted hover:text-ink" : "bg-control text-ink"
+        }`}
+      >
+        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true">
+          <path d="M1 8 C4 8 6 2 11 2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+        {count}
+      </button>
+    </span>
+  );
+}
+
 function TrackHeader({
   track,
   depth,
   selected,
   armed,
   onArmToggle,
+  automation,
   projectStore,
   dispatch,
 }: {
@@ -113,6 +163,7 @@ function TrackHeader({
   /** Audio tracks only: armed to receive the next recorded take. */
   armed: boolean;
   onArmToggle: () => void;
+  automation: AutomationView;
   projectStore: ProjectStore;
   dispatch: Dispatch;
 }) {
@@ -158,6 +209,7 @@ function TrackHeader({
         onCommit={(name) => dispatch({ type: "setTrack", trackId: track.id, name })}
         className="font-mono text-[13px] text-strong flex-1 min-w-0"
       />
+      <AutomationChip count={track.automations.length} view={automation} />
       <VolumeKnob
         value={track.volume}
         title="Volume"
@@ -168,6 +220,21 @@ function TrackHeader({
         label="Track actions"
         items={[
           colorMenu(track.color, (color) => dispatch({ type: "setTrack", trackId: track.id, color })),
+          {
+            label: "Add automation",
+            onClick: () => {
+              const id = newAutomationId();
+              dispatch({
+                type: "addAutomation",
+                trackId: track.id,
+                id,
+                points: newAutomationPoints(),
+                placement: { id: newPlacementId(), startBeat: 0 },
+              });
+              if (automation.folded) automation.onFold();
+              automationSelection.set({ trackId: track.id, automationId: id });
+            },
+          },
           { separator: true },
           {
             label: "Delete track",
@@ -205,6 +272,8 @@ export function TrackRow({
   onHover,
   scrollRef,
   stickyHeader = true,
+  automation,
+  onPickAutomation,
 }: {
   meta: TrackMeta;
   depth: number;
@@ -233,47 +302,73 @@ export function TrackRow({
   onHover: (beat: number | null) => void;
   /** The timeline's scroller, passed down so a selected clip's kebab can be clamped into view. */
   scrollRef: RefObject<HTMLElement | null>;
+  /** How its automation rows show (DAW-67.4). */
+  automation: AutomationView;
+  /** An automation clip was picked, so the timeline drops its clip selection. */
+  onPickAutomation: () => void;
 }) {
   const track = projectStore.getTrack(meta.id);
   return (
-    <div className="flex" data-track-id={meta.id}>
-      <div className={`shrink-0 ${stickyHeader ? "sticky left-0 z-10" : ""}`} style={{ width: headerW }}>
-        <TrackHeader
-          track={meta}
-          depth={depth}
-          selected={selectedTrack}
-          armed={armed}
-          onArmToggle={onArmToggle}
-          projectStore={projectStore}
-          dispatch={dispatch}
-        />
-      </div>
-      {track ? (
-        <Lane
+    <>
+      {track && (
+        <AutomationRows
           track={track}
-          width={laneWidth}
+          depth={depth}
+          folded={automation.folded}
+          hidden={automation.hidden}
+          onHideRow={automation.onHideRow}
+          headerW={headerW}
+          laneWidth={laneWidth}
           pxPerBeat={pxPerBeat}
           beatsPerBar={beatsPerBar}
           snapOn={snapOn}
           snapDiv={snapDiv}
-          selection={selection}
-          markerBeat={markerBeat}
-          dropBeat={dropBeat}
-          headerW={headerW}
           stickyHeader={stickyHeader}
-          scrollRef={scrollRef}
-          onSelect={onSelect}
-          onMark={onMark}
-          onCopy={onCopy}
-          canPaste={canPaste}
-          onPaste={onPaste}
-          onHover={onHover}
-          dispatch={dispatch}
+          onPick={onPickAutomation}
           projectStore={projectStore}
+          dispatch={dispatch}
         />
-      ) : (
-        <div className={`${ROW} border-b border-line-soft`} style={{ width: laneWidth }} />
       )}
-    </div>
+      <div className="flex" data-track-id={meta.id}>
+        <div className={`shrink-0 ${stickyHeader ? "sticky left-0 z-10" : ""}`} style={{ width: headerW }}>
+          <TrackHeader
+            track={meta}
+            depth={depth}
+            selected={selectedTrack}
+            armed={armed}
+            onArmToggle={onArmToggle}
+            automation={automation}
+            projectStore={projectStore}
+            dispatch={dispatch}
+          />
+        </div>
+        {track ? (
+          <Lane
+            track={track}
+            width={laneWidth}
+            pxPerBeat={pxPerBeat}
+            beatsPerBar={beatsPerBar}
+            snapOn={snapOn}
+            snapDiv={snapDiv}
+            selection={selection}
+            markerBeat={markerBeat}
+            dropBeat={dropBeat}
+            headerW={headerW}
+            stickyHeader={stickyHeader}
+            scrollRef={scrollRef}
+            onSelect={onSelect}
+            onMark={onMark}
+            onCopy={onCopy}
+            canPaste={canPaste}
+            onPaste={onPaste}
+            onHover={onHover}
+            dispatch={dispatch}
+            projectStore={projectStore}
+          />
+        ) : (
+          <div className={`${ROW} border-b border-line-soft`} style={{ width: laneWidth }} />
+        )}
+      </div>
+    </>
   );
 }
