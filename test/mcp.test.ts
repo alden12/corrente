@@ -337,6 +337,7 @@ describe("MCP server (tracks)", () => {
       "sampler",
       "subtractive",
       "supersaw",
+      "tine-piano",
       "wavetable",
       "wobble",
     ]);
