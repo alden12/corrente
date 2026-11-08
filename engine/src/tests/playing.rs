@@ -51,3 +51,20 @@ fn a_released_voice_frees_its_slot_once_silent() {
     render(&mut engine, 8);
     assert!(!engine.track(0).is_some_and(|track| track.voice_active(0)));
 }
+
+// TS: it("a track with no MIDI devices reports the keys it played, in the block they sound in", () => { ... })
+#[test]
+fn a_track_with_no_midi_devices_reports_the_keys_it_played_in_their_block() {
+    let plan = PlanBuilder::new().node(kind("saw"), vec![voice(0)], vec![]).step(NODE, vec![0]).out(buffer(0));
+    let mut engine = plan.loaded();
+    let played = |engine: &Engine| engine.track(0).map(|track| track.played().to_vec()).unwrap_or_default();
+    engine.key_on(0, 5, 60, 0.8);
+    engine.process();
+    assert_eq!(played(&engine), vec![5.0, 60.0, 0.8]);
+    // Read once: the next block has played nothing.
+    engine.process();
+    assert!(played(&engine).is_empty());
+    engine.track_mut(0).unwrap().key_off(0, 60);
+    engine.process();
+    assert_eq!(played(&engine), vec![0.0, 60.0, 0.0]);
+}

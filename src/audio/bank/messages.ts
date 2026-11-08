@@ -54,7 +54,12 @@ export type FromBank =
    * How many blocks over the last second or so took longer to render than they last (INST-36.9):
    * the stalls a bigger output buffer absorbs. Sent only when there were any.
    */
-  | { type: "slow"; blocks: number };
+  | { type: "slow"; blocks: number }
+  /**
+   * The notes a track's voices are sounding now, sent when they change (MOBILE-13): what lights the
+   * keys and pads with what the track is playing. Its MIDI devices' notes, or with none, its keys.
+   */
+  | { type: "sounding"; track: number; notes: number[] };
 
 /** What a bank's worklet is built with. */
 export interface BankOptions {

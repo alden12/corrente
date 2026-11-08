@@ -115,6 +115,8 @@ export function PadButton({
   const self = useRef<HTMLButtonElement>(null);
   const sounding = !editing && touch.isSounding(pitches);
   const latched = !editing && touch.isLatched(pitches);
+  // The track playing it, not you: lit more quietly than a press, so the two read apart (MOBILE-13).
+  const playing = !editing && !sounding && (touch.isPlaying?.(pitches) ?? false);
   const editClass = editing
     ? `outline-1 outline-dashed -outline-offset-1 ${editing.selected ? "outline-you outline-2" : "outline-line"} ${editing.hidden ? "opacity-40" : ""}`
     : "";
@@ -127,6 +129,7 @@ export function PadButton({
       aria-description={hint ? describeHint(hint) : undefined}
       aria-pressed={editing ? editing.selected : sounding}
       data-pitches={padKey(pitches)}
+      data-playing={playing || undefined}
       {...(editing ? { onClick: editing.onSelect } : touch.padProps(pitches))}
       // No position utility here: the accidentals position themselves absolutely, and two
       // Tailwind classes for the same property are settled by stylesheet order rather than
@@ -137,7 +140,11 @@ export function PadButton({
       // The radius *is* here, because every pad everywhere has the same one; only size and
       // position are the caller's business.
       className={`[container-type:inline-size] flex flex-col items-center justify-center rounded-md leading-none select-none ${editing ? "touch-pan-y" : "touch-none"} cursor-pointer transition-colors ${
-        sounding ? "bg-you/30 text-you" : `${hint ? HINT_FILL[hint.strength] : toneFill(tone)} ${TONE_TEXT[tone]}`
+        sounding
+          ? "bg-you/30 text-you"
+          : playing
+            ? "bg-you/15 text-you"
+            : `${hint ? HINT_FILL[hint.strength] : toneFill(tone)} ${TONE_TEXT[tone]}`
       } ${latched ? "ring-1 ring-inset ring-you" : ""} ${hint?.mood || hint?.keyChange ? "relative" : ""} ${editClass} ${className}`}
       style={style}
     >

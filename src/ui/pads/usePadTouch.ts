@@ -117,6 +117,10 @@ export interface PadTouch {
   isSounding: (pitches: PadNotes) => boolean;
   /** Sounding with nothing on it - latched, or about to be if the finger lifts here. */
   isLatched: (pitches: PadNotes) => boolean;
+  /** Being played by the track itself - a clip, an arpeggiator - rather than by you (MOBILE-13). */
+  isPlaying?: (pitches: PadNotes) => boolean;
+  /** The notes the track is playing, for marking those no pad shows. */
+  playing?: ReadonlySet<number>;
   /** Pointer handlers for one pad. */
   padProps: (pitches: PadNotes) => {
     onPointerDown: (event: ReactPointerEvent) => void;

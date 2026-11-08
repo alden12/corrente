@@ -43,6 +43,8 @@ export interface DevicePlace {
 const FADE_OUT_MS = 40;
 
 export class EngineDevice {
+  /** Hears which notes the track's voices are sounding, as they change (MOBILE-13): an instrument's. */
+  onSounding: ((notes: number[]) => void) | undefined;
   /** The slot's output, once it arrives: silent until then. */
   readonly output: GainNode;
   readonly context: BaseAudioContext;
@@ -75,6 +77,10 @@ export class EngineDevice {
     let loaded = () => {};
     const heard = new Promise<void>((resolve) => (loaded = resolve));
     const listener = (message: FromBank) => {
+      if (message.type === "sounding") {
+        this.onSounding?.(message.notes);
+        return;
+      }
       if (message.type === "sampled") {
         if (message.message) console.error(message.message);
         this.samples.heard(message.param, message.ref);

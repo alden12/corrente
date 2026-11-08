@@ -96,6 +96,7 @@ export function DesktopShell({
   // A kit track's keys play its pads (INST-54).
   const keys = useDesktopKeys(liveNotes, started, useSongKey(projectStore, dispatch), {
     kit: kitOf(selectedTrack, projectStore.getSamples()),
+    trackId: selectedTrack?.id,
   });
 
   // Track the body height so the timeline can never crowd out the workbench:

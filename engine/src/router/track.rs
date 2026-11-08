@@ -54,11 +54,16 @@ pub struct Track {
     pub(super) voices_carried: bool,
     /// The track's MIDI devices (INST-11.1), between the keys it's told and its voices, if it has any.
     pub(super) midi: Option<Chain>,
-    /// What the MIDI devices played into the voices last block, three words a note: its offset, its
-    /// note, and its velocity, 0 for a note off (MIDI's own convention). For drawing what a device
-    /// plays (a portrait) from the engine itself.
+    /// What the voices were played last block, three words a note: its offset, its note, and its
+    /// velocity, 0 for a note off (MIDI's own convention): what the MIDI devices played, or with none,
+    /// the keys themselves. For drawing what a device plays (a portrait), and for lighting the keys
+    /// with what a track is playing (MOBILE-13).
     played: [f32; PLAYED_WORDS],
     played_count: usize,
+    /// Keys played straight into the voices (no MIDI devices) since the last block, three words a note
+    /// as `played`: they arrive before the block they sound in, so they wait here until it starts.
+    keyed: [f32; PLAYED_WORDS],
+    keyed_count: usize,
     /// The sample rate the plan was loaded at: what a re-strike's fade in seconds is counted in.
     pub(super) sample_rate: i32,
 }
@@ -87,6 +92,8 @@ impl Track {
             midi: None,
             played: [0.0; PLAYED_WORDS],
             played_count: 0,
+            keyed: [0.0; PLAYED_WORDS],
+            keyed_count: 0,
             sample_rate: 48000,
         }
     }
@@ -163,6 +170,13 @@ impl Track {
         // TS: this.midi?.block(this.clock, transport).forEach(([offset, event]) => event.kind === "on" ? this.playOn(...) : this.playOff(...))
         // `.take()` lends the chain out of the track while the track plays its notes, then puts it back.
         self.played_count = 0;
+        // TS: for (let at = 0; at < this.keyedCount * 3; at += 3) this.notePlayed(...this.keyed.subarray(at, at + 3)); this.keyedCount = 0;
+        // The keys played straight into the voices before this block, as the devices' notes would be.
+        for at in (0..self.keyed_count * 3).step_by(3) {
+            let [offset, note, velocity] = [self.keyed[at], self.keyed[at + 1], self.keyed[at + 2]];
+            self.note_played(offset as usize, note as i32, velocity);
+        }
+        self.keyed_count = 0;
         if let Some(mut chain) = self.midi.take() {
             for &(offset, event) in chain.block(self.clock, transport) {
                 match event {
@@ -215,7 +229,17 @@ impl Track {
         }
     }
 
-    /// What the MIDI devices played last block: three words a note (offset, note, velocity or 0 for off).
+    /// Keep a key played straight into the voices, for the next block's `played`, while there's room.
+    // TS: if (this.keyedCount * 3 < PLAYED_WORDS) this.keyed.set([Math.max(offset, 0), note, velocity], this.keyedCount++ * 3)
+    pub(super) fn note_keyed(&mut self, offset: i32, note: i32, velocity: f32) {
+        let at = self.keyed_count * 3;
+        if let Some(words) = self.keyed.get_mut(at..at + 3) {
+            words.copy_from_slice(&[offset.max(0) as f32, note as f32, velocity]);
+            self.keyed_count += 1;
+        }
+    }
+
+    /// What the voices were played last block: three words a note (offset, note, velocity or 0 for off).
     // TS: return this.played.subarray(0, this.playedCount * 3)
     pub fn played(&self) -> &[f32] {
         &self.played[..self.played_count * 3]

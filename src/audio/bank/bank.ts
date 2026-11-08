@@ -120,6 +120,8 @@ export class EngineBank {
   /** Each sample loaded, by ref: its slot, how many sample params (or maps) name it, and a map's regions. */
   private readonly sampleSlots = new Map<string, { slot: number; users: number; regions?: string[] }>();
   private outputs: Float32Array[][] = [];
+  /** The engine's memory as floats, for reading what a track played in place (`updateSounding`). */
+  private heap = new Float32Array(0);
   private inputs: Float32Array[][] = [];
   /**
    * Param names by number, for queued param events: they name the param, not its place in a plan,
@@ -417,6 +419,27 @@ export class EngineBank {
   /** Whether a track made no sound in the last block and has no voice sounding (DAW-57). */
   silent(track: number): boolean {
     return this.engine.eng_track_silent(track) === 1;
+  }
+
+  /**
+   * Bring `sounding` (a track's notes, one byte each, 1 while sounding) up to date with what its
+   * voices were played in the last block (MOBILE-13): its MIDI devices' notes, or with none, its keys.
+   * True if anything changed. Reads the engine's memory in place, so the audio thread makes nothing.
+   */
+  updateSounding(track: number, sounding: Uint8Array): boolean {
+    const count = this.engine.eng_midi_played_count(track);
+    if (count === 0) return false;
+    if (this.heap.buffer !== this.engine.memory.buffer) this.heap = new Float32Array(this.engine.memory.buffer);
+    const at = this.engine.eng_midi_played(track) >> 2;
+    let changed = false;
+    for (let index = 0; index < count; index++) {
+      const note = this.heap[at + index * 3 + 1];
+      const on = this.heap[at + index * 3 + 2] > 0 ? 1 : 0;
+      if (note < 0 || note >= sounding.length || sounding[note] === on) continue;
+      sounding[note] = on;
+      changed = true;
+    }
+    return changed;
   }
 
   /** Voices sounding on a track, releases included. */

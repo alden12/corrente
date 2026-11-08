@@ -34,12 +34,15 @@ class EngineBankProcessor extends AudioWorkletProcessor {
    * (INST-53).
    */
   private settlingUntil = 0;
+  /** Each track's sounding notes, a byte a note (`EngineBank.updateSounding`), made once. */
+  private readonly sounding: Uint8Array[];
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
     const { bytes, tracks } = options!.processorOptions as BankOptions;
     this.bank = new EngineBank(bytes, sampleRate, tracks);
     this.loaded = new Uint8Array(tracks);
+    this.sounding = Array.from({ length: tracks }, () => new Uint8Array(128));
     // What each message does, by type.
     const handlers: { [Type in ToBank["type"]]: (message: Extract<ToBank, { type: Type }>) => void } = {
       load: ({ track, plan, values, options }) => {
@@ -56,10 +59,15 @@ class EngineBankProcessor extends AudioWorkletProcessor {
       unload: ({ track }) => {
         this.bank.unload(track);
         this.loaded[track] = 0;
+        this.clearSounding(track);
       },
       noteOn: ({ track, note, velocity, time }) => this.bank.noteOn(track, note, velocity, time),
       noteOff: ({ track, note, time }) => this.bank.noteOff(track, note, time),
-      allOff: ({ track, time }) => this.bank.allNotesOff(track, time),
+      allOff: ({ track, time }) => {
+        this.bank.allNotesOff(track, time);
+        // Everything let go at once doesn't come back note by note, so say so here.
+        this.clearSounding(track);
+      },
       param: ({ track, param, value, time }) => this.bank.setParam(track, param, value, time),
       midi: ({ track, words }) => {
         try {
@@ -106,6 +114,7 @@ class EngineBankProcessor extends AudioWorkletProcessor {
     this.bank.process(currentTime);
     if (now() - started > this.budget && currentTime >= this.settlingUntil) this.slow++;
     this.report();
+    this.reportSounding();
     // Plain loops: a closure per block would be garbage.
     for (let track = 0; track < outputs.length; track++) {
       if (!this.loaded[track]) continue;
@@ -114,6 +123,26 @@ class EngineBankProcessor extends AudioWorkletProcessor {
         channels[channel].set(this.bank.output(track, channel));
     }
     return true;
+  }
+
+  /** Say which notes each track is sounding, for any track whose notes changed this block. */
+  private reportSounding(): void {
+    for (let track = 0; track < this.loaded.length; track++) {
+      if (this.loaded[track] && this.bank.updateSounding(track, this.sounding[track])) this.postSounding(track);
+    }
+  }
+
+  private clearSounding(track: number): void {
+    if (!this.sounding[track].includes(1)) return;
+    this.sounding[track].fill(0);
+    this.postSounding(track);
+  }
+
+  /** A list only when something changed: notes come a few a second, not a block. */
+  private postSounding(track: number): void {
+    const notes: number[] = [];
+    this.sounding[track].forEach((on, note) => on && notes.push(note));
+    this.port.postMessage({ type: "sounding", track, notes } satisfies FromBank);
   }
 
   /** About once a second, say how many blocks were slow, if any were. */

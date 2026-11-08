@@ -14,6 +14,7 @@
  * key does, and a key that plays nothing is not drawn at all.
  */
 import { KeysHelp } from "./KeysHelp";
+import { outOfRange } from "./outOfRange";
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { PadButton } from "../pads/PadButton";
 import type { PadSettings } from "../pads/padSettings";
@@ -82,6 +83,12 @@ export function KeysPanel({
   const held = useHeldKeys(keyboard);
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
+  // Notes the track plays off the shown keys (MOBILE-13), marked at the panel's edge. Notes only: a
+  // chord or a kit pad isn't a range to fall outside of.
+  const offKeys =
+    settings.chords || kit
+      ? { above: false, below: false }
+      : outOfRange(touch.playing ?? new Set(), rows.slice(0, shownRows));
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
   const chordHint = useChordHints(
     rows.flat().map(({ pad }) => pad?.chord),
@@ -120,6 +127,19 @@ export function KeysPanel({
               there is something to scroll; a `scrollbar-width` here would hand it back to a Mac's
               auto-hiding one. Clipped otherwise: the notes' rows fit to within a pixel or two, which
               would show a scrollbar with nothing to scroll. */}
+          {(offKeys.above || offKeys.below) && (
+            <div
+              data-testid="keys-off-range"
+              className="shrink-0 w-3 flex flex-col justify-between text-[10px] leading-none text-you"
+            >
+              <span title="Playing notes above these keys" className={offKeys.above ? "" : "invisible"}>
+                ▲
+              </span>
+              <span title="Playing notes below these keys" className={offKeys.below ? "" : "invisible"}>
+                ▼
+              </span>
+            </div>
+          )}
           <div
             data-keys-scroll
             className={`flex-1 min-w-0 flex flex-col-reverse ${settings.chords || settings.editingChords ? "overflow-y-auto" : "overflow-hidden"}`}

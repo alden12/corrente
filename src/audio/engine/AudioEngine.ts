@@ -24,6 +24,7 @@ import { ChainEffects } from "./chainEffects";
 import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
 import { COMPENSATION_GLIDE_SECONDS, MixRouter, masterBus } from "./mixer";
 import { LevelMeters } from "./levels";
+import { TrackNotes } from "../live/trackNotes";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
@@ -96,6 +97,8 @@ export class AudioEngine {
   private master: GainNode | null = null;
   /** The meters' analysers, made as meters ask (DAW-8.5). */
   private meters: LevelMeters | null = null;
+  /** What each track is playing, for the keys and pads to light with (MOBILE-13). */
+  readonly trackNotes = new TrackNotes();
   /** A master-level bus for the metronome click (independent of any track). */
   private metronomeGain: GainNode | null = null;
   private metronomeVolume = 0.6;
@@ -356,6 +359,7 @@ export class AudioEngine {
     for (const [id, node] of this.nodes) {
       if (!instrumentIds.has(id)) {
         disposeTrackNode(node);
+        this.trackNotes.drop(id);
         this.dropCompensator(id);
         this.nodes.delete(id);
       }
@@ -432,6 +436,11 @@ export class AudioEngine {
             node.absorbed,
           );
         }
+        // What the track plays, to the keys and pads, as it's heard (MOBILE-13).
+        if (node.instrument instanceof EngineInstrument) {
+          const trackId = track.id;
+          node.instrument.onSounding = (notes) => this.trackNotes.report(trackId, notes, this.outputDelayMs());
+        }
         // The effects the instrument doesn't play itself follow it.
         node.effects.reconcile(ctx, track.effects.slice(node.absorbed.length), edited);
         node.effects.wire(node.instrument.output, node.gain);
@@ -469,6 +478,12 @@ export class AudioEngine {
   levels(id: string): [number, number] {
     const node = this.groupNodes.get(id)?.output ?? this.nodes.get(id)?.gain ?? this.audioNodes.get(id)?.gain;
     return this.meters?.levels(id, node) ?? [0, 0];
+  }
+
+  /** How long after the audio thread renders a block it's heard: the output's latency, in ms. */
+  private outputDelayMs(): number {
+    const ctx = this.ctx;
+    return ctx ? ((ctx.outputLatency || 0) + ctx.baseLatency) * 1000 : 0;
   }
 
   /** How loud the master is just now, left and right, before the soft clip. */

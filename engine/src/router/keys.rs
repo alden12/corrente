@@ -89,7 +89,12 @@ impl Track {
     pub fn key_on(&mut self, offset: i32, note: i32, velocity: f64, samples: &Samples) {
         match &mut self.midi {
             Some(chain) => chain.key(offset, Event::On { note, velocity: velocity as f32, length: None, index: 0 }),
-            None => self.play_on(offset, note, velocity, samples),
+            // TS: default: this.noteKeyed(offset, note, velocity); this.playOn(offset, note, velocity, samples);
+            // `{ ...; ... }` runs both in one arm.
+            None => {
+                self.note_keyed(offset, note, velocity as f32);
+                self.play_on(offset, note, velocity, samples);
+            }
         }
     }
 
@@ -151,7 +156,11 @@ impl Track {
     pub fn key_off(&mut self, offset: i32, note: i32) {
         match &mut self.midi {
             Some(chain) => chain.key(offset, Event::Off { note, index: 0 }),
-            None => self.play_off(offset, note),
+            // TS: default: this.noteKeyed(offset, note, 0); this.playOff(offset, note);
+            None => {
+                self.note_keyed(offset, note, 0.0);
+                self.play_off(offset, note);
+            }
         }
     }
 

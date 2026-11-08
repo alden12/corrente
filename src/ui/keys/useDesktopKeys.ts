@@ -7,6 +7,7 @@
  * chords mode it can also grow past the keyboard's four, to every chord row the key has: the rows
  * past the keys have no key, and are there to click.
  */
+import { useTrackPlaying } from "../pads/trackPlaying";
 import { useState } from "react";
 import { pitchName } from "../../audio/params/noteName";
 import { pitchAt } from "../../audio/theory/scales";
@@ -51,7 +52,13 @@ export function useDesktopKeys(
     // Where the panel remembers being open, and whether it starts so: the plugin's window starts folded.
     fold = { key: "corrente:keys-open", initial: true },
     kit,
-  }: { fold?: { key: string; initial: boolean }; kit?: KeysKit } = {},
+    trackId,
+  }: {
+    fold?: { key: string; initial: boolean };
+    kit?: KeysKit;
+    /** The track the keys play, whose own playing lights them too (MOBILE-13). */
+    trackId?: string;
+  } = {},
 ) {
   const [open, setOpen] = usePersistentBoolean(fold.key, fold.initial);
   // Not persisted: a strip you set while playing, not a preference.
@@ -71,7 +78,9 @@ export function useDesktopKeys(
   // in a band above each row; off, every row is an octave and Shift reaches the sharps.
   const rowMode: KeyRowMode = padSettings.accidentals ? "accidentals" : "octaves";
   const settings = drawnRowSettings(padSettings, shownRows, mostRows, setShownRows, octavesSpanned(rowMode));
-  const touch = usePadTouch(liveNotes);
+  const pressed = usePadTouch(liveNotes);
+  const playing = useTrackPlaying(trackId);
+  const touch = { ...pressed, isPlaying: playing.isPlaying, playing: playing.notes };
   const enabled = started && !settings.editingChords;
   // Shift turns the octave rows into their sharps (accidental rows have them already), and in chords
   // mode moves the keys up onto the four chord rows above; Ctrl+Shift on a Mac, the four above those.

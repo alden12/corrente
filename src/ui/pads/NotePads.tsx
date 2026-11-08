@@ -13,6 +13,7 @@
  * How many rows may show depends on the room the Studio has, not on the device, and on a share
  * of that room rather than all of it, so the arrangement and the sheet keep theirs (`keysRoom`).
  */
+import { useTrackPlaying } from "./trackPlaying";
 import { useEffect } from "react";
 import type { InstrumentTrack } from "../../audio/project/projectStore";
 import type { SampleAsset } from "../../audio/samples/catalog";
@@ -56,7 +57,9 @@ export function NotePads({
   const [chords] = usePersistentBoolean(CHORDS_KEY, false);
   const rows = fitPads(room, accidentals && !chords);
   const settings = usePadSettings(octavesPerRow, rows, songKey);
-  const touch = usePadTouch(notes);
+  const pressed = usePadTouch(notes);
+  const playing = useTrackPlaying(track.id);
+  const touch = { ...pressed, isPlaying: playing.isPlaying, playing: playing.notes };
   const isKit = playsPads(instrumentSchema(track.instrumentType));
 
   /**

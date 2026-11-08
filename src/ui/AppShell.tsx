@@ -82,6 +82,7 @@ import { useAuthorColors, useSyncAuthorColorVars } from "./useAuthorColors";
 import { useResolvedTheme } from "./theme";
 import { AuthorColorsProvider } from "./authorColorsContext";
 import { LevelsProvider } from "./meters/levelsContext";
+import { TrackNotesProvider } from "./pads/trackPlaying";
 import { activeKey } from "../audio/agent/config";
 import { StartDialog } from "./StartDialog";
 import { usePersistentBoolean, usePersistentString } from "./usePersistent";
@@ -547,91 +548,93 @@ export function AppShell() {
   return (
     <AuthorColorsProvider value={{ config: authorColors, self: currentUser, theme }}>
       <LevelsProvider value={engine}>
-        {/* `dvh`, not `vh`: mobile browsers count their collapsing address bar in `vh`, so
+        <TrackNotesProvider value={engine.trackNotes}>
+          {/* `dvh`, not `vh`: mobile browsers count their collapsing address bar in `vh`, so
           a `100vh` shell puts the bottom tabs under the chrome until the user scrolls. */}
-        <div className="flex flex-col h-dvh overflow-hidden bg-ground text-ink">
-          {outdated ? (
-            <UpdateNotice required onReload={reloadOntoLatest} />
-          ) : (
-            updateWaiting && <UpdateNotice onReload={applyUpdate} />
-          )}
-          {deviceShape.tier === "desktop" ? (
-            <DesktopShell {...shellProps} />
-          ) : (
-            <MobileShell {...shellProps} shape={deviceShape} />
-          )}
-          {settings && (
-            <SettingsPanel
-              agentConfig={agentConfig}
-              authorColors={authorColors}
-              editLog={editLog}
-              midiInput={midiInput}
-              recorder={recorder}
-              engine={engine}
-              bufferControl={bufferControl}
-              projectStore={projectStore}
-              dispatch={dispatch}
-              initialTab={settings.tab}
-              touch={deviceShape.tier !== "desktop"}
-              onClose={() => setSettings(null)}
-            />
-          )}
-          {share && <SharePanel projectId={share.id} projectName={share.name} onClose={() => setShare(null)} />}
-          {!started && (
-            <StartDialog
-              onStart={handleStart}
-              error={startError}
-              intro={hosting.mode === "standalone" ? <Welcome /> : undefined}
-            />
-          )}
-          {!projectLoaded && <LoadingOverlay waking={hosting.mode === "hosted"} />}
-          {unreachable && <UnreachableDialog onRetry={retryProject} others={otherProjects} onOpen={openOther} />}
-          {recovery && (
-            <RecoveryDialog
-              detail={recovery.detail}
-              // A reload rather than re-running the boot chain by hand: the bundle is well-formed again,
-              // so an ordinary start is the whole of the recovery. Same move the fork below makes.
-              onRebuild={async () => {
-                const outcome = await rebuildProjectState();
-                if (outcome.status === "rebuilt") window.location.reload();
-                return outcome.status === "rebuilt";
-              }}
-              onFork={async () => {
-                // Named off the library listing rather than the live store: after a failed SWITCH the
-                // store still holds the project we came from, and this is about the one we could not open.
-                const damaged = projectList.find((meta) => meta.id === currentProjectId())?.name ?? "Untitled";
-                const name = `${damaged} (recovered)`;
-                openInPlace(await startProjectBeside(name), name);
-              }}
-              others={otherProjects}
-              onOpen={openOther}
-            />
-          )}
-          {conflict && (
-            <ConflictDialog
-              info={conflict.info}
-              onTakeTheirs={() => {
-                sessionRef.current?.discardPending(); // drop our held edits; converge on the peer's version
-                setConflict(null);
-              }}
-              onKeepMine={() => {
-                const { myState } = conflict;
-                void (async () => {
-                  try {
-                    // Fork a copy carrying our offline edits, then converge the shared project on the peer's
-                    // version and reload into the copy (a fresh session attaches to the new project).
-                    const id = await forkProjectFromSnapshot(myState, `${myState.name} (copy)`);
-                    await sessionRef.current?.discardPending(); // durably clear the original's held queue first
-                    setCurrentProject(id);
-                    window.location.reload();
-                  } catch (error) {
-                    console.warn("[corrente] keep-mine fork failed:", error);
-                  }
-                })();
-              }}
-            />
-          )}
-        </div>
+          <div className="flex flex-col h-dvh overflow-hidden bg-ground text-ink">
+            {outdated ? (
+              <UpdateNotice required onReload={reloadOntoLatest} />
+            ) : (
+              updateWaiting && <UpdateNotice onReload={applyUpdate} />
+            )}
+            {deviceShape.tier === "desktop" ? (
+              <DesktopShell {...shellProps} />
+            ) : (
+              <MobileShell {...shellProps} shape={deviceShape} />
+            )}
+            {settings && (
+              <SettingsPanel
+                agentConfig={agentConfig}
+                authorColors={authorColors}
+                editLog={editLog}
+                midiInput={midiInput}
+                recorder={recorder}
+                engine={engine}
+                bufferControl={bufferControl}
+                projectStore={projectStore}
+                dispatch={dispatch}
+                initialTab={settings.tab}
+                touch={deviceShape.tier !== "desktop"}
+                onClose={() => setSettings(null)}
+              />
+            )}
+            {share && <SharePanel projectId={share.id} projectName={share.name} onClose={() => setShare(null)} />}
+            {!started && (
+              <StartDialog
+                onStart={handleStart}
+                error={startError}
+                intro={hosting.mode === "standalone" ? <Welcome /> : undefined}
+              />
+            )}
+            {!projectLoaded && <LoadingOverlay waking={hosting.mode === "hosted"} />}
+            {unreachable && <UnreachableDialog onRetry={retryProject} others={otherProjects} onOpen={openOther} />}
+            {recovery && (
+              <RecoveryDialog
+                detail={recovery.detail}
+                // A reload rather than re-running the boot chain by hand: the bundle is well-formed again,
+                // so an ordinary start is the whole of the recovery. Same move the fork below makes.
+                onRebuild={async () => {
+                  const outcome = await rebuildProjectState();
+                  if (outcome.status === "rebuilt") window.location.reload();
+                  return outcome.status === "rebuilt";
+                }}
+                onFork={async () => {
+                  // Named off the library listing rather than the live store: after a failed SWITCH the
+                  // store still holds the project we came from, and this is about the one we could not open.
+                  const damaged = projectList.find((meta) => meta.id === currentProjectId())?.name ?? "Untitled";
+                  const name = `${damaged} (recovered)`;
+                  openInPlace(await startProjectBeside(name), name);
+                }}
+                others={otherProjects}
+                onOpen={openOther}
+              />
+            )}
+            {conflict && (
+              <ConflictDialog
+                info={conflict.info}
+                onTakeTheirs={() => {
+                  sessionRef.current?.discardPending(); // drop our held edits; converge on the peer's version
+                  setConflict(null);
+                }}
+                onKeepMine={() => {
+                  const { myState } = conflict;
+                  void (async () => {
+                    try {
+                      // Fork a copy carrying our offline edits, then converge the shared project on the peer's
+                      // version and reload into the copy (a fresh session attaches to the new project).
+                      const id = await forkProjectFromSnapshot(myState, `${myState.name} (copy)`);
+                      await sessionRef.current?.discardPending(); // durably clear the original's held queue first
+                      setCurrentProject(id);
+                      window.location.reload();
+                    } catch (error) {
+                      console.warn("[corrente] keep-mine fork failed:", error);
+                    }
+                  })();
+                }}
+              />
+            )}
+          </div>
+        </TrackNotesProvider>
       </LevelsProvider>
     </AuthorColorsProvider>
   );
