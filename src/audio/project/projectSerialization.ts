@@ -43,6 +43,7 @@ import type { SampleAsset } from "../samples/catalog";
 import { DEVICE_FORMAT_VERSION, type CustomDevice } from "../definitions/custom";
 import type { DeviceRef } from "../library/backend";
 import { FIRST_CLIP_NAME } from "./seedClip";
+import { copyAutomation } from "../automation/edits";
 
 /** Serialize an effect chain (its params snapshotted) for persistence. */
 function snapshotEffects(host: EffectHost): EffectData[] {
@@ -103,6 +104,11 @@ export function snapshotTrack(track: Track): TrackData {
     solo: track.solo,
     volume: track.volume,
     color: track.color,
+    // Only when it has some, so a track without stays the document it was.
+    ...(track.automations.length ? { automations: track.automations.map(copyAutomation) } : {}),
+    ...(track.automationPlacements.length
+      ? { automationPlacements: track.automationPlacements.map((placement) => ({ ...placement })) }
+      : {}),
   };
   const arrangement = {
     activeClipId: track.activeClipId,

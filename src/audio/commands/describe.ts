@@ -31,6 +31,17 @@ function on(ctx: DescribeContext | undefined, id: string | undefined, prep = "on
   return prep ? ` ${prep} ${name}` : ` ${name}`;
 }
 
+/** What changed in an automation clip, by the fields the edit carries (DAW-67). */
+const describeAutomationChange = (command: Extract<EditCommand, { type: "setAutomation" }>): string => {
+  if (command.name !== undefined) return `Renamed automation to ${command.name}`;
+  if (command.bindings !== undefined) return "Changed what automation drives";
+  if (command.linkedClipId !== undefined)
+    return command.linkedClipId ? "Linked automation to a clip" : "Unlinked automation";
+  if (command.points !== undefined) return "Drew automation";
+  if (command.lengthBeats !== undefined) return `Set automation length ${command.lengthBeats}`;
+  return command.color ? `Coloured automation ${command.color}` : "Automation takes its track's colour";
+};
+
 const plural = (count: number) => `${count} ${count === 1 ? "note" : "notes"}`;
 
 type DescribeMap = {
@@ -121,6 +132,13 @@ const DESCRIBE: DescribeMap = {
   splitPlacement: () => "Split clip",
   launchClip: (command) => (command.clipId ? "Launched clip" : "Stopped clip"),
   stopAllClips: () => "Back to timeline",
+  addAutomation: (command, ctx) =>
+    `Added automation${command.name ? ` "${command.name}"` : ""}${on(ctx, command.trackId, "to")}`,
+  setAutomation: (command) => describeAutomationChange(command),
+  removeAutomation: () => "Removed automation",
+  placeAutomation: () => "Placed automation",
+  setAutomationPlacement: () => "Moved automation",
+  removeAutomationPlacement: () => "Removed automation from the timeline",
   setTempo: (command) => `Set tempo ${command.bpm}`,
   setTimeSignature: (command) => `Set time signature ${command.numerator}/${command.denominator}`,
   setKey: (command) => `Set key to ${keyLabel(command)}`,

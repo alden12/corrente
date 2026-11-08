@@ -40,7 +40,10 @@
 // custom device using it, but only meets one where someone makes it.
 // 13: the master volume (DAW-8.5), `setMasterVolume` and the document's `masterVolume`. An older client
 // can't apply the edit, but only meets it in a project where someone moves the master fader.
-export const PROTOCOL_VERSION = 13;
+// 14: automation clips (DAW-67), the six automation edits and a track's `automations` and
+// `automationPlacements`. An older client can't apply the edits, but only meets them in a project where
+// someone automates a knob.
+export const PROTOCOL_VERSION = 14;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

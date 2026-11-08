@@ -25,6 +25,7 @@ export const midiDeviceParamKey = (trackId: string, deviceId: string, id: string
 export const clipKey = (id: string): string => `clip:${id}`;
 export const placementKey = (id: string): string => `placement:${id}`;
 export const groupKey = (id: string): string => `group:${id}`;
+export const automationKey = (id: string): string => `automation:${id}`;
 
 /** The placement a clip's first notes made (DAW-50), when they made one. */
 const firstPlacement = (command: { trackId: string; placeAt?: number }): string[] =>
@@ -158,6 +159,27 @@ const EFFECTS: EffectMap = {
   movePlacement: (command) => ({ touched: [trackKey(command.trackId), placementKey(command.placementId)] }),
   resizePlacement: (command) => ({ touched: [trackKey(command.trackId), placementKey(command.placementId)] }),
   removePlacement: (command) => ({
+    touched: [trackKey(command.trackId)],
+    removed: [placementKey(command.placementId)],
+  }),
+  // Automation clips (DAW-67): the clip, and its placements under the placement keys clips use.
+  addAutomation: (command) => ({
+    touched: [
+      trackKey(command.trackId),
+      automationKey(command.id),
+      ...(command.placement ? [placementKey(command.placement.id)] : []),
+    ],
+  }),
+  setAutomation: (command) => ({ touched: [trackKey(command.trackId), automationKey(command.automationId)] }),
+  removeAutomation: (command) => ({
+    touched: [trackKey(command.trackId)],
+    removed: [automationKey(command.automationId)],
+  }),
+  placeAutomation: (command) => ({
+    touched: [trackKey(command.trackId), automationKey(command.automationId), placementKey(command.id)],
+  }),
+  setAutomationPlacement: (command) => ({ touched: [trackKey(command.trackId), placementKey(command.placementId)] }),
+  removeAutomationPlacement: (command) => ({
     touched: [trackKey(command.trackId)],
     removed: [placementKey(command.placementId)],
   }),

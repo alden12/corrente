@@ -25,6 +25,20 @@ export interface Sample<K extends EditCommand["type"]> {
   command: Extract<EditCommand, { type: K }>;
 }
 
+/** An automation clip on t-1, for the automation edits to change. */
+const AUTOMATION_SETUP: EditCommand = {
+  type: "addAutomation",
+  trackId: "t-1",
+  id: "au-1",
+  name: "Sweep",
+  lengthBeats: 4,
+  points: [
+    { id: "ap-1", beat: 0, value: 0 },
+    { id: "ap-2", beat: 4, value: 1 },
+  ],
+  bindings: [{ id: "ab-1", target: { kind: "instrument" }, param: "filter.cutoff", min: 200, max: 4000 }],
+};
+
 export const SAMPLES = {
   renameProject: {
     setup: [{ type: "renameProject", name: "Before" }],
@@ -110,6 +124,56 @@ export const SAMPLES = {
   resizePlacement: {
     setup: [{ type: "resizePlacement", trackId: "t-1", placementId: "p-t-1", startBeat: 4, offset: 0, length: 8 }],
     command: { type: "resizePlacement", trackId: "t-1", placementId: "p-t-1", startBeat: 6, offset: 2, length: 6 },
+  },
+
+  // Automation (DAW-67): a clip made in the setup, so each edit has one to change.
+  setAutomation: {
+    setup: [AUTOMATION_SETUP],
+    command: {
+      type: "setAutomation",
+      trackId: "t-1",
+      automationId: "au-1",
+      name: "Swell",
+      points: [
+        { id: "ap-1", beat: 0, value: 1 },
+        { id: "ap-2", beat: 4, value: 0, shape: "sine", rate: 0.5 },
+      ],
+    },
+  },
+  placeAutomation: {
+    setup: [AUTOMATION_SETUP],
+    command: { type: "placeAutomation", trackId: "t-1", id: "ap-place", automationId: "au-1", startBeat: 8 },
+  },
+  setAutomationPlacement: {
+    setup: [
+      AUTOMATION_SETUP,
+      { type: "placeAutomation", trackId: "t-1", id: "ap-place", automationId: "au-1", startBeat: 8 },
+    ],
+    command: { type: "setAutomationPlacement", trackId: "t-1", placementId: "ap-place", startBeat: 2, length: 3 },
+  },
+  removeAutomationPlacement: {
+    setup: [
+      AUTOMATION_SETUP,
+      { type: "placeAutomation", trackId: "t-1", id: "ap-place", automationId: "au-1", startBeat: 8 },
+    ],
+    command: { type: "removeAutomationPlacement", trackId: "t-1", placementId: "ap-place" },
+  },
+  removeAutomation: {
+    setup: [AUTOMATION_SETUP],
+    command: { type: "removeAutomation", trackId: "t-1", automationId: "au-1" },
+  },
+  addAutomation: {
+    setup: [],
+    command: {
+      type: "addAutomation",
+      trackId: "t-1",
+      id: "au-new",
+      name: "Sweep",
+      lengthBeats: 8,
+      points: [{ id: "ap-n", beat: 0, value: 0.5 }],
+      bindings: [{ id: "ab-n", target: { kind: "instrument" }, param: "filter.cutoff", min: 200, max: 4000 }],
+      placement: { id: "ap-new", startBeat: 4 },
+    },
   },
 
   launchClip: {

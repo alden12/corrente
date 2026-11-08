@@ -66,6 +66,7 @@ describe("normalizeCommand", () => {
         "addAudioClip",
         "addClip",
         "addPlacement",
+        "addAutomation",
       ].sort(),
     );
   });

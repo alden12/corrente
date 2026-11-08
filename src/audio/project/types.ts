@@ -34,6 +34,7 @@ import type {
   NoteClipData,
   InstrumentTrackData,
   AudioTrackData,
+  AutomationClipData,
 } from "./schema";
 
 export type {
@@ -46,8 +47,17 @@ export type {
   NoteClipData,
   InstrumentTrackData,
   AudioTrackData,
+  AutomationClipData,
 };
-export type { ProjectData, TrackData, TimeSignature } from "./schema";
+export type {
+  ProjectData,
+  TrackData,
+  TimeSignature,
+  AutomationShape,
+  AutomationPoint,
+  AutomationTarget,
+  AutomationBinding,
+} from "./schema";
 
 /** An effect in a chain (structural view, no param values). Shared by tracks and groups. */
 export type EffectMeta = Omit<EffectData, "params">;
@@ -82,9 +92,20 @@ export type NoteClipMeta = Omit<NoteClipData, "notes">;
 // their element types swapped to the no-payload `*Meta` views. The `params` blob is dropped.
 export type InstrumentTrackMeta = Omit<
   InstrumentTrackData,
-  "params" | "effects" | "midiDevices" | "clips" | "placements" | "activeClipId" | "launchedClipId" | "color"
+  | "params"
+  | "effects"
+  | "midiDevices"
+  | "clips"
+  | "placements"
+  | "activeClipId"
+  | "launchedClipId"
+  | "color"
+  | "automations"
+  | "automationPlacements"
 > & {
   color: DeviceColor;
+  automations: AutomationClipData[];
+  automationPlacements: Placement[];
   effects: EffectMeta[];
   midiDevices: MidiDeviceMeta[];
   clips: NoteClipMeta[];
@@ -95,9 +116,18 @@ export type InstrumentTrackMeta = Omit<
 
 export type AudioTrackMeta = Omit<
   AudioTrackData,
-  "effects" | "clips" | "placements" | "activeClipId" | "launchedClipId" | "color"
+  | "effects"
+  | "clips"
+  | "placements"
+  | "activeClipId"
+  | "launchedClipId"
+  | "color"
+  | "automations"
+  | "automationPlacements"
 > & {
   color: DeviceColor;
+  automations: AutomationClipData[];
+  automationPlacements: Placement[];
   effects: EffectMeta[];
   clips: AudioClipData[];
   activeClipId: string;

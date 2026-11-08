@@ -103,6 +103,14 @@ const NORMALIZE = {
     const forked = command.empty ? named : pin(named, "fromClipId", seed?.fromClipId);
     return pin(forked, "lengthBeats", seed?.lengthBeats);
   },
+  // A new automation clip's name counts the names taken, and its length follows a new clip's (or the
+  // clip it's linked to), so both move between a dispatch and a replay (DAW-67).
+  addAutomation: (project, command) =>
+    pin(
+      pin(command, "name", project.defaultAutomationName(command.trackId)),
+      "lengthBeats",
+      project.defaultAutomationLength(command.trackId, command.linkedClipId),
+    ),
   addPlacement: (project, command) => {
     // An audio track with nothing in its pool has `activeClipId: ""`, which names no clip.
     const placed = pin(command, "clipId", project.getTrack(command.trackId)?.activeClipId || undefined);

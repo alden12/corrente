@@ -8,6 +8,7 @@
 import type { GroupMeta, TrackMeta, MidiDeviceMeta } from "./types";
 import type { Track, Group, EffectHost, InstrumentTrack, ProjectStructure } from "./projectStore";
 import type { TransportState } from "./projectSerialization";
+import { copyAutomation } from "../automation/edits";
 
 /** Effect chain as structural meta (no param values). */
 function effectMetas(host: EffectHost): TrackMeta["effects"] {
@@ -44,6 +45,8 @@ function trackMeta(track: Track): TrackMeta {
     volume: track.volume,
     color: track.color,
     effects: effectMetas(track),
+    automations: track.automations.map(copyAutomation),
+    automationPlacements: track.automationPlacements.map((placement) => ({ ...placement })),
   };
   return track.kind === "audio"
     ? {

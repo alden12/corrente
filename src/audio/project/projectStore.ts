@@ -72,6 +72,7 @@ import type {
   TrackMeta,
   GroupMeta,
   AudioClipData,
+  AutomationClipData,
   Placement,
   ClipAuthor,
   ClipContent,
@@ -80,6 +81,20 @@ import type {
   TimeSignature,
 } from "./types";
 import { createListeners } from "../../listeners";
+import {
+  AUTOMATION_NAME,
+  addAutomation,
+  copyAutomation,
+  placeAutomation,
+  removeAutomation,
+  removeAutomationPlacement,
+  setAutomation,
+  setAutomationPlacement,
+  unlinkFrom,
+  type AutomationPatch,
+  type NewAutomation,
+  type PlacementPatch,
+} from "../automation/edits";
 
 const { min: MIN_BPM, max: MAX_BPM } = TEMPO_BPM_RANGE;
 // Time-signature bounds are shared with the zod schema (the one source), so the store's coercion
@@ -142,6 +157,10 @@ interface BaseTrack extends EffectHost {
   muted: boolean;
   solo: boolean;
   volume: number;
+  /** Its automation clips (DAW-67), plain data replaced whole on each edit, and where the unlinked
+   *  ones sit on the timeline (free to overlap: the timeline stacks them). */
+  automations: AutomationClipData[];
+  automationPlacements: Placement[];
 }
 
 /** A note clip (pattern) at runtime: meta + its own ClipStore (the notes). */
@@ -632,6 +651,8 @@ export class ProjectStore {
       ],
       activeClipId: seedClipId(id),
       placements: [],
+      automations: [],
+      automationPlacements: [],
       launchedClipId: null,
     };
   }
@@ -808,6 +829,8 @@ export class ProjectStore {
       clips: [],
       activeClipId: "",
       placements: [],
+      automations: [],
+      automationPlacements: [],
       launchedClipId: null,
     };
     this.tracks.push(track);
@@ -850,6 +873,8 @@ export class ProjectStore {
           length: clip.length ?? this.naturalBeats(durationSec),
         },
       ],
+      automations: [],
+      automationPlacements: [],
       launchedClipId: null,
     };
     this.tracks.push(track);
@@ -1422,6 +1447,7 @@ export class ProjectStore {
     if (idx === -1) return;
     t.clips.splice(idx, 1);
     t.placements = t.placements.filter((placement) => placement.clipId !== clipId);
+    unlinkFrom(t, clipId);
     if (t.activeClipId === clipId) t.activeClipId = t.clips[Math.min(idx, t.clips.length - 1)].id;
     this.emit();
   }
@@ -1545,6 +1571,55 @@ export class ProjectStore {
       }
     }
     if (changed) this.emit();
+  }
+
+  // --- automation (DAW-67) ----------------------------------------------------
+  // The edits themselves live in `automation/edits.ts`; these find the track and emit on a change.
+
+  /** The name a new automation clip on the track gets when it is given none. Pinned at dispatch. */
+  defaultAutomationName(trackId: string): string | undefined {
+    const track = this.getTrack(trackId);
+    return (
+      track &&
+      freeName(
+        AUTOMATION_NAME,
+        track.automations.map((clip) => clip.name),
+      )
+    );
+  }
+
+  /** The length a new automation clip gets when it is given none: a new note clip's, or its linked clip's. */
+  defaultAutomationLength(trackId: string, linkedClipId?: string): number {
+    const linked =
+      linkedClipId && this.getTrack(trackId)?.kind === "instrument" && this.getClipStore(trackId, linkedClipId);
+    return linked ? linked.getLength() : this.newClipLength;
+  }
+
+  addAutomation(trackId: string, spec: NewAutomation, author: ClipAuthor = "you"): void {
+    this.editAutomation(trackId, (track) => addAutomation(track, spec, author));
+  }
+  setAutomation(trackId: string, id: string, patch: AutomationPatch): void {
+    this.editAutomation(trackId, (track) => setAutomation(track, id, patch));
+  }
+  removeAutomation(trackId: string, id: string): void {
+    this.editAutomation(trackId, (track) => removeAutomation(track, id));
+  }
+  placeAutomation(
+    trackId: string,
+    spec: { id: string; automationId: string; startBeat: number; offset?: number; length?: number },
+  ): void {
+    this.editAutomation(trackId, (track) => placeAutomation(track, spec));
+  }
+  setAutomationPlacement(trackId: string, placementId: string, patch: PlacementPatch): void {
+    this.editAutomation(trackId, (track) => setAutomationPlacement(track, placementId, patch));
+  }
+  removeAutomationPlacement(trackId: string, placementId: string): void {
+    this.editAutomation(trackId, (track) => removeAutomationPlacement(track, placementId));
+  }
+
+  private editAutomation(trackId: string, edit: (track: Track) => boolean): void {
+    const track = this.getTrack(trackId);
+    if (track && edit(track)) this.emit();
   }
 
   // --- effect chain (track OR group) ----------------------------------------
@@ -1934,6 +2009,8 @@ export class ProjectStore {
       muted: stored.muted ?? false,
       solo: stored.solo ?? false,
       volume: stored.volume ?? 0.8,
+      automations: (stored.automations ?? []).map(copyAutomation),
+      automationPlacements: (stored.automationPlacements ?? []).map((placement) => ({ ...placement })),
     };
     if (stored.kind === "audio") {
       const pool = audioClipPool(stored);

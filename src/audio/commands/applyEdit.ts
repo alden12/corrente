@@ -10,6 +10,7 @@
 import type { ProjectStore } from "../project/projectStore";
 import { authorshipEffect, clipKey, noteEditClipTarget } from "./authorship";
 import type { Author, EditCommand } from "./types";
+import { AUTOMATION_NAME } from "../automation/edits";
 
 type ApplyMap = {
   [K in EditCommand["type"]]: (
@@ -199,6 +200,48 @@ const APPLY: ApplyMap = {
   // Clip launching (override the arrangement with a looping clip).
   launchClip: (project, command) => project.launchClip(command.trackId, command.clipId),
   stopAllClips: (project) => project.stopAllClips(),
+  // Automation clips (DAW-67). A dispatch pins the name and length; the fallbacks are for a raw replay.
+  addAutomation: (project, command, author) =>
+    project.addAutomation(
+      command.trackId,
+      {
+        id: command.id,
+        name: command.name ?? project.defaultAutomationName(command.trackId) ?? AUTOMATION_NAME,
+        lengthBeats: command.lengthBeats ?? project.defaultAutomationLength(command.trackId, command.linkedClipId),
+        points: command.points,
+        bindings: command.bindings,
+        linkedClipId: command.linkedClipId,
+        color: command.color,
+        placement: command.placement,
+      },
+      author,
+    ),
+  setAutomation: (project, command) =>
+    project.setAutomation(command.trackId, command.automationId, {
+      name: command.name,
+      lengthBeats: command.lengthBeats,
+      points: command.points,
+      bindings: command.bindings,
+      linkedClipId: command.linkedClipId,
+      color: command.color,
+    }),
+  removeAutomation: (project, command) => project.removeAutomation(command.trackId, command.automationId),
+  placeAutomation: (project, command) =>
+    project.placeAutomation(command.trackId, {
+      id: command.id,
+      automationId: command.automationId,
+      startBeat: command.startBeat,
+      offset: command.offset,
+      length: command.length,
+    }),
+  setAutomationPlacement: (project, command) =>
+    project.setAutomationPlacement(command.trackId, command.placementId, {
+      startBeat: command.startBeat,
+      offset: command.offset,
+      length: command.length,
+    }),
+  removeAutomationPlacement: (project, command) =>
+    project.removeAutomationPlacement(command.trackId, command.placementId),
   setTempo: (project, command) => project.setTempo(command.bpm),
   setTimeSignature: (project, command) => project.setTimeSignature(command.numerator, command.denominator),
   setKey: (project, command) => project.setKey(command.tonic, command.scale),

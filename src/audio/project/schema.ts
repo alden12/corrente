@@ -115,6 +115,61 @@ export const audioClipDataSchema = z.object({
 });
 
 /* -------------------------------------------------------------------------- */
+/* Automation clips (DAW-67)                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The shape of the segment from a point to the next. `curve` is a line bent by `bend`; `step` holds
+ * the point's value and jumps at the next; the waves repeat every `rate` beats around the line from
+ * this point's value to the next's, `depth` either side.
+ */
+export const AUTOMATION_SHAPES = ["curve", "step", "sine", "triangle", "saw", "square"] as const;
+
+export const automationPointSchema = z.object({
+  id: z.string(),
+  /** From the clip's start, in beats. */
+  beat: z.number(),
+  /** 0..1, mapped into each binding's range. */
+  value: z.number(),
+  /** The segment from here to the next point. Unset, a straight line. */
+  shape: z.enum(AUTOMATION_SHAPES).optional(),
+  /** A curve's bend, -1..1: negative eases in, positive eases out. Unset, straight. */
+  bend: z.number().optional(),
+  /** A wave's cycle, in beats. */
+  rate: z.number().optional(),
+  /** A wave's swing either side of its line, 0..1. */
+  depth: z.number().optional(),
+});
+
+/** The device a binding's param is on: the track's instrument, one of its effects or MIDI devices. */
+export const automationTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("instrument") }),
+  z.object({ kind: z.literal("effect"), effectId: z.string() }),
+  z.object({ kind: z.literal("midiDevice"), deviceId: z.string() }),
+]);
+
+/** A knob an automation clip drives: the curve's 0..1 becomes `min`..`max` in the param's own units. */
+export const automationBindingSchema = z.object({
+  id: z.string(),
+  target: automationTargetSchema,
+  param: z.string(),
+  min: z.number(),
+  max: z.number(),
+});
+
+export const automationClipDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  author: authorSchema,
+  color: colorSchema.optional(),
+  lengthBeats: z.number(),
+  points: z.array(automationPointSchema),
+  bindings: z.array(automationBindingSchema),
+  /** The note clip it plays with, wherever that is placed or launched; unset, it is placed itself. */
+  linkedClipId: z.string().optional(),
+});
+
+/* -------------------------------------------------------------------------- */
 /* Tracks + groups                                                            */
 /* -------------------------------------------------------------------------- */
 
@@ -128,6 +183,10 @@ const baseTrackFields = {
   /** Its colour, which its clips take unless they have their own. Unset in a project from before
    *  DAW-47, where it's picked by the track's place on load. */
   color: colorSchema.optional(),
+  /** Its automation clips (DAW-67), and where the unlinked ones sit on the timeline. Optional: older
+   *  documents have none, and a track without any writes none. */
+  automations: z.array(automationClipDataSchema).optional(),
+  automationPlacements: z.array(placementSchema).optional(),
 };
 
 // The chain/arrangement fields are optional on the persisted shape (defaulted on load),
@@ -329,6 +388,11 @@ export type MidiDeviceData = z.infer<typeof midiDeviceDataSchema>;
 export type Placement = z.infer<typeof placementSchema>;
 export type NoteClipData = z.infer<typeof noteClipDataSchema>;
 export type AudioClipData = z.infer<typeof audioClipDataSchema>;
+export type AutomationShape = (typeof AUTOMATION_SHAPES)[number];
+export type AutomationPoint = z.infer<typeof automationPointSchema>;
+export type AutomationTarget = z.infer<typeof automationTargetSchema>;
+export type AutomationBinding = z.infer<typeof automationBindingSchema>;
+export type AutomationClipData = z.infer<typeof automationClipDataSchema>;
 export type InstrumentTrackData = z.infer<typeof instrumentTrackDataSchema>;
 export type AudioTrackData = z.infer<typeof audioTrackDataSchema>;
 export type TrackData = z.infer<typeof trackDataSchema>;

@@ -95,6 +95,8 @@ const COALESCABLE = new Set<EditCommand["type"]>([
   "setClipLength",
   "movePlacement",
   "resizePlacement",
+  "setAutomation",
+  "setAutomationPlacement",
 ]);
 
 /** The feed line for an undo or redo, naming the edit it took back or put back. */
@@ -134,6 +136,15 @@ function coalesceKey(command: EditCommand): string {
       return `movePlacement:${command.trackId}:${command.placementId}`;
     case "resizePlacement":
       return `resizePlacement:${command.trackId}:${command.placementId}`;
+    // A drag of a curve's points or a range sends the same fields over and over; a change to other
+    // fields (a rename after a drag) is its own edit.
+    case "setAutomation":
+      return `setAutomation:${command.trackId}:${command.automationId}:${Object.keys(command)
+        .filter((key) => !["type", "trackId", "automationId"].includes(key))
+        .sort()
+        .join(",")}`;
+    case "setAutomationPlacement":
+      return `setAutomationPlacement:${command.trackId}:${command.placementId}`;
     // Coalesce a continuous drag of a stable selection into one entry; a new
     // gesture (different note set) gets a fresh key, so it starts a new edit.
     case "editNotes":

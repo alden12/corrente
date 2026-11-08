@@ -11,7 +11,7 @@ import type { DeviceColor } from "../deviceColors";
 import type { CustomMidiDevice } from "../midi/custom";
 import type { ParamValue } from "../params/types";
 import type { ClipData, NoteEvent } from "../sequencer/types";
-import type { ClipContent, ProjectData } from "../project/types";
+import type { AutomationBinding, AutomationPoint, ClipContent, ProjectData } from "../project/types";
 import type { CustomDevice } from "../definitions/custom";
 import type { DeviceRef } from "../library/backend";
 import type { DeviceAnalysisRequest } from "../analysis/deviceAlone";
@@ -178,6 +178,54 @@ export type ServerToBrowser =
   // Clip launching (a launched clip loops over the transport, overriding placements)
   | { type: "launchClip"; trackId: string; clipId: string | null }
   | { type: "stopAllClips" }
+  // Automation clips (DAW-67): a curve on a track driving knobs, placed on the timeline or linked to a
+  // note clip. `points` and `bindings` replace the clip's whole curve or list. Ids are the creator's.
+  // `name` and `lengthBeats` default to a fresh name and a new clip's length, pinned at dispatch.
+  | {
+      type: "addAutomation";
+      trackId: string;
+      id: string;
+      name?: string;
+      lengthBeats?: number;
+      points?: AutomationPoint[];
+      bindings?: AutomationBinding[];
+      linkedClipId?: string;
+      color?: DeviceColor;
+      /** Put it on the timeline as it is made (not for a linked clip). */
+      placement?: { id: string; startBeat: number; length?: number };
+    }
+  | {
+      type: "setAutomation";
+      trackId: string;
+      automationId: string;
+      name?: string;
+      lengthBeats?: number;
+      points?: AutomationPoint[];
+      bindings?: AutomationBinding[];
+      /** null unlinks it. */
+      linkedClipId?: string | null;
+      /** null takes the track's colour again. */
+      color?: DeviceColor | null;
+    }
+  | { type: "removeAutomation"; trackId: string; automationId: string }
+  | {
+      type: "placeAutomation";
+      trackId: string;
+      id: string;
+      automationId: string;
+      startBeat: number;
+      offset?: number;
+      length?: number;
+    }
+  | {
+      type: "setAutomationPlacement";
+      trackId: string;
+      placementId: string;
+      startBeat?: number;
+      offset?: number;
+      length?: number;
+    }
+  | { type: "removeAutomationPlacement"; trackId: string; placementId: string }
   // Feed annotation: a line of intent narration shown in the activity feed (not an edit)
   | { type: "note"; text: string }
   // Live notes (polyphonic)
