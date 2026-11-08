@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TrackNotes } from "../src/audio/live/trackNotes";
-import { outOfRange } from "../src/ui/keys/outOfRange";
+import { playingEdges } from "../src/ui/keys/playingEdges";
 import type { KeyCell } from "../src/ui/keys/keyLayout";
 
 describe("what each track is playing (MOBILE-13)", () => {
@@ -28,15 +28,34 @@ describe("what each track is playing (MOBILE-13)", () => {
   });
 });
 
-describe("notes off the shown keys", () => {
+describe("marking notes no shown key holds", () => {
   const row = (pitches: number[]): KeyCell[] =>
     pitches.map((pitch) => ({ code: `k${pitch}`, pad: { pitches: [pitch], name: "", label: "", tone: "in-scale" } }));
+  // C major, two octave rows: C3..E3 and C4..E4.
   const rows = [row([48, 50, 52]), row([60, 62, 64])];
 
-  it("says which way they are, and nothing for notes on the keys", () => {
-    expect(outOfRange(new Set([50, 62]), rows)).toEqual({ above: false, below: false });
-    expect(outOfRange(new Set([72]), rows)).toEqual({ above: true, below: false });
-    expect(outOfRange(new Set([36, 80]), rows)).toEqual({ above: true, below: true });
-    expect(outOfRange(new Set(), rows)).toEqual({ above: false, below: false });
+  it("marks nothing for notes on the keys", () => {
+    expect(playingEdges(rows, new Set([50, 62])).size).toBe(0);
+  });
+
+  it("marks a note above the keys on its column's top edge, and one below on its bottom edge", () => {
+    expect(playingEdges(rows, new Set([74]))).toEqual(new Map([["k62", ["top"]]]));
+    expect(playingEdges(rows, new Set([38]))).toEqual(new Map([["k50", ["bottom"]]]));
+  });
+
+  it("marks a note with no key of its own beside the key under it", () => {
+    // E flat 3: no key in C major's rows, so D3's right edge.
+    expect(playingEdges(rows, new Set([51]))).toEqual(new Map([["k50", ["right"]]]));
+  });
+
+  it("marks every key holding that neighbour, as every key holding a note lights", () => {
+    // C4 on two keys, E4 above: C sharp 4 has no key, so both C4s are marked.
+    const repeated = [row([60, 64]), row([60]).map((cell) => ({ ...cell, code: "again" }))];
+    expect(playingEdges(repeated, new Set([61]))).toEqual(
+      new Map([
+        ["k60", ["right"]],
+        ["again", ["right"]],
+      ]),
+    );
   });
 });

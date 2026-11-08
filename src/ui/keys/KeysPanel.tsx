@@ -14,7 +14,7 @@
  * key does, and a key that plays nothing is not drawn at all.
  */
 import { KeysHelp } from "./KeysHelp";
-import { outOfRange } from "./outOfRange";
+import { playingEdges, type Side as PlayingSide } from "./playingEdges";
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { PadButton } from "../pads/PadButton";
 import type { PadSettings } from "../pads/padSettings";
@@ -83,12 +83,12 @@ export function KeysPanel({
   const held = useHeldKeys(keyboard);
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
-  // Notes the track plays off the shown keys (MOBILE-13), marked at the panel's edge. Notes only: a
-  // chord or a kit pad isn't a range to fall outside of.
+  // Notes the track plays that no shown key holds (MOBILE-13), marked on the edge of the key beside
+  // them or in their column. Notes only: a chord pad or a kit pad isn't a note to sit beside.
   const offKeys =
     settings.chords || kit
-      ? { above: false, below: false }
-      : outOfRange(touch.playing ?? new Set(), rows.slice(0, shownRows));
+      ? new Map<string, PlayingSide[]>()
+      : playingEdges(rows.slice(0, shownRows), touch.playing ?? new Set());
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
   const chordHint = useChordHints(
     rows.flat().map(({ pad }) => pad?.chord),
@@ -127,19 +127,6 @@ export function KeysPanel({
               there is something to scroll; a `scrollbar-width` here would hand it back to a Mac's
               auto-hiding one. Clipped otherwise: the notes' rows fit to within a pixel or two, which
               would show a scrollbar with nothing to scroll. */}
-          {(offKeys.above || offKeys.below) && (
-            <div
-              data-testid="keys-off-range"
-              className="shrink-0 w-3 flex flex-col justify-between text-[10px] leading-none text-you"
-            >
-              <span title="Playing notes above these keys" className={offKeys.above ? "" : "invisible"}>
-                ▲
-              </span>
-              <span title="Playing notes below these keys" className={offKeys.below ? "" : "invisible"}>
-                ▼
-              </span>
-            </div>
-          )}
           <div
             data-keys-scroll
             className={`flex-1 min-w-0 flex flex-col-reverse ${settings.chords || settings.editingChords ? "overflow-y-auto" : "overflow-hidden"}`}
@@ -155,6 +142,7 @@ export function KeysPanel({
                     settings={settings}
                     touch={lit}
                     heldAt={held.heldAt}
+                    playing={offKeys}
                     keycap={keycap}
                     hintFor={hintFor}
                     kit={kit}
@@ -180,6 +168,7 @@ function KeyRow({
   settings,
   touch,
   heldAt,
+  playing,
   keycap,
   hintFor,
   kit,
@@ -192,6 +181,8 @@ function KeyRow({
   settings: PadSettings;
   touch: PadTouch;
   heldAt: HeldKeys["heldAt"];
+  /** Edges marking notes the track plays that no shown key holds (`playingEdges`). */
+  playing: Map<string, PlayingSide[]>;
   keycap: (code: string) => string;
   hintFor: (pad: KeyPad) => PadHint | null;
   /** A kit's pads: taller keys, the keycap over the sound's name. */
@@ -205,7 +196,7 @@ function KeyRow({
     <div className="flex" style={{ height: kit ? KIT_KEY_HEIGHT : KEY_HEIGHT }}>
       {offset && <div className="shrink-0" style={{ width: `calc(0.5 * ${unit})` }} />}
       {row.map(({ code, pad }) => {
-        const edge = edgeStyle(edges.get(code));
+        const edge = edgeStyle(edges.get(code), playing.get(code));
         return pad ? (
           <PadButton
             key={code}
@@ -267,9 +258,20 @@ function offscreenEdges(row: KeyCell[], heldAt: HeldKeys["heldAt"]): Map<string,
   );
 }
 
-const EDGE_SHADOW = { left: "inset 2px 0 0 var(--color-you)", right: "inset -2px 0 0 var(--color-you)" } as const;
-const edgeStyle = (sides: Side[] | undefined) =>
-  sides ? { boxShadow: sides.map((side) => EDGE_SHADOW[side]).join(", ") } : {};
+const EDGE_SHADOW = {
+  left: "inset 2px 0 0",
+  right: "inset -2px 0 0",
+  top: "inset 0 2px 0",
+  bottom: "inset 0 -2px 0",
+} as const;
+/** A held key's edges in the accent, and the track's playing ones quieter (MOBILE-13), as a lit pad is. */
+const edgeStyle = (held: Side[] | undefined, playing: PlayingSide[] | undefined) => {
+  const shadows = [
+    ...(held ?? []).map((side) => `${EDGE_SHADOW[side]} var(--color-you)`),
+    ...(playing ?? []).map((side) => `${EDGE_SHADOW[side]} color-mix(in oklab, var(--color-you) 55%, transparent)`),
+  ];
+  return shadows.length ? { boxShadow: shadows.join(", ") } : {};
+};
 
 /** A chord pad's selection while the chords are being arranged; nothing otherwise. */
 const editingFor = (pad: KeyPad, settings: PadSettings) =>
