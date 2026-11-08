@@ -72,3 +72,19 @@ test("the master strip: a fader in decibels, undoable, and a stereo meter (DAW-8
   await expect(page.getByTestId("master-peak")).toHaveText(/^-\d+\.\d$/);
   await page.keyboard.up("z");
 });
+
+test("the master strip stays on top while the timeline scrolls under it (DAW-8.5)", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/");
+  await dismissStart(page);
+  const scroll = page.getByTestId("arr-scroll");
+  await scroll.evaluate((element) => (element.scrollLeft = 400));
+  await expect.poll(() => scroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  // The strip's own middle is still the strip, not the ruler scrolled over it.
+  const box = (await page.getByTestId("master-strip").boundingBox())!;
+  const onTop = await page.evaluate(
+    ([x, y]) => !!document.elementFromPoint(x, y)?.closest('[data-testid="master-strip"]'),
+    [box.x + box.width / 2, box.y + box.height / 2],
+  );
+  expect(onTop).toBe(true);
+});

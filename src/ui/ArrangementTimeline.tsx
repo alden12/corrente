@@ -517,7 +517,8 @@ export function ArrangementTimeline({
               <div className="sticky top-0 z-20 flex" style={{ height: RULER_H }}>
                 <div
                   className={`shrink-0 bg-rail border-r border-b border-line ${
-                    stickyHeaders ? "sticky left-0 z-10" : ""
+                    // Above the ruler (itself sticky, z-10), which scrolls under the master strip here.
+                    stickyHeaders ? "sticky left-0 z-20" : ""
                   }`}
                   style={{ width: headerW, height: RULER_H }}
                 >
