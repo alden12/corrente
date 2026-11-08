@@ -7,11 +7,13 @@ function setUp() {
   const clock = { now: 0 };
   const played: number[] = [];
   const pitches: number[] = [];
+  const cuts: number[] = [];
   const engine = {
     started: true,
     get currentTime() {
       return clock.now;
     },
+    cutAllNotes: () => cuts.push(clock.now),
     getNoteTarget: () => ({
       playNote: (pitch: number, _seconds: number, _velocity: number, when: number) => {
         played.push(when);
@@ -35,7 +37,7 @@ function setUp() {
       vi.advanceTimersByTime(25);
     }
   };
-  return { scheduler, project, track, played, pitches, run };
+  return { scheduler, project, track, played, pitches, cuts, run };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -110,5 +112,19 @@ describe("a cue", () => {
     run(9);
     expect(cued).not.toHaveBeenCalled();
     scheduler.stop();
+  });
+});
+
+describe("a new play", () => {
+  it("cuts what the last one left ringing before its first note", () => {
+    const { scheduler, played, cuts, run } = setUp();
+    scheduler.play();
+    run(1);
+    scheduler.stop();
+    expect(cuts).toEqual([0]);
+    scheduler.play();
+    // Cut as the play starts, before its first note is scheduled.
+    expect(cuts).toHaveLength(2);
+    expect(played.at(-1)).toBeGreaterThanOrEqual(cuts[1]);
   });
 });

@@ -480,6 +480,17 @@ export class AudioEngine {
     return this.meters?.levels(id, node) ?? [0, 0];
   }
 
+  /**
+   * Cut every track's notes, the ringing tails of the last play included: what a new play starts
+   * with, so they don't hold the voice slots its first notes want.
+   */
+  cutAllNotes(): void {
+    for (const node of this.nodes.values()) {
+      if (node.instrument instanceof EngineInstrument) node.instrument.cutAllNotes();
+      else node.instrument.allNotesOff();
+    }
+  }
+
   /** How long after the audio thread renders a block it's heard: the output's latency, in ms. */
   private outputDelayMs(): number {
     const ctx = this.ctx;

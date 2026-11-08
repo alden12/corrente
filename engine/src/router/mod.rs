@@ -62,7 +62,7 @@ mod wavetable;
 
 // TS: export { Engine } from "./engine". `pub use` re-exports, so lib.rs writes `router::Engine`.
 pub use engine::Engine;
-pub use track::Track;
+pub use track::{NOTE_WORDS, Track};
 // MIDI fields (crate::midi) read values through the same shaping as params.
 pub(crate) use binding::Shaping;
 // The tests write wavetables at these sizes. `#[cfg(test)]` builds the line into the tests only.

@@ -26,6 +26,7 @@ import {
   BLOCK,
   EMPTY_SAMPLE,
   INPUT_CHANNELS,
+  NOTE_WORDS,
   OUTPUT_CHANNELS,
   SAMPLE_SLOTS,
   startEngine,
@@ -143,6 +144,7 @@ export class EngineBank {
     this.play[EVENT.noteOff] = (event, offset) => this.playNoteOff(event, offset);
     this.play[EVENT.param] = (event) => this.playParam(event);
     this.play[EVENT.allOff] = (event, offset) => this.playAllOff(event, offset);
+    this.play[EVENT.allCut] = (event, offset) => this.engine.eng_keys_cut(event.track, offset);
     this.play[EVENT.midiValue] = (event) => this.engine.eng_midi_value(event.track, event.target, event.value);
     this.view();
   }
@@ -192,12 +194,12 @@ export class EngineBank {
     const words = new Float32Array(
       this.engine.memory.buffer,
       this.engine.eng_midi_played(track),
-      this.engine.eng_midi_played_count(track) * 3,
+      this.engine.eng_midi_played_count(track) * NOTE_WORDS,
     );
-    return Array.from({ length: words.length / 3 }, (_, at) => ({
-      offset: words[at * 3],
-      note: words[at * 3 + 1],
-      velocity: words[at * 3 + 2],
+    return Array.from({ length: words.length / NOTE_WORDS }, (_, at) => ({
+      offset: words[at * NOTE_WORDS],
+      note: words[at * NOTE_WORDS + 1],
+      velocity: words[at * NOTE_WORDS + 2],
     }));
   }
 
@@ -353,8 +355,8 @@ export class EngineBank {
   }
 
   /** Release every held note on a track. */
-  allNotesOff(track: number, time: number): void {
-    this.queue.add(EVENT.allOff, track, 0, 0, time);
+  allNotesOff(track: number, time: number, cut = false): void {
+    this.queue.add(cut ? EVENT.allCut : EVENT.allOff, track, 0, 0, time);
   }
 
   /**
@@ -433,8 +435,8 @@ export class EngineBank {
     const at = this.engine.eng_midi_played(track) >> 2;
     let changed = false;
     for (let index = 0; index < count; index++) {
-      const note = this.heap[at + index * 3 + 1];
-      const on = this.heap[at + index * 3 + 2] > 0 ? 1 : 0;
+      const note = this.heap[at + index * NOTE_WORDS + 1];
+      const on = this.heap[at + index * NOTE_WORDS + 2] > 0 ? 1 : 0;
       if (note < 0 || note >= sounding.length || sounding[note] === on) continue;
       sounding[note] = on;
       changed = true;

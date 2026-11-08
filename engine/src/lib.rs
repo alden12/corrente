@@ -242,6 +242,14 @@ pub extern "C" fn eng_keys_off(track: i32, offset: i32) {
     with_track(track, |track| track.keys_off(offset));
 }
 
+/// Release every held note on a track and cut every voice still sounding, `offset` samples into the
+/// coming block: what a new play starts with.
+// TS: withTrack(track, (track) => track.keysCut(offset))
+#[unsafe(no_mangle)]
+pub extern "C" fn eng_keys_cut(track: i32, offset: i32) {
+    with_track(track, |track| track.keys_cut(offset));
+}
+
 /// Move one of a track's values (a param's raw value, numbered as eng_bind's words number them): each
 /// param source reading it ramps to its shaped value.
 // TS: if (value >= 0) withTrack(track, (track) => track.setValue(value, raw));
@@ -379,10 +387,10 @@ pub extern "C" fn eng_midi_played(track: i32) -> *const f32 {
 }
 
 /// How many notes eng_midi_played holds after the last eng_process.
-// TS: return withTrack(track, (track) => track.played().length / 3) ?? 0
+// TS: return withTrack(track, (track) => track.played().length / NOTE_WORDS) ?? 0
 #[unsafe(no_mangle)]
 pub extern "C" fn eng_midi_played_count(track: i32) -> i32 {
-    with_track(track, |track| (track.played().len() / 3) as i32).unwrap_or(0)
+    with_track(track, |track| (track.played().len() / router::NOTE_WORDS) as i32).unwrap_or(0)
 }
 
 /// Where the transport is at the start of the coming block: `beat` (counted from where it started),

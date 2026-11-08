@@ -54,22 +54,58 @@ pub struct Track {
     pub(super) voices_carried: bool,
     /// The track's MIDI devices (INST-11.1), between the keys it's told and its voices, if it has any.
     pub(super) midi: Option<Chain>,
-    /// What the voices were played last block, three words a note: its offset, its note, and its
-    /// velocity, 0 for a note off (MIDI's own convention): what the MIDI devices played, or with none,
-    /// the keys themselves. For drawing what a device plays (a portrait), and for lighting the keys
-    /// with what a track is playing (MOBILE-13).
-    played: [f32; PLAYED_WORDS],
-    played_count: usize,
-    /// Keys played straight into the voices (no MIDI devices) since the last block, three words a note
-    /// as `played`: they arrive before the block they sound in, so they wait here until it starts.
-    keyed: [f32; PLAYED_WORDS],
-    keyed_count: usize,
+    /// What the voices were played last block: what the MIDI devices played, or with none, the keys
+    /// themselves. For drawing what a device plays (a portrait), and for lighting the keys with what a
+    /// track is playing (MOBILE-13).
+    played: NoteList,
+    /// Keys played straight into the voices (no MIDI devices) since the last block. They arrive before
+    /// the block they sound in, so they wait here until it starts, then join `played`.
+    keyed: NoteList,
     /// The sample rate the plan was loaded at: what a re-strike's fade in seconds is counted in.
     pub(super) sample_rate: i32,
 }
 
+/// The words a note takes in a `NoteList`: its offset into the block, its note, and its velocity,
+/// 0 for a note off (MIDI's own convention). JS reads the list in place with the same layout.
+pub const NOTE_WORDS: usize = 3;
+
 /// Room for every event a chain can play in a block (its notes and the note offs of lengths ending).
-const PLAYED_WORDS: usize = MAX_EVENTS * 2 * 3;
+const NOTE_LIST_WORDS: usize = MAX_EVENTS * 2 * NOTE_WORDS;
+
+/// A block's notes as one flat array of numbers, NOTE_WORDS a note, so JS can read it straight out
+/// of the engine's memory. Fixed size: the audio thread never allocates.
+// TS: class NoteList { words = new Float32Array(NOTE_LIST_WORDS); count = 0 }
+pub(super) struct NoteList {
+    words: [f32; NOTE_LIST_WORDS],
+    count: usize,
+}
+
+impl NoteList {
+    fn new() -> Self {
+        NoteList { words: [0.0; NOTE_LIST_WORDS], count: 0 }
+    }
+
+    /// Add a note, while there's room.
+    // TS: const at = this.count * NOTE_WORDS; if (at + NOTE_WORDS <= this.words.length) { this.words.set([offset, note, velocity], at); this.count++ }
+    // `get_mut(range)` is None past the end, so a full list drops the note rather than panicking.
+    fn push(&mut self, offset: usize, note: i32, velocity: f32) {
+        let at = self.count * NOTE_WORDS;
+        if let Some(words) = self.words.get_mut(at..at + NOTE_WORDS) {
+            words.copy_from_slice(&[offset as f32, note as f32, velocity]);
+            self.count += 1;
+        }
+    }
+
+    fn clear(&mut self) {
+        self.count = 0;
+    }
+
+    /// The notes held, NOTE_WORDS words each.
+    // TS: return this.words.subarray(0, this.count * NOTE_WORDS)
+    fn words(&self) -> &[f32] {
+        &self.words[..self.count * NOTE_WORDS]
+    }
+}
 
 impl Track {
     // With no plan: silent until one loads.
@@ -90,10 +126,8 @@ impl Track {
             clock: 0,
             voices_carried: false,
             midi: None,
-            played: [0.0; PLAYED_WORDS],
-            played_count: 0,
-            keyed: [0.0; PLAYED_WORDS],
-            keyed_count: 0,
+            played: NoteList::new(),
+            keyed: NoteList::new(),
             sample_rate: 48000,
         }
     }
@@ -169,23 +203,23 @@ impl Track {
     pub(super) fn process(&mut self, host: &[Slot; HOST_SIGNALS], samples: &Samples, transport: BlockTransport) {
         // TS: this.midi?.block(this.clock, transport).forEach(([offset, event]) => event.kind === "on" ? this.playOn(...) : this.playOff(...))
         // `.take()` lends the chain out of the track while the track plays its notes, then puts it back.
-        self.played_count = 0;
-        // TS: for (let at = 0; at < this.keyedCount * 3; at += 3) this.notePlayed(...this.keyed.subarray(at, at + 3)); this.keyedCount = 0;
-        // The keys played straight into the voices before this block, as the devices' notes would be.
-        for at in (0..self.keyed_count * 3).step_by(3) {
-            let [offset, note, velocity] = [self.keyed[at], self.keyed[at + 1], self.keyed[at + 2]];
-            self.note_played(offset as usize, note as i32, velocity);
+        // TS: this.played.clear(); for (const [offset, note, velocity] of chunks(this.keyed.words(), NOTE_WORDS)) this.played.push(offset, note, velocity); this.keyed.clear();
+        // The keys played straight into the voices before this block go first, as the devices' notes
+        // would. `chunks_exact(n)` walks a slice n at a time.
+        self.played.clear();
+        for note in self.keyed.words().chunks_exact(NOTE_WORDS) {
+            self.played.push(note[0] as usize, note[1] as i32, note[2]);
         }
-        self.keyed_count = 0;
+        self.keyed.clear();
         if let Some(mut chain) = self.midi.take() {
             for &(offset, event) in chain.block(self.clock, transport) {
                 match event {
                     Event::On { note, velocity, .. } => {
-                        self.note_played(offset, note, velocity);
+                        self.played.push(offset, note, velocity);
                         self.play_on(offset as i32, note, f64::from(velocity), samples);
                     }
                     Event::Off { note, .. } => {
-                        self.note_played(offset, note, 0.0);
+                        self.played.push(offset, note, 0.0);
                         self.play_off(offset as i32, note);
                     }
                     Event::Tick { .. } => {}
@@ -218,31 +252,17 @@ impl Track {
         self.clock += BLOCK as u64;
     }
 
-    /// Keep a note the MIDI devices played this block, while there's room.
-    // TS: if (this.playedCount * 3 < PLAYED_WORDS) this.played.set([offset, note, velocity], this.playedCount++ * 3)
-    fn note_played(&mut self, offset: usize, note: i32, velocity: f32) {
-        let at = self.played_count * 3;
-        // `get_mut(range)` is None past the end, so a full list drops the note rather than panicking.
-        if let Some(words) = self.played.get_mut(at..at + 3) {
-            words.copy_from_slice(&[offset as f32, note as f32, velocity]);
-            self.played_count += 1;
-        }
-    }
-
-    /// Keep a key played straight into the voices, for the next block's `played`, while there's room.
-    // TS: if (this.keyedCount * 3 < PLAYED_WORDS) this.keyed.set([Math.max(offset, 0), note, velocity], this.keyedCount++ * 3)
+    /// Keep a key played straight into the voices (a track with no MIDI devices), for `played` once
+    /// its block starts: `key_on` and `key_off` call this, before the block they land in renders.
+    // TS: this.keyed.push(Math.max(offset, 0), note, velocity)
     pub(super) fn note_keyed(&mut self, offset: i32, note: i32, velocity: f32) {
-        let at = self.keyed_count * 3;
-        if let Some(words) = self.keyed.get_mut(at..at + 3) {
-            words.copy_from_slice(&[offset.max(0) as f32, note as f32, velocity]);
-            self.keyed_count += 1;
-        }
+        self.keyed.push(usize::try_from(offset).unwrap_or(0), note, velocity);
     }
 
-    /// What the voices were played last block: three words a note (offset, note, velocity or 0 for off).
-    // TS: return this.played.subarray(0, this.playedCount * 3)
+    /// What the voices were played last block, NOTE_WORDS words a note.
+    // TS: return this.played.words()
     pub fn played(&self) -> &[f32] {
-        &self.played[..self.played_count * 3]
+        self.played.words()
     }
 
     /// Note the block's peaks, and whether it was silent.
