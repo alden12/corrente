@@ -13,7 +13,7 @@
  * of the accidental rows, so each accidental sits between the two notes it is between as a black
  * key does, and a key that plays nothing is not drawn at all.
  */
-import { isMac } from "./platform";
+import { KeysHelp } from "./KeysHelp";
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { PadButton } from "../pads/PadButton";
 import type { PadSettings } from "../pads/padSettings";
@@ -80,13 +80,6 @@ export function KeysPanel({
 }) {
   const keycap = useKeycapLabels();
   const held = useHeldKeys(keyboard);
-  const hint = kit
-    ? "Pads in order, from Z"
-    : settings.chords
-      ? `Shift rows 5-8${isMac() ? " · ⌃⇧ 9-12" : ""} · Tab sustain · [ ] octave`
-      : rowMode === "octaves"
-        ? "Shift sharps · Tab sustain · [ ] octave"
-        : "Tab sustain · [ ] octave";
   // A pad lights for a key held down as well as for the mouse, so the panel shows what is playing.
   const lit: PadTouch = { ...touch, isSounding: (pitches) => touch.isSounding(pitches) || held.isHeld(pitches) };
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
@@ -107,7 +100,7 @@ export function KeysPanel({
       <SectionHeader title="Keys" fold={{ open, onToggle }}>
         {open && (
           <>
-            <span className="font-mono text-[10px] text-faint shrink-0">{hint}</span>
+            <KeysHelp kit={kit} chords={settings.chords} rowMode={rowMode} />
             {!kit && (
               <div className="flex-1 min-w-0 flex">
                 <ScalePadControls settings={settings} octavesPerRow={1} />

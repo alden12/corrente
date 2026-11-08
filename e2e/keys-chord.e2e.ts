@@ -76,6 +76,18 @@ test.describe("on a Mac", () => {
     await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }));
   });
 
+  test("the Keys header's ⓘ lists the shortcuts for what the keys play", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("button", { name: "Chords", exact: true }).click();
+    await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+    const help = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect(help).toContainText("Chord rows 9-12");
+    await expect(help).toContainText("Sustain pedal");
+    await page.keyboard.press("Escape");
+    await expect(help).toHaveCount(0);
+  });
+
   test("Shift plays chord rows 5-8, and Ctrl+Shift rows 9-12", async ({ page }) => {
     await page.goto("/");
     await dismissStart(page);
