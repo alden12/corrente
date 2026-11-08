@@ -144,6 +144,7 @@ export class EngineBank {
     this.play[EVENT.noteOff] = (event, offset) => this.playNoteOff(event, offset);
     this.play[EVENT.param] = (event) => this.playParam(event);
     this.play[EVENT.allOff] = (event, offset) => this.playAllOff(event, offset);
+    this.play[EVENT.allCut] = (event, offset) => this.engine.eng_keys_cut(event.track, offset);
     this.play[EVENT.midiValue] = (event) => this.engine.eng_midi_value(event.track, event.target, event.value);
     this.view();
   }
@@ -354,8 +355,10 @@ export class EngineBank {
   }
 
   /** Release every held note on a track. */
-  allNotesOff(track: number, time: number): void {
-    this.queue.add(EVENT.allOff, track, 0, 0, time);
+  allNotesOff(track: number, time: number, cut = false): void {
+    // Notes still queued for after it belong to what's being stopped: a long note's off especially.
+    this.queue.clearNotes(track, time);
+    this.queue.add(cut ? EVENT.allCut : EVENT.allOff, track, 0, 0, time);
   }
 
   /**

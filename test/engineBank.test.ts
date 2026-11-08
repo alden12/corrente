@@ -169,6 +169,18 @@ describe("EngineBank", () => {
     expect(bank.silent(0)).toBe(true);
   });
 
+  it("drops a stopped play's notes still queued, so a late note off can't let go of the next play's note", () => {
+    const bank = bankOf();
+    // A long note, its off queued for later, then everything stopped before it comes.
+    bank.noteOn(0, 60, 0.5, 0);
+    bank.noteOff(0, 60, 4 * BLOCK * SAMPLE);
+    bank.allNotesOff(0, BLOCK * SAMPLE);
+    // The next play strikes the same note, held past where the old off was due.
+    bank.noteOn(0, 60, 0.5, 2 * BLOCK * SAMPLE);
+    const sound = render(bank, 6);
+    expect(sound[5 * BLOCK]).toBeCloseTo(0.5, 6);
+  });
+
   it("keeps tracks apart", () => {
     const bank = bankOf(2);
     bank.noteOn(1, 60, 1, 0);

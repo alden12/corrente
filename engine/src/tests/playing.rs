@@ -68,3 +68,24 @@ fn a_track_with_no_midi_devices_reports_the_keys_it_played_in_their_block() {
     engine.process();
     assert_eq!(played(&engine), vec![0.0, 60.0, 0.0]);
 }
+
+// TS: it("cutting a track's keys fades out every voice, releases and all", () => { ... })
+#[test]
+fn cutting_a_tracks_keys_frees_every_voice_releases_and_all() {
+    let plan = PlanBuilder::new().node(kind("saw"), vec![voice(0)], vec![]).step(NODE, vec![0]).out(buffer(0));
+    let mut engine = plan.loaded();
+    let sounding = |engine: &Engine| {
+        let track = engine.track(0).unwrap();
+        (0..track.voice_slots()).filter(|&slot| track.voice_active(slot)).count()
+    };
+    // Two voices sounding, started as the binding would start them.
+    engine.track_mut(0).unwrap().note_on(0, 0, 261.6, 0.8, 60.0);
+    engine.track_mut(0).unwrap().note_on(1, 0, 329.6, 0.8, 64.0);
+    engine.process();
+    assert_eq!(sounding(&engine), 2);
+    engine.track_mut(0).unwrap().keys_cut(0);
+    // A block to fade over, then the slots are free.
+    engine.process();
+    engine.process();
+    assert_eq!(sounding(&engine), 0);
+}

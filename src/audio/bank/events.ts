@@ -7,7 +7,7 @@
  * happens as a message arrives (between blocks), which is where the queue may grow.
  */
 
-export const EVENT = { noteOn: 0, noteOff: 1, param: 2, allOff: 3, midiValue: 4 } as const;
+export const EVENT = { noteOn: 0, noteOff: 1, param: 2, allOff: 3, midiValue: 4, allCut: 5 } as const;
 export type EventKind = (typeof EVENT)[keyof typeof EVENT];
 
 /** One event, as `next` hands it out: a reused object, valid until the next call. */
@@ -85,6 +85,22 @@ export class EventQueue {
     let kept = this.start;
     for (let at = this.start; at < this.end; at++) {
       if (this.tracks[at] === track) continue;
+      this.move(at, kept++);
+    }
+    this.end = kept;
+  }
+
+  /**
+   * Drop a track's notes, ons and offs, due at or after `from`: what an all-notes-off at `from`
+   * supersedes. A note's off is sent with its on, timed for when it ends, so without this a stopped
+   * play's offs still land later, and one landing in the next play lets go of that play's note.
+   * Param moves stay.
+   */
+  clearNotes(track: number, from: number): void {
+    let kept = this.start;
+    for (let at = this.start; at < this.end; at++) {
+      const note = this.kinds[at] === EVENT.noteOn || this.kinds[at] === EVENT.noteOff;
+      if (note && this.tracks[at] === track && this.times[at] >= from) continue;
       this.move(at, kept++);
     }
     this.end = kept;
