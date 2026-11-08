@@ -2,16 +2,12 @@
  * Shared mixer controls for the track/group headers: a low-profile Fader and an adjoined Mute/Solo
  * button pair.
  *
- * The Fader is a volume, on a decibel taper (`gainTaper`), and given `meter` its track is the level
- * meter too (DAW-8.5): the level fills it from the left, green, then amber over -6 dB and red at
- * the top, a peak mark waits at the loudest recent level, and a sample at full scale lights the cap
- * at its right end for a few seconds. The meter never draws past the end: the end is 0 dBFS.
+ * The Fader is a gain on a decibel taper (`gainTaper`), reading out in dB (DAW-8.5): clip gain's.
+ * Track and group volumes are `VolumeKnob`s, whose rings are their meters.
  */
 import { useRef } from "react";
 import { capturePointerDrag, releasePointerDrag } from "./dragGesture";
 import { formatDecibels, gainOfPosition, positionOfGain } from "./controls/gainTaper";
-import { useLevelMeter } from "./meters/useLevelMeter";
-import { METER_GRADIENT } from "./meters/meterColors";
 
 /** A step of the arrow keys, in fader travel. */
 const KEY_STEP = 0.05;
@@ -22,7 +18,6 @@ export function Fader({
   title,
   width = 56,
   max = 1,
-  meter,
   onPointerDownCapture,
 }: {
   value: number;
@@ -31,12 +26,9 @@ export function Fader({
   width?: number;
   /** Top of the range (default 1). Clip gain uses >1 to allow a boost. */
   max?: number;
-  /** The live level to meter (the loudest sample since the last frame, as a gain); none, no meter. */
-  meter?: () => number;
   onPointerDownCapture?: (e: React.PointerEvent) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { bar: meterBar, peak: meterPeak, clip: meterClip } = useLevelMeter(meter);
   const position = positionOfGain(value, max);
   const label = `${title ?? "Volume"}: ${formatDecibels(value)}`;
 
@@ -75,38 +67,13 @@ export function Fader({
       className="relative h-4 shrink-0 cursor-pointer select-none touch-none"
       style={{ width }}
     >
-      {meter ? (
-        // The track is the meter: the level revealed from the left over the colours, the peak mark,
-        // and the clip cap at the right end. The handle alone says where the volume is.
-        <div
-          data-testid="level-meter"
-          className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-line overflow-hidden"
-        >
-          <div
-            ref={meterBar}
-            data-testid="level-meter-bar"
-            className="absolute inset-0"
-            style={{ background: METER_GRADIENT, clipPath: "inset(0 100% 0 0)" }}
-          />
-          <div ref={meterPeak} className="absolute inset-y-0 w-0.5 -ml-px bg-ink/60" style={{ opacity: 0 }} />
-          <div
-            ref={meterClip}
-            data-testid="level-meter-clip"
-            className="absolute inset-y-0 right-0 w-1 bg-hot"
-            style={{ opacity: 0 }}
-          />
-        </div>
-      ) : (
-        // The track, and the accent as the filled portion - the same rule the knobs and the device
-        // faders follow, so the three read as one family.
-        <>
-          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 rounded-full bg-line" />
-          <div
-            className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 rounded-full bg-you"
-            style={{ width: `${position * 100}%` }}
-          />
-        </>
-      )}
+      {/* The track, and the accent as the filled portion - the same rule the knobs and the device
+          faders follow, so the three read as one family. */}
+      <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 rounded-full bg-line" />
+      <div
+        className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 rounded-full bg-you"
+        style={{ width: `${position * 100}%` }}
+      />
       {/* A 9px ring handle. Small on purpose: the row is 46px tall and the name has to fit
           beside it. The hit area is the whole 16px-tall track, not this. */}
       <div

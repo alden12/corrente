@@ -27,20 +27,26 @@ test("mute and solo toggle on a track", async ({ page }) => {
   await expect(scroll.getByRole("slider", { name: "Volume" }).first()).toBeVisible();
 });
 
-test("a track's fader meters its level, and reads out in decibels (DAW-8.5)", async ({ page }) => {
+test("a track's volume knob meters its level on its ring, and reads out in decibels (DAW-8.5)", async ({ page }) => {
   await page.goto("/");
   await dismissStart(page);
   const scroll = page.getByTestId("arr-scroll");
-  const fader = scroll.getByRole("slider", { name: "Volume", exact: true }).first();
-  await expect(fader).toHaveAttribute("aria-valuetext", /dB$/);
+  const knob = scroll.getByRole("slider", { name: "Volume", exact: true }).first();
+  await expect(knob).toHaveAttribute("aria-valuetext", /dB$/);
 
-  // The meter's bar is clipped away to nothing in silence, and opens as a note sounds.
-  const bar = fader.getByTestId("level-meter-bar");
-  const shown = () => bar.evaluate((element) => getComputedStyle(element).clipPath);
-  await expect.poll(shown).toMatch(/inset\(0px 100%/);
+  // The ring is empty in silence, and fills as a note sounds.
+  const level = async () => Number(await knob.getAttribute("data-level"));
+  await expect.poll(level).toBe(0);
   await page.keyboard.down("z");
-  await expect.poll(shown, { message: "the meter rises with the note" }).not.toMatch(/inset\(0px 100%/);
+  await expect.poll(level, { message: "the ring fills with the note" }).toBeGreaterThan(0.1);
   await page.keyboard.up("z");
+
+  // A double-click puts it back to 0 dB.
+  await knob.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(knob).not.toHaveAttribute("aria-valuetext", "0.0 dB");
+  await knob.dblclick();
+  await expect(knob).toHaveAttribute("aria-valuetext", "0.0 dB");
 });
 
 test("the master strip: a fader in decibels, undoable, and a stereo meter (DAW-8.5)", async ({ page }) => {
@@ -55,7 +61,7 @@ test("the master strip: a fader in decibels, undoable, and a stereo meter (DAW-8
   await expect(master).toHaveAttribute("aria-valuetext", "0.0 dB");
 
   // Both sides' bars open as a note sounds, and the peak reads out in decibels.
-  const bars = page.getByTestId("master-meter").locator("div > div");
+  const bars = page.getByTestId("master-meter-bar");
   const opened = () =>
     bars.evaluateAll(
       (elements) => elements.filter((element) => !/inset\(0px 100%/.test(getComputedStyle(element).clipPath)).length,

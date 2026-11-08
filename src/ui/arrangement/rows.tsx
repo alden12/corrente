@@ -13,7 +13,8 @@ import { colorMenu, paletteAccent } from "../deviceColor";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { Menu } from "../Menu";
 import { InlineRename } from "../InlineRename";
-import { Fader, MuteSolo } from "../MixerControls";
+import { MuteSolo } from "../MixerControls";
+import { VolumeKnob } from "../controls/VolumeKnob";
 import { useLevelSource } from "../meters/levelsContext";
 import { Lane } from "./Lane";
 import { ROW, GUTTER, GUTTER_PAD, INDENT, type Selection } from "./shared";
@@ -63,10 +64,9 @@ export function GroupHeader({
         onCommit={(name) => dispatch({ type: "setGroup", groupId: group.id, name })}
         className="font-mono text-[11px] tracking-wide uppercase text-strong flex-1 min-w-0"
       />
-      <Fader
+      <VolumeKnob
         value={group.volume}
         title="Group volume"
-        width={48}
         meter={meter}
         onChange={(v) => dispatch({ type: "setGroup", groupId: group.id, volume: v })}
       />
@@ -158,12 +158,10 @@ function TrackHeader({
         onCommit={(name) => dispatch({ type: "setTrack", trackId: track.id, name })}
         className="font-mono text-[13px] text-strong flex-1 min-w-0"
       />
-      <Fader
+      <VolumeKnob
         value={track.volume}
         title="Volume"
-        width={56}
         meter={meter}
-        onPointerDownCapture={(e) => e.stopPropagation()}
         onChange={(v) => dispatch({ type: "setTrack", trackId: track.id, volume: v })}
       />
       <Menu

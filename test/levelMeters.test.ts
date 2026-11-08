@@ -81,3 +81,13 @@ describe("the master volume (DAW-8.5)", () => {
     expect(loaded.masterVolume).toBe(0.25);
   });
 });
+
+describe("the meters' scale (DAW-8.5)", () => {
+  it("follows the faders' taper to 0 dB, then reads the over zone to +6 dB", async () => {
+    const { meterPosition, ZERO_AT } = await import("../src/ui/meters/meterScale");
+    expect(meterPosition(1)).toBeCloseTo(ZERO_AT, 9);
+    expect(meterPosition(db(-6))).toBeCloseTo(positionOfGain(db(-6)) * ZERO_AT, 9);
+    expect(meterPosition(db(3))).toBeCloseTo(ZERO_AT + (1 - ZERO_AT) / 2, 3);
+    expect(meterPosition(db(12))).toBe(1);
+  });
+});

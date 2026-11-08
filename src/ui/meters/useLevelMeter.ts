@@ -1,40 +1,30 @@
 /**
- * Drive a meter's elements from the engine's levels (DAW-8.5), straight onto the DOM once a frame,
- * never through React state: forty meters re-rendering at 60 fps would cost more than the mix. The
- * caller places the elements it wants and hands their refs here: the bar (revealed from the left to
- * the level), the peak mark, the clip light, and a readout of the peak in decibels. `reset` puts the
- * clip light out (and the peak back to the level) at once, for a click on the readout.
+ * Drive a meter from the engine's levels (DAW-8.5), straight onto the DOM once a frame, never
+ * through React state: forty meters re-rendering at 60 fps would cost more than the mix.
+ *
+ * `useMeterFrames` is the loop: it runs the ballistics and hands each frame's state to a draw
+ * function (the volume knob paints its ring). `useLevelMeter` draws a straight meter: the caller
+ * places the elements it wants and hands their refs here: the bar (revealed from the left to the
+ * level), the peak mark, the clip light, and a readout of the peak in decibels. `reset` puts the
+ * clip out (and the peak back to the level) at once, for a click on the readout.
  */
 import { useCallback, useEffect, useRef } from "react";
-import { positionOfGain } from "../controls/gainTaper";
 import { decibelsOf } from "../../audio/decibels";
 import { nextMeter, SILENT_METER, type MeterState } from "./ballistics";
 import { onMeterFrame } from "./meterLoop";
+import { meterPosition } from "./meterScale";
 
-export interface LevelMeter {
-  bar: React.RefObject<HTMLDivElement | null>;
-  peak: React.RefObject<HTMLDivElement | null>;
-  clip: React.RefObject<HTMLDivElement | null>;
-  readout: React.RefObject<HTMLSpanElement | null>;
-  reset: () => void;
-}
-
-/** The readout's text: the peak to a tenth of a dB, or a dash for silence. */
-const readoutOf = (peak: number) => {
-  const decibels = decibelsOf(peak);
-  return decibels === -Infinity ? "-∞" : decibels.toFixed(1);
-};
-
-/** Show `read()` (the loudest sample since the last frame, as a gain) on the meter's elements. */
-export function useLevelMeter(read: (() => number) | undefined): LevelMeter {
-  const bar = useRef<HTMLDivElement>(null);
-  const peak = useRef<HTMLDivElement>(null);
-  const clip = useRef<HTMLDivElement>(null);
-  const readout = useRef<HTMLSpanElement>(null);
+/** Run the meter's ballistics on `read()` each frame and `draw` the result; `reset` clears a clip. */
+export function useMeterFrames(
+  read: (() => number) | undefined,
+  draw: (state: MeterState, now: number) => void,
+): () => void {
   const readRef = useRef(read);
+  const drawRef = useRef(draw);
   const resetRef = useRef(false);
   useEffect(() => {
     readRef.current = read;
+    drawRef.current = draw;
   });
   const enabled = read !== undefined;
 
@@ -47,24 +37,49 @@ export function useLevelMeter(read: (() => number) | undefined): LevelMeter {
         state = { ...state, peak: state.level, peakAt: now, clipUntil: 0 };
         resetRef.current = false;
       }
-      const level = positionOfGain(state.level);
-      const mark = positionOfGain(state.peak);
-      const clipped = now < state.clipUntil;
-      if (bar.current) bar.current.style.clipPath = `inset(0 ${(1 - level) * 100}% 0 0)`;
-      if (peak.current) {
-        peak.current.style.left = `${mark * 100}%`;
-        peak.current.style.opacity = mark > 0.01 ? "1" : "0";
-      }
-      if (clip.current) clip.current.style.opacity = clipped ? "1" : "0";
-      if (readout.current) {
-        readout.current.textContent = readoutOf(state.peak);
-        readout.current.dataset.clipped = String(clipped);
-      }
+      drawRef.current(state, now);
     });
   }, [enabled]);
 
-  const reset = useCallback(() => {
+  return useCallback(() => {
     resetRef.current = true;
   }, []);
+}
+
+export interface LevelMeter {
+  bar: React.RefObject<HTMLDivElement | null>;
+  peak: React.RefObject<HTMLDivElement | null>;
+  clip: React.RefObject<HTMLDivElement | null>;
+  readout: React.RefObject<HTMLSpanElement | null>;
+  reset: () => void;
+}
+
+/** The readout's text: the peak to a tenth of a dB, or -∞ for silence. */
+const readoutOf = (peak: number) => {
+  const decibels = decibelsOf(peak);
+  return decibels === -Infinity ? "-∞" : `${decibels > 0 ? "+" : ""}${decibels.toFixed(1)}`;
+};
+
+/** Show `read()` (the loudest sample since the last frame, as a gain) on a straight meter's elements. */
+export function useLevelMeter(read: (() => number) | undefined): LevelMeter {
+  const bar = useRef<HTMLDivElement>(null);
+  const peak = useRef<HTMLDivElement>(null);
+  const clip = useRef<HTMLDivElement>(null);
+  const readout = useRef<HTMLSpanElement>(null);
+  const reset = useMeterFrames(read, (state, now) => {
+    const level = meterPosition(state.level);
+    const mark = meterPosition(state.peak);
+    const clipped = now < state.clipUntil;
+    if (bar.current) bar.current.style.clipPath = `inset(0 ${(1 - level) * 100}% 0 0)`;
+    if (peak.current) {
+      peak.current.style.left = `${mark * 100}%`;
+      peak.current.style.opacity = mark > 0.01 ? "1" : "0";
+    }
+    if (clip.current) clip.current.style.opacity = clipped ? "1" : "0";
+    if (readout.current) {
+      readout.current.textContent = readoutOf(state.peak);
+      readout.current.dataset.clipped = String(clipped);
+    }
+  });
   return { bar, peak, clip, readout, reset };
 }

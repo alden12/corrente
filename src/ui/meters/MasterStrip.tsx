@@ -1,27 +1,27 @@
 /**
- * The master, in the timeline's top-left corner above the track headers (DAW-8.5): a stereo meter on
- * the left, the master fader across the rest, and the peak in decibels at the end. Built for the
- * corner's 22px, and made to look unlike a track's fader so it reads as the whole mix rather than one
- * more track: two meter bars, one per side, a fader with a groove, marks at -24, -12, -6 and 0 dB
- * and a block handle, and a number. The number turns red while a clip is held; a click on it
- * clears it.
+ * The master, in the timeline's top-left corner above the track headers (DAW-8.5): one meter-fader
+ * across the corner, then the peak in decibels.
  *
- * The fader is the master volume (`setMasterVolume`), on the faders' decibel taper; the meter is
- * the mix after it, before the soft clip, so a red number means the master is being driven past
- * full scale and turning the master down is the fix.
+ * - **The groove is the meter:** two bars, left over right, filling from the left on the meters'
+ *   scale (`meterScale`): green, amber over -6 dB, red over -1 dB. Past the 0 dB mark the groove
+ *   carries on into a red-tinted over zone up to +6 dB, since the master sums ahead of its soft clip
+ *   and can go over: you see how far, not just that it did.
+ * - **The caret above the groove is the master volume** (`setMasterVolume`), on the faders' taper,
+ *   topping out at 0 dB. It sits on the groove's top edge, with a hairline down, so it marks the
+ *   volume without covering the level. Drag anywhere on the strip; arrow keys nudge.
+ * - **The number** is the recent peak, red while a clip is held; a click clears it.
+ *
+ * Marks at -24, -12, -6 and 0 dB. It reads as the whole mix, and apart from the tracks' knobs.
  */
 import { useMemo, useRef } from "react";
 import { capturePointerDrag, releasePointerDrag } from "../dragGesture";
 import { formatDecibels, gainOfPosition, positionOfGain } from "../controls/gainTaper";
 import { useLevelSource, type LevelSource } from "./levelsContext";
 import { useLevelMeter } from "./useLevelMeter";
-import { METER_GRADIENT } from "./meterColors";
+import { METER_GRADIENT, ZERO_AT, meterPosition } from "./meterScale";
 
-/** The decibel marks on the master's groove. */
-const MARKS = [-24, -12, -6, 0].map((decibels) => ({
-  decibels,
-  left: positionOfGain(10 ** (decibels / 20)) * 100,
-}));
+/** The decibel marks along the groove. */
+const MARKS = [-24, -12, -6, 0].map((decibels) => ({ decibels, left: meterPosition(10 ** (decibels / 20)) * 100 }));
 const KEY_STEP = 0.05;
 
 /** One read of the master a frame, shared by the meters: left, right and the louder of the two. */
@@ -39,15 +39,18 @@ function frameReads(source: LevelSource) {
   return { left: () => read()[0], right: () => read()[1], louder: () => Math.max(...read()) };
 }
 
+/** One side's bar in the groove, with its peak mark. */
 function MeterBar({ read, label }: { read: (() => number) | undefined; label: string }) {
-  const { bar } = useLevelMeter(read);
+  const { bar, peak } = useLevelMeter(read);
   return (
-    <div aria-hidden="true" title={label} className="relative h-0.75 rounded-full bg-line overflow-hidden">
+    <div aria-hidden="true" title={label} className="relative h-1 overflow-hidden">
       <div
         ref={bar}
+        data-testid="master-meter-bar"
         className="absolute inset-0"
         style={{ background: METER_GRADIENT, clipPath: "inset(0 100% 0 0)" }}
       />
+      <div ref={peak} className="absolute inset-y-0 w-px bg-ink/70" style={{ opacity: 0 }} />
     </div>
   );
 }
@@ -58,19 +61,17 @@ export function MasterStrip({ volume, onVolume }: { volume: number; onVolume: (v
   const { readout, reset } = useLevelMeter(reads?.louder);
   const grooveRef = useRef<HTMLDivElement>(null);
   const position = positionOfGain(volume);
+  /** Where the caret sits along the groove: the fader's travel ends at the 0 dB mark. */
+  const caret = position * ZERO_AT * 100;
 
   const setFromClientX = (clientX: number) => {
     const box = grooveRef.current?.getBoundingClientRect();
-    if (box) onVolume(gainOfPosition((clientX - box.left) / box.width));
+    if (box) onVolume(gainOfPosition((clientX - box.left) / box.width / ZERO_AT));
   };
 
   return (
     <div data-testid="master-strip" className="@container h-full flex items-center gap-2 pl-2.5 pr-1.5">
       <span className="font-mono text-[9px] tracking-[0.14em] text-muted shrink-0">MASTER</span>
-      <div data-testid="master-meter" className="w-10 shrink-0 flex flex-col gap-px">
-        <MeterBar read={reads?.left} label="Left" />
-        <MeterBar read={reads?.right} label="Right" />
-      </div>
       <div
         ref={grooveRef}
         role="slider"
@@ -94,32 +95,45 @@ export function MasterStrip({ volume, onVolume }: { volume: number; onVolume: (v
           if (event.key === "ArrowLeft" || event.key === "ArrowDown") onVolume(gainOfPosition(position - KEY_STEP));
           if (event.key === "ArrowRight" || event.key === "ArrowUp") onVolume(gainOfPosition(position + KEY_STEP));
         }}
-        className="relative flex-1 min-w-10 h-4 cursor-pointer select-none touch-none"
+        className="relative flex-1 min-w-12 h-full cursor-pointer select-none touch-none"
       >
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-sm bg-ground border border-line" />
+        {/* The groove: the two sides' bars, the over zone tinted past 0 dB, and the marks. */}
+        <div
+          data-testid="master-meter"
+          className="absolute inset-x-0 bottom-1 flex flex-col gap-px p-px rounded-[3px] bg-ground border border-line overflow-hidden"
+        >
+          <div
+            aria-hidden="true"
+            className="absolute inset-y-0 right-0 bg-hot/15"
+            style={{ left: `${ZERO_AT * 100}%` }}
+          />
+          <MeterBar read={reads?.left} label="Left" />
+          <MeterBar read={reads?.right} label="Right" />
+        </div>
         {MARKS.map((mark) => (
           <div
             key={mark.decibels}
             aria-hidden="true"
-            className="absolute top-0.5 bottom-0.5 w-px bg-line"
+            className={`absolute bottom-0 h-1 w-px ${mark.decibels === 0 ? "bg-muted" : "bg-line"}`}
             style={{ left: `${mark.left}%` }}
           />
         ))}
+        {/* The volume: a caret on the groove's top edge and a hairline down through it. */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-0.5 left-0 rounded-sm bg-you"
-          style={{ width: `${position * 100}%` }}
-        />
-        <div
-          className="absolute top-1/2 h-3 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-you bg-panel"
-          style={{ left: `${position * 100}%` }}
-        />
+          aria-hidden="true"
+          className="absolute top-0.5 bottom-1 w-0 pointer-events-none"
+          style={{ left: `${caret}%` }}
+        >
+          <div className="absolute top-0 -translate-x-1/2 w-0 h-0 border-x-[4px] border-x-transparent border-t-[5px] border-t-you" />
+          <div className="absolute top-1 bottom-0 -translate-x-1/2 w-px bg-you/70" />
+        </div>
       </div>
       <button
         type="button"
         onClick={reset}
         title="The master's peak, in dB: red after a clip. Click to clear."
         aria-label="Master peak"
-        className="hidden @[12rem]:block w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-muted cursor-pointer"
+        className="hidden @[12rem]:block w-9 shrink-0 text-right font-mono text-[10px] tabular-nums text-muted cursor-pointer"
       >
         <span ref={readout} data-testid="master-peak" className="data-[clipped=true]:text-hot">
           -∞
