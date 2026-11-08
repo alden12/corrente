@@ -10,6 +10,7 @@
  * **Linked or placed, never both.** A clip linked to a note clip plays wherever that clip plays, so
  * linking one takes its own placements away, and placing one unlinks it.
  */
+import { clamp } from "../../util";
 import type { AutomationBinding, AutomationClipData, AutomationPoint, ClipAuthor, Placement } from "../project/types";
 import type { DeviceColor } from "../deviceColors";
 import { tidyPoints } from "./curve";
@@ -57,7 +58,6 @@ export interface PlacementPatch {
   length?: number;
 }
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const lengthOf = (beats: number) => clamp(beats, MIN_AUTOMATION_BEATS, MAX_AUTOMATION_BEATS);
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 

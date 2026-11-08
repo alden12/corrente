@@ -8,6 +8,7 @@
  * line between the two points' values, `depth` either side. Before the first point the curve holds
  * the first value, after the last it holds the last, so one point is a constant.
  */
+import { clamp } from "../../util";
 import type { AutomationClipData, AutomationPoint, AutomationShape } from "../project/types";
 
 /** A wave's cycle when a point names none: one beat. */
@@ -16,8 +17,6 @@ export const DEFAULT_RATE = 1;
 export const DEFAULT_DEPTH = 0.25;
 /** The shortest cycle a wave may have (a 64th of a beat), so a wave can't alias into noise. */
 export const MIN_RATE = 1 / 64;
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** A line's progress `t` (0..1) bent by `bend` (-1..1): positive rises fast then eases, negative the reverse. */
 export function bent(t: number, bend = 0): number {
