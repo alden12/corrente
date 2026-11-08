@@ -374,6 +374,11 @@ export class EngineBank {
     this.queue.add(EVENT.param, track, this.paramId(param), value, time);
   }
 
+  /** Drop a param's queued moves at or after `time` (automation ahead of the playhead, DAW-67). */
+  clearParam(track: number, param: string, time: number): void {
+    this.queue.clearParam(track, this.paramId(param), time);
+  }
+
   /** A param name's number, for the queue. */
   private paramId(param: string): number {
     const known = this.paramIds.get(param);

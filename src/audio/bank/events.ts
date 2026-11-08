@@ -106,6 +106,20 @@ export class EventQueue {
     this.end = kept;
   }
 
+  /**
+   * Drop a track's queued moves of one param at or after `from`: automation queued ahead of the
+   * playhead (DAW-67), once you grab the knob it was moving or the transport stops.
+   */
+  clearParam(track: number, target: number, from: number): void {
+    let kept = this.start;
+    for (let at = this.start; at < this.end; at++) {
+      const move = this.kinds[at] === EVENT.param && this.targets[at] === target;
+      if (move && this.tracks[at] === track && this.times[at] >= from) continue;
+      this.move(at, kept++);
+    }
+    this.end = kept;
+  }
+
   /** Space at the end: slide the queue back to the start, or double it if it is full. */
   private makeRoom(): void {
     if (this.start > 0) {

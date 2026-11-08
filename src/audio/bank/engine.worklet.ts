@@ -70,6 +70,7 @@ class EngineBankProcessor extends AudioWorkletProcessor {
         this.clearSounding(track);
       },
       param: ({ track, param, value, time }) => this.bank.setParam(track, param, value, time),
+      clearParam: ({ track, param, time }) => this.bank.clearParam(track, param, time),
       midi: ({ track, words }) => {
         try {
           this.bank.loadMidi(track, words);

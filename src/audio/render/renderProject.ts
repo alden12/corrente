@@ -22,7 +22,9 @@
 import { scaleMask } from "../theory/key";
 import { EngineBank } from "../bank/bank";
 import { BLOCK } from "../bank/exports";
-import { instrumentChain, piecesOf, runParts, type ChainPlan } from "../bank/chainPlan";
+import { instrumentChain, piecesOf, planParamOf, runParts, type ChainPlan } from "../bank/chainPlan";
+import { automationMoves, automationRuns } from "../automation/playback";
+import { STEP_SECONDS, knobStore, knobValue } from "../automation/player";
 import { groupDepth, groupEffectStage, INSTRUMENT_STAGE, trackEffectStage } from "../bank/stages";
 import { engineValueOf } from "../definitions/values";
 import { compensate, type MixNode } from "../engine/latency";
@@ -286,6 +288,37 @@ export async function renderProject(
   });
   const generators = players.flatMap((player) => player.devices.filter((device) => device.generates));
 
+  // --- the automation (DAW-67) ---------------------------------------------------------------
+  // Each knob a track's automation moves, sampled as live and set in the slot whose plan plays it.
+  const loopLength = timeline.length - timeline.loopStart;
+  const automated = strips.flatMap((strip) => {
+    const track = strip.track ?? strip.audio;
+    if (!track || track.automations.length === 0) return [];
+    // The arrangement, as the notes play it: a launched clip is live playback's, not the song's.
+    const runs = automationRuns({ ...track, launchedClipId: null }, timeline.loopStart, loopLength);
+    return [{ track, slots: strip.slots, runs }];
+  });
+  const automate = (from: number, to: number) =>
+    automated.forEach(({ track, slots, runs }) =>
+      automationMoves(
+        runs,
+        from / secondsPerBeat,
+        to / secondsPerBeat,
+        timeline.loopStart,
+        loopLength,
+        STEP_SECONDS / secondsPerBeat,
+      ).forEach((move) => {
+        const store = knobStore(track, move.binding);
+        const id = move.binding.param;
+        const slot = store && slots.find((each) => planParamOf(each.chain, store, id) !== undefined);
+        if (!store || !slot) return;
+        const value = engineValueOf(store.spec(id), knobValue(store, id, move.value));
+        banks
+          .get(slot.stage)!
+          .setParam(slot.track, planParamOf(slot.chain, store, id)!, value, move.beat * secondsPerBeat);
+      }),
+    );
+
   // --- latency compensation -----------------------------------------------------------------
   const latencyOf = (strip: Strip) => strip.slots.reduce((sum, slot) => sum + slot.chain.plan.latency, 0);
   const mixNode = (strip: Strip): MixNode => ({ id: strip.id, parentId: strip.parentId, latency: latencyOf(strip) });
@@ -330,6 +363,8 @@ export async function renderProject(
     const start = block * BLOCK;
     const [from, to] = [start / sampleRate, (start + BLOCK) / sampleRate];
     clock.currentTime = from;
+    // The region plays once: past its end the knobs hold where it left them, through the tail.
+    automate(from, Math.min(to, loopLength * secondsPerBeat));
     players.forEach(({ head, byBlock }) =>
       byBlock.get(block)?.forEach((note) => head.playNote(note.pitch, note.length, note.velocity, note.start)),
     );

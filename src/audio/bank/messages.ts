@@ -15,6 +15,8 @@ export type ToBank =
   /** Cut what still rings after its key went up (a new play's start); keys still down sound on. */
   | { type: "cutTails"; track: number; time: number }
   | { type: "param"; track: number; param: string; value: number; time: number }
+  /** Drop a param's queued moves at or after `time`: automation queued ahead (DAW-67). */
+  | { type: "clearParam"; track: number; param: string; time: number }
   /** The track's MIDI devices as chainWords makes them (INST-11.1): none takes them away. */
   | { type: "midi"; track: number; words: Int32Array }
   /** Move a MIDI device value, numbered as chainWords' `values`, at `time`. */

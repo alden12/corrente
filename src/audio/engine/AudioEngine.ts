@@ -20,6 +20,8 @@ import type { AudioClipData } from "../project/types";
 import type { Instrument } from "../instruments/types";
 import { groupDepth, groupEffectStage } from "../bank/stages";
 import { EngineInstrument } from "../bank/EngineInstrument";
+import { EngineDevice } from "../bank/EngineDevice";
+import type { ParamStore } from "../params/store";
 import { ChainEffects } from "./chainEffects";
 import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
 import { COMPENSATION_GLIDE_SECONDS, MixRouter, masterBus } from "./mixer";
@@ -840,6 +842,26 @@ export class AudioEngine {
    */
   getNoteTarget(trackId: string): NoteTarget | undefined {
     return this.nodes.get(trackId)?.noteHead;
+  }
+
+  /** The engine devices playing a track's params: its instrument and its effects (DAW-67). */
+  private trackDevices(trackId: string): EngineDevice[] {
+    const node = this.nodes.get(trackId);
+    const effects = (node?.effects ?? this.audioNodes.get(trackId)?.effects)?.effects() ?? [];
+    return [node?.instrument, ...effects].flatMap((device) => (device instanceof EngineDevice ? [device] : []));
+  }
+
+  /**
+   * Move a track's knob to `value` (its own units) at `time` without editing it: automation playing
+   * (DAW-67). `store` and `id` name the knob: the track's or one of its effects' params.
+   */
+  automate(trackId: string, store: ParamStore, id: string, value: number, time: number): void {
+    this.trackDevices(trackId).some((device) => device.automate(store, id, value, time));
+  }
+
+  /** Drop a knob's automation queued from `time` on, and put its own value back then. */
+  releaseAutomation(trackId: string, store: ParamStore, id: string, time: number): void {
+    this.trackDevices(trackId).some((device) => device.releaseAutomation(store, id, time));
   }
 
   /**

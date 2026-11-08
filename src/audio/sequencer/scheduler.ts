@@ -25,6 +25,7 @@ import {
   arrangementBeatOf,
 } from "./timing";
 import type { Placement } from "../project/types";
+import { AutomationPlayer } from "../automation/player";
 
 export { beatsToSeconds, notesStartingInBeatRange, onsetsInBeatRange, tileClipNotes, clipBeatAt } from "./timing";
 
@@ -124,6 +125,8 @@ export class Scheduler implements TransportClock {
 
   private readonly engine: AudioEngine;
   private readonly project: ProjectStore;
+  /** The tracks' automation as it plays (DAW-67): what knobs it moves, which are grabbed. */
+  readonly automation: AutomationPlayer;
   private readonly onStateChange?: (playing: boolean) => void;
   /** Hears tempo changes while stopped, so the new engine's synced devices keep up. */
   private readonly unsubscribeTempo: () => void;
@@ -142,6 +145,7 @@ export class Scheduler implements TransportClock {
     this.engine = engine;
     this.project = project;
     this.onStateChange = onStateChange;
+    this.automation = new AutomationPlayer(engine, project);
     this.toldTempo = project.tempo;
     this.unsubscribeTempo = project.subscribe(() => {
       if (this.timer === null && this.project.tempo !== this.toldTempo) this.tellTransport();
@@ -255,6 +259,8 @@ export class Scheduler implements TransportClock {
   /** Carry on playing from `count`: what was sounding stops, and the engine hears the new beat. */
   private jumpTo(count: number): void {
     this.silenceAll();
+    // What was queued ahead belongs to where play was; the next window sends where it is now.
+    this.automation.end();
     this.anchorAt(count, this.engine.currentTime);
     this.tellTransport();
     this.tick();
@@ -319,6 +325,7 @@ export class Scheduler implements TransportClock {
     // The last play's ringing tails go: they'd hold the voice slots this one's first notes want. Keys
     // still down (one held through a take's count-in) sound on.
     this.engine.cutTails();
+    this.automation.begin();
     this.anchorAt(this.startCount(), atTime ?? this.engine.currentTime);
     this.lastBps = this.project.tempo / 60;
     this.unsubscribe = this.project.subscribe(() => this.reanchor());
@@ -345,6 +352,7 @@ export class Scheduler implements TransportClock {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.silenceAll();
+    this.automation.end();
     this.tellTransport();
     this.onStateChange?.(false);
   }
@@ -544,6 +552,17 @@ export class Scheduler implements TransportClock {
         }
       }
     }
+    this.automation.schedule(
+      {
+        fromBeat: fromBeats,
+        toBeat: horizonBeats,
+        loopStart,
+        loopLength: loopLen,
+        beatsPerSecond: bps,
+        timeAt: (beat) => this.anchorTime + (beat - this.anchorBeat) / bps,
+      },
+      (track) => track.muted || track.id === this.silencedTrackId,
+    );
     this.scheduledUntilBeats = horizonBeats;
   }
 

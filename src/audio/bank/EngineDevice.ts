@@ -17,12 +17,13 @@
  * or moved effect is bypassed first, and the plan loads a little later, once the bypass has ramped
  * (live only; an offline render has no edits).
  */
-import type { ChainPlan } from "./chainPlan";
+import { planParamOf, type ChainPlan } from "./chainPlan";
 import { chainEdit, reloadOptions, type ChainEdit, type Sent } from "./reloadPlan";
 import { DeviceSamples } from "./deviceSamples";
 import { engineValueOf } from "../definitions/values";
 import { bindParams, type ParamBinding } from "../params/binding";
 import type { ParamValue } from "../params/types";
+import type { ParamStore } from "../params/store";
 import type { FromBank, ToBank } from "./messages";
 import { mainInput, sidechainInput, takeSlot, type BankSlot } from "./pool";
 
@@ -203,6 +204,26 @@ export class EngineDevice {
       ]);
       return bindParams(store, bindings);
     });
+  }
+
+  /**
+   * Move a param to `value` (in its own units) at `time`, apart from its store: automation (DAW-67),
+   * which plays the knob without editing the project. Says whether this device plays that param.
+   */
+  automate(store: ParamStore, id: string, value: number, time: number): boolean {
+    const param = planParamOf(this.chain, store, id);
+    if (param === undefined) return false;
+    this.send({ type: "param", param, value: engineValueOf(store.spec(id), value), time });
+    return true;
+  }
+
+  /** Drop the automation queued for a param from `time` on, and put its store's value back then. */
+  releaseAutomation(store: ParamStore, id: string, time: number): boolean {
+    const param = planParamOf(this.chain, store, id);
+    if (param === undefined) return false;
+    this.send({ type: "clearParam", param, time });
+    this.send({ type: "param", param, value: engineValueOf(store.spec(id), store.get(id)), time });
+    return true;
   }
 
   /** Resolves once the plan and its samples are with the engine, so an offline render doesn't start silent. */

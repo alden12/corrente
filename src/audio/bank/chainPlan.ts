@@ -34,6 +34,15 @@ export interface ChainLayout {
  */
 export type ParamSources = Record<string, { store: ParamStore; id: string }>;
 
+/**
+ * The plan's name for a store's number param, if the chain plays it (and not as a sample): what
+ * automation moves (DAW-67), live and in a render.
+ */
+export const planParamOf = ({ plan, sources }: Pick<ChainPlan, "plan" | "sources">, store: ParamStore, id: string) =>
+  plan.params.find(
+    (source) => !source.sample && sources[source.param]?.store === store && sources[source.param]?.id === id,
+  )?.param;
+
 /** A chain's devices as one plan, and where each param comes from. */
 export interface ChainPlan extends ChainLayout {
   plan: CompiledPlan;
