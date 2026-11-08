@@ -8,6 +8,7 @@
  * touch layout (pinned transport, one view, bottom tabs). Everything above is shared,
  * so mobile is another projection of the same stores rather than a fork.
  */
+import { KnobTake } from "../audio/automation/knobTake";
 import { isMac } from "./keys/platform";
 import { Welcome } from "./hosting/Welcome";
 import { setFromExplore } from "./explore/fromExplore";
@@ -152,6 +153,11 @@ export function AppShell() {
   // A take with your preview in front goes onto a new track with its sound, not onto the preview.
   // In an effect, not the initializer: React may run an initializer twice and keep only one result.
   useEffect(() => recorder.setPreviewSource(previewRecording(projectStore)), [recorder, projectStore]);
+  // Knob moves during a take land as automation clips beside it (DAW-67.7).
+  useEffect(
+    () => new KnobTake(recorder, scheduler, projectStore, editLog.dispatch).start(),
+    [recorder, scheduler, projectStore, editLog],
+  );
   useEffect(() => rememberGroupFolds(projectStore), [projectStore]);
   const [liveNotes] = useState(() => new LiveNotes(engine, projectStore, recorder, preview));
   // The output buffer, picked from whether someone is playing live (INST-36.9).
