@@ -27,12 +27,14 @@ test("a curve drawn in the workbench and bound to the level silences the track w
   const point = editor.getByTestId("curve-point");
   await expect(point).toHaveCount(1);
 
-  // Drag the curve's one point to the bottom: flat at nothing.
+  // Drag the curve's one point to the bottom: flat at nothing. (The section is the column's last, so
+  // bring it into view first.)
+  await editor.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const at = (await point.boundingBox())!;
   const box = (await editor.boundingBox())!;
   await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
   await page.mouse.down();
-  await page.mouse.move(at.x + at.width / 2, box.y + box.height + 20, { steps: 5 });
+  await page.mouse.move(at.x + at.width / 2, box.y + box.height - 2, { steps: 5 });
   await page.mouse.up();
 
   // A click on empty curve adds a point; a double-click on it takes it away again.

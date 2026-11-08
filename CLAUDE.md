@@ -29,6 +29,9 @@ treat these as labels that tie related code together, not as links to follow.
   (`tracks.map((track) => ...)`, not `(t) =>`; `clip`, `placement`, `effect`, `note`,
   not `c`/`p`/`fx`/`n`). Existing single-letter code is grandfathered; write new code
   the readable way and tidy names as you touch the surrounding lines.
+- **No nested ternaries** (`a ? b : c ? d : e`): they're hard to read. Use an `if`/early return, a
+  small named function, or a lookup map instead. One level is fine. Existing ones are grandfathered;
+  don't write new ones, and untangle them as you touch the lines.
 - For key-based dispatch, use an **object key -> value (or key -> function) map**
   instead of `switch`/`case` or long `if`/`else if` chains. Examples in the code:
   the MCP bridge inbound handlers (`src/audio/mcp/bridge.ts`), the param coercers

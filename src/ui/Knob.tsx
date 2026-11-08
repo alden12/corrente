@@ -158,7 +158,7 @@ function NumberKnob({
   return (
     <div className="flex flex-col items-center gap-1.5 w-14">
       <div
-        className="relative w-10 h-10 rounded-full cursor-ns-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
+        className="relative w-10 h-10 rounded-full cursor-ns-resize touch-none select-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
         style={{
           background: `conic-gradient(from 225deg, ${hex} 0deg ${sweep}deg, var(--color-line) ${sweep}deg 270deg, transparent 270deg 360deg)`,
         }}
@@ -231,7 +231,7 @@ function NumberSlider({
       {/* The hit area is the full 24px box; the visible track is a 2px line down the middle.
           Drawing the track *as* the target would leave an 8px-wide thing to hit on touch. */}
       <div
-        className="relative w-6 flex-1 min-h-16 cursor-ns-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
+        className="relative w-6 flex-1 min-h-16 cursor-ns-resize touch-none select-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
         role="slider"
         aria-label={spec.label}
         aria-valuemin={spec.min}

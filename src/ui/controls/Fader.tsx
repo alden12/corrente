@@ -103,7 +103,7 @@ export function Fader({
           event.preventDefault();
           handler();
         }}
-        className="relative flex-1 h-2 rounded-full bg-ground border border-line cursor-ew-resize touch-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
+        className="relative flex-1 h-2 rounded-full bg-ground border border-line cursor-ew-resize touch-none select-none focus-visible:[outline:2px_solid_var(--color-you)] focus-visible:outline-offset-2"
       >
         {/* The catchment. Absolute, so growing it moves nothing around it. */}
         <span className="absolute inset-x-0 -inset-y-3 [@media(pointer:coarse)]:-inset-y-5" />

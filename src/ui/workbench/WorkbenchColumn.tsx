@@ -255,12 +255,9 @@ export function WorkbenchColumn({
         </>
       )}
 
-      {/* The track's automation (DAW-67.5): between the notes and the devices whose knobs it moves. */}
-      {!preview && <AutomationSection track={track} dispatch={dispatch} compact={compact} />}
-
       {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
           sticks to the top once they reach it. */}
-      <section aria-label="Devices" className="pb-6">
+      <section aria-label="Devices" className={preview ? "pb-6" : undefined}>
         <DevicesBar
           track={track}
           projectStore={projectStore}
@@ -285,6 +282,14 @@ export function WorkbenchColumn({
           </RackStacked.Provider>
         )}
       </section>
+
+      {/* The track's automation (DAW-67.5), last: below the devices whose knobs it moves (2026-11-08,
+          Alden), so the notes and the sound they make stay together at the top. */}
+      {!preview && (
+        <div className="pb-6">
+          <AutomationSection track={track} dispatch={dispatch} compact={compact} />
+        </div>
+      )}
     </div>
   );
 }

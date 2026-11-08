@@ -15,6 +15,7 @@ import { AUTOMATION_SHAPES } from "../../audio/project/schema";
 import { DEFAULT_DEPTH, DEFAULT_RATE } from "../../audio/automation/curve";
 import { newAutomationId, newPlacementId } from "../../audio/commands/ids";
 import { SectionHeader } from "../controls/SectionHeader";
+import { BetaChip } from "../BetaChip";
 import { IconButton } from "../controls/IconButton";
 import { InlineRename } from "../InlineRename";
 import { usePersistentBoolean } from "../usePersistent";
@@ -105,9 +106,13 @@ export function AutomationSection({
         title="Automation"
         fold={{ open, onToggle: () => setOpen(!open) }}
         actions={
-          <IconButton label="Add automation" size={compact ? "md" : "sm"} onClick={add}>
-            +
-          </IconButton>
+          <>
+            {/* While it's being built (DAW-67): it will change, and parts of it are missing. */}
+            <BetaChip title="Automation is new and still being built: expect it to change" />
+            <IconButton label="Add automation" size={compact ? "md" : "sm"} onClick={add}>
+              +
+            </IconButton>
+          </>
         }
       >
         <div className="flex items-center gap-1.5 overflow-x-auto">
