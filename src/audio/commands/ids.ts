@@ -16,3 +16,7 @@ export const newNoteId = () => randomUuid();
 // Custom-device type ids are namespaced so they can never collide with a built-in type.
 export const newCustomInstrumentId = () => `ci-${short()}`;
 export const newCustomEffectId = () => `ce-${short()}`;
+// Automation clips (DAW-67), their points and the knobs they drive.
+export const newAutomationId = () => `au-${short()}`;
+export const newAutomationPointId = () => `ap-${short()}`;
+export const newAutomationBindingId = () => `ab-${short()}`;

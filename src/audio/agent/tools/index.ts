@@ -17,6 +17,7 @@ import { clipTools } from "./clips";
 import { soundTools } from "./sound";
 import { projectTools } from "./project";
 import { analysisTools } from "./analysis";
+import { automationTools } from "./automation";
 
 export type { AgentToolDeps } from "./factory";
 
@@ -28,5 +29,6 @@ export function createAgentTools(deps: AgentToolDeps): AgentTool[] {
     ...soundTools(context),
     ...projectTools(context),
     ...analysisTools(context),
+    ...automationTools(context),
   ];
 }

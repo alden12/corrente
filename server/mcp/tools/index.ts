@@ -19,6 +19,7 @@ import { registerPatchesTools } from "./patches";
 import { registerFeedTools } from "./feed";
 import { registerLiveNotesTools } from "./liveNotes";
 import { registerAnalysisTools } from "./analysis";
+import { registerAutomationTools } from "./automation";
 
 export function registerDawTools(context: ToolContext): void {
   registerTracksTools(context);
@@ -36,4 +37,5 @@ export function registerDawTools(context: ToolContext): void {
   registerFeedTools(context);
   registerLiveNotesTools(context);
   registerAnalysisTools(context);
+  registerAutomationTools(context);
 }

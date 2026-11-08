@@ -917,6 +917,42 @@ describe("MCP server (tracks)", () => {
     expect(res.content[0].text).toMatch(/no daw tab connected/i);
   });
 
+  it("adds automation on the tab and its own mirror, from the tools the agent shares", async () => {
+    const messages = await connectTab();
+    const trackId = await makeTrack("subtractive");
+    const added = parse(
+      await call("add_automation", {
+        track: trackId,
+        points: [
+          { beat: 0, value: 0 },
+          { beat: 4, value: 1, shape: "sine", rate: 0.5 },
+        ],
+        drives: [{ device: "instrument", param: "filter.cutoff" }],
+        start_beat: 8,
+      }),
+    );
+    await waitFor(() => typesOf(messages).includes("addAutomation"));
+    const sent = messages.find((message) => (message as { type: string }).type === "addAutomation") as {
+      id: string;
+      name: string;
+    };
+    expect(sent).toMatchObject({
+      id: added.id,
+      name: "Automation",
+      placement: { id: added.placementId, startBeat: 8 },
+    });
+    const listed = parse(await call("list_automation", { track: trackId })).automations;
+    expect(listed).toHaveLength(1);
+    expect(listed[0].drives[0]).toMatchObject({ device: "instrument", param: "filter.cutoff" });
+    expect(listed[0].placements[0].startBeat).toBe(8);
+    const refused = await call("add_automation", {
+      track: trackId,
+      drives: [{ device: "instrument", param: "osc.waveform" }],
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0].text).toMatch(/not a number knob/);
+  });
+
   it("remove_group cascades and removes its tracks", async () => {
     const messages = await connectTab();
     const trackId = await makeTrack("subtractive");
