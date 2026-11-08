@@ -14,8 +14,15 @@ import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { Menu } from "../Menu";
 import { InlineRename } from "../InlineRename";
 import { Fader, MuteSolo } from "../MixerControls";
+import { useLevelSource } from "../meters/levelsContext";
 import { Lane } from "./Lane";
 import { ROW, GUTTER, GUTTER_PAD, INDENT, type Selection } from "./shared";
+
+/** A track's or group's level for its fader's meter (DAW-8.5): the louder channel, as a gain. */
+function useMeter(id: string): (() => number) | undefined {
+  const source = useLevelSource();
+  return source ? () => Math.max(...source.levels(id)) : undefined;
+}
 
 export function GroupHeader({
   group,
@@ -28,6 +35,7 @@ export function GroupHeader({
   projectStore: ProjectStore;
   dispatch: Dispatch;
 }) {
+  const meter = useMeter(group.id);
   return (
     <div
       className={`${ROW} flex items-center gap-2 pr-2.5 border-b border-r border-line bg-ground`}
@@ -59,6 +67,7 @@ export function GroupHeader({
         value={group.volume}
         title="Group volume"
         width={48}
+        meter={meter}
         onChange={(v) => dispatch({ type: "setGroup", groupId: group.id, volume: v })}
       />
       <Menu
@@ -110,6 +119,7 @@ function TrackHeader({
   // Always-on left accent in the track's colour (DAW-47), the one its clips take. Selection is carried
   // by the background tint, so the two cues don't fight one edge.
   const accent = paletteAccent(track.color);
+  const meter = useMeter(track.id);
   return (
     <div
       onClick={() => projectStore.selectTrack(track.id)}
@@ -152,6 +162,7 @@ function TrackHeader({
         value={track.volume}
         title="Volume"
         width={56}
+        meter={meter}
         onPointerDownCapture={(e) => e.stopPropagation()}
         onChange={(v) => dispatch({ type: "setTrack", trackId: track.id, volume: v })}
       />

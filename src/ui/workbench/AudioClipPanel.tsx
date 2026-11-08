@@ -7,6 +7,7 @@
  * Extracted from CenterWorkbench when the touch shell gave the editor its own tab
  * (MOBILE-1); the behaviour is unchanged.
  */
+import { formatDecibels } from "../controls/gainTaper";
 import type { Fold } from "../controls/FoldButton";
 import { SectionHeader } from "../controls/SectionHeader";
 import { useEffect, useRef, useState } from "react";
@@ -259,7 +260,7 @@ export function AudioClipPanel({
             <label className="inline-flex items-center gap-2 font-mono text-[11px] text-muted ml-auto">
               Gain
               <Fader value={clip.gain} max={4} width={80} title="Clip gain" onChange={(v) => setClip({ gain: v })} />
-              <span className="text-faint w-10">{clip.gain.toFixed(2)}×</span>
+              <span className="text-faint w-16">{formatDecibels(clip.gain)}</span>
             </label>
           </div>
         </div>

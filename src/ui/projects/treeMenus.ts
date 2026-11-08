@@ -8,15 +8,16 @@ import { newGroupId, newTrackId } from "../../audio/commands/ids";
 import { EMPTY_INSTRUMENT } from "../../audio/instruments/catalog";
 import { colorMenu } from "../deviceColor";
 import type { MenuItem } from "../Menu";
+import { formatDecibels, gainOfPosition, positionOfGain } from "../controls/gainTaper";
 
-/** A level, 0..1, set in place in the menu. */
+/** A level, as a gain 0..1, set in place in the menu on the faders' decibel taper (DAW-8.5). */
 const levelItem = (volume: number, set: (volume: number) => void): MenuItem => ({
   label: "Level",
   fader: {
-    position: volume,
-    onPosition: set,
-    display: String(Math.round(volume * 100)),
-    aria: { now: Math.round(volume * 100), min: 0, max: 100 },
+    position: positionOfGain(volume),
+    onPosition: (position) => set(gainOfPosition(position)),
+    display: formatDecibels(volume),
+    aria: { now: Math.round(positionOfGain(volume) * 100), min: 0, max: 100 },
   },
 });
 

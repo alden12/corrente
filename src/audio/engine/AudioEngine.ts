@@ -23,6 +23,7 @@ import { EngineInstrument } from "../bank/EngineInstrument";
 import { ChainEffects } from "./chainEffects";
 import { trackInstrument, updateTrackInstrument } from "./trackInstrument";
 import { COMPENSATION_GLIDE_SECONDS, MixRouter, masterBus } from "./mixer";
+import { LevelMeters } from "./levels";
 import { createMidiDevice } from "../midi/device/registry";
 import { GraphMidiDevice, type NoteTarget } from "../midi/device/GraphMidiDevice";
 import type { TransportClock } from "../midi/device/clock";
@@ -64,6 +65,8 @@ const disposeTrackNode = (node: TrackNode): void => {
 
 /** The metronome's id in the mix router: not a track, but delayed like one. */
 const METRONOME = "metronome";
+/** The master's meter's id: no track or group id looks like it. */
+const MASTER_METER = "~master";
 
 interface AudioTrackNode {
   /** Where this track's scheduled buffer sources feed in. */
@@ -91,6 +94,8 @@ export class AudioEngine {
    */
   private router: MixRouter | null = null;
   private master: GainNode | null = null;
+  /** The meters' analysers, made as meters ask (DAW-8.5). */
+  private meters: LevelMeters | null = null;
   /** A master-level bus for the metronome click (independent of any track). */
   private metronomeGain: GainNode | null = null;
   private metronomeVolume = 0.6;
@@ -231,6 +236,7 @@ export class AudioEngine {
     this.stopSlow = onSlowBlocks(ctx, (blocks) => this.slowListeners.emit(blocks));
     setEngineTransport(ctx, this.engineTransport ?? { time: 0, beat: 0, tempo: project.tempo, playing: false });
     this.master = masterBus(ctx);
+    this.meters = new LevelMeters(ctx);
     this.router = new MixRouter(ctx, (parentId) => this.parentInput(parentId), COMPENSATION_GLIDE_SECONDS);
     // The metronome feeds the master bus (so it is limited with everything else) but is not a
     // track, so it ignores mute/solo and the arrangement. It is as late as the whole mix (INST-36.7),
@@ -450,6 +456,22 @@ export class AudioEngine {
   /** Route a track or group into its parent through its compensating delay. */
   private route(id: string, from: AudioNode, parentId: string | null): void {
     this.router?.route(id, from, parentId);
+    // Routing cuts the node's other connections, its meter's among them.
+    this.meters?.attach(id, from);
+  }
+
+  /**
+   * How loud a track or group is just now, after its volume: the loudest sample of each channel over
+   * the last ~43 ms, as a gain (1 is 0 dBFS). For its meter (DAW-8.5); silence before audio starts.
+   */
+  levels(id: string): [number, number] {
+    const node = this.groupNodes.get(id)?.output ?? this.nodes.get(id)?.gain ?? this.audioNodes.get(id)?.gain;
+    return this.meters?.levels(id, node) ?? [0, 0];
+  }
+
+  /** How loud the master is just now, left and right, before the soft clip. */
+  masterLevels(): [number, number] {
+    return this.meters?.levels(MASTER_METER, this.master ?? undefined) ?? [0, 0];
   }
 
   /** Set every compensating delay from how late each track's and group's own chain is. */
@@ -893,6 +915,7 @@ export class AudioEngine {
     this.decoding.clear();
     this.metronomeGain?.disconnect();
     this.master?.disconnect();
+    this.meters = null;
     this.stopSlow?.();
     this.stopSlow = null;
     void this.ctx?.close();
