@@ -19,6 +19,7 @@
  * is one undo step and one feed entry. Geometry is shared with the piano roll via
  * `timeGrid`/`Ruler`, so the two views stay pixel-for-pixel consistent.
  */
+import { MasterStrip } from "./meters/MasterStrip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProjectStore } from "../audio/project/projectStore";
 import type { Scheduler } from "../audio/sequencer/scheduler";
@@ -519,7 +520,12 @@ export function ArrangementTimeline({
                     stickyHeaders ? "sticky left-0 z-10" : ""
                   }`}
                   style={{ width: headerW, height: RULER_H }}
-                ></div>
+                >
+                  <MasterStrip
+                    volume={project.masterVolume}
+                    onVolume={(volume) => dispatch({ type: "setMasterVolume", volume })}
+                  />
+                </div>
                 <Ruler
                   viewBeats={viewBeats}
                   loopStart={project.loopStart}

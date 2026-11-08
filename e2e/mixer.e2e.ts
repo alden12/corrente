@@ -31,7 +31,7 @@ test("a track's fader meters its level, and reads out in decibels (DAW-8.5)", as
   await page.goto("/");
   await dismissStart(page);
   const scroll = page.getByTestId("arr-scroll");
-  const fader = scroll.getByRole("slider", { name: "Volume" }).first();
+  const fader = scroll.getByRole("slider", { name: "Volume", exact: true }).first();
   await expect(fader).toHaveAttribute("aria-valuetext", /dB$/);
 
   // The meter's bar is clipped away to nothing in silence, and opens as a note sounds.
@@ -40,5 +40,29 @@ test("a track's fader meters its level, and reads out in decibels (DAW-8.5)", as
   await expect.poll(shown).toMatch(/inset\(0px 100%/);
   await page.keyboard.down("z");
   await expect.poll(shown, { message: "the meter rises with the note" }).not.toMatch(/inset\(0px 100%/);
+  await page.keyboard.up("z");
+});
+
+test("the master strip: a fader in decibels, undoable, and a stereo meter (DAW-8.5)", async ({ page }) => {
+  await page.goto("/");
+  await dismissStart(page);
+  const master = page.getByRole("slider", { name: "Master volume" });
+  await expect(master).toHaveAttribute("aria-valuetext", "0.0 dB");
+  await master.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(master).not.toHaveAttribute("aria-valuetext", "0.0 dB");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(master).toHaveAttribute("aria-valuetext", "0.0 dB");
+
+  // Both sides' bars open as a note sounds, and the peak reads out in decibels.
+  const bars = page.getByTestId("master-meter").locator("div > div");
+  const opened = () =>
+    bars.evaluateAll(
+      (elements) => elements.filter((element) => !/inset\(0px 100%/.test(getComputedStyle(element).clipPath)).length,
+    );
+  await master.blur();
+  await page.keyboard.down("z");
+  await expect.poll(opened, { message: "both sides of the master meter rise" }).toBe(2);
+  await expect(page.getByTestId("master-peak")).toHaveText(/^-\d+\.\d$/);
   await page.keyboard.up("z");
 });

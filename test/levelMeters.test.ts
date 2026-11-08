@@ -49,3 +49,35 @@ describe("a meter's ballistics (DAW-8.5)", () => {
     expect(nextMeter(SILENT_METER, 0.9, 1000).clipUntil).toBe(0);
   });
 });
+
+describe("the master volume (DAW-8.5)", () => {
+  it("is an edit: set, clamped, undone, and coalesced while dragged", async () => {
+    const { ProjectStore } = await import("../src/audio/project/projectStore");
+    const { EditLog } = await import("../src/audio/commands/editLog");
+    const project = new ProjectStore(false);
+    const log = new EditLog(project);
+    expect(project.masterVolume).toBe(1);
+    log.dispatch({ type: "setMasterVolume", volume: 0.5 });
+    log.dispatch({ type: "setMasterVolume", volume: 0.4 });
+    expect(project.masterVolume).toBe(0.4);
+    log.dispatch({ type: "setMasterVolume", volume: 3 });
+    expect(project.masterVolume).toBe(1);
+    // One drag, one undo step: the three moves coalesced.
+    log.dispatch({ type: "setMasterVolume", volume: 0.5 });
+    log.undo();
+    expect(project.masterVolume).toBe(1);
+    expect(log.getState().canUndo).toBe(false);
+  });
+
+  it("is saved only once moved, and loads back", async () => {
+    const { ProjectStore } = await import("../src/audio/project/projectStore");
+    const project = new ProjectStore(false);
+    expect(project.snapshot()).not.toHaveProperty("masterVolume");
+    project.setMasterVolume(0.25);
+    const saved = project.snapshot();
+    expect(saved.masterVolume).toBe(0.25);
+    const loaded = new ProjectStore(false);
+    loaded.load(saved);
+    expect(loaded.masterVolume).toBe(0.25);
+  });
+});
