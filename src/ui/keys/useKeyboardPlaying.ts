@@ -25,6 +25,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { isTypingTarget } from "../typingTarget";
+import { isMac } from "./platform";
 import { padKey, type PadNoteTarget, type PadNotes } from "../pads/usePadTouch";
 import { OCTAVE_KEYS, type KeyPad } from "./keyLayout";
 import { createValueStore } from "../../listeners";
@@ -109,8 +110,10 @@ export function useKeyboardPlaying({
     if (!enabled) return;
     const onDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
-      // A shortcut (Cmd+A selects all in the roll), not a note.
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // A shortcut (Cmd+A selects all in the roll), not a note. Ctrl+Shift on a Mac is the second lift
+      // (`useLift`), so its keys play.
+      const lifting = event.ctrlKey && event.shiftKey && isMac();
+      if (event.metaKey || event.altKey || (event.ctrlKey && !lifting)) return;
       if (event.code === "Tab") {
         event.preventDefault();
         if (!event.repeat) target.setSustain?.(true);
@@ -155,17 +158,24 @@ export function useKeyboardPlaying({
 }
 
 /**
- * Shift is held: the octave rows turn into their accidentals while it is. Read off every key
- * event's modifier state rather than the Shift key's own events, so a Shift pressed before the
- * window had focus still counts at the next key.
+ * How far the held modifiers lift the keys (keyLayout's `lift`): 1 with Shift, 2 with Ctrl+Shift
+ * where `twoUp` allows it (chords mode on a Mac), else 0. Read off every key event's modifier state
+ * rather than the modifiers' own events, so one pressed before the window had focus still counts at
+ * the next key.
+ *
+ * Ctrl+Shift only on a Mac: elsewhere the browser keeps Ctrl+Shift+W, T, N and Q for itself (W closes
+ * the window) and a page can't stop it, and Cmd+Shift on a Mac would be worse (while Cmd is held a
+ * Mac browser sends no key-ups for other keys, so notes stick, and Cmd+Shift+3, 4 and 5 are the
+ * system's screenshots). So off a Mac, rows nine and up are reached by clicking (DAW-12.1.2).
  */
-export function useShiftHeld(enabled: boolean): boolean {
-  const [held, setHeld] = useState(false);
+export function useLift(enabled: boolean, twoUp: boolean): number {
+  const [lift, setLift] = useState(0);
   useEffect(() => {
     if (!enabled) return;
-    const read = (event: KeyboardEvent) => setHeld(event.getModifierState("Shift"));
-    // Shift's key-up may land in another window.
-    const drop = () => setHeld(false);
+    const read = (event: KeyboardEvent) =>
+      setLift(!event.getModifierState("Shift") ? 0 : twoUp && event.getModifierState("Control") ? 2 : 1);
+    // A modifier's key-up may land in another window.
+    const drop = () => setLift(0);
     window.addEventListener("keydown", read);
     window.addEventListener("keyup", read);
     window.addEventListener("blur", drop);
@@ -174,6 +184,6 @@ export function useShiftHeld(enabled: boolean): boolean {
       window.removeEventListener("keyup", read);
       window.removeEventListener("blur", drop);
     };
-  }, [enabled]);
-  return enabled && held;
+  }, [enabled, twoUp]);
+  return enabled ? lift : 0;
 }

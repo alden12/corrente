@@ -17,7 +17,7 @@
  *   F# G# A# on G H J, and nothing over E and B. The tracker layout, and a piano's black keys: the
  *   note rows are drawn half a key to the right (`isAccidentalRow`), so each accidental sits between
  *   the two notes it is between.
- * - **Shift** (`raised`) turns every key of an octave row, while held, into **its own note's sharp**,
+ * - **Shift** (`lift`) turns every key of an octave row, while held, into **its own note's sharp**,
  *   where that is outside the scale, and blanks the rest (E and B in C major): the panel shows
  *   exactly which keys have one. Tried and dropped (2026-10-09): falling back to the flat so no key
  *   is dead, with the two keys either side of a black key merged into one pad - it read as two keys
@@ -89,10 +89,11 @@ export interface KeyboardLayoutOptions {
   lowOctave: number;
   rowMode: KeyRowMode;
   /**
-   * Shift is held: each key of an octave row plays the black key beside its note, and in chords mode
-   * the keyboard's rows move up a keyboard's worth, onto chord rows five to eight.
+   * How far a modifier lifts the keys (`useLift`): 0, or 1 with Shift held, when each key of an octave
+   * row plays the black key beside its note and in chords mode the keys move up a keyboard's worth,
+   * onto chord rows five to eight. 2, chords only, with Ctrl+Shift on a Mac: rows nine to twelve.
    */
-  raised: boolean;
+  lift: number;
   chords: boolean;
   prefs: ChordPrefs;
   /** Lay out hidden chords too, for the chord editor. */
@@ -111,7 +112,7 @@ export const isAccidentalRow = (
 ): boolean => !chords && rowMode === "accidentals" && rowIndex % 2 === 1;
 
 function noteKeys(options: KeyboardLayoutOptions): KeyCell[][] {
-  const { tonic, scale, lowOctave, rowMode, raised } = options;
+  const { tonic, scale, lowOctave, rowMode, lift } = options;
   const intervals: readonly number[] = SCALES[scale];
   const inScale = (semitones: number) => intervals.includes(((semitones % 12) + 12) % 12);
   /** A column's note, in semitones above the row's tonic. */
@@ -133,7 +134,7 @@ function noteKeys(options: KeyboardLayoutOptions): KeyCell[][] {
     codes.map((code, column) => {
       const octave = rowMode === "accidentals" ? Math.floor(rowIndex / 2) : rowIndex;
       if (rowMode === "octaves")
-        return { code, pad: raised ? sharpOf(octave, degreeAt(column)) : pad(octave, degreeAt(column)) };
+        return { code, pad: lift > 0 ? sharpOf(octave, degreeAt(column)) : pad(octave, degreeAt(column)) };
       if (!isAccidentalRow(rowIndex, options)) return { code, pad: pad(octave, degreeAt(column)) };
       // The key up and to the right of a note plays its sharp, so the first key has none.
       if (column === 0) return { code, pad: null };
@@ -153,7 +154,7 @@ const offKeyCodes = (rowIndex: number): readonly string[] =>
 /** Whether a cell is one of the chord rows past the keys rather than a real key. */
 export const isOffKeyCode = (code: string) => code.startsWith("off-keys-");
 
-function chordKeys({ tonic, scale, lowOctave, prefs, editing, raised }: KeyboardLayoutOptions): KeyCell[][] {
+function chordKeys({ tonic, scale, lowOctave, prefs, editing, lift }: KeyboardLayoutOptions): KeyCell[][] {
   const grid = (octave: number, rows?: number) =>
     chordRows({ tonic, scale, lowOctave: lowOctave + octave, prefs, editing, rows });
   // Every row the key fills, and never fewer than the keyboard's four; the same for each octave.
@@ -162,8 +163,9 @@ function chordKeys({ tonic, scale, lowOctave, prefs, editing, raised }: Keyboard
   // degree is that column of the octave above (and the closing tonic is the next octave's first).
   const degrees = SCALES[scale].length;
   const grids = Array.from({ length: Math.ceil(KEYS_PER_ROW / degrees) }, (_unused, octave) => grid(octave, depth));
-  // Raised, the keys play the four rows above their own, and their own rows are clicked.
-  const keyRow = raised ? KEY_ROW_COUNT : 0;
+  // Lifted, the keys play the rows a keyboard's worth (or two) above their own, and the rows they
+  // leave are clicked.
+  const keyRow = lift * KEY_ROW_COUNT;
   const codesFor = (rowIndex: number) =>
     (rowIndex >= keyRow ? KEY_ROWS[rowIndex - keyRow] : undefined) ?? offKeyCodes(rowIndex);
   return Array.from({ length: depth }, (_unused, rowIndex) =>

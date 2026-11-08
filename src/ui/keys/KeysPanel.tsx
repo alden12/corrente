@@ -13,6 +13,7 @@
  * of the accidental rows, so each accidental sits between the two notes it is between as a black
  * key does, and a key that plays nothing is not drawn at all.
  */
+import { isMac } from "./platform";
 import { useEffect, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { PadButton } from "../pads/PadButton";
 import type { PadSettings } from "../pads/padSettings";
@@ -82,7 +83,7 @@ export function KeysPanel({
   const hint = kit
     ? "Pads in order, from Z"
     : settings.chords
-      ? "Shift rows 5-8 · Tab sustain · [ ] octave"
+      ? `Shift rows 5-8${isMac() ? " · ⌃⇧ 9-12" : ""} · Tab sustain · [ ] octave`
       : rowMode === "octaves"
         ? "Shift sharps · Tab sustain · [ ] octave"
         : "Tab sustain · [ ] octave";

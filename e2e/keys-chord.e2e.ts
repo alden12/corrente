@@ -69,3 +69,33 @@ test("a held chord that leads to a new key offers it above, taken by letting go 
   await expect(page.getByRole("button", { name: "Key and scale" })).toContainText("A minor");
   await expect(bubble).toHaveCount(0);
 });
+
+test.describe("on a Mac", () => {
+  // Ctrl+Shift lifts the keys only on a Mac (elsewhere the browser keeps Ctrl+Shift+W and co).
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }));
+  });
+
+  test("Shift plays chord rows 5-8, and Ctrl+Shift rows 9-12", async ({ page }) => {
+    await page.goto("/");
+    await dismissStart(page);
+    await page.getByRole("button", { name: "Chords", exact: true }).click();
+    // Column-reverse: the DOM's rows run bottom first, so the nth child is row n+1.
+    const firstPadOfRow = (row: number) =>
+      page.locator("[data-keys-scroll] > div > *").nth(row).locator("[data-pitches]").first();
+    const lit = page.locator('button[data-pitches][aria-pressed="true"]');
+
+    for (const [modifiers, row] of [
+      [["Shift"], 4],
+      [["Control", "Shift"], 8],
+    ] as const) {
+      for (const modifier of modifiers) await page.keyboard.down(modifier);
+      await page.keyboard.down("z");
+      await expect(lit).toHaveCount(1);
+      await expect(lit).toHaveAttribute("data-pitches", (await firstPadOfRow(row).getAttribute("data-pitches"))!);
+      await page.keyboard.up("z");
+      for (const modifier of [...modifiers].reverse()) await page.keyboard.up(modifier);
+      await expect(lit).toHaveCount(0);
+    }
+  });
+});

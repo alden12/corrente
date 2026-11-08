@@ -11,7 +11,7 @@ const layout = (overrides: Partial<Options> = {}) =>
     scale: "major",
     lowOctave: 3,
     rowMode: "octaves",
-    raised: false,
+    lift: 0,
     chords: false,
     prefs: DEFAULT_CHORD_PREFS,
     editing: false,
@@ -45,7 +45,7 @@ describe("keyboardRows, notes", () => {
 
 describe("keyboardRows, raised and accidental rows", () => {
   it("turns each key into its own note's sharp while Shift is held, and blanks the keys without one", () => {
-    const row = layout({ raised: true })[0];
+    const row = layout({ lift: 1 })[0];
     // C D E F G A B C D E -> C# D# - F# G# A# - C# D# -
     expect(row.map((cell) => cell.pad?.pitches[0] ?? null)).toEqual([49, 51, null, 54, 56, 58, null, 61, 63, null]);
     expect(row.flatMap((cell) => (cell.pad ? [cell.pad.tone] : [])).every((tone) => tone === "accidental")).toBe(true);
@@ -104,10 +104,18 @@ describe("keyboardRows, chords", () => {
   });
   it("with Shift held, plays the four chord rows above the keyboard's own, which are then clicked", () => {
     const rows = layout({ chords: true });
-    const raised = layout({ chords: true, raised: true });
+    const raised = layout({ chords: true, lift: 1 });
     expect(raised[4][0].code).toBe("KeyZ");
     expect(raised[0][0].code).toBe("off-keys-0-0");
-    expect(pitchesOf("KeyZ", { chords: true, raised: true })).toEqual(rows[4][0].pad?.pitches);
+    expect(pitchesOf("KeyZ", { chords: true, lift: 1 })).toEqual(rows[4][0].pad?.pitches);
+  });
+  it("with Ctrl+Shift (a Mac's second lift), plays rows nine to twelve", () => {
+    const rows = layout({ chords: true });
+    const lifted = layout({ chords: true, lift: 2 });
+    expect(rows.length).toBeGreaterThan(8);
+    expect(lifted[8][0].code).toBe("KeyZ");
+    expect(lifted[4][0].code).toBe("off-keys-4-0");
+    expect(pitchesOf("KeyZ", { chords: true, lift: 2 })).toEqual(rows[8][0].pad?.pitches);
   });
 });
 

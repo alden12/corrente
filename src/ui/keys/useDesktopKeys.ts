@@ -24,7 +24,8 @@ import {
   padsByCode,
   type KeyRowMode,
 } from "./keyLayout";
-import { useKeyboardPlaying, useShiftHeld } from "./useKeyboardPlaying";
+import { useKeyboardPlaying, useLift } from "./useKeyboardPlaying";
+import { isMac } from "./platform";
 import { KEY_HEIGHT, KIT_KEY_HEIGHT, keysPanelHeight } from "./panelGeometry";
 import type { ParamStore } from "../../audio/params/store";
 import { refLabel, type SampleAsset } from "../../audio/samples/catalog";
@@ -73,8 +74,8 @@ export function useDesktopKeys(
   const touch = usePadTouch(liveNotes);
   const enabled = started && !settings.editingChords;
   // Shift turns the octave rows into their sharps (accidental rows have them already), and in chords
-  // mode moves the keys up onto the four chord rows above.
-  const raised = useShiftHeld(enabled && !kit && (settings.chords || rowMode === "octaves"));
+  // mode moves the keys up onto the four chord rows above; Ctrl+Shift on a Mac, the four above those.
+  const lift = useLift(enabled && !kit && (settings.chords || rowMode === "octaves"), settings.chords && isMac());
   // A kit's pads, or the notes or chords of the key.
   const rows = kit
     ? kitRows(kitPads.map((pad) => ({ note: pad.note, label: refLabel(pad.ref, kit.samples) })))
@@ -83,7 +84,7 @@ export function useDesktopKeys(
         scale: settings.scale,
         lowOctave: settings.lowOctave,
         rowMode,
-        raised,
+        lift,
         chords: settings.chords,
         prefs: settings.chordPrefs,
         editing: settings.editingChords,

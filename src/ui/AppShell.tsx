@@ -8,6 +8,7 @@
  * touch layout (pinned transport, one view, bottom tabs). Everything above is shared,
  * so mobile is another projection of the same stores rather than a fork.
  */
+import { isMac } from "./keys/platform";
 import { Welcome } from "./hosting/Welcome";
 import { setFromExplore } from "./explore/fromExplore";
 import { openExplorePage } from "./explore/explorePage";
@@ -419,10 +420,12 @@ export function AppShell() {
     return () => handle.dispose();
   }, [projectStore, engine, scheduler, editLog, versionStore]);
 
-  // Undo / redo (Cmd/Ctrl-Z, Shift+Cmd/Ctrl-Z), unless typing in a field.
+  // Undo / redo (Cmd/Ctrl-Z, Shift+Cmd/Ctrl-Z), unless typing in a field. Cmd only on a Mac, where
+  // Ctrl+Shift lifts the chord keys (useLift) and Z is one of them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      const shortcut = isMac() ? e.metaKey : e.metaKey || e.ctrlKey;
+      if (!shortcut || e.key.toLowerCase() !== "z") return;
       if (isTypingTarget(e.target)) return;
       e.preventDefault();
       if (e.shiftKey) editLog.redo();
