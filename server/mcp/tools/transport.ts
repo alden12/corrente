@@ -157,7 +157,7 @@ export function registerTransportTools({ server, target }: ToolContext): void {
     {
       title: "Set master volume",
       description:
-        "Set the master volume (DAW-8.5): the gain the whole mix goes out at, 0..1 (1 is 0 dB, 0.5 about -6 dB). Ahead of the master's soft clip, so turning it down is how to stop a loud mix clipping.",
+        "Set the master volume: the gain the whole mix goes out at, 0..1 (1 is 0 dB, 0.5 about -6 dB). Ahead of the master's soft clip, so turning it down is how to stop a loud mix clipping.",
       inputSchema: { volume: z.number().min(0).max(1).describe("a gain, 0..1") },
     },
     async ({ volume }) => {
