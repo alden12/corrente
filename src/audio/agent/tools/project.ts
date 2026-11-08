@@ -68,6 +68,17 @@ export function projectTools(ctx: ToolContext): AgentTool[] {
     }),
 
     defineTool({
+      name: "set_master_volume",
+      description:
+        "Set the master volume: the gain the whole mix goes out at, 0..1 (1 is 0 dB, 0.5 about -6 dB). Turn it down to stop a loud mix clipping.",
+      schema: z.object({ volume: z.number().min(0).max(1) }),
+      run: ({ volume }) => {
+        dispatch({ type: "setMasterVolume", volume });
+        return { ok: true, masterVolume: projectStore.masterVolume };
+      },
+    }),
+
+    defineTool({
       name: "list_samples",
       description:
         "List sample references usable on a Sampler track: built-in kit, the sampled instruments (multi-sampled, downloaded on first use, each with its size in MB), the project's imported samples, and the built-in wavetables a wavetable can play (any sample also plays as a wavetable, cut into 2048-sample cycles).",

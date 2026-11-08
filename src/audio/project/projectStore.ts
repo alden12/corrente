@@ -207,6 +207,8 @@ export interface ProjectStructure {
   /** Project-wide groove template id (see grooves/catalog) + how strongly it applies. */
   grooveId: string;
   grooveAmount: number;
+  /** The master volume (DAW-8.5), a gain 0..1 on the master bus: 1 unless set. */
+  masterVolume: number;
   /** The project's imported-sample library (referenced by Sampler params as "asset:<id>"). */
   samples: SampleAsset[];
   selectedTrackId: string | null;
@@ -225,6 +227,7 @@ export class ProjectStore {
   private musicalKey: ProjectKey = { ...DEFAULT_KEY };
   private grooveId = DEFAULT_GROOVE_ID;
   private grooveAmount = 1;
+  private masterGain = 1;
   private samples: SampleAsset[] = [];
   /** Who last edited each object (key -> author), for the last-editor colour tint. Mutated in
    *  place at the applyEdit seam via setAuthor; snapshot() copies it out and load() restores it,
@@ -294,6 +297,7 @@ export class ProjectStore {
       selectedTrackId: this.selectedTrackId,
       grooveId: this.grooveId,
       grooveAmount: this.grooveAmount,
+      masterVolume: this.masterGain,
       samples: this.samples,
       previews: this.previews,
     });
@@ -348,6 +352,10 @@ export class ProjectStore {
   }
   get loopStart(): number {
     return this.loopStartBeats;
+  }
+  /** The master volume (DAW-8.5), a gain 0..1. */
+  get masterVolume(): number {
+    return this.masterGain;
   }
   get timeSignature(): TimeSignature {
     return this.timeSig;
@@ -1182,6 +1190,14 @@ export class ProjectStore {
     this.emit();
   }
 
+  /** Set the master volume (DAW-8.5), a gain clamped to 0..1: what the whole mix goes out at. */
+  setMasterVolume(volume: number): void {
+    const next = clamp(volume, 0, 1);
+    if (next === this.masterGain) return;
+    this.masterGain = next;
+    this.emit();
+  }
+
   // --- clip pool + arrangement (instrument & audio) -------------------------
   /** A unique, human clip name (A, B, C, ... AA) not already used on the track. */
   /** The name `addClip` would give the next clip in a track's pool (A, B, C...). Pinned at dispatch
@@ -1666,6 +1682,7 @@ export class ProjectStore {
       selectedTrackId: this.selectedTrackId,
       grooveId: this.grooveId,
       grooveAmount: this.grooveAmount,
+      masterVolume: this.masterGain,
       samples: this.samples,
       // Key-sorted, so the document is canonical. The record is keyed by object id and written in
       // whatever order edits happened, so removing and re-adding an object reorders the keys
@@ -1997,6 +2014,7 @@ export class ProjectStore {
     this.musicalKey = { ...(data.key ?? DEFAULT_KEY) };
     this.grooveId = data.grooveId ?? DEFAULT_GROOVE_ID;
     this.grooveAmount = clamp(data.grooveAmount ?? 1, 0, 1);
+    this.masterGain = clamp(data.masterVolume ?? 1, 0, 1);
     this.samples = (data.samples ?? []).map((sample) => ({ ...sample }));
     this.authorship = { ...(data.authorship ?? {}) };
     // Keep the selection across a reload of the same project (undo, redo, a peer's edit rebuilding

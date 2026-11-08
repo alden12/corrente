@@ -75,6 +75,7 @@ const PROJECT_KEYS: Partial<Record<EditCommand["type"], string[]>> = {
   setGroove: ["project:groove"],
   setLength: ["project:length"],
   setLoopStart: ["project:loopStart"],
+  setMasterVolume: ["project:masterVolume"],
 };
 
 const unique = (keys: string[]): string[] => [...new Set(keys)];

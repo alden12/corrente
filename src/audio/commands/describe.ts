@@ -8,6 +8,7 @@
  * absent (or a name no longer resolves) the phrasing degrades to the type alone.
  */
 import { keyLabel } from "../theory/key";
+import { formatDecibels } from "../decibels";
 import type { EditCommand } from "./types";
 import { catalogEntry, hasInstrument } from "../instruments/catalog";
 import { effectCatalogEntry, hasEffect } from "../effects/catalog";
@@ -129,6 +130,7 @@ const DESCRIBE: DescribeMap = {
       : `Set groove amount ${Math.round((command.amount ?? 0) * 100)}%`,
   setLength: (command) => `Set loop length ${command.lengthBeats}`,
   setLoopStart: (command) => `Set loop start ${command.beats}`,
+  setMasterVolume: (command) => `Set master volume ${formatDecibels(command.volume)}`,
   addSample: (command) => `Imported "${command.name}"`,
   removeSample: () => "Removed sample",
 };

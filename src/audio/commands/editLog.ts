@@ -90,6 +90,7 @@ const COALESCABLE = new Set<EditCommand["type"]>([
   "setGroove",
   "setLength",
   "setLoopStart",
+  "setMasterVolume",
   "editNotes",
   "setClipLength",
   "movePlacement",
@@ -125,6 +126,8 @@ function coalesceKey(command: EditCommand): string {
       return "setLength";
     case "setLoopStart":
       return "setLoopStart";
+    case "setMasterVolume":
+      return "setMasterVolume";
     case "setClipLength":
       return `setClipLength:${command.trackId}:${command.clipId ?? ""}`;
     case "movePlacement":

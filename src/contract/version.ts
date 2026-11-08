@@ -38,7 +38,9 @@
 // instrument.
 // 12: a zone's `choke` group (INST-9.2), a closed hi-hat cutting the open one. An older side refuses a
 // custom device using it, but only meets one where someone makes it.
-export const PROTOCOL_VERSION = 12;
+// 13: the master volume (DAW-8.5), `setMasterVolume` and the document's `masterVolume`. An older client
+// can't apply the edit, but only meets it in a project where someone moves the master fader.
+export const PROTOCOL_VERSION = 13;
 /** The oldest client this build's server still serves. */
 export const MIN_PROTOCOL_VERSION = 1;
 

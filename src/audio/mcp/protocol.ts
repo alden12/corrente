@@ -192,6 +192,8 @@ export type ServerToBrowser =
   | { type: "setGroove"; grooveId?: string; amount?: number }
   | { type: "setLength"; lengthBeats: number }
   | { type: "setLoopStart"; beats: number }
+  // The master volume (DAW-8.5), a gain 0..1.
+  | { type: "setMasterVolume"; volume: number }
   | { type: "transport"; action: "play" | "stop" }
   // Version-history RPC (expects a matching historyReply, correlated by `id`)
   | { type: "historyRequest"; id: string; method: HistoryMethod; params?: Record<string, unknown> }

@@ -325,6 +325,8 @@ export class AudioEngine {
 
     const edited = this.editedCustomDevices(project);
     this.sendKey(ctx, project);
+    // The master volume (DAW-8.5), on the master bus ahead of its soft clip.
+    this.master.gain.setTargetAtTime(project.masterVolume, ctx.currentTime, 0.01);
 
     const groups = project.getGroups();
     // Everyone's preview plays too (COMM-1.4.5): with nothing placed, only live notes sound one.

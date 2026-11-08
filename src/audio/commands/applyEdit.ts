@@ -205,6 +205,7 @@ const APPLY: ApplyMap = {
   setGroove: (project, command) => project.setGroove(command.grooveId, command.amount),
   setLength: (project, command) => project.setLength(command.lengthBeats),
   setLoopStart: (project, command) => project.setLoopStart(command.beats),
+  setMasterVolume: (project, command) => project.setMasterVolume(command.volume),
   addSample: (project, command) =>
     project.addSample({
       id: command.id,

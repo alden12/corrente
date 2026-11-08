@@ -230,6 +230,8 @@ export const projectDataSchema = z.object({
   loopStart: z.number().optional(),
   grooveId: z.string().optional(),
   grooveAmount: z.number().optional(),
+  /** The master volume (DAW-8.5), a gain 0..1. Optional and read as 1, so older docs need no schema bump. */
+  masterVolume: z.number().optional(),
   // Optional + healed to 4/4 on load (like loopStart/grooveId), so older docs need no schema bump.
   timeSignature: timeSignatureSchema.optional(),
   // DAW-12: optional and read as C major when missing, so older docs need no schema bump.

@@ -1,4 +1,5 @@
 /** MCP tools: Transport (project-level). */
+import { formatDecibels } from "../../../src/audio/decibels";
 import { keyLabel, keySchema, TONIC_NAMES } from "../../../src/audio/theory/key";
 import { SCALE_NAMES } from "../../../src/audio/theory/scales";
 import { z } from "zod";
@@ -148,6 +149,21 @@ export function registerTransportTools({ server, target }: ToolContext): void {
       if (!target.send({ type: "setLoopStart", beats })) return fail(target.whyNotConnected());
       target.project.setLoopStart(beats);
       return ok(`Loop start set to ${beats} beats.`);
+    },
+  );
+
+  server.registerTool(
+    "set_master_volume",
+    {
+      title: "Set master volume",
+      description:
+        "Set the master volume (DAW-8.5): the gain the whole mix goes out at, 0..1 (1 is 0 dB, 0.5 about -6 dB). Ahead of the master's soft clip, so turning it down is how to stop a loud mix clipping.",
+      inputSchema: { volume: z.number().min(0).max(1).describe("a gain, 0..1") },
+    },
+    async ({ volume }) => {
+      if (!target.send({ type: "setMasterVolume", volume })) return fail(target.whyNotConnected());
+      target.project.setMasterVolume(volume);
+      return ok(`Master volume set to ${formatDecibels(target.project.masterVolume)}.`);
     },
   );
 

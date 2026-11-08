@@ -86,6 +86,7 @@ export function buildStructure(tracks: Track[], groups: Group[], transport: Tran
     key: transport.key,
     grooveId: transport.grooveId,
     grooveAmount: transport.grooveAmount,
+    masterVolume: transport.masterVolume,
     samples: transport.samples,
     selectedTrackId: transport.selectedTrackId,
   };

@@ -75,6 +75,7 @@ export interface TransportState {
   selectedTrackId: string | null;
   grooveId: string;
   grooveAmount: number;
+  masterVolume: number;
   samples: SampleAsset[];
   /** Last-editor map; only the persistable snapshot carries it (the reactive structure omits it). */
   authorship?: Record<string, ClipAuthor>;
@@ -166,6 +167,8 @@ export function snapshotProject(tracks: Track[], groups: Group[], transport: Tra
     selectedTrackId: transport.selectedTrackId,
     grooveId: transport.grooveId,
     grooveAmount: transport.grooveAmount,
+    // Only when moved, so a project at the default stays the document it was.
+    ...(transport.masterVolume !== 1 ? { masterVolume: transport.masterVolume } : {}),
     samples: transport.samples.map((sample) => ({ ...sample })),
     // Copy so undo checkpoints don't alias the live map (stamping mutates it in place).
     authorship: { ...(transport.authorship ?? {}) },

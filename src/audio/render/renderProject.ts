@@ -381,8 +381,11 @@ export async function renderProject(
     }
 
     const mixed = busOf(null);
+    // The master volume (DAW-8.5), before the soft clip as live.
+    const masterVolume = project.masterVolume;
     mixed.forEach((channel, index) =>
-      channel.forEach((sample, frame) => {
+      channel.forEach((unscaled, frame) => {
+        const sample = unscaled * masterVolume;
         if (start + frame >= kept) {
           masterPeak = Math.max(masterPeak, Math.abs(sample));
           if (Math.abs(sample) > 1) masterOver++;
