@@ -18,7 +18,6 @@ describe("Scheduler integration (mocked clock)", () => {
       get currentTime() {
         return clock;
       },
-      cutAllNotes: () => {},
       getNoteTarget(id: string) {
         if (!instByTrack.has(id)) instByTrack.set(id, { id });
         return {
@@ -82,7 +81,6 @@ describe("Scheduler integration (mocked clock)", () => {
       get currentTime() {
         return clock;
       },
-      cutAllNotes: () => {},
       getNoteTarget: () => ({
         playNote: (midi: number, _dur: number, _vel: number, when: number) => calls.push({ midi, when }),
         allNotesOff: () => {},
@@ -127,7 +125,6 @@ describe("Scheduler before-play hook (INST-43)", () => {
   const engineStub = () => ({
     started: true,
     currentTime: 0,
-    cutAllNotes: () => {},
     getNoteTarget: () => ({ playNote: () => {}, allNotesOff: () => {} }),
     scheduleAudioClip: () => {},
     stopAllAudio: () => {},
@@ -191,7 +188,6 @@ describe("Scheduler while a take records", () => {
       get currentTime() {
         return clock;
       },
-      cutAllNotes: () => {},
       getNoteTarget: (id: string) => ({
         playNote: (midi: number) => calls.push({ trackId: id, midi }),
         allNotesOff: () => {},

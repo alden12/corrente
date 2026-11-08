@@ -63,8 +63,8 @@ class EngineBankProcessor extends AudioWorkletProcessor {
       },
       noteOn: ({ track, note, velocity, time }) => this.bank.noteOn(track, note, velocity, time),
       noteOff: ({ track, note, time }) => this.bank.noteOff(track, note, time),
-      allOff: ({ track, time, cut }) => {
-        this.bank.allNotesOff(track, time, cut);
+      allOff: ({ track, time }) => {
+        this.bank.allNotesOff(track, time);
         // Everything let go at once doesn't come back note by note, so say so here.
         this.clearSounding(track);
       },

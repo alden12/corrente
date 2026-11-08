@@ -203,18 +203,6 @@ impl Track {
         self.release_voices(offset);
     }
 
-    /// Let go of every key and cut every voice still sounding, releases and all, over a block from
-    /// `offset`: a fresh start for a new play, so the last one's ringing tails don't hold the slots its
-    /// first notes want.
-    // TS: this.keysOff(offset); for (let slot = 0; slot < this.voiceSlots(); slot++) this.cut(slot, offset)
-    pub fn keys_cut(&mut self, offset: i32) {
-        self.keys_off(offset);
-        // Every voice the graph has, as `choke` walks them; `cut` skips one silent or already fading.
-        for slot in 0..self.voice_slots() {
-            self.cut(slot, offset);
-        }
-    }
-
     /// Replace the track's MIDI devices (None for none). The keys down carry over: what the old chain
     /// (or the voices, with none) was playing lets go, and the keys start again in the new one.
     // TS:

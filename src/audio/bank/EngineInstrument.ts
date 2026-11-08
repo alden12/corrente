@@ -47,11 +47,6 @@ export class EngineInstrument extends EngineDevice implements Instrument {
     this.send({ type: "allOff", time: this.context.currentTime });
   }
 
-  /** Let go of every note and cut what's still ringing, releases and all: a new play's fresh start. */
-  cutAllNotes(): void {
-    this.send({ type: "allOff", time: this.context.currentTime, cut: true });
-  }
-
   dispose(): void {
     this.midi.dispose();
     super.dispose();

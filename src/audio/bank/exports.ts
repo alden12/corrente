@@ -32,7 +32,6 @@ export interface EngineExports {
   eng_key_off(track: number, offset: number, note: number): void;
   /** Releases every held note. */
   eng_keys_off(track: number, offset: number): void;
-  eng_keys_cut(track: number, offset: number): void;
   /**
    * A track's MIDI devices (INST-11.1, midi/compile.ts's chainWords): the keys down start again in
    * them. A chain of none takes them away. 0, or -1 if the words don't make a chain (nothing changes).
