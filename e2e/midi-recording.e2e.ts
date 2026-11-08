@@ -53,3 +53,34 @@ test("records live MIDI into the selected instrument track", async ({ page }) =>
   await expect(page.getByText('Recorded "Take 1" (2 notes)')).toBeVisible();
   await expect(page.getByTestId("lane").getByRole("button", { name: /Playing Take 1/ })).toBeVisible();
 });
+
+test("Tab is the sustain pedal: a note let go under it rings on until Tab comes up", async ({ page }) => {
+  await page.goto("/");
+  await startAudio(page);
+  await setNoCountIn(page);
+  const record = page.getByRole("button", { name: "Record", exact: true });
+  await record.click();
+  await expect(record).toHaveAttribute("aria-pressed", "true");
+
+  // The live ghost note grows while its note sounds, so its width says whether it still does.
+  const ghost = page.getByTestId("ghost-note").first();
+  const width = async () => (await ghost.boundingBox())?.width ?? 0;
+  const focused = () => page.evaluate(() => document.activeElement?.outerHTML);
+
+  await page.keyboard.down("z");
+  await expect(ghost).toBeVisible();
+  const before = await focused();
+  await page.keyboard.down("Tab");
+  expect(await focused(), "Tab doesn't move focus while the keys are live").toBe(before);
+  await page.keyboard.up("z");
+  const atRelease = await width();
+  await expect.poll(width, { message: "sustained past its key-up" }).toBeGreaterThan(atRelease + 4);
+
+  await page.keyboard.up("Tab");
+  // Let go: it stops growing.
+  await page.waitForTimeout(150);
+  const atLift = await width();
+  await page.waitForTimeout(400);
+  expect(await width()).toBeLessThanOrEqual(atLift + 1);
+  await record.click();
+});

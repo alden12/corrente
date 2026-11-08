@@ -14,6 +14,10 @@
  * Shift changes the layout itself (`useShiftHeld`), so the panel shows what a key will play before
  * you press it; a key held through the change keeps sounding what it started. Losing focus (a tab switch, a dialog) lets everything go, since the key-up will never arrive.
  *
+ * **Tab is the sustain pedal** while held, as in GarageBand's Musical Typing: the same `setSustain`
+ * a MIDI pedal (CC64) calls, so notes let go under it ring on until Tab comes up. Space stays
+ * play/stop. While the keys are live, Tab doesn't move focus between controls.
+ *
  * **Which keys are down is a store the panel subscribes to, not state of the shell that owns this.**
  * A key press must not redraw the whole desktop: React renders a keydown's update before the next
  * keydown is handled, so with the held keys as shell state every key of a chord waited for the last
@@ -67,7 +71,8 @@ export function useKeyboardPlaying({
 }: {
   /** The current layout's pads by key code (`padsByCode`). */
   pads: Map<string, KeyPad>;
-  target: PadNoteTarget;
+  /** Where notes go, and the sustain pedal Tab holds down (`LiveNotes`). */
+  target: PadNoteTarget & { setSustain?: (down: boolean) => void };
   /** Off until audio has started, and while the chord editor has the pads. */
   enabled: boolean;
   onOctave: (direction: -1 | 1) => void;
@@ -94,7 +99,9 @@ export function useKeyboardPlaying({
   const releaseAll = useCallback(() => {
     const everything = heldNotes();
     held.current.clear();
+    // Tab's key-up won't arrive either: lift the pedal after the notes, so nothing rings on.
     everything.forEach((pitch) => target.noteOff(pitch));
+    target.setSustain?.(false);
     publish();
   }, [heldNotes, publish, target]);
 
@@ -104,6 +111,11 @@ export function useKeyboardPlaying({
       if (isTypingTarget(event.target)) return;
       // A shortcut (Cmd+A selects all in the roll), not a note.
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.code === "Tab") {
+        event.preventDefault();
+        if (!event.repeat) target.setSustain?.(true);
+        return;
+      }
       const octave = OCTAVE_KEYS[event.code];
       const pad = padsRef.current.get(event.code);
       if (octave === undefined && !pad) return;
@@ -120,6 +132,7 @@ export function useKeyboardPlaying({
       publish();
     };
     const onUp = (event: KeyboardEvent) => {
+      if (event.code === "Tab") target.setSustain?.(false);
       const key = held.current.get(event.code);
       if (!key) return;
       held.current.delete(event.code);
