@@ -78,9 +78,7 @@ export function useDesktopKeys(
   // in a band above each row; off, every row is an octave and Shift reaches the sharps.
   const rowMode: KeyRowMode = padSettings.accidentals ? "accidentals" : "octaves";
   const settings = drawnRowSettings(padSettings, shownRows, mostRows, setShownRows, octavesSpanned(rowMode));
-  const pressed = usePadTouch(liveNotes);
-  const playing = useTrackPlaying(trackId);
-  const touch = { ...pressed, isPlaying: playing.isPlaying, playing: playing.notes };
+  const touch = { ...usePadTouch(liveNotes), ...useTrackPlaying(trackId) };
   const enabled = started && !settings.editingChords;
   // Shift turns the octave rows into their sharps (accidental rows have them already), and in chords
   // mode moves the keys up onto the four chord rows above; Ctrl+Shift on a Mac, the four above those.

@@ -88,7 +88,7 @@ export function KeysPanel({
   const offKeys =
     settings.chords || kit
       ? new Map<string, PlayingSide[]>()
-      : playingEdges(rows.slice(0, shownRows), touch.playing ?? new Set());
+      : playingEdges(rows.slice(0, shownRows), touch.trackNotes ?? new Set());
   // The chord last played, from a key or a click, where it is on the keys: what the hints light from (DAW-12.2).
   const chordHint = useChordHints(
     rows.flat().map(({ pad }) => pad?.chord),
@@ -142,7 +142,7 @@ export function KeysPanel({
                     settings={settings}
                     touch={lit}
                     heldAt={held.heldAt}
-                    playing={offKeys}
+                    trackEdges={offKeys}
                     keycap={keycap}
                     hintFor={hintFor}
                     kit={kit}
@@ -168,7 +168,7 @@ function KeyRow({
   settings,
   touch,
   heldAt,
-  playing,
+  trackEdges,
   keycap,
   hintFor,
   kit,
@@ -182,7 +182,7 @@ function KeyRow({
   touch: PadTouch;
   heldAt: HeldKeys["heldAt"];
   /** Edges marking notes the track plays that no shown key holds (`playingEdges`). */
-  playing: Map<string, PlayingSide[]>;
+  trackEdges: Map<string, PlayingSide[]>;
   keycap: (code: string) => string;
   hintFor: (pad: KeyPad) => PadHint | null;
   /** A kit's pads: taller keys, the keycap over the sound's name. */
@@ -196,7 +196,7 @@ function KeyRow({
     <div className="flex" style={{ height: kit ? KIT_KEY_HEIGHT : KEY_HEIGHT }}>
       {offset && <div className="shrink-0" style={{ width: `calc(0.5 * ${unit})` }} />}
       {row.map(({ code, pad }) => {
-        const edge = edgeStyle(edges.get(code), playing.get(code));
+        const edge = edgeStyle(edges.get(code), trackEdges.get(code));
         return pad ? (
           <PadButton
             key={code}

@@ -57,9 +57,7 @@ export function NotePads({
   const [chords] = usePersistentBoolean(CHORDS_KEY, false);
   const rows = fitPads(room, accidentals && !chords);
   const settings = usePadSettings(octavesPerRow, rows, songKey);
-  const pressed = usePadTouch(notes);
-  const playing = useTrackPlaying(track.id);
-  const touch = { ...pressed, isPlaying: playing.isPlaying, playing: playing.notes };
+  const touch = { ...usePadTouch(notes), ...useTrackPlaying(track.id) };
   const isKit = playsPads(instrumentSchema(track.instrumentType));
 
   /**

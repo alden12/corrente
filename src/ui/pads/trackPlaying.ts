@@ -14,11 +14,12 @@ export const TrackNotesProvider = TrackNotesContext.Provider;
 const NONE: ReadonlySet<number> = new Set();
 const unsubscribed = () => () => {};
 
+/** As `PadTouch` names them, so a hook's result spreads straight into one. */
 export interface TrackPlaying {
   /** The notes the track is sounding now. */
-  notes: ReadonlySet<number>;
+  trackNotes: ReadonlySet<number>;
   /** Whether a pad's notes are all sounding: a chord pad lights when its whole chord is playing. */
-  isPlaying: (pitches: PadNotes) => boolean;
+  isTrackPlaying: (pitches: PadNotes) => boolean;
 }
 
 /** What `trackId` is playing now; nothing for no track, or outside the app (a test's surface). */
@@ -28,7 +29,7 @@ export function useTrackPlaying(trackId: string | undefined): TrackPlaying {
     store && trackId ? store.get(trackId) : NONE,
   );
   return {
-    notes,
-    isPlaying: (pitches) => pitches.length > 0 && pitches.every((pitch) => notes.has(pitch)),
+    trackNotes: notes,
+    isTrackPlaying: (pitches) => pitches.length > 0 && pitches.every((pitch) => notes.has(pitch)),
   };
 }

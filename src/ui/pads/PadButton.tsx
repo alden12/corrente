@@ -116,7 +116,7 @@ export function PadButton({
   const sounding = !editing && touch.isSounding(pitches);
   const latched = !editing && touch.isLatched(pitches);
   // The track playing it, not you: lit more quietly than a press, so the two read apart (MOBILE-13).
-  const playing = !editing && !sounding && (touch.isPlaying?.(pitches) ?? false);
+  const playing = !editing && !sounding && (touch.isTrackPlaying?.(pitches) ?? false);
   const editClass = editing
     ? `outline-1 outline-dashed -outline-offset-1 ${editing.selected ? "outline-you outline-2" : "outline-line"} ${editing.hidden ? "opacity-40" : ""}`
     : "";

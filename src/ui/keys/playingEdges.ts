@@ -28,13 +28,13 @@ function columnOf(row: Shown[], pitch: number): Shown | undefined {
   return [...row].sort((a, b) => below(a) - below(b))[0];
 }
 
-/** Marks for `playing` on the shown `rows` (bottom row first), by key code. */
-export function playingEdges(rows: KeyCell[][], playing: ReadonlySet<number>): Map<string, Side[]> {
+/** Marks for `trackNotes` on the shown `rows` (bottom row first), by key code. */
+export function playingEdges(rows: KeyCell[][], trackNotes: ReadonlySet<number>): Map<string, Side[]> {
   const keys = rows.flatMap(singles);
-  if (keys.length === 0 || playing.size === 0) return new Map();
+  if (keys.length === 0 || trackNotes.size === 0) return new Map();
   const shown = new Set(keys.map((key) => key.pitch));
   const [lowest, highest] = [Math.min(...shown), Math.max(...shown)];
-  const marks = [...playing]
+  const marks = [...trackNotes]
     .filter((pitch) => !shown.has(pitch))
     .flatMap((pitch): { code: string; side: Side }[] => {
       if (pitch > highest) {
