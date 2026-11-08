@@ -265,7 +265,7 @@ export function WorkbenchColumn({
           // On touch the column is a phone's width: the devices stack, everything flowing down it.
           <RackStacked.Provider value={compact}>
             {/* Its knobs light up to bind while an automation clip picks them (DAW-67.5). */}
-            <AutomationKnobs track={track} dispatch={dispatch}>
+            <AutomationKnobs track={track} projectStore={projectStore} scheduler={scheduler} dispatch={dispatch}>
               <DeviceRack
                 track={track}
                 samples={project.samples}

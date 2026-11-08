@@ -19,6 +19,7 @@ import type { ProjectStore, Track } from "../project/projectStore";
 import type { ParamStore } from "../params/store";
 import type { AutomationBinding } from "../project/types";
 import { createListeners } from "../../listeners";
+import { clamp } from "../../util";
 import { automationMoves, automationRuns, bindingKnob } from "./playback";
 
 /** How often a curve is sampled while it plays, in seconds of playback. */
@@ -64,7 +65,7 @@ export function knobStore(track: Track, binding: Pick<AutomationBinding, "target
 /** A value kept in a number knob's range: a binding's range may say more than the knob takes. */
 export function knobValue(store: ParamStore, id: string, value: number): number {
   const spec = store.spec(id);
-  return spec.kind === "number" ? Math.min(spec.max, Math.max(spec.min, value)) : value;
+  return spec.kind === "number" ? clamp(value, spec.min, spec.max) : value;
 }
 
 /** A track's knob as one key: the track and `bindingKnob`. */
@@ -138,6 +139,11 @@ export class AutomationPlayer {
   /** Whether a knob was grabbed this play, so its automation rests until the next. */
   isOverridden(trackId: string, binding: Pick<AutomationBinding, "target" | "param">): boolean {
     return this.overridden.has(knobKey(trackId, binding));
+  }
+
+  /** The overridden knobs as one string, which changes when they do: a snapshot for React to read. */
+  get overriddenKeys(): string {
+    return [...this.overridden].sort().join("\n");
   }
 
   /** How many knobs are overridden: what "Back to automation" would hand back. */

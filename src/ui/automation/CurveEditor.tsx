@@ -22,11 +22,11 @@ import { newAutomationPointId } from "../../audio/commands/ids";
 import { beginPointerDrag } from "../pointerDrag";
 import { formatNumber } from "../paramFormat";
 import { paletteAccent } from "../deviceColor";
+import { clamp } from "../../util";
 
 const PAD = 10;
 /** Beats a point lands on: a sixteenth note, unless Alt is held. */
 const SNAP = 0.25;
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export function CurveEditor({
   track,

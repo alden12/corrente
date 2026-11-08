@@ -15,6 +15,7 @@ import { useRecorder } from "./useRecorder";
 import { LoopButton, MetronomeButton } from "./TransportToggles";
 import { useLooping, useMetronome } from "./transportPrefs";
 import { Button } from "./controls/Button";
+import { useAutomationOverrides } from "./automation/useAutomationOverrides";
 import { IconButton } from "./controls/IconButton";
 import { Select } from "./controls/Select";
 
@@ -43,6 +44,7 @@ export function TransportBar({
   const rec = useRecorder(recorder);
   const [metronome] = useMetronome();
   const [looping] = useLooping();
+  const automation = useAutomationOverrides(scheduler.automation);
 
   // The scheduler reads this flag each tick; keep it in sync with the preference. The one
   // writer to the scheduler, whichever control (this button, or the Project settings page)
@@ -124,6 +126,17 @@ export function TransportBar({
       )}
       {/* Snug between Play and Tempo: the bar's 12px gap either side read as padding round it. */}
       <LoopButton hidden={compact} className="-mx-1.5" />
+      {/* Knobs grabbed off their automation this play (DAW-67.6), handed back in one go. */}
+      {automation.overriddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => automation.backToAutomation()}
+          title="Hand every knob you've grabbed back to its automation"
+          className="h-7 px-2.5 shrink-0 rounded-full border border-[var(--color-warn)] text-[11px] text-[var(--color-warn)] cursor-pointer whitespace-nowrap"
+        >
+          ↺ {compact ? automation.overriddenCount : `Back to automation (${automation.overriddenCount})`}
+        </button>
+      )}
       {/* The word labels drop below `sm`: on a phone the transport is pinned above every
           view (MOBILE-1) and has to fit 390px without clipping. The fields keep their
           `aria-label` / `title`, so nothing is lost to assistive tech. */}

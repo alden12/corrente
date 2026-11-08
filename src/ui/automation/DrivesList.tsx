@@ -7,7 +7,7 @@ import type { Track } from "../../audio/project/projectStore";
 import type { Dispatch } from "../../audio/commands/types";
 import type { AutomationBinding, AutomationClipData } from "../../audio/project/types";
 import { knobStore } from "../../audio/automation/player";
-import { bindMode, useBindMode } from "./bindMode";
+import { bindMode, revealKnob, useBindMode } from "./bindMode";
 import { knobLabel } from "./labels";
 
 export function DrivesList({ track, clip, dispatch }: { track: Track; clip: AutomationClipData; dispatch: Dispatch }) {
@@ -36,9 +36,14 @@ export function DrivesList({ track, clip, dispatch }: { track: Track; clip: Auto
             className="rounded-lg border border-line bg-panel px-2.5 py-2 flex flex-col gap-1.5"
           >
             <div className="flex items-center gap-2">
-              <span className={`font-semibold text-[12.5px] ${label.missing ? "text-muted line-through" : "text-ink"}`}>
+              <button
+                type="button"
+                title="Show this knob"
+                onClick={() => revealKnob(track.id, each)}
+                className={`font-semibold text-[12.5px] cursor-pointer hover:underline ${label.missing ? "text-muted line-through" : "text-ink"}`}
+              >
                 {label.knob}
-              </span>
+              </button>
               <span className="flex-1 min-w-0 truncate text-[11px] text-muted">{label.device}</span>
               <button
                 type="button"

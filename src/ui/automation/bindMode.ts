@@ -6,7 +6,8 @@ import { useSyncExternalStore } from "react";
 import { createValueStore } from "../../listeners";
 import type { ParamStore } from "../../audio/params/store";
 import type { Track } from "../../audio/project/projectStore";
-import type { AutomationTarget } from "../../audio/project/types";
+import type { AutomationBinding, AutomationTarget } from "../../audio/project/types";
+import { bindingKnob } from "../../audio/automation/playback";
 
 export const bindMode = createValueStore<{ trackId: string; automationId: string } | null>(null);
 
@@ -24,3 +25,21 @@ export const sameTarget = (left: AutomationTarget, right: AutomationTarget): boo
   left.kind === right.kind &&
   (left.kind !== "effect" || (right.kind === "effect" && left.effectId === right.effectId)) &&
   (left.kind !== "midiDevice" || (right.kind === "midiDevice" && left.deviceId === right.deviceId));
+
+/** The attribute naming an automated knob on screen (DAW-67.6): its track and `bindingKnob`. */
+export const knobMarkKey = (trackId: string, binding: Pick<AutomationBinding, "target" | "param">) =>
+  `${trackId}|${bindingKnob(binding)}`;
+
+/** Scroll to a track's knob on screen and flash it: where a Drives row points. */
+export function revealKnob(trackId: string, binding: Pick<AutomationBinding, "target" | "param">): boolean {
+  const mark = document.querySelector<HTMLElement>(
+    `[data-automation-knob="${CSS.escape(knobMarkKey(trackId, binding))}"]`,
+  );
+  if (!mark) return false;
+  mark.scrollIntoView({ block: "center", behavior: "smooth" });
+  mark.animate([{ boxShadow: "0 0 0 6px var(--color-warn)" }, { boxShadow: "0 0 0 0 transparent" }], {
+    duration: 900,
+    easing: "ease-out",
+  });
+  return true;
+}
