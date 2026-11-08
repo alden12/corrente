@@ -24,8 +24,11 @@ interface Meter {
 export class LevelMeters {
   private readonly meters = new Map<string, Meter>();
   private readonly buffer = new Float32Array(WINDOW);
+  private readonly context: BaseAudioContext;
 
-  constructor(private readonly context: BaseAudioContext) {}
+  constructor(context: BaseAudioContext) {
+    this.context = context;
+  }
 
   /** `id`'s node was (re)routed: hang its meter back on, if it has one. */
   attach(id: string, source: AudioNode): void {
