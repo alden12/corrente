@@ -2,7 +2,8 @@
  * An automation clip's curve, to draw on (DAW-67.5): the canvas's "Automation clip editor" board.
  *
  * - **Points**: press empty space to add one there (and keep dragging it), drag one to move it,
- *   double-click one (or select it and press Delete) to remove it. Beats snap to a sixteenth of a
+ *   double-click one (or pick it and press Delete, or the section's Delete point) to remove it. Each
+ *   has a finger-sized target round it, for touch. Beats snap to a sixteenth of a
  *   bar's beat grid unless Alt is held.
  * - **Bend**: drag a segment's line up or down to bend it.
  * - **The axis** reads in the first knob's units ("4.0 kHz"), the curve's 0..1 mapped into its range.
@@ -217,23 +218,37 @@ export function CurveEditor({
           );
         })}
         {clip.points.map((point) => (
-          <circle
-            key={point.id}
-            data-testid="curve-point"
-            data-selected={point.id === selectedPoint}
-            cx={xOf(point.beat)}
-            cy={yOf(point.value)}
-            r={point.id === selectedPoint ? 7 : 5}
-            fill={point.id === selectedPoint ? accent : "var(--color-ground)"}
-            stroke={point.id === selectedPoint ? "var(--color-ink)" : accent}
-            strokeWidth={2}
-            className="cursor-grab"
-            onPointerDown={(event) => onPoint(point, event)}
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              remove(point.id);
-            }}
-          />
+          <g key={point.id}>
+            {/* A finger-sized target round each point: the dot itself is for the eye. */}
+            <circle
+              cx={xOf(point.beat)}
+              cy={yOf(point.value)}
+              r={18}
+              fill="transparent"
+              className="cursor-grab"
+              onPointerDown={(event) => onPoint(point, event)}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                remove(point.id);
+              }}
+            />
+            <circle
+              data-testid="curve-point"
+              data-selected={point.id === selectedPoint}
+              cx={xOf(point.beat)}
+              cy={yOf(point.value)}
+              r={point.id === selectedPoint ? 7 : 5}
+              fill={point.id === selectedPoint ? accent : "var(--color-ground)"}
+              stroke={point.id === selectedPoint ? "var(--color-ink)" : accent}
+              strokeWidth={2}
+              className="cursor-grab"
+              onPointerDown={(event) => onPoint(point, event)}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                remove(point.id);
+              }}
+            />
+          </g>
         ))}
       </svg>
     </div>

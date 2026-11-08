@@ -15,7 +15,7 @@
  * The wheel needs no rule of its own: the roll takes it while the pointer is over it, and
  * the browser keeps a scroll that is already moving the column going past the roll.
  */
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ProjectStore, Track } from "../../audio/project/projectStore";
 import type { Scheduler } from "../../audio/sequencer/scheduler";
 import type { Recorder } from "../../audio/recording/recorder";
@@ -36,6 +36,7 @@ import { newClipId } from "../../audio/commands/ids";
 import { BinIcon } from "../shellIcons";
 import { AutomationSection } from "./AutomationSection";
 import { AutomationKnobs } from "../automation/AutomationKnobs";
+import { useBindMode } from "../automation/bindMode";
 
 /** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
 const DEVICES_PEEK = 56;
@@ -108,6 +109,12 @@ export function WorkbenchColumn({
     : compact
       ? Math.max(120, roomForRoll)
       : Math.min(rollH, Math.max(200, roomForRoll));
+  // Binding knobs to an automation clip wants the devices open, or there's nothing to tap (DAW-67.8).
+  const picking = useBindMode();
+  const bindingHere = picking?.trackId === track.id;
+  useEffect(() => {
+    if (bindingHere) setDevicesOpen(true);
+  }, [bindingHere, setDevicesOpen]);
   const scrollToDevice = (key: string) => {
     const scroll = () =>
       columnRef.current

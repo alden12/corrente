@@ -50,7 +50,7 @@ export function DrivesList({ track, clip, dispatch }: { track: Track; clip: Auto
                 title="Swap the range's ends"
                 aria-label={`Invert ${label.knob}`}
                 onClick={() => change(each.id, { min: each.max, max: each.min })}
-                className="h-6 px-1.5 rounded text-[11px] text-muted hover:text-ink hover:bg-control cursor-pointer"
+                className="h-6 pointer-coarse:h-11 px-1.5 pointer-coarse:px-3 rounded text-[11px] text-muted hover:text-ink hover:bg-control cursor-pointer"
               >
                 ⇅
               </button>
@@ -59,7 +59,7 @@ export function DrivesList({ track, clip, dispatch }: { track: Track; clip: Auto
                 aria-label={`Stop driving ${label.knob}`}
                 title="Stop driving this knob"
                 onClick={() => write(clip.bindings.filter((other) => other.id !== each.id))}
-                className="h-6 w-6 rounded text-[14px] text-muted hover:text-hot hover:bg-control cursor-pointer"
+                className="h-6 w-6 pointer-coarse:h-11 pointer-coarse:w-11 rounded text-[14px] text-muted hover:text-hot hover:bg-control cursor-pointer"
               >
                 ×
               </button>
@@ -101,7 +101,7 @@ export function DrivesList({ track, clip, dispatch }: { track: Track; clip: Auto
           <button
             type="button"
             onClick={() => bindMode.set(null)}
-            className="self-start h-7 px-3 rounded-md bg-you text-ground text-[12px] font-semibold cursor-pointer"
+            className="self-start h-7 pointer-coarse:h-11 px-3 rounded-md bg-you text-ground text-[12px] font-semibold cursor-pointer"
           >
             Done
           </button>
@@ -110,7 +110,7 @@ export function DrivesList({ track, clip, dispatch }: { track: Track; clip: Auto
         <button
           type="button"
           onClick={() => bindMode.set({ trackId: track.id, automationId: clip.id })}
-          className="h-8 rounded-lg border border-dashed border-line text-[12px] text-muted hover:text-ink hover:border-you cursor-pointer"
+          className="h-8 pointer-coarse:h-11 rounded-lg border border-dashed border-line text-[12px] text-muted hover:text-ink hover:border-you cursor-pointer"
         >
           + Bind a knob
         </button>

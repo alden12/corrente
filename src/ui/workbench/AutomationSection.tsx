@@ -124,7 +124,7 @@ export function AutomationSection({
                   automationSelection.set({ trackId: track.id, automationId: automation.id });
                   setOpen(true);
                 }}
-                className="h-6 px-2 shrink-0 flex items-center gap-1.5 rounded-full border text-[11px] cursor-pointer"
+                className="h-6 pointer-coarse:h-9 px-2 shrink-0 flex items-center gap-1.5 rounded-full border text-[11px] cursor-pointer"
                 style={{
                   borderColor: paletteAccent(automation.color ?? track.color, picked ? 1 : 0.5),
                   background: paletteAccent(automation.color ?? track.color, picked ? 0.28 : 0.1),
@@ -167,7 +167,7 @@ export function AutomationSection({
                           aria-pressed={on}
                           title={SHAPE_NAMES[shape]}
                           onClick={() => editPoint({ shape: shape === "curve" ? undefined : shape })}
-                          className={`h-8 grid place-items-center rounded-md border cursor-pointer ${
+                          className={`h-8 pointer-coarse:h-11 grid place-items-center rounded-md border cursor-pointer ${
                             on ? "border-you bg-you/15 text-you" : "border-line text-muted hover:text-ink"
                           }`}
                         >
@@ -178,6 +178,22 @@ export function AutomationSection({
                       );
                     })}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!clip) return;
+                      dispatch({
+                        type: "setAutomation",
+                        trackId: track.id,
+                        automationId: clip.id,
+                        points: clip.points.filter((each) => each.id !== point.id),
+                      });
+                      setSelectedPoint(null);
+                    }}
+                    className="self-start h-7 pointer-coarse:h-11 px-2.5 rounded-md text-[11px] text-muted hover:text-hot hover:bg-control cursor-pointer"
+                  >
+                    Delete point
+                  </button>
                   {isWave(point.shape) && (
                     <div className="flex items-center gap-2 text-[11px] text-muted">
                       <label className="flex items-center gap-1.5">

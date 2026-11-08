@@ -427,6 +427,7 @@ function AutomationLane({
           run={run}
           pxPerBeat={pxPerBeat}
           chosen={isChosen(run)}
+          menuItems={isChosen(run) ? itemsFor(run) : undefined}
           onPointerDown={(event) => {
             const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
             const edge = event.pointerType === "mouse" && rect.right - event.clientX <= RESIZE_PX;
@@ -449,6 +450,7 @@ function AutomationBlock({
   chosen,
   onPointerDown,
   onContextMenu,
+  menuItems,
 }: {
   track: Track;
   run: AutomationRun;
@@ -456,6 +458,8 @@ function AutomationBlock({
   chosen: boolean;
   onPointerDown: (event: React.PointerEvent) => void;
   onContextMenu: (event: React.MouseEvent) => void;
+  /** The clip's actions, when it is picked, for its ⋮ on touch. */
+  menuItems?: MenuItem[];
 }) {
   const { clip } = run;
   const accent = paletteAccent(clip.color ?? track.color);
@@ -505,6 +509,15 @@ function AutomationBlock({
       </span>
       {/* right-edge trim affordance, for a placed clip */}
       {!linked && <div className="absolute top-0 bottom-0 right-0 w-1.5 cursor-ew-resize" />}
+      {/* Touch has no right-click: a picked clip offers the same menu from its ⋮. */}
+      {menuItems && (
+        <span
+          onPointerDown={(event) => event.stopPropagation()}
+          className="hidden pointer-coarse:flex absolute right-0 inset-y-0 items-center bg-panel/80"
+        >
+          <Menu label={`${clip.name} actions`} items={menuItems} triggerClassName="w-9 h-full text-[17px] text-ink" />
+        </span>
+      )}
     </div>
   );
 }
