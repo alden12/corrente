@@ -346,10 +346,12 @@ export function Knob({
   const control = renderers[spec.kind]();
   const items = extras?.menu(store, spec.id);
   const badge = extras?.badge(store, spec.id);
-  if (!items && !badge) return control;
+  const overlay = extras?.overlay?.(store, spec.id);
+  if (!items && !badge && !overlay) return control;
   return (
     <div className="relative" onContextMenu={items ? (event) => openAt(event, items) : undefined}>
       {control}
+      {overlay}
       {badge && (
         <span className="absolute -top-1 right-0 px-1 rounded-sm bg-you/15 font-mono text-[9px] leading-normal text-you pointer-events-none">
           {badge}

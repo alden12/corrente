@@ -34,6 +34,8 @@ import { SectionHeader, SECTION_HEADER_HEIGHT, TOUCH_SECTION_HEADER_HEIGHT } fro
 import { IconButton } from "../controls/IconButton";
 import { newClipId } from "../../audio/commands/ids";
 import { BinIcon } from "../shellIcons";
+import { AutomationSection } from "./AutomationSection";
+import { AutomationKnobs } from "../automation/AutomationKnobs";
 
 /** What of the devices always shows under the roll (their bar), so it's plain there is more below. */
 const DEVICES_PEEK = 56;
@@ -246,6 +248,9 @@ export function WorkbenchColumn({
         </>
       )}
 
+      {/* The track's automation (DAW-67.5): between the notes and the devices whose knobs it moves. */}
+      {!preview && <AutomationSection track={track} dispatch={dispatch} compact={compact} />}
+
       {/* The devices, as many rows as they need: the column scrolls, not the rack. Their bar
           sticks to the top once they reach it. */}
       <section aria-label="Devices" className="pb-6">
@@ -259,14 +264,17 @@ export function WorkbenchColumn({
         {devicesOpen && (
           // On touch the column is a phone's width: the devices stack, everything flowing down it.
           <RackStacked.Provider value={compact}>
-            <DeviceRack
-              track={track}
-              samples={project.samples}
-              dispatch={dispatch}
-              projectStore={projectStore}
-              onRevealSamples={onRevealSamples}
-              bare
-            />
+            {/* Its knobs light up to bind while an automation clip picks them (DAW-67.5). */}
+            <AutomationKnobs track={track} dispatch={dispatch}>
+              <DeviceRack
+                track={track}
+                samples={project.samples}
+                dispatch={dispatch}
+                projectStore={projectStore}
+                onRevealSamples={onRevealSamples}
+                bare
+              />
+            </AutomationKnobs>
           </RackStacked.Provider>
         )}
       </section>
