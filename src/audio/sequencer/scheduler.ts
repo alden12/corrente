@@ -316,8 +316,9 @@ export class Scheduler implements TransportClock {
 
   private begin(atTime?: number): void {
     if (this.timer !== null || !this.engine.started) return;
-    // The last play's ringing tails go: they'd hold the voice slots this one's first notes want.
-    this.engine.cutAllNotes();
+    // The last play's ringing tails go: they'd hold the voice slots this one's first notes want. Keys
+    // still down (one held through a take's count-in) sound on.
+    this.engine.cutTails();
     this.anchorAt(this.startCount(), atTime ?? this.engine.currentTime);
     this.lastBps = this.project.tempo / 60;
     this.unsubscribe = this.project.subscribe(() => this.reanchor());

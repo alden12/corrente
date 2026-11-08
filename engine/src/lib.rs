@@ -242,12 +242,12 @@ pub extern "C" fn eng_keys_off(track: i32, offset: i32) {
     with_track(track, |track| track.keys_off(offset));
 }
 
-/// Release every held note on a track and cut every voice still sounding, `offset` samples into the
-/// coming block: what a new play starts with.
-// TS: withTrack(track, (track) => track.keysCut(offset))
+/// Cut every voice on a track still ringing after its key went up, `offset` samples into the coming
+/// block: what a new play starts with. Keys still down sound on.
+// TS: withTrack(track, (track) => track.cutTails(offset))
 #[unsafe(no_mangle)]
-pub extern "C" fn eng_keys_cut(track: i32, offset: i32) {
-    with_track(track, |track| track.keys_cut(offset));
+pub extern "C" fn eng_cut_tails(track: i32, offset: i32) {
+    with_track(track, |track| track.cut_tails(offset));
 }
 
 /// Move one of a track's values (a param's raw value, numbered as eng_bind's words number them): each

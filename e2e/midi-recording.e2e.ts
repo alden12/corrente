@@ -84,3 +84,26 @@ test("Tab is the sustain pedal: a note let go under it rings on until Tab comes 
   expect(await width()).toBeLessThanOrEqual(atLift + 1);
   await record.click();
 });
+
+test("a key held through the count-in sounds on as the take starts, and starts the take", async ({ page }) => {
+  await page.goto("/");
+  await startAudio(page);
+  await setCountIn(page, "1 bar");
+  await page.getByRole("button", { name: "Activity", exact: true }).click();
+
+  const record = page.getByRole("button", { name: "Record", exact: true });
+  await record.click();
+  // Down during the count-in (a bar at 120 BPM is two seconds), and held on past the downbeat.
+  await page.waitForTimeout(500);
+  await page.keyboard.down("z");
+  await expect(page.getByTestId("ghost-note").first()).toBeVisible({ timeout: 5000 });
+  // A new play cuts what rings on after its key went up; a key still down must keep sounding.
+  const knob = page.getByTestId("arr-scroll").getByRole("slider", { name: "Volume", exact: true }).first();
+  // Long enough for the meter, which falls back 24 dB a second, to show a cut voice gone: a held one
+  // reads a steady level, around 0.6 along the ring here.
+  await page.waitForTimeout(1500);
+  expect(Number(await knob.getAttribute("data-level")), "still sounding after the downbeat").toBeGreaterThan(0.3);
+  await page.keyboard.up("z");
+  await record.click();
+  await expect(page.getByText('Recorded "Take 1" (1 note)')).toBeVisible();
+});

@@ -196,6 +196,12 @@ impl VoiceAllocator {
         self.held[slot]
     }
 
+    /// The same, false for a slot past this allocator's (a graph can have more voices than it tracks).
+    // TS: return held[slot] ?? false
+    pub fn held_at(&self, slot: usize) -> bool {
+        self.held.get(slot).copied().unwrap_or(false)
+    }
+
     /// The notes held now, with their velocities: what a new plan starts again.
     // TS: return slots.filter((slot) => held[slot]).map((slot) => ({ note: notes[slot], velocity: velocities[slot] }))
     // `filter_map` keeps each Some its function returns; `?` there skips a slot with no note.

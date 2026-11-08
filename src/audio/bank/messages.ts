@@ -11,8 +11,9 @@ export type ToBank =
   | { type: "unload"; track: number }
   | { type: "noteOn"; track: number; note: number; velocity: number; time: number }
   | { type: "noteOff"; track: number; note: number; time: number }
-  /** Let go of every note; `cut`, cut the voices still ringing too (a new play's fresh start). */
-  | { type: "allOff"; track: number; time: number; cut?: boolean }
+  | { type: "allOff"; track: number; time: number }
+  /** Cut what still rings after its key went up (a new play's start); keys still down sound on. */
+  | { type: "cutTails"; track: number; time: number }
   | { type: "param"; track: number; param: string; value: number; time: number }
   /** The track's MIDI devices as chainWords makes them (INST-11.1): none takes them away. */
   | { type: "midi"; track: number; words: Int32Array }

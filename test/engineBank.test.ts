@@ -181,6 +181,17 @@ describe("EngineBank", () => {
     expect(sound[5 * BLOCK]).toBeCloseTo(0.5, 6);
   });
 
+  it("cuts what rings on after its key went up at a new play's start, and leaves a held key sounding", () => {
+    const bank = bankOf();
+    // A key held through a take's count-in: down before the play starts, and still down after.
+    bank.noteOn(0, 60, 0.5, 0);
+    bank.cutTails(0, BLOCK * SAMPLE);
+    const sound = render(bank, 4);
+    // Sounding at its velocity, a block and more past the cut.
+    expect(sound[3 * BLOCK]).toBeCloseTo(0.5, 6);
+    expect(bank.silent(0)).toBe(false);
+  });
+
   it("keeps tracks apart", () => {
     const bank = bankOf(2);
     bank.noteOn(1, 60, 1, 0);

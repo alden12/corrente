@@ -17,7 +17,7 @@ function setUp(noteBeats: number[]) {
     get currentTime() {
       return clock.now;
     },
-    cutAllNotes: () => {},
+    cutTails: () => {},
     getNoteTarget: () => ({
       playNote: (pitch: number, _seconds: number, _velocity: number, when: number) => played.push({ pitch, when }),
       allNotesOff: () => {},

@@ -481,13 +481,13 @@ export class AudioEngine {
   }
 
   /**
-   * Cut every track's notes, the ringing tails of the last play included: what a new play starts
-   * with, so they don't hold the voice slots its first notes want.
+   * Cut every track's ringing tails, the last play's notes still sounding after their keys went up:
+   * what a new play starts with, so they don't hold the voice slots its first notes want. Keys still
+   * down sound on, so a note held through a take's count-in carries on into the take.
    */
-  cutAllNotes(): void {
+  cutTails(): void {
     for (const node of this.nodes.values()) {
-      if (node.instrument instanceof EngineInstrument) node.instrument.cutAllNotes();
-      else node.instrument.allNotesOff();
+      if (node.instrument instanceof EngineInstrument) node.instrument.cutTails();
     }
   }
 

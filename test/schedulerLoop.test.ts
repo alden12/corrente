@@ -13,7 +13,7 @@ function setUp() {
     get currentTime() {
       return clock.now;
     },
-    cutAllNotes: () => cuts.push(clock.now),
+    cutTails: () => cuts.push(clock.now),
     getNoteTarget: () => ({
       playNote: (pitch: number, _seconds: number, _velocity: number, when: number) => {
         played.push(when);

@@ -47,9 +47,9 @@ export class EngineInstrument extends EngineDevice implements Instrument {
     this.send({ type: "allOff", time: this.context.currentTime });
   }
 
-  /** Let go of every note and cut what's still ringing, releases and all: a new play's fresh start. */
-  cutAllNotes(): void {
-    this.send({ type: "allOff", time: this.context.currentTime, cut: true });
+  /** Cut what still rings after its key went up: a new play's start. Keys still down sound on. */
+  cutTails(): void {
+    this.send({ type: "cutTails", time: this.context.currentTime });
   }
 
   dispose(): void {

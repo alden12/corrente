@@ -203,15 +203,18 @@ impl Track {
         self.release_voices(offset);
     }
 
-    /// Let go of every key and cut every voice still sounding, releases and all, over a block from
-    /// `offset`: a fresh start for a new play, so the last one's ringing tails don't hold the slots its
-    /// first notes want.
-    // TS: this.keysOff(offset); for (let slot = 0; slot < this.voiceSlots(); slot++) this.cut(slot, offset)
-    pub fn keys_cut(&mut self, offset: i32) {
-        self.keys_off(offset);
+    /// Cut every voice still ringing on after its key went up (a release tail), over a block from
+    /// `offset`: what a new play starts with, so the last play's tails don't hold the slots its first
+    /// notes want. Keys still down keep sounding: a note held through a take's count-in carries on.
+    // TS: for (let slot = 0; slot < this.voiceSlots(); slot++) if (!this.voices.isHeld(slot)) this.cut(slot, offset)
+    pub fn cut_tails(&mut self, offset: i32) {
         // Every voice the graph has, as `choke` walks them; `cut` skips one silent or already fading.
         for slot in 0..self.voice_slots() {
-            self.cut(slot, offset);
+            // `is_some_and` on `get`: a slot past the allocator's (it can have fewer) isn't held.
+            let held = self.voices.held_at(slot);
+            if !held {
+                self.cut(slot, offset);
+            }
         }
     }
 
